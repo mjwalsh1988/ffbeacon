@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getIsAdmin } from "@/lib/admin-auth";
 import { SITE } from "@/lib/site";
 import { accentGradient } from "@/lib/signal";
+import { personJsonLd, serializeJsonLd, type PersonJsonLd } from "@/lib/json-ld";
 import {
   loadProfileBundle,
   resolveHistoricalHandle,
@@ -158,6 +159,7 @@ export async function ProfileView({
         reactions={reactions}
         followerCount={follow.followerCount}
         viewerIsFollowing={follow.viewerIsFollowing}
+        personSchema={buildPersonSchema(bundle, canonicalBase)}
       />
     );
   }
@@ -192,8 +194,37 @@ export async function ProfileView({
       reactions={reactions}
       followerCount={follow.followerCount}
       viewerIsFollowing={follow.viewerIsFollowing}
+      personSchema={buildPersonSchema(bundle, canonicalBase)}
     />
   );
+}
+
+/**
+ * Person schema for the profile, mirroring app/author/michael/page.tsx's
+ * inline Person schema but built only from fields the profile itself shows
+ * publicly: the display name and canonical URL always; the avatar as `image`
+ * only when the owner set one; `sameAs` only from the links actually placed
+ * in a "links" block on the page (bundle.links holds every link the owner
+ * saved regardless of placement, which is not the same claim as "shown here").
+ */
+function buildPersonSchema(
+  bundle: ProfileBundle,
+  canonicalBase: string,
+): PersonJsonLd {
+  const signal = bundle.signal!;
+  const avatar = signalMediaUrl(signal.avatar_path);
+  const sameAs = bundle.blocks
+    .filter((block): block is Extract<ResolvedBlock, { type: "links" }> =>
+      block.type === "links",
+    )
+    .flatMap((block) => block.links.map((link) => link.url));
+
+  return personJsonLd({
+    name: signal.display_name,
+    url: `${SITE.url}${canonicalBase}/${signal.handle}`,
+    image: avatar,
+    sameAs,
+  });
 }
 
 /** Flatten loaded posts (and their comments) into the reaction target list. */
@@ -220,6 +251,7 @@ function ProfileBody({
   reactions,
   followerCount,
   viewerIsFollowing,
+  personSchema,
 }: {
   bundle: ProfileBundle;
   ownerPreview: boolean;
@@ -230,6 +262,7 @@ function ProfileBody({
   reactions: WallReactions;
   followerCount: number;
   viewerIsFollowing: boolean;
+  personSchema: PersonJsonLd;
 }) {
   const signal = bundle.signal!;
   const avatar = signalMediaUrl(signal.avatar_path);
@@ -259,6 +292,12 @@ function ProfileBody({
 
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(personSchema) }}
+      />
+
       {ownerPreview && (
         <div
           role="status"

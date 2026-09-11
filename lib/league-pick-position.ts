@@ -31,7 +31,7 @@
  * WHERE THIS APPLIES
  * Only where the league is known and the pick descriptor came from Sleeper: the
  * league transactions feed, the player-profile trades tab, and the Sleeper
- * import on /tools/signal-check. The manual builder and On The Clock both send
+ * import on /tools/trade-calculator. The manual builder and On The Clock both send
  * a slot the user chose, and an estimate must never overrule a real choice.
  *
  * WHAT IT REFUSES TO DO

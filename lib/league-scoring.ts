@@ -151,6 +151,39 @@ export function tePremiumPerReception(scoring: ScoringSettings | null | undefine
   return Math.max(bonus, fromRecTe);
 }
 
+/**
+ * A format_configs row, or any object shaped like the columns this function
+ * reads. Structural, so a caller can pass a real format_configs row directly
+ * without importing the generated Supabase type.
+ */
+export type FormatScoringInput = {
+  scoring_type: string; // "ppr" | "half_ppr" | "standard"
+  te_premium_bonus: number | null;
+};
+
+/**
+ * Build a minimal ScoringSettings map from a format_configs row.
+ *
+ * A caller with no live league scoring_settings (a format picker rather than
+ * a synced Sleeper league) has nothing to pass to closestScoringBase or
+ * scoreWithFallback except null, and closestScoringBase(null) always returns
+ * "pts_std": a PPR reader would be shown the standard-scoring points column.
+ * This function turns the reader's chosen format into the { rec } map
+ * closestScoringBase needs to route to the right stored column, plus
+ * bonus_rec_te so the fallback path in scoreWithFallback applies the TE
+ * premium. It does not carry yardage or touchdown keys, so scoreStatMap's
+ * exact path is deliberately unusable on it and every caller falls through
+ * to the stored pts_ppr / pts_half_ppr / pts_std column, which is the point.
+ */
+export function scoringSettingsForFormat(format: FormatScoringInput): ScoringSettings {
+  const rec = format.scoring_type === "ppr" ? 1 : format.scoring_type === "half_ppr" ? 0.5 : 0;
+  const settings: ScoringSettings = { rec };
+  if (format.te_premium_bonus && format.te_premium_bonus > 0) {
+    settings.bonus_rec_te = format.te_premium_bonus;
+  }
+  return settings;
+}
+
 /** The stored point columns for a projection or stat row. */
 export type StoredPoints = {
   ppr: number | null;

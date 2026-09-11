@@ -45,7 +45,13 @@ export function LinkTile({
         <Icon className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-ink">{title}</span>
+        {/* The sr-only full stop matters: the title and the line under it
+            share one link, and without it they run together into a single
+            sentence when read as the link's name. */}
+        <span className="block text-sm font-semibold text-ink">
+          {title}
+          <span className="sr-only">. </span>
+        </span>
         <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">{body}</span>
       </span>
       <ArrowRight

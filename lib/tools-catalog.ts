@@ -16,7 +16,7 @@
  * its own icons.
  *
  * Order is this page's own, and it is NOT TOOLS_NAV's: the nav runs
- * league-pulse, on-the-clock, manager-pulse, signal-check, beacon-breakdown,
+ * league-pulse, on-the-clock, manager-pulse, trade-calculator, who-should-i-start,
  * faab, while this puts Beacon Breakdown ahead of Manager Pulse. That predates
  * the extraction and is left alone rather than quietly changed, but it now
  * drives the two machine-readable documents as well as the all-tools page, so
@@ -31,8 +31,8 @@ export type ToolHref =
   | "/tools/league-pulse"
   | "/tools/on-the-clock"
   | "/tools/manager-pulse"
-  | "/tools/beacon-breakdown"
-  | "/tools/signal-check"
+  | "/tools/who-should-i-start"
+  | "/tools/trade-calculator"
   | "/tools/faab";
 
 export type ToolCatalogEntry = {
@@ -79,18 +79,18 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
     cta: "Open the draft room",
   },
   {
-    href: "/tools/beacon-breakdown",
-    eyebrow: "Player comparison",
-    title: "Beacon Breakdown",
+    href: "/tools/who-should-i-start",
+    eyebrow: "Start / Sit",
+    title: "Beacon Breakdown: Who Should I Start?",
     pitch:
-      "Two players. One verdict. Drop any two players into a matchup card and see who has the edge, with side-by-side values, rankings, trends, and a plain-English bottom line you can screenshot and share.",
+      "Put two to eight players in, say how many you start, and get a start or sit call for this week, built from projections, matchups and each player's record against the projection.",
     bullets: [
-      "Head-to-head cards with a single Beacon Edge meter up top",
-      "Every row shows who wins: value, rank, production, risk, and upside",
-      "Dynasty and redraft outlooks weighted to your league format",
-      "A Beacon Verdict that reads like a real take, not a stat dump",
+      "A START or SIT call on every player, ordered by this week's projected points",
+      "The chance your last starter outscores your best bench option",
+      "Matchup, implied team total and floor and ceiling on every card",
+      "Head to head, projection, reliability, market and stats tabs underneath",
     ],
-    cta: "Compare players",
+    cta: "Find out who to start",
   },
   {
     href: "/tools/manager-pulse",
@@ -107,7 +107,7 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
     cta: "Scout a manager",
   },
   {
-    href: "/tools/signal-check",
+    href: "/tools/trade-calculator",
     eyebrow: "Trade analysis",
     title: "Signal Check Trade Calculator",
     pitch:

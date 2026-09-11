@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -46,20 +46,47 @@ import { categorizeLeague } from "@/lib/league-category";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The core sync and the league row, once per request.
+ *
+ * generateMetadata and the page body both need this league. Cached (React's
+ * per-request `cache()`, not the Next data cache), they share one
+ * `pulseLeagueCore` call instead of generateMetadata reading a possibly-
+ * unsynced row on its own, which is what let a crawler index "League not
+ * found" over a full page on a league's first visit.
+ *
+ * The page body still does its own follow-up select for power_pulse_status
+ * and power_pulse_detail, which LEAGUE_CORE_COLUMNS does not carry (only this
+ * route reads them); this helper only has to guarantee the sync ran, not
+ * carry every column.
+ */
+const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
+  const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
+  if (!pulse.ok) return null;
+
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
+});
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ league_id: string }>;
 }): Promise<Metadata> {
   const { league_id } = await params;
-  const supabase = await createClient();
-
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("name")
-    .eq("sleeper_league_id", league_id)
-    .maybeSingle();
-  if (!league) return { title: "League not found" };
+  const synced = await getSyncedLeague(league_id);
+  if (!synced) return { title: "League not found" };
+  const league = synced.league;
 
   const title = `${league.name} Power Pulse`;
   const description = `Projected standings, playoff odds, and expected performance for every team in ${league.name}.`;
@@ -67,6 +94,10 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,
@@ -90,8 +121,9 @@ export default async function LeaguePowerPulsePage({
   // it runs inside the Suspense boundaries below and the header, tabs and intro
   // paint without waiting for it.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
-  if (!pulseResult.ok) notFound();
+  const synced = await getSyncedLeague(sleeperLeagueId);
+  if (!synced) notFound();
+  const pulseCached = synced.cached;
 
   const supabase = await createClient();
 
@@ -197,7 +229,7 @@ export default async function LeaguePowerPulsePage({
     formatTags,
     scoringTags,
     lastUpdatedLabel: lastPulsed ? formatRelative(lastPulsed) : "never",
-    cached: pulseResult.cached,
+    cached: pulseCached,
     coverage: context.coverage,
     sourceDisplay: coverageOk ? context.sourceDisplay : "N/A",
     formatDisplay: coverageOk ? context.formatDisplay : "N/A",
@@ -276,7 +308,7 @@ export default async function LeaguePowerPulsePage({
               status={league.status ?? null}
               formatConfigId={coverageOk ? context.formatConfigId : null}
               sourceSlug={coverageOk ? context.sourceSlug : null}
-              resynced={!pulseResult.cached}
+              resynced={!pulseCached}
               scoringDescription={scoringDescription}
             />
           </Suspense>
@@ -292,7 +324,7 @@ export default async function LeaguePowerPulsePage({
             status={league.status ?? null}
             formatConfigId={coverageOk ? context.formatConfigId : null}
             sourceSlug={coverageOk ? context.sourceSlug : null}
-            resynced={!pulseResult.cached}
+            resynced={!pulseCached}
             searchedUsername={searchedUsername}
             viewerSleeperUserId={viewer?.sleeperUserId ?? null}
             linkUsername={linkUsername}

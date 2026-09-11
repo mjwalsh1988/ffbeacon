@@ -4,7 +4,12 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 const DISCORD_INVITE_URL = "https://discord.gg/scrhgHNWfe";
-const PAGE_URL = "https://ffbeacon.com/join";
+
+// Single source for the page's description so the base metadata description,
+// the openGraph description, and the twitter description can never drift
+// apart from one another.
+const PAGE_DESCRIPTION =
+  "Join the FF Beacon community on Discord: fantasy football tools, rankings, and trade talk built for everyone.";
 
 /**
  * Why this page renders instead of doing a server-side redirect():
@@ -31,14 +36,12 @@ const PAGE_URL = "https://ffbeacon.com/join";
 
 export const metadata: Metadata = {
   title: "Join the FF Beacon Discord",
-  description:
-    "Join the FF Beacon community on Discord: fantasy football tools, rankings, and trade talk built for everyone.",
-  alternates: { canonical: PAGE_URL },
+  description: PAGE_DESCRIPTION,
+  alternates: { canonical: "/join" },
   openGraph: {
     title: "Join the FF Beacon Discord",
-    description:
-      "Fantasy football tools, rankings, and trade reactions, built for everyone, including screen readers.",
-    url: PAGE_URL,
+    description: PAGE_DESCRIPTION,
+    url: "/join",
     siteName: "FF Beacon",
     type: "website",
     images: [
@@ -53,8 +56,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Join the FF Beacon Discord",
-    description:
-      "Fantasy football tools, rankings, and trade reactions, built for everyone, including screen readers.",
+    description: PAGE_DESCRIPTION,
     images: ["/api/og/join"],
     site: "@ffbeacon",
     creator: "@ffbeacon",

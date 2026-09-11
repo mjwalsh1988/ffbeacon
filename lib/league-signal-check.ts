@@ -2,7 +2,7 @@
  * Batch Signal Check analysis for a league's trades.
  *
  * The League Pulse transactions feed grades every trade through the SAME Signal
- * Check pipeline a user gets when they type the trade into /tools/signal-check:
+ * Check pipeline a user gets when they type the trade into /tools/trade-calculator:
  * FF Beacon native values, the league's derived format (closest supported format
  * as a fallback), the published calibration + trade-shape ruleset, and the same
  * verdict / confidence / explanation output. This module resolves the format and

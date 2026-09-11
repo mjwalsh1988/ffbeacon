@@ -16,7 +16,13 @@
 import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { loadSchedule, loadAccuracy } from "./load";
+import {
+  loadSchedule,
+  loadAccuracy,
+  loadDefenseRanks,
+  rankDefenseRows,
+  type DefenseRankInput,
+} from "./load";
 
 type MatchupRow = {
   week: number;
@@ -172,5 +178,110 @@ describe("loadAccuracy source scoping", () => {
     ]);
     const out = await loadAccuracy(client, ["p1"], "pts_ppr", "ffbeacon");
     expect(out.has("p1")).toBe(false);
+  });
+});
+
+/**
+ * rankDefenseRows: the pure core of loadDefenseRanks, exercised against a
+ * fixture rather than a database.
+ */
+describe("rankDefenseRows", () => {
+  function input(over: Partial<DefenseRankInput> & Pick<DefenseRankInput, "team" | "effectiveMultiplier">): DefenseRankInput {
+    return { position: "WR", ...over };
+  }
+
+  it("keys the map as team|position", () => {
+    const out = rankDefenseRows([input({ team: "BUF", position: "WR", effectiveMultiplier: 1.1 })]);
+    expect(out.has("BUF|WR")).toBe(true);
+  });
+
+  it("gives rank 1 to the defense that allows the most points to the position", () => {
+    const out = rankDefenseRows([
+      input({ team: "NYJ", effectiveMultiplier: 1.3 }),
+      input({ team: "SF", effectiveMultiplier: 0.7 }),
+      input({ team: "BUF", effectiveMultiplier: 1.0 }),
+    ]);
+    expect(out.get("NYJ|WR")).toEqual({ rank: 1, of: 3 });
+    expect(out.get("BUF|WR")).toEqual({ rank: 2, of: 3 });
+    expect(out.get("SF|WR")).toEqual({ rank: 3, of: 3 });
+  });
+
+  it("ranks each position within its own pool", () => {
+    const out = rankDefenseRows([
+      input({ team: "NYJ", position: "WR", effectiveMultiplier: 1.3 }),
+      input({ team: "NYJ", position: "RB", effectiveMultiplier: 0.6 }),
+      input({ team: "SF", position: "RB", effectiveMultiplier: 1.4 }),
+    ]);
+    expect(out.get("NYJ|WR")).toEqual({ rank: 1, of: 1 });
+    expect(out.get("NYJ|RB")).toEqual({ rank: 2, of: 2 });
+    expect(out.get("SF|RB")).toEqual({ rank: 1, of: 2 });
+  });
+
+  it("breaks a tie by team code for a deterministic order", () => {
+    const out = rankDefenseRows([
+      input({ team: "NYJ", effectiveMultiplier: 1.0 }),
+      input({ team: "BUF", effectiveMultiplier: 1.0 }),
+    ]);
+    expect(out.get("BUF|WR")).toEqual({ rank: 1, of: 2 });
+    expect(out.get("NYJ|WR")).toEqual({ rank: 2, of: 2 });
+  });
+});
+
+/**
+ * loadDefenseRanks: the database read plus a degrade-to-empty-Map path, since
+ * this feeds one optional matchup reason sentence rather than a required
+ * number, and a start/sit board must still render without it.
+ */
+describe("loadDefenseRanks", () => {
+  type DefenseDbRow = {
+    team: string;
+    position: string;
+    multiplier: number;
+    shrunk_multiplier: number | null;
+  };
+
+  /**
+   * The smallest client that satisfies loadDefenseRanks' call chain:
+   * from().select().eq(scoring).eq(season).
+   */
+  function fakeDefenseClient(rows: DefenseDbRow[], failWith?: string): SupabaseClient<Database> {
+    const builder = {
+      select: () => builder,
+      eq: () => builder,
+      then(resolve: (v: { data: DefenseDbRow[] | null; error: { message: string } | null }) => void) {
+        resolve(
+          failWith
+            ? { data: null, error: { message: failWith } }
+            : { data: rows, error: null },
+        );
+      },
+    };
+    return { from: () => builder } as unknown as SupabaseClient<Database>;
+  }
+
+  it("prefers the shrunk multiplier when one exists, matching opponentMultiplier's own default preference", async () => {
+    const client = fakeDefenseClient([
+      { team: "NYJ", position: "WR", multiplier: 1.05, shrunk_multiplier: 1.3 },
+      { team: "BUF", position: "WR", multiplier: 1.1, shrunk_multiplier: 0.9 },
+    ]);
+    const out = await loadDefenseRanks(client, "pts_ppr", 2026);
+    expect(out.get("NYJ|WR")).toEqual({ rank: 1, of: 2 });
+    expect(out.get("BUF|WR")).toEqual({ rank: 2, of: 2 });
+  });
+
+  it("falls back to the raw multiplier when a shrunk figure is not yet available", async () => {
+    const client = fakeDefenseClient([
+      { team: "NYJ", position: "WR", multiplier: 1.4, shrunk_multiplier: null },
+      { team: "BUF", position: "WR", multiplier: 0.8, shrunk_multiplier: null },
+    ]);
+    const out = await loadDefenseRanks(client, "pts_ppr", 2026);
+    expect(out.get("NYJ|WR")).toEqual({ rank: 1, of: 2 });
+    expect(out.get("BUF|WR")).toEqual({ rank: 2, of: 2 });
+  });
+
+  it("degrades to an empty map on a failed read rather than throwing", async () => {
+    const client = fakeDefenseClient([], "connection reset");
+    const out = await loadDefenseRanks(client, "pts_ppr", 2026);
+    expect(out).toEqual(new Map());
   });
 });

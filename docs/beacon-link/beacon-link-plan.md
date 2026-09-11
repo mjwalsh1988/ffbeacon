@@ -2965,7 +2965,7 @@ human review", linking to `/services`; the League Pulse deep view header gains
 a "Get this roster reviewed" link (rendered by `FeatureGate` on nothing, it is
 always shown, but only when `settings.purchases.enabled`) that deep-links
 `/services/<slug>?league=<id>&roster=<id>` so the intake opens prefilled;
-`/tools/signal-check`'s result gains "Get a second opinion on this trade"
+`/tools/trade-calculator`'s result gains "Get a second opinion on this trade"
 linking the trade-review product with the trade encoded. Each is one
 `Link`, styled as the site's secondary button, and each is absent when
 purchases are off.

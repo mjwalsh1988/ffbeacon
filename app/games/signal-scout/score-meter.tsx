@@ -3,7 +3,7 @@
 /**
  * Score meter: a visual readout of remaining signal strength (plan sections
  * 4, 13, 21, 26). Mirrors the aria-hidden bar + sr-only summary sentence
- * pattern from app/tools/signal-check/trade-margin-graph.tsx. The caller
+ * pattern from app/tools/trade-calculator/trade-margin-graph.tsx. The caller
  * (signal-scout-client.tsx) still owns all game state; the only state here is
  * the docking below.
  *

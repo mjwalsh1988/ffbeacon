@@ -2,7 +2,7 @@
  * Grading one league's trades for Would You Rather.
  *
  * A thin, shared wrapper over `analyzeLeagueTrades`, which is the SAME pipeline
- * behind the League Pulse transactions feed and /tools/signal-check: FF Beacon
+ * behind the League Pulse transactions feed and /tools/trade-calculator: FF Beacon
  * native values, the league's own derived format, the published ruleset. The
  * game does not get its own opinion of a trade, and it must not: the whole
  * payoff of the reveal is that the reader is shown the real verdict, not a

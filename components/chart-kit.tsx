@@ -30,9 +30,9 @@
  * dash pattern and a marker shape as well as a hue, and every legend entry names
  * its player in text.
  *
- * WHY THIS MODULE LIVES OUTSIDE app/tools/beacon-breakdown.
+ * WHY THIS MODULE LIVES OUTSIDE app/tools/who-should-i-start.
  *   This started as furniture for one tool and lived at
- *   app/tools/beacon-breakdown/chart-kit.tsx. League Pulse's Positional WAR
+ *   app/tools/who-should-i-start/chart-kit.tsx. League Pulse's Positional WAR
  *   chart needs the same accessibility contract (ChartFigure's summary/table/
  *   caption trio applies unchanged), and importing a component across an app
  *   route boundary is the wrong dependency direction: a route directory is not
@@ -42,7 +42,7 @@
  */
 
 import type { ReactNode } from "react";
-import type { PulsePosition } from "@/lib/power-pulse/types";
+import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 
 /** Player A is purple, player B is cyan, everywhere in the tool. */
 export const SERIES_A = "#A855F7";
@@ -221,7 +221,7 @@ export type SeriesStyle = {
   color: string;
   /** SVG stroke-dasharray, or null for a solid line. */
   dash: string | null;
-  marker: "circle" | "square" | "diamond" | "triangle" | "cross" | "star";
+  marker: "circle" | "square" | "diamond" | "triangle" | "cross" | "star" | "plus" | "hexagon";
 };
 
 /**
@@ -291,6 +291,43 @@ export const POSITION_SERIES: Record<PulsePosition, SeriesStyle> = {
 };
 
 /**
+ * Ordered eight-entry palette for an N-player comparison (Who Should I
+ * Start's background tabs, two to eight players). Index by a player's slot
+ * in the comparison's own side list (0-based), never by the player's NFL
+ * position: this palette carries no positional meaning.
+ *
+ * The first six entries are POSITION_SERIES's own six styles, read out in
+ * PULSE_POSITIONS order, because that six-way set is already the validated
+ * distinguishable set this file documents above (CVD separation, the
+ * normal-vision floor, and chroma all hold, and every entry already carries
+ * its own dash and marker). Two more are appended for players seven and
+ * eight, per docs/seo/who-should-i-start-and-site-seo-plan.md section 2.7: a
+ * solid grey with a plus marker, a dotted white with a hexagon marker. Both
+ * reuse existing FF Beacon ink tokens rather than inventing new hex values,
+ * and both are checked with this file's own contrast formula against the
+ * same composited panel background the six above are checked against
+ * (bg-surface/50 over bg-base resolves to #0B0B14). This project ships one
+ * theme only (dark; there is no light `data-theme` anywhere in the app), so
+ * there is no second background to re-check against:
+ *   - Player 7, ink.muted  #A8A8B8: 8.35:1 (AAA)
+ *   - Player 8, ink.DEFAULT #F4F4F8: 17.85:1 (AAA)
+ * Both clear the plan's mandatory 4.5:1 AA bar with wide margin. Player 8's
+ * dash ("1 3") is deliberately tighter than K's dotted rose ("1 4") so the
+ * two dotted series in an eight-up chart do not read as one dash style in
+ * two colors. The marker shapes are new paths in markerPath() below and are
+ * geometrically distinct from all six above, including from "cross" (K's
+ * marker, which despite its name already draws a blockier plus sign): the
+ * new "plus" is a slimmer, larger cross than "cross" draws.
+ */
+export const PLAYER_SERIES: SeriesStyle[] = [
+  ...PULSE_POSITIONS.map((position) => POSITION_SERIES[position]),
+  // Player 7. Solid grey (ink.muted). Contrast vs #0B0B14: 8.35:1 (AAA).
+  { color: "#A8A8B8", dash: null, marker: "plus" },
+  // Player 8. Dotted white (ink.DEFAULT). Contrast vs #0B0B14: 17.85:1 (AAA).
+  { color: "#F4F4F8", dash: "1 3", marker: "hexagon" },
+];
+
+/**
  * SVG path `d` for one marker shape, centered at (cx, cy) with characteristic
  * size r. Returns a closed, fillable path so the chart's <svg> and the OG
  * route's Satori-rendered <svg> draw the exact same shape from the exact same
@@ -348,6 +385,37 @@ export function markerPath(marker: SeriesStyle["marker"], cx: number, cy: number
         const rad = i % 2 === 0 ? outerR : innerR;
         // Start pointing straight up, then step 36 degrees per point.
         const angle = (-90 + i * 36) * (Math.PI / 180);
+        pts.push([cx + rad * Math.cos(angle), cy + rad * Math.sin(angle)]);
+      }
+      return `M${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L")} Z`;
+    }
+    case "plus": {
+      // A slimmer, larger cross than "cross" draws above, so the two read as
+      // distinct shapes rather than the same plus sign at two sizes.
+      const outer = r * 1.3;
+      const t = r * 0.22;
+      const pts: [number, number][] = [
+        [cx - t, cy - outer],
+        [cx + t, cy - outer],
+        [cx + t, cy - t],
+        [cx + outer, cy - t],
+        [cx + outer, cy + t],
+        [cx + t, cy + t],
+        [cx + t, cy + outer],
+        [cx - t, cy + outer],
+        [cx - t, cy + t],
+        [cx - outer, cy + t],
+        [cx - outer, cy - t],
+        [cx - t, cy - t],
+      ];
+      return `M${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L")} Z`;
+    }
+    case "hexagon": {
+      const rad = r * 1.15;
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 6; i++) {
+        // Start pointing straight up, then step 60 degrees per point.
+        const angle = (-90 + i * 60) * (Math.PI / 180);
         pts.push([cx + rad * Math.cos(angle), cy + rad * Math.sin(angle)]);
       }
       return `M${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L")} Z`;

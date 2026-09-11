@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Accessibility,
   BookOpen,
+  Cog,
   ListOrdered,
   Check,
   Clock,
@@ -89,7 +90,7 @@ export default async function GuidesPage() {
       <DiscordCtaSection
         eyebrow="While you wait"
         heading="Waiting on a guide? Ask a real person right now."
-        body="Two are live and the last is being written while we build out the platform. In the meantime, drop into our Discord and real fantasy players will walk you through any concept, free. Want to know what's already live? Read about FF Beacon."
+        body="Three are live and the last is being written while we build out the platform. In the meantime, drop into our Discord and real fantasy players will walk you through any concept, free. Want to know what's already live? Read about FF Beacon."
         isMember={isMember}
         memberHeading="While the rest cook, explore the tools."
         memberBody="You're already in the crew, so hang tight on the guides still being written. In the meantime, the free FF Beacon tools are live and ready to put to work on your team."
@@ -162,6 +163,19 @@ const GUIDES: Guide[] = [
     ],
   },
   {
+    icon: Cog,
+    title: "How FF Beacon works",
+    href: "/guides/how-ff-beacon-works",
+    description:
+      "The methodology page: which engine projects a player, how the matchup and reliability adjustments work, what the confidence figure measures, and what none of it accounts for.",
+    bullets: [
+      "The projection engine, named live rather than hardcoded",
+      "The matchup model, built from our own play-by-play back to 2020",
+      "The reliability discount and the start/sit confidence figure",
+      "What the models do not know, stated plainly",
+    ],
+  },
+  {
     icon: Accessibility,
     title: "Accessible fantasy football",
     description:
@@ -187,9 +201,10 @@ function GuidesSection() {
         Start with the vocabulary, then go draft.
       </h2>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
-        The glossary and the draft guide are live and free to read right now.
-        The last one is being written while we focus on the rest of the
-        platform, and it&apos;ll land here when it&apos;s ready.
+        The glossary, the draft guide, and the methodology page are live and
+        free to read right now. The last one is being written while we focus
+        on the rest of the platform, and it&apos;ll land here when it&apos;s
+        ready.
       </p>
 
       <ul

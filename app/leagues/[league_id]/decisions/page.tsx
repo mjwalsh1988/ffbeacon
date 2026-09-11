@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
@@ -69,28 +69,63 @@ import type { SleeperLeague } from "@/lib/sleeper";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The core sync and the league row, once per request.
+ *
+ * generateMetadata and the page body both need this league. Cached (React's
+ * per-request `cache()`, not the Next data cache), they share one
+ * `pulseLeagueCore` call rather than generateMetadata reading a possibly-
+ * unsynced row on its own, which is what let a crawler index "League not
+ * found" over a full page on a league's first visit.
+ *
+ * The page body still does its own follow-up select for manager_ledger_status,
+ * which LEAGUE_CORE_COLUMNS does not carry (only this route reads it); this
+ * helper only has to guarantee the sync ran, not carry every column.
+ */
+const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
+  const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
+  if (!pulse.ok) return null;
+
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
+});
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ league_id: string }>;
 }): Promise<Metadata> {
   const { league_id } = await params;
-  const supabase = await createClient();
-
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("name")
-    .eq("sleeper_league_id", league_id)
-    .maybeSingle();
-  if (!league) return { title: "League not found" };
+  const synced = await getSyncedLeague(league_id);
+  if (!synced) return { title: "League not found" };
+  const league = synced.league;
 
   const title = `${league.name} Manager Decisions`;
   const description = `Lineup, waiver, trade and draft decisions graded against settled results for every manager in ${league.name}.`;
+  const ogPath = `/api/og/league/${league_id}`;
   return {
     title,
     description,
-    openGraph: { title, description },
-    twitter: { card: "summary_large_image", title, description },
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
+    openGraph: {
+      title,
+      description,
+      images: [{ url: ogPath, width: 1200, height: 630 }],
+    },
+    twitter: { card: "summary_large_image", title, description, images: [ogPath] },
   };
 }
 
@@ -118,11 +153,12 @@ export default async function DecisionsPage({
   // (lib/sleeper-handle/resolve.ts). `linkUsername` is what a link built on
   // this page may carry, which is the handle only when the reader arrived on
   // one.
-  const [pulseResult, viewer] = await Promise.all([
-    pulseLeagueCore(adminClient, sleeperLeagueId),
+  const [synced, viewer] = await Promise.all([
+    getSyncedLeague(sleeperLeagueId),
     resolveSleeperViewer(supabase, sp.username),
   ]);
-  if (!pulseResult.ok) notFound();
+  if (!synced) notFound();
+  const pulseCached = synced.cached;
 
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
@@ -179,7 +215,7 @@ export default async function DecisionsPage({
     }),
     scoringTags: buildLeagueScoringTags(league.scoring_settings),
     lastUpdatedLabel: lastPulsed ? formatRelative(lastPulsed.toISOString()) : "never",
-    cached: pulseResult.cached,
+    cached: pulseCached,
     coverage: context.coverage,
     sourceDisplay: coverageOk ? context.sourceDisplay : "N/A",
     formatDisplay: coverageOk ? context.formatDisplay : "N/A",
@@ -255,7 +291,7 @@ export default async function DecisionsPage({
       {/* The rest of the derived sync, inside its own boundary so it never
           holds up the ledger above. Renders nothing. */}
       <Suspense fallback={null}>
-        <DerivedWork leagueRowId={league.id} resynced={!pulseResult.cached} />
+        <DerivedWork leagueRowId={league.id} resynced={!pulseCached} />
       </Suspense>
     </LeagueShell>
   );

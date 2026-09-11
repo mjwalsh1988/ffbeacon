@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
@@ -8,6 +8,8 @@ import { recordCronRun } from "@/lib/cron-runs";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { loadBeamSettings } from "@/lib/beam/settings";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
+import { getActiveFormats } from "@/lib/source";
+import { submitIndexNow } from "@/lib/indexnow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +63,20 @@ export async function GET(req: Request) {
       const started = Date.now();
       const rankings = await runSeedRankings(supabase);
       const trends = await runCalculateTrends(supabase);
+
+      // Rankings and trends just rebuilt from the freshest value sync; push the
+      // rankings board and every format page to IndexNow. Fired via after() so
+      // a slow or failed ping never adds to this cron's own duration, and
+      // gated on both rebuilds actually succeeding: a failed rankings rebuild
+      // leaves the previous rows in place, so there is nothing new to push.
+      if (rankings.ok && trends.ok) {
+        const activeFormats = await getActiveFormats(supabase);
+        const urls = [
+          "/rankings",
+          ...activeFormats.map((format) => `/rankings/${format.slug}`),
+        ];
+        after(() => submitIndexNow(urls));
+      }
 
       // Non-fatal, like every other prune on this job. A failed rebuild leaves
       // the previous one in place, and Manager Pulse degrades to ranking

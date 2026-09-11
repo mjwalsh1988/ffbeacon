@@ -34,16 +34,19 @@ import {
   Flame,
   Sparkles,
   Zap,
+  HeartHandshake,
   type LucideIcon,
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
+import { SITE } from "@/lib/site";
+import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
 
 // What the homepage says about itself to a search engine and to anyone who
 // pastes the link into a group chat. Leads with what is free and what you get,
 // because that is the question a stranger is actually asking.
 const HOME_TITLE = "FF Beacon - Your signal through the fantasy noise.";
 const HOME_DESCRIPTION =
-  "Free fantasy football rankings, trade grades, draft help, and league tools, with a Discord full of people happy to sanity-check your lineup. No paywall, and built to work by ear as well as by eye.";
+  "Free fantasy football rankings, trade grades, draft help, and league tools, with a Discord to sanity-check your lineup. Works by ear or by eye.";
 
 export const metadata: Metadata = {
   // `absolute` bypasses the root layout's "%s | FF Beacon" title template so
@@ -117,15 +120,15 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     featured: "cyan",
   },
   {
-    href: "/tools/beacon-breakdown",
-    title: "Beacon Breakdown",
+    href: "/tools/who-should-i-start",
+    title: "Beacon Breakdown: Who Should I Start?",
     description:
-      "Torn between two players? Drop them into a matchup card and see who has the edge, with side-by-side values, rankings, and trends, plus a plain-English verdict you can screenshot and share.",
-    cta: "Compare players",
+      "Put your players in and get a start/sit verdict built from this week's projections and matchups, with the confidence to back it.",
+    cta: "Find out who to start",
     icon: Swords,
   },
   {
-    href: "/tools/signal-check",
+    href: "/tools/trade-calculator",
     title: "Signal Check Trade Calculator",
     description:
       "Thinking about a trade? Build both sides in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
@@ -185,6 +188,7 @@ export default async function HomePage() {
       <ToolsSection />
       <GamesSection />
       <ArticlesSection articles={articles} />
+      <GuidesSection />
       <SourcesFormatsSection formats={formats} sources={sources} />
       <CtaSection memberContext={memberContext} />
     </main>
@@ -276,6 +280,21 @@ function Hero({ memberContext }: { memberContext: Promise<MemberContext> }) {
               </li>
             ))}
           </ul>
+
+          {/* Byline. Same "By {name}" pattern as the Beacon Brief and guide
+              pages (rel="author" ties the link to the person the NewsArticle
+              and Article schema on those pages already name). */}
+          <p className="mt-6 text-xs text-ink-subtle">
+            Built by{" "}
+            <Link
+              rel="author"
+              href={SITE.author.bylineHref}
+              className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              {SITE.author.name}
+            </Link>
+            .
+          </p>
         </div>
 
         {/* Right column: the Discord community card with live guild stats. */}
@@ -1202,6 +1221,60 @@ function ArticleCard({ article }: { article: ArticleRow }) {
   );
 }
 
+/* ---------- Guides ---------- */
+
+/**
+ * A single card pointing at /guides, styled like the tool cards above so a
+ * guides link reads as part of the same set of free resources. The
+ * description names what is actually live there today: the glossary
+ * (TERM_COUNT terms) and the nightly-rebuilt draft guide. A third guide
+ * (accessible fantasy football) is still being written, so it is left out
+ * of this card rather than advertised early.
+ */
+function GuidesSection() {
+  return (
+    <section aria-labelledby="guides-heading" className="border-b border-line">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <SectionEyebrow>Learn the game</SectionEyebrow>
+        <h2
+          id="guides-heading"
+          className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
+          New to fantasy? Start with the vocabulary.
+        </h2>
+        <div className="mt-10 max-w-2xl">
+          <Link
+            href="/guides"
+            className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 items-center justify-center rounded-card bg-beacon text-black"
+            >
+              <BookOpen className="h-6 w-6" />
+            </span>
+            <h3 className="mt-5 text-xl font-semibold text-ink">
+              Fantasy football guides
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              A plain-English glossary covering {TERM_COUNT} terms, from PPR to
+              aDOT, plus a draft guide rebuilt nightly with steals, fades, and a
+              plain-English verdict on every name. Both are free to read.
+            </p>
+            <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
+              Browse the guides
+              <ArrowRight
+                aria-hidden="true"
+                className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
+              />
+            </span>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- CTA ---------- */
 
 function CtaSection({ memberContext }: { memberContext: Promise<MemberContext> }) {
@@ -1277,6 +1350,16 @@ async function CtaContent({
           <Timer aria-hidden="true" className="h-3.5 w-3.5" />
           Get live draft help
           <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+        </Link>
+        {/* A real link to the /donate page, distinct from the header's Donate
+            control, which opens the same form in a modal without leaving the
+            page. */}
+        <Link
+          href="/donate"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <HeartHandshake aria-hidden="true" className="h-3.5 w-3.5" />
+          Support the site
         </Link>
         <Link
           href="/about"

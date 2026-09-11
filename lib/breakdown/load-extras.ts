@@ -6,11 +6,16 @@
  * ONE MODEL, NOT TWO. Projections run through lib/power-pulse/project.ts, the
  * same pure function the Power Pulse page and the FAAB calculator use. A second
  * copy of that math would drift, and the first symptom would be a Breakdown that
- * disagrees with the Power Pulse page it links to. We pass `scoringSettings:
- * null` because there is no league here, which makes `scoreWithFallback` read the
- * stored pts_ppr / pts_half_ppr / pts_std column for the active format instead of
- * a league's dot product. Every other adjustment (opponent strength, reliability,
- * availability, injury, variance) applies exactly as it does inside a league.
+ * disagrees with the Power Pulse page it links to. We build `scoringSettings`
+ * from `scoringSettingsForFormat` (lib/league-scoring.ts) because there is no
+ * league here: that helper builds a minimal `{ rec }` map from the reader's
+ * active format, deliberately too thin for `scoreStatMap`'s exact dot product
+ * to accept, so `scoreWithFallback` reads the stored pts_ppr / pts_half_ppr /
+ * pts_std column for the active format instead of a league's dot product.
+ * Passing `null` there used to make `closestScoringBase(null)` fall to
+ * `pts_std` for every reader, which is the latent defect the helper fixes.
+ * Every other adjustment (opponent strength, reliability, availability,
+ * injury, variance) applies exactly as it does inside a league.
  *
  * BOTH PLAYERS IN ONE QUERY. The original breakdown fired three queries per
  * player. Adding projections, accuracy, defensive splits, market snapshots, and
@@ -20,7 +25,9 @@
  * NO SLEEPER CALL. Resolving "what week is it" through Sleeper's state endpoint
  * would put an uncached external fetch on a public page's critical path. We
  * already store everything needed to answer it: the newest projected season, and
- * the newest week anybody actually played. Both are indexed lookups.
+ * the newest week anybody actually played. Both are indexed lookups. The read
+ * itself is resolveSeasonClock, which lives in lib/start-sit/clock.ts and is
+ * re-exported below so every existing importer of this module keeps working.
  *
  * EVERY PROJECTION READ NAMES ITS SOURCE. `player_weekly_projections` and
  * `player_projection_accuracy` both hold an ffbeacon row beside every sleeper
@@ -36,6 +43,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ScoringKey } from "@/lib/player-profile";
+import { scoringSettingsForFormat, type ScoringSettings } from "@/lib/league-scoring";
 import { loadDefenseSplits, type DefenseRow, type ProjectionRow } from "@/lib/power-pulse/load";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { DEFAULT_POWER_PULSE_SETTINGS, type PowerPulseSettings } from "@/lib/power-pulse/default-settings";
@@ -43,6 +51,7 @@ import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
+import { resolveSeasonClock, type SeasonClock } from "@/lib/start-sit/clock";
 import type {
   BreakdownExtras,
   BreakdownMarket,
@@ -51,6 +60,10 @@ import type {
   ProjectedWeekPoint,
   ReliabilityWeek,
 } from "./types";
+
+// Re-exported so every existing importer of resolveSeasonClock and SeasonClock
+// keeps resolving through this module after the move to lib/start-sit/clock.ts.
+export { resolveSeasonClock, type SeasonClock };
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -79,17 +92,13 @@ export type ExtrasContext = {
   tePremiumPerReception: number;
 };
 
-/** Where the season sits, derived from our own tables. */
-export type SeasonClock = {
-  season: number | null;
-  /** The first week we have not seen a completed game for. 1 in the preseason. */
-  currentWeek: number;
-  /** The newest season that has graded games, for the reliability read. */
-  gradedSeason: number | null;
-};
-
 const PAGE = 1000;
-/** Sleeper publishes an 18-week regular season. */
+/**
+ * Sleeper publishes an 18-week regular season. Also the last week the
+ * projection loop below walks to; kept here rather than imported from
+ * lib/start-sit/clock.ts because that module's copy is a private constant
+ * resolveSeasonClock owns for its own currentWeek clamp.
+ */
 const MAX_WEEK = 18;
 
 function numOrNull(v: unknown): number | null {
@@ -103,67 +112,29 @@ function scoringBaseFor(key: ScoringKey): ScoringBase {
 }
 
 /**
- * Where we are in the NFL calendar, read from stored data rather than Sleeper.
- *
- * `season` is the newest season we hold regular-season projections for.
- * `currentWeek` is one past the newest week anybody has a completed game in,
- * clamped into the regular season. In the preseason nothing has been played, so
- * it resolves to week 1 and the whole slate is "remaining", which is exactly the
- * behaviour the profile's projection outlook already has.
+ * The inverse of lib/player-profile.ts scoringKeyForType, needed because
+ * ExtrasContext already carries the resolved ScoringKey (not a format_configs
+ * row) and scoringSettingsForFormat wants the format_configs scoring_type
+ * shape. No new query: everything scoringSettingsForFormat needs is already on
+ * ExtrasContext.
  */
-export async function resolveSeasonClock(supabase: AnySupabase): Promise<SeasonClock> {
-  const db = supabase as SupabaseClient<Database>;
+function scoringTypeForKey(key: ScoringKey): string {
+  if (key === "pts_half_ppr") return "half_ppr";
+  if (key === "pts_std") return "standard";
+  return "ppr";
+}
 
-  // SLEEPER_SOURCE, deliberately and permanently. This asks which season we
-  // hold projections FOR, and Sleeper is the coverage baseline every other
-  // source is measured against (see availableProjectionSources in
-  // lib/projections/source.ts): our own builder mirrors Sleeper's rows rather
-  // than adding seasons of its own. Reading unfiltered would return the same
-  // answer through twice the rows, and reading the resolved source would make
-  // "what season is it" depend on a switch that is about how a number is
-  // computed rather than about which weeks exist.
-  const { data: projSeason } = await db
-    .from("player_weekly_projections")
-    .select("season")
-    .eq("season_type", "regular")
-    .eq("source", SLEEPER_SOURCE)
-    .order("season", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const season = projSeason ? Number(projSeason.season) : null;
-
-  const { data: statSeason } = await db
-    .from("player_stats")
-    .select("season")
-    .eq("season_type", "regular")
-    .gt("gp", 0)
-    .order("season", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const gradedSeason = statSeason ? Number(statSeason.season) : null;
-
-  if (season == null) return { season: null, currentWeek: 1, gradedSeason };
-
-  // Only weeks inside the projected season count toward "what week is it".
-  let currentWeek = 1;
-  if (gradedSeason === season) {
-    const { data: playedWeek } = await db
-      .from("player_stats")
-      .select("week")
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .gt("gp", 0)
-      .order("week", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (playedWeek) {
-      currentWeek = Math.min(MAX_WEEK + 1, Number(playedWeek.week) + 1);
-    }
-  }
-
-  return { season, currentWeek, gradedSeason };
+/**
+ * The scoring map handed to projectPlayerWeek so a PPR reader's WR gets
+ * pts_ppr and not pts_std. See scoringSettingsForFormat in
+ * lib/league-scoring.ts for why this is deliberately too thin for the exact
+ * dot-product path: this page has no league scoring_settings, only a format.
+ */
+export function scoringSettingsForContext(context: ExtrasContext): ScoringSettings {
+  return scoringSettingsForFormat({
+    scoring_type: scoringTypeForKey(context.scoringKey),
+    te_premium_bonus: context.tePremiumPerReception,
+  });
 }
 
 /** Weekly projections for both players from `fromWeek` on, in one paged read. */
@@ -549,6 +520,10 @@ export async function loadBreakdownExtras(
 
   const out = new Map<string, BreakdownExtras>();
 
+  // Same for both subjects: neither has a league, so this is the format's own
+  // { rec, bonus_rec_te } map rather than a roster's scoring_settings.
+  const scoringSettings = scoringSettingsForContext(context);
+
   for (const subject of subjects) {
     const acc = accuracy.get(subject.id) ?? null;
     const accForEngine = acc
@@ -582,9 +557,11 @@ export async function loadBreakdownExtras(
           },
           accuracy: accForEngine,
           reliability,
-          // No league here, so the engine reads the stored points column for the
-          // active scoring instead of a league's own dot product.
-          scoringSettings: null,
+          // No league here, so scoringSettingsForContext hands scoreWithFallback
+          // a map too thin for the exact dot product, and the engine reads the
+          // stored pts_ppr / pts_half_ppr / pts_std column for the active
+          // format instead of a league's own dot product.
+          scoringSettings,
           defense,
           defenseSeasons,
           week,

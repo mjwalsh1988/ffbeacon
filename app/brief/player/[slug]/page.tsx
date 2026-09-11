@@ -38,6 +38,15 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     title,
     description,
     alternates: { canonical },
+    // The player profile (/players/[slug]) is the canonical home for this
+    // player's coverage: it carries the same articles on its Beacon Brief tab
+    // alongside value data this archive never had. follow stays true so a
+    // crawler that lands here still walks out to it.
+    robots: {
+      index: false,
+      follow: true,
+      googleBot: { index: false, follow: true },
+    },
     // Filtered views of the Brief share the Brief's own card. The headline
     // and the description below still name the filter, so the preview reads
     // correctly even though the artwork is the section's.

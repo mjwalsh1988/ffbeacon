@@ -38,10 +38,16 @@ import { ScrollToTop } from "@/components/scroll-to-top";
  * as before: a full-viewport centered card (100dvh, `pb-[20dvh]` biasing the card's
  * center to roughly 40% from the top, which reads better than dead center). The card
  * is the single live region, role="status" + aria-live="polite" with a real
- * "Loading..." label, so a screen reader announces it once; the PulseLoader inside is
- * decorative because the card owns the announcement. <ScrollToTop /> resets the window
- * on mount so a navigation made while scrolled down lands with the loader in view.
- * All colors come from brand tokens; no hex is hardcoded.
+ * sentence naming the destination, so a screen reader announces it once; the
+ * PulseLoader inside is decorative because the card owns the announcement.
+ * <ScrollToTop /> resets the window on mount so a navigation made while scrolled down
+ * lands with the loader in view. All colors come from brand tokens; no hex is
+ * hardcoded.
+ *
+ * SEO-T980: the label below reads "Loading your Sleeper league." instead of a bare
+ * "Loading...", so a crawler or a slow reader that sees this boundary gets real text
+ * naming the destination rather than empty shapes. It stays inside the existing
+ * role="status" region rather than adding a second one.
  */
 export default function Loading() {
   return (
@@ -54,7 +60,7 @@ export default function Loading() {
       >
         <PulseLoader size={96} decorative />
         <p className="text-sm font-medium tracking-wide text-ink-muted">
-          Loading...
+          Loading your Sleeper league.
         </p>
       </div>
     </div>

@@ -283,6 +283,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A flex is a lineup slot that accepts more than one position. The standard flex takes a running back, wide receiver, or tight end.",
           "Leagues vary the recipe: a WR/TE flex, a superflex that adds quarterbacks, or a second and third flex in deeper setups. Read the slot before you draft, because a league with two flexes needs a very different roster than one with none.",
         ],
+        link: { href: "/tools/who-should-i-start", label: "our start/sit tool" },
       },
       {
         id: "bench",
@@ -651,7 +652,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "Treat the output as a starting point rather than a ruling. A calculator does not know you are already two starters deep at the position you are trading away.",
         ],
         link: {
-          href: "/tools/signal-check",
+          href: "/tools/trade-calculator",
           label: "Grade a trade with the Signal Check Trade Calculator",
         },
       },
@@ -1040,7 +1041,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "It reads values for your exact scoring format rather than a generic one, and it reports its own confidence so you know when a draft pick estimate is doing the heavy lifting.",
         ],
         link: {
-          href: "/tools/signal-check",
+          href: "/tools/trade-calculator",
           label: "Get a verdict in the Signal Check Trade Calculator",
         },
       },

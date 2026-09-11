@@ -462,6 +462,103 @@ describe("loadAdjustedProjections", () => {
     expect(week5.points).not.toBeCloseTo(week5.rawPoints, 6);
   });
 
+  // SEO-T902: sigma and opponentMultiplier come from projectPlayerWeek's
+  // ProjectedWeek; beatRate, availabilityRate and weeksPlayed come from the
+  // player's own AccuracyRow. All five are backwards-compatible additions to
+  // AdjustedProjection, carried through rather than re-read.
+  it("carries sigma, opponentMultiplier, beatRate, availabilityRate and weeksPlayed on each week", async () => {
+    const client = fakeClient({
+      nfl_defense_vs_position: [
+        {
+          team: "DAL",
+          season: 2026,
+          position: "RB",
+          scoring: "pts_ppr",
+          multiplier: 1.3,
+          adjusted_multiplier: 1.2,
+          shrunk_multiplier: 1.2,
+          games_sampled: 10,
+        },
+      ],
+      player_projection_accuracy: [
+        {
+          player_id: "p1",
+          scoring: "pts_ppr",
+          season: null,
+          source: SLEEPER_SOURCE,
+          shrunk_multiplier: 1,
+          beat_rate: 0.62,
+          availability_rate: 0.94,
+          ratio_stdev: 0.3,
+          weeks_played: 8,
+        },
+      ],
+      player_weekly_projections: [
+        projectionRow({
+          id: "r1",
+          player_id: "p1",
+          week: 5,
+          opponent: "DAL",
+          availability: "unprojected",
+          stat_line: { rec: 5, rec_yd: 50, rush_att: 10, rush_yd: 40 },
+        }),
+      ],
+    });
+
+    const result = await loadAdjustedProjections({
+      supabase: client,
+      playerIds: ["p1"],
+      season: 2026,
+      fromWeek: 5,
+      toWeek: 5,
+      scoringSettings: PPR_SCORING,
+      positionByPlayer: new Map([["p1", "RB"]]),
+      currentWeek: 5,
+    });
+
+    const week5 = result.byPlayer.get("p1")!.byWeek.get(5)!;
+    // Opponent multiplier: shrunk 1.2, clamped to the default [0.85, 1.15]
+    // ceiling of 1.15, same figure the earlier test pins for the same fixture.
+    expect(week5.opponentMultiplier).toBeCloseTo(1.15, 6);
+    // sigma is points * coefficientOfVariation, so it must be a positive
+    // number rather than the field simply carrying through as undefined.
+    expect(week5.sigma).toBeGreaterThan(0);
+    expect(week5.beatRate).toBeCloseTo(0.62, 6);
+    expect(week5.availabilityRate).toBeCloseTo(0.94, 6);
+    expect(week5.weeksPlayed).toBe(8);
+  });
+
+  it("defaults beatRate, availabilityRate and weeksPlayed when no accuracy row exists for the player", async () => {
+    const client = fakeClient({
+      player_weekly_projections: [
+        projectionRow({
+          id: "r1",
+          player_id: "p3",
+          week: 1,
+          stat_line: { rec: 6, rec_yd: 60 },
+        }),
+      ],
+    });
+
+    const result = await loadAdjustedProjections({
+      supabase: client,
+      playerIds: ["p3"],
+      season: 2026,
+      fromWeek: 1,
+      toWeek: 1,
+      scoringSettings: PPR_SCORING,
+      positionByPlayer: new Map([["p3", "TE"]]),
+      currentWeek: 1,
+    });
+
+    const week1 = result.byPlayer.get("p3")!.byWeek.get(1)!;
+    expect(week1.beatRate).toBeNull();
+    expect(week1.availabilityRate).toBeNull();
+    expect(week1.weeksPlayed).toBe(0);
+    expect(week1.opponentMultiplier).toBe(1);
+    expect(week1.sigma).toBeGreaterThanOrEqual(0);
+  });
+
   // FINDING 1 regression guard. Before loadAccuracy took a `source` parameter,
   // it read player_projection_accuracy with no source filter at all, so once a
   // source='ffbeacon' blended row existed alongside source='sleeper' for the

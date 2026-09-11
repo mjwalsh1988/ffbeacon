@@ -112,7 +112,7 @@ export function rankingsSeoCopy(format: RankingFormat): RankingsSeoCopy {
 
   return {
     title: `${phrase} Rankings`,
-    description: `${phrase} fantasy football rankings, sorted by current market value and updated daily. Compare every ranked player with 7-day trends, positional ranks, and tiers.`,
+    description: `${phrase} fantasy football rankings, sorted by market value and updated daily, with 7-day trends, positional ranks, and tiers.`,
     headline: `${lower} fantasy football rankings`,
     intro: `Every ranked player in ${phrase}, sorted by ${horizon}. ${qbNote}${teNote} Sort any column, filter by position, and switch data source without losing your place.`,
   };

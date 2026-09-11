@@ -6,6 +6,7 @@ import {
   isUsableScoring,
   scoreStatMap,
   scoreWithFallback,
+  scoringSettingsForFormat,
   tePremiumPerReception,
   type ScoringSettings,
 } from "./league-scoring";
@@ -155,6 +156,54 @@ describe("scoreWithFallback", () => {
       "TE",
     );
     expect(result.points).toBeNull();
+  });
+});
+
+// T-SEO-900: scoringSettingsForFormat, so a format picker with no synced
+// league scoring_settings still routes a projection's points to the column
+// that matches the reader's format instead of always falling back to
+// pts_std (closestScoringBase(null) === "pts_std"). Exercised through the
+// real entry points, closestScoringBase and scoreWithFallback, rather than
+// only against the returned map.
+describe("scoringSettingsForFormat", () => {
+  // Stored columns a WR/TE projection would carry, deliberately distinct so
+  // a wrong column pick shows up as a wrong number rather than a coincidence.
+  const stored = { ppr: 20, half_ppr: 15, std: 10 };
+  const stats = { rec: 6 };
+
+  it("picks pts_ppr for a PPR format", () => {
+    const settings = scoringSettingsForFormat({ scoring_type: "ppr", te_premium_bonus: 0 });
+    expect(closestScoringBase(settings)).toBe("pts_ppr");
+    const result = scoreWithFallback(stats, stored, settings, "WR");
+    expect(result.points).toBe(20);
+  });
+
+  it("picks pts_half_ppr for a half-PPR format", () => {
+    const settings = scoringSettingsForFormat({ scoring_type: "half_ppr", te_premium_bonus: 0 });
+    expect(closestScoringBase(settings)).toBe("pts_half_ppr");
+    const result = scoreWithFallback(stats, stored, settings, "WR");
+    expect(result.points).toBe(15);
+  });
+
+  it("picks pts_std for a standard format", () => {
+    const settings = scoringSettingsForFormat({ scoring_type: "standard", te_premium_bonus: 0 });
+    expect(closestScoringBase(settings)).toBe("pts_std");
+    const result = scoreWithFallback(stats, stored, settings, "WR");
+    expect(result.points).toBe(10);
+  });
+
+  it("adds te_premium_bonus times receptions for a TE and nothing for a WR", () => {
+    const settings = scoringSettingsForFormat({ scoring_type: "ppr", te_premium_bonus: 0.5 });
+    const teResult = scoreWithFallback(stats, stored, settings, "TE");
+    const wrResult = scoreWithFallback(stats, stored, settings, "WR");
+    // 20 (pts_ppr) + 0.5 per reception * 6 receptions
+    expect(teResult.points).toBeCloseTo(23, 5);
+    expect(wrResult.points).toBe(20);
+  });
+
+  it("omits bonus_rec_te when te_premium_bonus is zero or null", () => {
+    expect(scoringSettingsForFormat({ scoring_type: "ppr", te_premium_bonus: 0 })).toEqual({ rec: 1 });
+    expect(scoringSettingsForFormat({ scoring_type: "ppr", te_premium_bonus: null })).toEqual({ rec: 1 });
   });
 });
 

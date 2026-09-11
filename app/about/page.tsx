@@ -260,17 +260,17 @@ export default async function AboutPage() {
               body="Connects to your live Sleeper draft and flags who is falling while the clock is still running."
             />
             <LinkTile
-              href="/tools/signal-check"
+              href="/tools/trade-calculator"
               icon={Scale}
               title="Signal Check Trade Calculator"
               body="Grade a trade and get the verdict, the value margin, and how confident the read is."
               accent="purple"
             />
             <LinkTile
-              href="/tools/beacon-breakdown"
+              href="/tools/who-should-i-start"
               icon={Swords}
-              title="Beacon Breakdown"
-              body="Two players side by side, with the numbers that actually separate them."
+              title="Start / Sit"
+              body="Who should I start? Beacon Breakdown answers it from this week's projections and matchups."
             />
             <LinkTile
               href="/tools/faab"

@@ -38,6 +38,37 @@ import {
   findPlayerTradesCached,
 } from "@/lib/player-profile-cache";
 import { projectionSourceDisplay } from "@/lib/projections/source-constants";
+import { createClient } from "@/lib/supabase/server";
+import { buildPlayerSummary } from "@/lib/player-profile/summary";
+
+/**
+ * Position rank from the resolved (format, source)'s current rankings row
+ * (SEO-T972). Not already loaded anywhere on the profile: the overview sidebar
+ * shows value and its trend but never the current rank, so this is one new,
+ * single-row, indexed read (mirrors the same lookup lib/beam/capabilities/
+ * player-rank.ts does for the same table). The rankings table can resolve a
+ * different source than the value tables for a given format, so it reads
+ * context.rankingsSourceSlug rather than context.valueSourceSlug.
+ */
+async function loadPositionRank(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playerId: string,
+  formatConfigId: string | null,
+  source: string | null,
+): Promise<number | null> {
+  if (!formatConfigId || !source) return null;
+  const { data } = await supabase
+    .from("rankings")
+    .select("position_rank")
+    .eq("player_id", playerId)
+    .eq("format_config_id", formatConfigId)
+    .eq("source", source)
+    .is("week", null)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.position_rank ?? null;
+}
 
 export async function OverviewTab({
   player,
@@ -52,6 +83,10 @@ export async function OverviewTab({
 }) {
   const playerName =
     player.full_name ?? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
+  const playerSurname =
+    player.last_name && player.last_name.trim().length > 0
+      ? player.last_name
+      : playerName.split(" ").slice(-1)[0] || playerName;
   const nowMs = Date.now();
 
   // Every read here is cached (lib/player-profile-cache.ts), so a reader clicking
@@ -59,8 +94,9 @@ export async function OverviewTab({
   // Resolved before the wave, because it is part of the projection read's cache
   // key. See lib/player-profile-cache.ts.
   const projectionSource = await resolveProfileProjectionSourceCached();
+  const supabase = await createClient();
 
-  const [valueSeries, trends, latestValue, trades, article, depthChart, projections] =
+  const [valueSeries, trends, latestValue, trades, article, depthChart, projections, positionRank] =
     await Promise.all([
       loadValueSeriesCached(player.id, context.formatConfigId, context.valueSourceSlug, 30),
       loadTrendsCached(player.id, context.formatConfigId, context.valueSourceSlug),
@@ -69,6 +105,7 @@ export async function OverviewTab({
       loadLatestArticleCached(player.id),
       loadDepthChartCached(player),
       loadWeeklyProjectionsCached(player.id, projectionSource),
+      loadPositionRank(supabase, player.id, context.formatConfigId, context.rankingsSourceSlug),
     ]);
 
   const scoringLabel =
@@ -80,8 +117,28 @@ export async function OverviewTab({
     tePremiumBonus,
   );
 
+  // SEO-T972: a deterministic factual summary, not generated prose. Gate the
+  // trend clause the same way the trend chip does (show_trend_30d) so a thin
+  // history never reads as momentum here either.
+  const summary = buildPlayerSummary({
+    playerName,
+    playerSurname,
+    position: player.position,
+    formatDisplay: context.formatDisplay,
+    positionRank,
+    trendDirection: trends?.show_trend_30d ? (trends.trend_30d as "up" | "down" | "stable" | null) : null,
+    trendPct: trends?.change_30d_pct ?? null,
+    nextProjectionWeek: projectionSummary.nextGame?.week ?? null,
+    nextProjectionPoints: projectionSummary.nextGamePoints,
+    projectionEngineDisplay: projectionSourceDisplay(projectionSource),
+    lastThreeFinishes: finishesLast3.map((f) => ({ season: f.season, finish: f.finish })),
+  });
+
   return (
     <PageBody>
+      {summary && (
+        <p className="mb-6 text-sm leading-relaxed text-ink-muted">{summary}</p>
+      )}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-6">
           <QuickNews article={article} playerName={playerName} />

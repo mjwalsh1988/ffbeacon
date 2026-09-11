@@ -23,12 +23,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/games" },
   title: "Free Fantasy Football Games",
   description:
-    "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Name a hidden player, or call the winner of a real trade. Free to play.",
+    "Games built on live NFL data, so what you pick up playing is worth something on Sunday. Name a hidden player, or call the winner of a real trade.",
   ...pageShareMetadata({
     key: "games",
     title: "Free Fantasy Football Games",
     description:
-      "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Name a hidden player, or call the winner of a real trade. Free to play.",
+      "Games built on live NFL data, so what you pick up playing is worth something on Sunday. Name a hidden player, or call the winner of a real trade.",
     path: "/games",
   }),
 };

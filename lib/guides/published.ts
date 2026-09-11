@@ -56,6 +56,15 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     updatedAt: "2026-08-12T09:00:00-04:00",
     priority: 0.8,
   },
+  {
+    slug: "how-ff-beacon-works",
+    title: "How FF Beacon works: the methodology behind every number",
+    summary:
+      "The projections, matchup model, reliability discount, and confidence figure behind every FF Beacon number, plus what the models do not know",
+    publishedAt: "2026-09-10T09:00:00-04:00",
+    updatedAt: "2026-09-10T09:00:00-04:00",
+    priority: 0.6,
+  },
 ];
 
 /** Look up one published guide by slug, or undefined when it is not published. */

@@ -17,7 +17,7 @@
  */
 
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
@@ -38,20 +38,47 @@ import type { SleeperLeague } from "@/lib/sleeper";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The core sync and the league row, once per request.
+ *
+ * generateMetadata and the page body both need this league. Cached (React's
+ * per-request `cache()`, not the Next data cache), they share one
+ * `pulseLeagueCore` call and one fallback select instead of generateMetadata
+ * reading a possibly-unsynced row on its own, which is what let a crawler
+ * index "League not found" over a full page on a league's first visit.
+ *
+ * Reads the row off `pulseLeagueCore`'s own result rather than selecting it
+ * again: every column this page asks for is already in LEAGUE_CORE_COLUMNS.
+ * The fallback select only runs on the null branch the core's own contract
+ * allows.
+ */
+const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
+  const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
+  if (!pulse.ok) return null;
+
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
+});
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ league_id: string }>;
 }): Promise<Metadata> {
   const { league_id } = await params;
-  const supabase = await createClient();
-
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("name")
-    .eq("sleeper_league_id", league_id)
-    .maybeSingle();
-  if (!league) return { title: "League not found" };
+  const synced = await getSyncedLeague(league_id);
+  if (!synced) return { title: "League not found" };
+  const league = synced.league;
 
   const title = `${league.name} Positional WAR`;
   const description = `Which positions are scarce in ${league.name}, measured in wins over replacement under this league's own scoring and starting lineup.`;
@@ -62,6 +89,10 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,
@@ -104,29 +135,16 @@ export default async function LeaguePositionalWarPage({
   // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
   // `linkUsername` is what a link built on this page may carry, which is the
   // handle only when the reader arrived on one.
-  const [pulseResult, viewer, resolvedSource] = await Promise.all([
-    pulseLeagueCore(adminClient, sleeperLeagueId),
+  const [synced, viewer, resolvedSource] = await Promise.all([
+    getSyncedLeague(sleeperLeagueId),
     resolveSleeperViewer(supabase, sp.username),
     resolveSourceSlug(supabase, sp.source),
   ]);
-  if (!pulseResult.ok) notFound();
+  if (!synced) notFound();
+  const { league, cached: pulseCached } = synced;
 
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
-
-  // The row the core already read, rather than a second read of the same one.
-  // The fallback is not dead code: the core's contract allows a null row, and a
-  // page that assumed otherwise would 500 instead of rendering.
-  const league =
-    pulseResult.league ??
-    (
-      await supabase
-        .from("leagues")
-        .select(LEAGUE_CORE_COLUMNS)
-        .eq("sleeper_league_id", sleeperLeagueId)
-        .maybeSingle()
-    ).data;
-  if (!league) notFound();
 
   // No handle on either link for a saved reader: /tools/league-pulse resolves
   // the same identity itself, and the deep view matches on the Sleeper user id.
@@ -171,7 +189,7 @@ export default async function LeaguePositionalWarPage({
     }),
     scoringTags: buildLeagueScoringTags(league.scoring_settings),
     lastUpdatedLabel: lastPulsed ? formatRelative(lastPulsed) : "never",
-    cached: pulseResult.cached,
+    cached: pulseCached,
     coverage: context.coverage,
     sourceDisplay: coverageOk ? context.sourceDisplay : "N/A",
     formatDisplay: coverageOk ? context.formatDisplay : "N/A",
@@ -291,7 +309,7 @@ export default async function LeaguePositionalWarPage({
       {/* The derived half, including the curve computation, runs here rather
           than blocking the masthead. It renders nothing. */}
       <Suspense fallback={null}>
-        <DerivedWork leagueRowId={league.id} resynced={!pulseResult.cached} />
+        <DerivedWork leagueRowId={league.id} resynced={!pulseCached} />
       </Suspense>
     </LeagueShell>
   );

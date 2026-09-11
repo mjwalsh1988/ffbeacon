@@ -250,7 +250,7 @@ export default async function AuthorMichaelPage() {
               body="A live draft room that says who is falling while the clock is still running."
             />
             <LinkTile
-              href="/tools/signal-check"
+              href="/tools/trade-calculator"
               icon={Scale}
               title="Signal Check Trade Calculator"
               body="Trade grades that state the margin and the confidence rather than a letter."

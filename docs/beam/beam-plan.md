@@ -37,7 +37,7 @@ registries).
   zone, air yards, snaps, kicking, team defense, plus denormalized `pts_ppr` /
   `pts_half_ppr` / `pts_std` (migration 0141). Indexes:
   `idx_stats_player_season`, `idx_stats_season_type`.
-- `app/tools/beacon-breakdown/stats-data.ts:46` `COMPARE_STATS` already carries
+- `app/tools/who-should-i-start/stats-data.ts:46` `COMPARE_STATS` already carries
   label, group, direction, and formatter for 24 stats. BEAM's registry should
   extend this shape, not fork it.
 - `components/player-profile/stat-shaping.tsx:485` `aggregateSeasons()`, `:210`
@@ -467,7 +467,7 @@ That is the same three calls
 `app/api/og/breakdown/[a]/[b]/route.tsx:113-153` makes. The answer then reads
 `result.verdict` (already a written sentence from `lib/breakdown/verdict.ts:198`)
 as the headline, the top two `result.takeaways` as supporting facts, and links to
-`/tools/beacon-breakdown?a=...&b=...&lens=...` so the reader can see the full
+`/tools/who-should-i-start?a=...&b=...&lens=...` so the reader can see the full
 table.
 
 Lens mapping from question wording:

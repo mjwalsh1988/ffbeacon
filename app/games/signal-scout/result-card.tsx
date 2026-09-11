@@ -1,7 +1,7 @@
 /**
  * Result reveal card: the four completed-round outcomes (won, solved_late,
  * failed, skipped), modeled on ResultHero in
- * app/tools/signal-check/trade-result.tsx (eyebrow + headline + gradient
+ * app/tools/trade-calculator/trade-result.tsx (eyebrow + headline + gradient
  * numeral layout, tone-by-outcome border/glow, Chip-style readouts). Pure
  * presentational; the caller (signal-scout-client.tsx) owns focus management
  * for the id below.

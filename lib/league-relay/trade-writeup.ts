@@ -8,7 +8,7 @@
  *
  *   SIGNAL CHECK      who won on value, by how much, and how sure it is.
  *                     lib/league-signal-check.ts, the same pipeline behind
- *                     /tools/signal-check and the League Pulse feed.
+ *                     /tools/trade-calculator and the League Pulse feed.
  *   TRADE IMPACT      what it does to each team's remaining season: optimal
  *                     lineup points per week, projected wins, playoff odds,
  *                     title odds. lib/league-relay/trade-impact.ts.

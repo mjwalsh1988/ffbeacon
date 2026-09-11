@@ -120,7 +120,7 @@ const FORBIDDEN = [
   // A concrete league, handle or share id. The URL PATTERNS with a {placeholder}
   // are fine and are how a model is told where live data lives.
   /\/leagues\/(?!\{)/,
-  /\/tools\/signal-check\/v\//,
+  /\/tools\/trade-calculator\/v\//,
   /\/tools\/manager-pulse\/(?!\{)/,
 ];
 

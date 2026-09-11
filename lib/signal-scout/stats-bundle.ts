@@ -10,7 +10,7 @@
  * 2020+ query is built locally here rather than adding one there. The weekly
  * row to GameRow mapping intentionally mirrors the existing duplicates in
  * components/player-profile/stats-tab.tsx and
- * app/tools/beacon-breakdown/load-stats.ts field-for-field; it is a third copy
+ * app/tools/who-should-i-start/load-stats.ts field-for-field; it is a third copy
  * kept in sync by hand until those are extracted, not a divergent reading of
  * the same rows.
  */

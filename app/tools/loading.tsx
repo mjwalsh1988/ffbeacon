@@ -14,16 +14,21 @@ import { ScrollToTop } from "@/components/scroll-to-top";
  * subtree in a Suspense boundary, and the HTTP status goes out with the
  * first flush (see the long comment in app/leagues/loading.tsx for why that
  * matters). The one descendant that calls notFound() under /tools is
- * app/tools/signal-check/v/[shareId]/page.tsx, for a share link id that does
+ * app/tools/trade-calculator/v/[shareId]/page.tsx, for a share link id that does
  * not resolve. Share links are not in any sitemap and are not content we ask
  * Google to index, so a stale or mistyped share link answering 200 while it
  * renders the not-found body is a narrow, contained cost, the same shape as
  * the accepted trade-off already documented for /leagues. Every other page
  * under /tools is a fixed tool page with no dynamic segment.
  *
- * The section name sits inside the same live region as "Loading...", so the
- * whole thing is one status update rather than two: a reader hears "Tools,
- * Loading" once and nothing else.
+ * The section name sits inside the same live region as the sentence below it,
+ * so the whole thing is one status update rather than two: a reader hears
+ * "Tools, Loading this fantasy football tool." once and nothing else.
+ *
+ * SEO-T980: the second line names the destination ("Loading this fantasy
+ * football tool.") instead of a bare "Loading...", true for every page under
+ * /tools since each one is a tool. Real, visible text inside the existing
+ * role="status" region, not a second live announcement.
  *
  * It is deliberately NOT an <h1>. It is styled as a tiny uppercase eyebrow,
  * and marking an eyebrow as the page's only level-1 heading gives a reader
@@ -47,7 +52,7 @@ export default function Loading() {
             Tools
           </p>
           <p className="text-sm font-medium tracking-wide text-ink-muted">
-            Loading...
+            Loading this fantasy football tool.
           </p>
         </div>
       </div>

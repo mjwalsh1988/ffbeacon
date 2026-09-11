@@ -22,6 +22,12 @@ import {
   type MastheadStat,
 } from "@/components/app-shell/page-masthead";
 import { formatEasternShortDate } from "@/lib/datetime";
+import {
+  loadFreshestRankingsGeneratedAt,
+  loadRankingsBoardCached,
+} from "@/lib/rankings-board";
+import { isBestBall } from "@/lib/rankings-formats";
+import { ALL_TERMS } from "@/lib/guides/fantasy-football-terms";
 
 /**
  * The rankings board, shared by /rankings and /rankings/[format].
@@ -40,19 +46,6 @@ import { formatEasternShortDate } from "@/lib/datetime";
  * path. Source is resolved by the caller too, so the header's source dropdown keeps
  * working identically on both.
  */
-
-
-/**
- * How far back the value fallback looks for a player the trends table does not
- * carry, and how many players it asks about per request.
- *
- * The product of the two has to stay under Supabase's 1,000 row per request
- * cap for the read to be safe without paging: 25 players over 30 days is at
- * most 750 rows even at a daily capture cadence. Raising either one means
- * checking that product again.
- */
-const FALLBACK_WINDOW_DAYS = 30;
-const FALLBACK_PLAYER_CHUNK = 25;
 
 export interface RankingsViewProps {
   /** The format to render. Already decided by the caller. */
@@ -142,230 +135,37 @@ export async function RankingsView({
     requestedSourceSlug,
   );
 
-  // Rankings + value history + trends run in parallel; the join happens in memory.
+  // THE BOARD READ, CACHED (SEO-T978).
   //
-  // We intentionally do NOT pass .in("player_id", playerIds) on
-  // player_value_history: with 400+ UUIDs the PostgREST GET URL silently exceeds the
-  // fetch URL length limit and the request fails with "fetch failed", leaving the
-  // page values-less. The (format_config_id, source) pair already bounds the result
-  // to a few hundred rows, so the filter is unnecessary anyway.
-  const rankingsQuery = supabase
-    .from("rankings")
-    .select(
-      "overall_rank, position_rank, tier, players!inner(id, slug, first_name, last_name, position, team, status, external_ids)",
-    )
-    .eq("format_config_id", format.id)
-    .eq("source", rankingsResolution.source ?? "__none__")
-    // No season filter. lib/seed-rankings.ts derives the season from
-    // currentNflSeason() and sweeps every other one, so the table holds
-    // exactly one. Pinning a constant here is what used to risk this
-    // reader and the writer drifting apart and silently serving a frozen
-    // board, and it would also blank the page for the hours between the
-    // March rollover and that night's write.
-    .is("week", null)
-    .order("overall_rank")
-    .limit(500);
-
-  // THE CURRENT VALUE COMES OFF THE TRENDS ROW, NOT OUT OF HISTORY.
-  //
-  // This used to be a third query: the whole of `player_value_history` for the
-  // format and source, ordered by captured_at descending, with no player filter
-  // (see the note above about the URL length) and no limit. PostgREST capped it
-  // at 1,000 rows, which happened to be about one day of captures, so the page
-  // worked by coincidence. A source capturing more than 1,000 rows a day for one
-  // format would have returned a partial day and blanked values for whoever fell
-  // off the end. `player_value_trends` carries `current_value` per
-  // (player, format, source) by construction, it is the pre-calculated table the
-  // rules in CLAUDE.md say a page should read, and it was already being fetched
-  // in this same wave. One read fewer, and the fragility goes with it.
-  const [rankingsResult, trendsResult, capturedResult] = await Promise.all([
-    rankingsResolution.source
-      ? position
-        ? rankingsQuery.eq("players.position", position)
-        : rankingsQuery
-      : Promise.resolve({ data: [] as never }),
-    valueHistoryResolution.source
-      ? supabase
-          .from("player_value_trends")
-          .select(
-            "player_id, current_value, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, show_trend_7d",
-          )
-          .eq("format_config_id", format.id)
-          .eq("source", valueHistoryResolution.source)
-      : Promise.resolve({ data: [] as never }),
-    // ONE ROW, for the "Values as of" date and nothing else.
-    //
-    // The trends row's own `updated_at` is not this date. It is when the trend
-    // calculation last ran, which happens nightly whether or not a new value
-    // was captured, so for a weekly source it would say "today" over values
-    // captured six days ago. The capture timestamp is the honest answer to what
-    // the chip claims, and asking for exactly one row of it is not the
-    // unbounded read this task removed.
-    valueHistoryResolution.source
-      ? supabase
-          .from("player_value_history")
-          .select("captured_at")
-          .eq("format_config_id", format.id)
-          .eq("source", valueHistoryResolution.source)
-          .order("captured_at", { ascending: false })
-          .limit(1)
-      : Promise.resolve({ data: [] as never }),
-  ]);
-
-  const valueByPlayer = new Map<string, { value: number }>();
-  for (const t of trendsResult.data ?? []) {
-    valueByPlayer.set(t.player_id, { value: t.current_value });
-  }
-
-  // THE GAP BETWEEN "RANKED" AND "HAS A TREND ROW", AND WHY IT IS FILLED HERE.
-  //
-  // A player can sit in `rankings` and have real captured values while having
-  // no `player_value_trends` row: the trend calculation needs a run of history
-  // it does not always have, and a player the source stopped publishing keeps
-  // his ranking for a while after his last capture. Measured on production
-  // today, that is 62 of 811 ranked players on the default source, and up to 80
-  // on another.
-  //
-  // The read this replaced did not cover them either, and mostly covered FEWER
-  // of them: it pulled `player_value_history` for the whole (format, source)
-  // ordered by captured_at with no bound, so PostgREST's 1,000 row cap left it
-  // seeing roughly one day of captures, which is 72 blanks on that same board.
-  // But on two sources it happened to cover three players that trends does not,
-  // so a straight swap would have blanked a value that used to render.
-  //
-  // So: trends first, then ONE bounded read for whoever trends could not name.
-  // Filtered to those player ids and to the last 30 days, which is far more
-  // generous than the one day the old query effectively saw, and small enough
-  // that the 1,000 row cap cannot bite (80 players at one row a day is under
-  // two weeks of rows). The first row per player wins, because the order is
-  // newest first. It costs one round trip, and only when there is somebody to
-  // look up.
-  const uncovered = [
-    ...new Set(
-      (rankingsResult.data ?? [])
-        .map(
-          (r) =>
-            (r as unknown as { players: { id: string } }).players?.id ?? null,
-        )
-        .filter((id): id is string => Boolean(id) && !valueByPlayer.has(id)),
-    ),
-  ];
-  if (uncovered.length > 0 && valueHistoryResolution.source) {
-    const source = valueHistoryResolution.source;
-    const cutoff = new Date(
-      Date.now() - FALLBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-    ).toISOString();
-
-    // CHUNKED BY PLAYER SO THE ROW COUNT IS BOUNDED BY CONSTRUCTION.
-    //
-    // Supabase enforces a 1,000 row cap per request server-side, and a
-    // `.limit()` cannot raise it. Asking for 30 days across all 80 uncovered
-    // players is 1,335 rows on the widest board today, so a single request
-    // would come back truncated and the players whose newest row fell past the
-    // cut would still render blank. That is exactly the mistake that made
-    // Kenny Gainwell and Bucky Irving unsearchable, and guessing a narrower
-    // window would only move the cliff rather than remove it.
-    //
-    // 25 players over a 30 day window is at most 750 rows, comfortably under
-    // the cap whatever the capture cadence, so no page can truncate. The chunks
-    // touch no shared state, so they run together rather than in a queue.
-    const chunks: string[][] = [];
-    for (let i = 0; i < uncovered.length; i += FALLBACK_PLAYER_CHUNK) {
-      chunks.push(uncovered.slice(i, i + FALLBACK_PLAYER_CHUNK));
-    }
-    const pages = await Promise.all(
-      chunks.map((chunk) =>
-        supabase
-          .from("player_value_history")
-          .select("player_id, value")
-          .eq("format_config_id", format.id)
-          .eq("source", source)
-          .in("player_id", chunk)
-          .gte("captured_at", cutoff)
-          .order("captured_at", { ascending: false }),
-      ),
-    );
-    for (const page of pages) {
-      for (const row of page.data ?? []) {
-        // Newest first, so the first row seen for a player is the one to keep.
-        if (valueByPlayer.has(row.player_id)) continue;
-        valueByPlayer.set(row.player_id, { value: row.value });
-      }
-    }
-  }
-  const trendByPlayer = new Map<
-    string,
-    {
-      change_7d: number | null;
-      change_7d_pct: number | null;
-      trend_7d: string | null;
-      rank_change_7d: number | null;
-      rank_7d_ago: number | null;
-      show_trend_7d: boolean;
-    }
-  >();
-  for (const t of trendsResult.data ?? []) {
-    trendByPlayer.set(t.player_id, {
-      change_7d: t.change_7d,
-      change_7d_pct: t.change_7d_pct,
-      trend_7d: t.trend_7d,
-      rank_change_7d: t.rank_change_7d,
-      rank_7d_ago: t.rank_7d_ago,
-      show_trend_7d: t.show_trend_7d,
-    });
-  }
+  // /rankings/[format] is force-dynamic (the page reads cookies for source
+  // preference and Discord membership above), so every request used to re-run
+  // the full rankings + trends + value-history waterfall below. The freshest
+  // rankings.generated_at is read first, cheaply (one row, the index migration
+  // 0273 added), and folded into the cache key along with the resolved format
+  // and sources: lib/rankings-board.ts has the full reasoning. Nothing
+  // user-scoped crosses into the cached function; it reads through the
+  // cookie-less anon client and takes only these already-resolved values.
+  const freshestGeneratedAt = await loadFreshestRankingsGeneratedAt(supabase);
+  const board = await loadRankingsBoardCached({
+    formatConfigId: format.id,
+    rankingsSource: rankingsResolution.source,
+    valueHistorySource: valueHistoryResolution.source,
+    generatedAt: freshestGeneratedAt,
+  });
 
   const tableCadence = registry.find(
     (s) => s.slug === valueHistoryResolution.source,
   )?.update_cadence as "daily" | "weekly" | undefined;
 
-  const rows: RankingsRow[] = (rankingsResult.data ?? []).map((r) => {
-    const player = (
-      r as unknown as {
-        players: {
-          id: string;
-          slug: string;
-          first_name: string;
-          last_name: string;
-          position: string;
-          team: string | null;
-          status: string;
-          external_ids: Record<string, unknown> | null;
-        };
-      }
-    ).players;
-    const value = valueByPlayer.get(player.id);
-    const trend = trendByPlayer.get(player.id);
-    // Sleeper id lives on players.external_ids.sleeper. May be missing for older or
-    // non-Sleeper-resolved players; the headshot component falls back to a position
-    // badge in that case.
-    const sleeperExt = player.external_ids?.sleeper;
-    const sleeper_id =
-      typeof sleeperExt === "string" && sleeperExt
-        ? sleeperExt
-        : typeof sleeperExt === "number"
-          ? String(sleeperExt)
-          : null;
-    return {
-      overall_rank: r.overall_rank,
-      position_rank: r.position_rank,
-      tier: r.tier ?? null,
-      slug: player.slug,
-      sleeper_id,
-      name: `${player.first_name} ${player.last_name}`,
-      position: player.position,
-      team: player.team,
-      status: player.status,
-      value: value?.value ?? null,
-      change_7d: trend?.change_7d ?? null,
-      change_7d_pct: trend?.change_7d_pct ?? null,
-      trend_7d: trend?.trend_7d ?? null,
-      rank_change_7d: trend?.rank_change_7d ?? null,
-      rank_7d_ago: trend?.rank_7d_ago ?? null,
-      show_trend_7d: trend?.show_trend_7d ?? false,
-      cadence: tableCadence,
-    };
-  });
+  // Position filtering happens here, in memory, against the cached full board,
+  // rather than as a query param on the cached read: the cache is keyed by
+  // format and source only, so one cache entry serves every position filter.
+  const rows: RankingsRow[] = (
+    position ? board.rows.filter((r) => r.position === position) : board.rows
+  ).map((r) => ({ ...r, cadence: tableCadence }));
+
+  // Which glossary entries this format's own settings touch (SEO-T974).
+  const glossaryLinks = glossaryLinksForFormat(format);
 
   // Confirmed Discord members skip the invite: the hero button scrolls straight to
   // the board and the bottom CTA points at the rest of the toolkit.
@@ -386,9 +186,9 @@ export async function RankingsView({
     ? describeSource(registry, valueHistoryResolution.source)
     : "Not available";
 
-  // Freshest snapshot for this (format, source). One row, ordered by
-  // captured_at descending.
-  const lastCapturedAt = capturedResult.data?.[0]?.captured_at ?? null;
+  // Freshest snapshot for this (format, source). Read inside the cached board
+  // loader: one row, ordered by captured_at descending.
+  const lastCapturedAt = board.lastCapturedAt;
 
   const chips: MastheadChip[] = [
     // The source chip says what it is ("Values via ..."); the format chip is
@@ -500,6 +300,7 @@ export async function RankingsView({
               sorted by current market value. Click any column header to
               re-sort, or open a player&apos;s row for the full breakdown.
             </p>
+            <GlossaryTermsNote links={glossaryLinks} />
           </div>
 
           {/* Filter card. Icon chip plus label, stacking gracefully on mobile:
@@ -581,6 +382,95 @@ export async function RankingsView({
         memberBody="You're already part of the crew, so we'll skip the invite. Carry these rankings into the rest of the free FF Beacon toolkit for trades, waivers, and drafts."
       />
     </main>
+  );
+}
+
+/** Every glossary anchor id this module is allowed to link to. Built once
+ *  from lib/guides/fantasy-football-terms.ts so a link never points at an id
+ *  that file has renamed or dropped. */
+const GLOSSARY_TERM_IDS = new Set(ALL_TERMS.map((t) => t.id));
+
+type FormatGlossaryLink = { id: string; anchorText: string };
+
+/**
+ * Which glossary terms this format's own settings involve (SEO-T974).
+ *
+ * Every /rankings/[format] page shows a different subset, in a different
+ * order, because it is read straight off the format's own columns: a
+ * standard-scoring redraft page links only "standard scoring" and "redraft",
+ * while a TE Premium superflex dynasty page links four terms. That is what
+ * keeps the sentence GlossaryTermsNote builds from reading identically on
+ * every one of the twelve pages.
+ */
+function glossaryLinksForFormat(format: {
+  slug: string;
+  league_type: string;
+  scoring_type: string;
+  is_superflex: boolean;
+  te_premium_bonus: number | string | null;
+}): FormatGlossaryLink[] {
+  const candidates: FormatGlossaryLink[] = [];
+
+  if (format.scoring_type === "ppr") {
+    candidates.push({ id: "ppr", anchorText: "PPR scoring" });
+  } else if (format.scoring_type === "half_ppr") {
+    candidates.push({ id: "half-ppr", anchorText: "half PPR scoring" });
+  } else if (format.scoring_type === "standard") {
+    candidates.push({ id: "standard-scoring", anchorText: "standard scoring" });
+  }
+
+  if (Number(format.te_premium_bonus ?? 0) > 0) {
+    candidates.push({ id: "te-premium", anchorText: "TE Premium" });
+  }
+
+  if (format.is_superflex) {
+    candidates.push({ id: "superflex", anchorText: "superflex" });
+  }
+
+  if (isBestBall(format.slug)) {
+    candidates.push({ id: "best-ball", anchorText: "best ball" });
+  }
+
+  if (format.league_type === "dynasty") {
+    candidates.push({ id: "dynasty", anchorText: "dynasty leagues" });
+  } else if (format.league_type === "redraft") {
+    candidates.push({ id: "redraft", anchorText: "redraft leagues" });
+  }
+
+  return candidates.filter((c) => GLOSSARY_TERM_IDS.has(c.id));
+}
+
+/**
+ * Inline links to the terms this format touches, each pointed at its own
+ * anchor id on /guides/fantasy-football-terms rather than at the page as a
+ * whole, since that is what lets a reader land straight on the definition
+ * they need. Renders nothing when a format's settings match no known term.
+ */
+function GlossaryTermsNote({ links }: { links: FormatGlossaryLink[] }) {
+  if (links.length === 0) return null;
+
+  return (
+    <p className="mt-3 max-w-2xl text-sm text-ink-muted">
+      New to this format? Brush up on{" "}
+      {links.map((link, i) => (
+        <span key={link.id}>
+          <Link
+            href={`/guides/fantasy-football-terms#${link.id}`}
+            className="text-brand-cyan underline-offset-4 hover:underline"
+          >
+            {link.anchorText}
+          </Link>
+          {i === links.length - 1
+            ? ""
+            : i === links.length - 2
+              ? links.length > 2
+                ? ", and "
+                : " and "
+              : ", "}
+        </span>
+      ))}{" "}
+      in the fantasy football glossary.
+    </p>
   );
 }
 

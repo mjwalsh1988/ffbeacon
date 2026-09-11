@@ -1,7 +1,7 @@
 /**
  * Beacon Breakdown data + computation layer.
  *
- * Powers the head-to-head player comparison tool at /tools/beacon-breakdown.
+ * Powers the head-to-head player comparison tool at /tools/who-should-i-start.
  * Unlike the player profile (which resolves format/source per player), a
  * breakdown compares TWO players on ONE shared, resolved (format, source) pair,
  * so the resolver work happens once here and both players are read against it.
@@ -54,17 +54,25 @@ import {
 } from "@/lib/player-profile";
 import { BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
 import { computeAgeDecimal } from "@/lib/player-age";
-import { computeEdge, visibleRows } from "@/lib/breakdown/edge";
+import { computeEdge, computeGroupEdge, visibleRows } from "@/lib/breakdown/edge";
 import { buildTakeaways, buildVerdict, resolveLensEdges } from "@/lib/breakdown/verdict";
-import { DEFAULT_LENS, type LensId } from "@/lib/breakdown/types";
+import { DEFAULT_LENS, LENSES, type LensId } from "@/lib/breakdown/types";
 import type { LeagueImpact, MetricSide } from "@/lib/breakdown/metrics";
 import type {
   BeaconEdge,
   BreakdownExtras,
+  BreakdownGroup,
   BreakdownPlayer,
   BreakdownRow,
+  GroupEdge,
   Takeaway,
 } from "@/lib/breakdown/types";
+import { loadBreakdownExtras, type ExtrasSubject } from "@/lib/breakdown/load-extras";
+import {
+  DEFAULT_POWER_PULSE_SETTINGS,
+  type PowerPulseSettings,
+} from "@/lib/power-pulse/default-settings";
+import { MIN_START_SIT_PLAYERS, MAX_START_SIT_PLAYERS } from "@/lib/start-sit/types";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -73,6 +81,7 @@ type AnySupabase =
 export type {
   BeaconEdge,
   BreakdownExtras,
+  BreakdownGroup,
   BreakdownMarket,
   BreakdownPlayer,
   BreakdownProjection,
@@ -82,6 +91,9 @@ export type {
   EdgeContribution,
   EdgeLabel,
   EdgeWinner,
+  GroupEdge,
+  GroupEdgeContribution,
+  GroupEdgeSide,
   Lens,
   LensId,
   ProjectedWeekPoint,
@@ -284,29 +296,54 @@ async function loadFinishesPair(
 /* Orchestration                                                       */
 /* ------------------------------------------------------------------ */
 
-export type LoadBreakdownParams = {
+export type LoadBreakdownPairParams = {
   formatParam?: string;
   sourceParam?: string;
   lens?: LensId;
 };
 
+/** @deprecated Name kept for anything still importing the old pair-only type. */
+export type LoadBreakdownParams = LoadBreakdownPairParams;
+
+type LoadBreakdownCoreParams = {
+  formatParam?: string;
+  sourceParam?: string;
+};
+
+/** Everything loadBreakdownCore resolves once, shared by the pair and group loaders. */
+type BreakdownCoreLookup =
+  | {
+      ok: true;
+      sides: BreakdownPlayer[];
+      context: BreakdownContext;
+      /**
+       * Points added per projected reception in a TE-premium format, for the
+       * extras loader's ExtrasContext. Deliberately not on BreakdownContext:
+       * loadBreakdownPair's result.context must stay byte-for-byte what it was
+       * before this field existed, since BEAM and the OG route depend on it.
+       */
+      tePremiumPerReception: number;
+    }
+  | { ok: false; missing: string[] };
+
 /**
- * Resolve the shared (format, source) context, load both players, and compute
- * the composite for the requested lens. Slugs that match no active player come
- * back in `missing` so the page can render a friendly "player not found" state.
+ * Resolve the shared (format, source) context and load every side's core
+ * fields (value, rank, trend, recent finish, team color, age, injury) in one
+ * wave. Slugs that match no active player come back in `missing` so the
+ * caller can render a friendly "player not found" state.
  *
- * Extras (projections, reliability, market) are NOT loaded here. They belong to
- * tabs behind their own Suspense boundaries, so the meter and the matchup header
- * can paint without waiting on them. `applyExtras` folds them in afterwards.
+ * Extras (projections, reliability, market) are NOT loaded here. For the pair
+ * loader they belong to tabs behind their own Suspense boundaries, so the
+ * meter and the matchup header can paint without waiting on them. The group
+ * loader below loads them itself, since the background tabs it feeds have no
+ * separate Suspense boundary of their own to defer into.
  */
-export async function loadBreakdown(
+async function loadBreakdownCore(
   supabase: AnySupabase,
-  slugA: string,
-  slugB: string,
-  params: LoadBreakdownParams,
-): Promise<BreakdownLookup> {
+  slugs: string[],
+  params: LoadBreakdownCoreParams,
+): Promise<BreakdownCoreLookup> {
   const db = supabase as SupabaseClient<Database>;
-  const lens = params.lens ?? DEFAULT_LENS;
 
   // One wave. The active-format list is a request-cached fetch shared with
   // SiteHeader, so folding it in here lets us pick the format row in memory
@@ -317,7 +354,7 @@ export async function loadBreakdown(
     await Promise.all([
       resolveFormatSlug(db, params.formatParam),
       resolveSourceSlug(db, params.sourceParam),
-      db.from("players").select(PLAYER_SELECT).in("slug", [slugA, slugB]),
+      db.from("players").select(PLAYER_SELECT).in("slug", slugs),
       getAvailableSources(db),
       getActiveFormats(db),
     ]);
@@ -326,7 +363,7 @@ export async function loadBreakdown(
   for (const row of (playerRows ?? []) as unknown as PlayerRow[]) {
     bySlug.set(row.slug, row);
   }
-  const missing = [slugA, slugB].filter((s) => !bySlug.has(s));
+  const missing = slugs.filter((s) => !bySlug.has(s));
   if (missing.length > 0) return { ok: false, missing };
 
   // Active formats only. The format dropdown never offers an inactive one, and
@@ -360,12 +397,13 @@ export async function loadBreakdown(
         }
       : null;
 
-  const rowA = bySlug.get(slugA)!;
-  const rowB = bySlug.get(slugB)!;
-  const playerIds = [rowA.id, rowB.id];
-  const teamAbbrs = [rowA.team, rowB.team].filter((t): t is string => Boolean(t));
+  // Slugs, in the caller's order, so sides[i] always corresponds to slugs[i].
+  const rows = slugs.map((s) => bySlug.get(s)!);
+  const playerIds = rows.map((r) => r.id);
+  const teamAbbrs = [...new Set(rows.map((r) => r.team).filter((t): t is string => Boolean(t)))];
 
-  // One wave for everything the core comparison needs.
+  // One wave for everything every side needs, run in parallel regardless of
+  // how many sides there are: N players cost one round trip per read, not N.
   const [teamRowsRes, rankRowsRes, values, trends, finishes] = await Promise.all([
     teamAbbrs.length > 0
       ? db.from("nfl_teams").select("abbreviation, primary_color").in("abbreviation", teamAbbrs)
@@ -447,19 +485,12 @@ export async function loadBreakdown(
     };
   }
 
-  const a = buildPlayer(rowA);
-  const b = buildPlayer(rowB);
+  const sides = rows.map(buildPlayer);
   const valueIsBeacon = valueSource === BEACON_SOURCE_SLUG;
 
-  const result = assembleBreakdown({
-    a,
-    b,
-    extrasA: EMPTY_EXTRAS,
-    extrasB: EMPTY_EXTRAS,
-    leagueA: null,
-    leagueB: null,
-    lens,
-    valueIsBeacon,
+  return {
+    ok: true,
+    sides,
     context: {
       formatSlug: formatResolution.slug,
       formatDisplay,
@@ -472,9 +503,147 @@ export async function loadBreakdown(
       valueIsBeacon,
       fallbackBanner,
     },
+    tePremiumPerReception: formatConfig?.te_premium_bonus ?? 0,
+  };
+}
+
+/**
+ * The two-player Beacon Breakdown: resolve the shared (format, source)
+ * context, load both players, and compute the composite for the requested
+ * lens through computeEdge. This is the ORIGINAL loadBreakdown, kept under a
+ * new name and unchanged in behavior: BEAM's player.compare.verdict capability
+ * and the pair OG share-image route both depend on this exact shape and must
+ * see byte-for-byte the same result they always have.
+ */
+export async function loadBreakdownPair(
+  supabase: AnySupabase,
+  slugA: string,
+  slugB: string,
+  params: LoadBreakdownPairParams,
+): Promise<BreakdownLookup> {
+  const lens = params.lens ?? DEFAULT_LENS;
+  const core = await loadBreakdownCore(supabase, [slugA, slugB], params);
+  if (!core.ok) return { ok: false, missing: core.missing };
+
+  const [a, b] = core.sides;
+  const result = assembleBreakdown({
+    a,
+    b,
+    extrasA: EMPTY_EXTRAS,
+    extrasB: EMPTY_EXTRAS,
+    leagueA: null,
+    leagueB: null,
+    lens,
+    valueIsBeacon: core.context.valueIsBeacon,
+    context: core.context,
   });
 
   return { ok: true, result };
+}
+
+export type LoadBreakdownGroupParams = {
+  formatParam?: string;
+  sourceParam?: string;
+  /**
+   * Service-role-only settings the extras loader needs for its projection
+   * pass. Read once by the caller with an admin client and handed down, the
+   * same split load-extras.ts documents; omitted, the projection engine's own
+   * code defaults apply.
+   */
+  pulseSettings?: PowerPulseSettings;
+};
+
+/** Everything the background tabs need for a group of two to eight players. */
+export type BreakdownGroupResult = {
+  group: BreakdownGroup;
+  /** Projections, reliability, and market, keyed by player id. */
+  extras: Map<string, BreakdownExtras>;
+  context: BreakdownContext;
+};
+
+export type BreakdownGroupLookup =
+  | { ok: true; result: BreakdownGroupResult }
+  | { ok: false; missing: string[] };
+
+/**
+ * The N-sided Beacon Breakdown (two to eight players) behind the Who Should I
+ * Start background tabs. Loads every side's core fields AND its extras
+ * (projections, reliability, market) in this one call, then computes the
+ * composite for all three lenses at once through computeGroupEdge, because
+ * the lens switch lives in the Head to head tab's own client state rather
+ * than the URL and so cannot round-trip to the server on a flip.
+ *
+ * Unlike loadBreakdownPair, extras are loaded here rather than left to a tab's
+ * own Suspense boundary: the group tabs (Projections, Reliability, Market)
+ * read the same bundle the Head to head tab's composite is built from, so a
+ * second, later-arriving read can never disagree with the numbers the meter
+ * already showed.
+ *
+ * No league mode: the "Your lineup" tab's per-league numbers are resolved
+ * separately (calculateLeagueImpact takes the candidate list directly), so
+ * every side here carries `league: null` into computeGroupEdge, exactly as
+ * loadBreakdownPair's plain (non-league) path does for computeEdge.
+ */
+export async function loadBreakdown(
+  supabase: AnySupabase,
+  slugs: string[],
+  params: LoadBreakdownGroupParams,
+): Promise<BreakdownGroupLookup> {
+  if (slugs.length < MIN_START_SIT_PLAYERS || slugs.length > MAX_START_SIT_PLAYERS) {
+    throw new Error(
+      `loadBreakdown expects ${MIN_START_SIT_PLAYERS} to ${MAX_START_SIT_PLAYERS} slugs, got ${slugs.length}`,
+    );
+  }
+
+  const core = await loadBreakdownCore(supabase, slugs, params);
+  if (!core.ok) return { ok: false, missing: core.missing };
+
+  const { sides, context, tePremiumPerReception } = core;
+
+  const extrasSubjects: ExtrasSubject[] = sides.map((s) => ({
+    id: s.id,
+    position: s.position,
+    team: s.team,
+    injuryStatus: s.injuryStatus,
+    overallRank: s.overallRank,
+  }));
+
+  const rawExtras = await loadBreakdownExtras(
+    supabase,
+    extrasSubjects,
+    {
+      scoringKey: context.scoringKey,
+      formatConfigId: context.formatConfigId,
+      valueSource: context.sourceSlug,
+      isDynasty: context.isDynasty,
+      isSuperflex: context.isSuperflex,
+      tePremiumPerReception,
+    },
+    params.pulseSettings ?? DEFAULT_POWER_PULSE_SETTINGS,
+  );
+
+  const extras = new Map<string, BreakdownExtras>(
+    sides.map((s) => [s.id, mergeMarket(s, rawExtras.get(s.id) ?? EMPTY_EXTRAS)]),
+  );
+
+  const metricSides: MetricSide[] = sides.map((player) => ({
+    player,
+    extras: extras.get(player.id) ?? EMPTY_EXTRAS,
+    league: null,
+  }));
+
+  const edges = Object.fromEntries(
+    LENSES.map((lens) => [lens.id, computeGroupEdge(metricSides, lens.id)]),
+  ) as Record<LensId, GroupEdge>;
+
+  return {
+    ok: true,
+    result: {
+      group: { sides, edges },
+      extras,
+      context,
+    },
+  };
 }
 
 /**

@@ -231,6 +231,70 @@ export type BeaconEdge = {
   metricsUsed: number;
 };
 
+/**
+ * One metric's contribution to one side's composite inside a group comparison.
+ * The group engine ranks N sides per metric instead of computing a pairwise
+ * share, so "share" here is this side's rank converted to 0..1 (1 is best,
+ * 0 is worst among the sides that had data), not the ratio share() computes.
+ */
+export type GroupEdgeContribution = {
+  key: string;
+  label: string;
+  /** This side's share of the metric among the sides that resolved it, 0..1. */
+  share: number;
+  weight: number;
+  /** weight * share. Every contribution for a side sums to that side's composite. */
+  contribution: number;
+  /** 1-based rank among the sides with a scalar for this metric. 1 is best; tied
+   * scalars share the average of their ranks. */
+  rank: number;
+  /** True when this side holds the best (or tied-best) scalar for the metric,
+   * for the tabs' "Best" badge. */
+  isBest: boolean;
+};
+
+/** One side's result inside a group comparison. */
+export type GroupEdgeSide = {
+  /** Weighted mean of this side's shares across the metrics that resolved for
+   * it, 0..1. Equal to the sum of `contributions[*].contribution`. Defaults to
+   * 0.5 (neutral, no lead either way) when nothing resolved for this side,
+   * the same default computeEdge's aShare keeps in that case. */
+  composite: number;
+  /** Largest contribution first, so a stacked bar or a "top movers" list can
+   * read straight off the array. */
+  contributions: GroupEdgeContribution[];
+};
+
+/**
+ * The Beacon Edge, generalised from a pair to two-to-eight sides. For N equal
+ * to 2 this reproduces computeEdge's leader and label (see edge.test.ts), so
+ * the pairwise surface and BEAM can keep calling computeEdge unchanged while
+ * the background tabs move to this for N players.
+ */
+export type GroupEdge = {
+  lens: LensId;
+  /** What the composite is measured on, named in plain language. */
+  basis: string;
+  label: EdgeLabel;
+  /** Index into `sides` of the leading side, or null when the top two are a
+   * toss-up. */
+  leader: number | null;
+  /** How many metrics actually had data on at least two sides. */
+  metricsUsed: number;
+  sides: GroupEdgeSide[];
+};
+
+/**
+ * Everything the background tabs need for a group of two to eight players. All
+ * three lenses are computed once on the server (edges is keyed by LensId)
+ * because the lens switch lives in the Head to head tab's own client state
+ * rather than in the URL, so a lens change cannot round-trip to the server.
+ */
+export type BreakdownGroup = {
+  sides: BreakdownPlayer[];
+  edges: Record<LensId, GroupEdge>;
+};
+
 /** A plain-English scannable takeaway. */
 export type Takeaway = {
   key: string;

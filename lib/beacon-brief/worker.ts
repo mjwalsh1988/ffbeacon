@@ -19,8 +19,10 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidateTag } from "next/cache";
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { submitIndexNow } from "@/lib/indexnow";
 import {
   deleteWebhookMessage,
   patchWebhookMessage,
@@ -857,6 +859,17 @@ async function handleDiscordPatch(
 }
 
 /**
+ * IndexNow ping for an article that just became published, or that was
+ * already published and just had its content change. Fired via after() so it
+ * runs once this job's own write has committed and never adds to this job's
+ * processing time; submitIndexNow never throws, so a failed or slow ping
+ * cannot affect the write it follows.
+ */
+function pingIndexNowForArticle(slug: string): void {
+  after(() => submitIndexNow([`/brief/${slug}`, "/brief"]));
+}
+
+/**
  * Fold a post into an existing article: rewrite the body to absorb the new
  * information, snapshot a revision, and mark the ingestion revised.
  *
@@ -878,7 +891,7 @@ async function applyRewriteToArticle(
 ): Promise<{ ok: boolean; error?: string; applied: boolean }> {
   const { data: article } = await admin
     .from("articles")
-    .select("id, title, content_md, tl_dr, tags, category_id")
+    .select("id, slug, status, title, content_md, tl_dr, tags, category_id")
     .eq("id", articleId)
     .maybeSingle();
   if (!article) return { ok: true, applied: false };
@@ -937,6 +950,12 @@ async function applyRewriteToArticle(
       last_updated: new Date().toISOString(),
     })
     .eq("id", article.id);
+
+  // Rewriting never changes status, so the status read before the update still
+  // tells us whether this content change is live. A draft's URL 404s, so
+  // pinging it would waste the submission.
+  if (article.status === "published") pingIndexNowForArticle(article.slug);
+
   await snapshotRevision(
     admin,
     article.id,
@@ -1625,6 +1644,9 @@ async function handleArticleWrite(
   // its cache early would win nothing and would just throw away five minutes
   // of a cache hit for every other reader.
   if (published) revalidateTag("home");
+
+  // Same gate as the cache bust above: a draft has no public URL to submit.
+  if (published) pingIndexNowForArticle(slug);
 
   if (refs.playerIds.length > 0) {
     await admin.from("article_players").insert(

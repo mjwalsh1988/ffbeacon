@@ -765,8 +765,8 @@ areas were read at a lower depth than the rest (Part 2) and are marked.
 | /tools/league-pulse | force-dynamic | header wave + handle gate (auth + prefs) + Sleeper user + leagues | 444 | 4.2, 4.20 |
 | /tools/on-the-clock | force-dynamic | header wave + settings + handle gate + member check | 953 | 4.10, 4.13, 4.20 |
 | /tools/faab | force-dynamic | header wave + settings + format + source + registry + handle gate (parallel) | 446 | 4.13, 4.20 |
-| /tools/signal-check | force-dynamic | header wave + handle gate | 426 | 4.20 |
-| /tools/beacon-breakdown | force-dynamic | header wave + player lookup; analysis behind Suspense | 410 | 4.6, 4.13, 4.20 |
+| /tools/trade-calculator | force-dynamic | header wave + handle gate | 426 | 4.20 |
+| /tools/beacon-breakdown (now /tools/who-should-i-start) | force-dynamic | header wave + player lookup; analysis behind Suspense | 410 | 4.6, 4.13, 4.20 |
 | /tools/manager-pulse/[handle] | force-dynamic | header wave + cache or progress read | 400 | covered by the 2026-09-05 audit |
 | /leagues/[id] | force-dynamic | 9 to 11 in series (4.7); sections behind Suspense | 482 | 4.1 (Teams), 4.7 |
 | /leagues/[id]/power-pulse | force-dynamic | league core + context; pulse cache read | 454 | 4.7 |

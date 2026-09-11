@@ -3,7 +3,7 @@
  *
  * Signal Check's verdict sentence and its plain-language read come from
  * admin-editable templates that call the two parties "Side A" and "Side B".
- * That is right on /tools/signal-check, where the two sides are columns on a
+ * That is right on /tools/trade-calculator, where the two sides are columns on a
  * screen and have no other name.
  *
  * It is wrong in a Discord post. The relay has already named both managers in
@@ -15,7 +15,7 @@
  * So the sentence is renamed on the way out, and only here. The rename cannot
  * change what the sentence means: A stays A, B stays B, and nothing but the
  * noun moves. Editing the global template instead would rewrite
- * /tools/signal-check and the League Pulse transactions feed to suit Discord.
+ * /tools/trade-calculator and the League Pulse transactions feed to suit Discord.
  *
  * This is the same trick lib/would-you-rather/side-names.ts plays, for the
  * opposite reason: that surface renames the sides to keep them ANONYMOUS, and

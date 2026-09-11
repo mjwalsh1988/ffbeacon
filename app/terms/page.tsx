@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 const EFFECTIVE_DATE = "September 6, 2026";
+const EFFECTIVE_DATE_ISO = "2026-09-06";
 
 /** Every section, in order, for the contents list. Ids match the headings below. */
 const SECTIONS: Array<{ id: string; label: string }> = [
@@ -62,7 +63,11 @@ export default function TermsPage() {
         <PageMasthead
           eyebrow="Legal"
           title="Terms of Service"
-          description={`Effective ${EFFECTIVE_DATE}`}
+          description={
+            <>
+              Effective <time dateTime={EFFECTIVE_DATE_ISO}>{EFFECTIVE_DATE}</time>
+            </>
+          }
         />
         <article className="mt-8 space-y-8 text-ink-muted">
           <p>

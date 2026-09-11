@@ -8,6 +8,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { pageShareMetadata } from "@/lib/page-og";
+import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import { createAdminClient } from "@/lib/supabase/server";
 import { Panel } from "@/components/dashboard-panel";
 import { LinkTile } from "@/components/link-tile";
@@ -30,16 +31,18 @@ import { countActivePool, growPool, POOL_LOW_WATER_MARK } from "@/lib/would-you-
 import type { WyrErrorCode, WyrRound } from "@/lib/would-you-rather/types";
 import { WouldYouRatherClient } from "./would-you-rather-client";
 
+const META_TITLE = "Would You Rather? Vote on Real Fantasy Trades";
+const META_DESCRIPTION =
+  "A real trade out of a real league, with the names taken off. Call the winner, then see how the room voted and what Signal Check says. Free to play.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/games/would-you-rather" },
-  title: "Would You Rather? Vote on Real Fantasy Trades",
-  description:
-    "A real trade out of a real league, with the names taken off. Call the winner, then see how the room voted and what the full Signal Check grade says. Free to play.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "would-you-rather",
-    title: "Would You Rather? Vote on Real Fantasy Trades",
-    description:
-      "A real trade out of a real league, with the names taken off. Call the winner, then see how the room voted and what the full Signal Check grade says. Free to play.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/games/would-you-rather",
   }),
 };
@@ -141,8 +144,20 @@ export default async function WouldYouRatherPage() {
     .select("id", { count: "exact", head: true });
   votesCast = voteCount ?? 0;
 
+  const webApplicationLd = webApplicationJsonLd({
+    name: META_TITLE,
+    description: META_DESCRIPTION,
+    url: "/games/would-you-rather",
+    category: "GameApplication",
+  });
+
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+      />
       <PageBody flush>
         <PageMasthead
           eyebrow="Games"
@@ -223,7 +238,7 @@ export default async function WouldYouRatherPage() {
             <Panel eyebrow="Elsewhere" title="Where to go next" headingLevel={2}>
               <div className="grid gap-2">
                 <LinkTile
-                  href="/tools/signal-check"
+                  href="/tools/trade-calculator"
                   icon={Scale}
                   title="Signal Check Trade Calculator"
                   body="Grade a trade of your own, with the same pipeline behind the reveal."

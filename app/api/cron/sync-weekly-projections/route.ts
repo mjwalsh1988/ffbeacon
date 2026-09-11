@@ -1,10 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runWeeklyProjectionsSync } from "@/lib/sync-weekly-projections";
 import { recordCronRun } from "@/lib/cron-runs";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { getActiveFormats } from "@/lib/source";
+import { submitIndexNow } from "@/lib/indexnow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +36,19 @@ export async function GET(req: Request) {
       const sync = await runWeeklyProjectionsSync(supabase);
       // Fresh projections -> bust the profile projection caches.
       if (!sync.skipped) revalidateTag(CACHE_TAGS.playerProjections);
+
+      // A skipped run, or one that fetched nothing, wrote no new row for the
+      // start/sit tool or any rankings board to reflect, so there is nothing to
+      // push. Fired via after() so a slow or failed ping never adds to this
+      // cron's own duration; submitIndexNow never throws.
+      if (!sync.skipped && sync.totalStored > 0) {
+        const activeFormats = await getActiveFormats(supabase);
+        const urls = [
+          "/tools/who-should-i-start",
+          ...activeFormats.map((format) => `/rankings/${format.slug}`),
+        ];
+        after(() => submitIndexNow(urls));
+      }
       return sync;
     });
     return NextResponse.json(result);

@@ -26,12 +26,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/rankings" },
   title: "Fantasy Football Rankings",
   description:
-    "Every player ranked for your scoring, with the seven-day move beside each one so you can see who is climbing and who is falling. Redraft, dynasty, superflex, and TE premium, updated daily.",
+    "Every player ranked for your scoring, with the seven-day move beside each one. Redraft, dynasty, superflex, and TE premium formats, updated daily.",
   ...pageShareMetadata({
     key: "rankings",
     title: "Fantasy Football Rankings",
     description:
-      "Every player ranked for your scoring, with the seven-day move beside each one so you can see who is climbing and who is falling. Redraft, dynasty, superflex, and TE premium, updated daily.",
+      "Every player ranked for your scoring, with the seven-day move beside each one. Redraft, dynasty, superflex, and TE premium formats, updated daily.",
     path: "/rankings",
   }),
 };

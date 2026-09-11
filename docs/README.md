@@ -30,6 +30,7 @@ before that date cite the old flat paths listed in the last column.
 | security | FF_BEACON_END_TO_END_SECURITY_AUDIT.md | The end to end audit | unchanged |
 | security | FF_BEACON_SECURITY_FINDINGS.json | Findings ledger | unchanged |
 | security | FF_BEACON_SECURITY_REMEDIATION_REPORT.md | What was remediated | unchanged |
+| seo | who-should-i-start-and-site-seo-plan.md | 2026-09-10 plan: the start/sit tool on /tools/who-should-i-start, the trade calculator slug, IndexNow, and the site-wide SEO audit | new |
 
 When a feature gains a second document, it goes in that feature's folder. A
 document that spans features goes with the feature it changes most.

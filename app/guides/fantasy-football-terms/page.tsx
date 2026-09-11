@@ -470,7 +470,7 @@ function Closing() {
           detail="Values, tiers, and trends for every format we support"
         />
         <ClosingLink
-          href="/tools/signal-check"
+          href="/tools/trade-calculator"
           label="Signal Check Trade Calculator"
           detail="Grade a trade and get the Beacon Verdict"
         />

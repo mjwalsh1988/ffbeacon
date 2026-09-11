@@ -43,7 +43,7 @@
  *   /login /my-beacon   Disallowed in robots.ts; account surfaces.
  *   /admin /api /auth   Disallowed in robots.ts.
  *   /leagues/**         Per-user league data, unbounded in count.
- *   /tools/signal-check/v/[shareId]   User-generated share artifacts.
+ *   /tools/trade-calculator/v/[shareId]   User-generated share artifacts.
  *   /brief/player/[slug]              Sets robots noindex.
  *   /[handle]/rankings/[boardId]      Sets robots index:false.
  *   /brief/tag/[tag]                  Hundreds of thin filter pages. They stay
@@ -107,11 +107,14 @@ const ID_BATCH_SIZE = 50;
 /** Core public pages that are not data-driven. */
 const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/tools", priority: 0.7 },
-  { path: "/tools/beacon-breakdown", priority: 0.6 },
+  // The start/sit tool is a head-term landing page, one notch above the
+  // other tools (plan 2.3).
+  { path: "/tools/who-should-i-start", priority: 0.7 },
   { path: "/tools/league-pulse", priority: 0.6 },
   { path: "/tools/faab", priority: 0.6 },
   { path: "/tools/on-the-clock", priority: 0.6 },
-  { path: "/tools/signal-check", priority: 0.6 },
+  { path: "/tools/manager-pulse", priority: 0.6 },
+  { path: "/tools/trade-calculator", priority: 0.6 },
   { path: "/games", priority: 0.4 },
   { path: "/games/signal-scout", priority: 0.4 },
   { path: "/games/would-you-rather", priority: 0.4 },

@@ -153,6 +153,11 @@ export async function BriefFeed({
         }
       >
         <div className="mb-5 flex items-center justify-between gap-3">
+          {/* The masthead title is this page's h1 and the card titles are h3
+              (article-card.tsx), so this h2 keeps the outline from skipping a
+              level. Same text on every view: whichever filter is active, the
+              grid below it is still the latest matching articles. */}
+          <h2 className="text-lg font-semibold text-ink">Latest articles</h2>
           <p className="text-sm text-ink-muted" role="status">
             {total === 0
               ? "No articles yet"

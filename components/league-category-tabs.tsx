@@ -20,7 +20,7 @@ import type { LeagueCategoryGroup } from "@/lib/league-category";
  * category starts at the same place.
  *
  * WHY NOT BreakdownTabs
- *   app/tools/beacon-breakdown/breakdown-tabs.tsx is the same ARIA pattern and
+ *   app/tools/who-should-i-start/breakdown-tabs.tsx is the same ARIA pattern and
  *   the same visual language, and this borrows both. What it cannot do is lose a
  *   tab: its tab set is fixed, so holding the selection as an id is safe. Here
  *   the Show-all filter can empty a whole category out from under the selection,

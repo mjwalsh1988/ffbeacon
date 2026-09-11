@@ -97,7 +97,7 @@ const PAGE_CARDS: Record<string, PageCard> = {
     subhead:
       "Put both sides in and get a straight answer: who wins, by how much, and the reason why. Redraft or dynasty, players or picks.",
     facts: ["Free", "No signup", "Shareable result"],
-    path: "/tools/signal-check",
+    path: "/tools/trade-calculator",
     badge: "Signal Check",
   },
   "league-pulse": {
@@ -131,13 +131,13 @@ const PAGE_CARDS: Record<string, PageCard> = {
     badge: "FAAB Calculator",
   },
   "beacon-breakdown": {
-    eyebrow: "Player comparison",
-    headlineTop: "Two players,",
-    headlineBottom: "one clear answer",
+    eyebrow: "Start / Sit",
+    headlineTop: "Who should",
+    headlineBottom: "I start?",
     subhead:
-      "Side by side on value, points, and role, then scored under your own league's rules if you want it that specific.",
-    facts: ["Free", "No signup", "Any two players"],
-    path: "/tools/beacon-breakdown",
+      "Put your players in. Get a start/sit verdict built from this week's projections and matchups.",
+    facts: ["Free", "No signup", "Any players, any format"],
+    path: "/tools/who-should-i-start",
     badge: "Beacon Breakdown",
   },
   games: {

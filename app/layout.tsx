@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SITE } from "@/lib/site";
+import {
+  organizationJsonLd,
+  serializeJsonLd,
+  websiteJsonLd,
+} from "@/lib/json-ld";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { DiscordCta } from "@/components/discord-cta";
@@ -52,6 +57,38 @@ export const metadata: Metadata = {
     shortcut: ["/img/favicon.ico"],
     apple: [{ url: "/img/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+  // Default share card for any page that sets no openGraph of its own
+  // (/privacy, /terms, the not-found branch of the share page). Next merges
+  // metadata shallowly per key, so a page that sets its own openGraph.images
+  // does not see this one; a page that sets openGraph without images loses
+  // this default image entirely rather than falling back to it, which is
+  // why every page that carries a share card sets its own images.
+  openGraph: {
+    title: SITE.name,
+    description: "Your signal through the fantasy noise.",
+    url: SITE.url,
+    siteName: SITE.name,
+    type: "website",
+    locale: "en_US",
+    images: [
+      {
+        url: `${SITE.url}/api/og/page/home`,
+        width: 1200,
+        height: 630,
+        alt: "FF Beacon, your signal through the fantasy noise",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE.name,
+    description: "Your signal through the fantasy noise.",
+    images: [`${SITE.url}/api/og/page/home`],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#07070D",
 };
 
 /**
@@ -99,6 +136,16 @@ export default function RootLayout({
             crawlers expect. Advertising text/markdown here would promise a
             content type the response does not carry. */}
         <link rel="describedby" href={`${SITE.url}/llms.txt`} />
+        {/* Organization and WebSite entity schema, once for the whole site.
+            No SearchAction: the site search is a command palette with no
+            query-string URL to point one at. See lib/json-ld.ts. */}
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{
+            __html: serializeJsonLd([organizationJsonLd(), websiteJsonLd()]),
+          }}
+        />
       </head>
       <body className="font-sans antialiased">
         <a

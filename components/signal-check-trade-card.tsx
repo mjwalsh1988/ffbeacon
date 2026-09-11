@@ -1,7 +1,7 @@
 /**
  * SignalCheckTradeCard: a league-feed trade rendered with its full Signal Check
  * grade. This is the same verdict, value margin, confidence, trade shape, and
- * plain-language read a user gets typing the trade into /tools/signal-check
+ * plain-language read a user gets typing the trade into /tools/trade-calculator
  * directly (see lib/league-signal-check.ts), so trades on the transactions feed
  * are graded, not just listed.
  *

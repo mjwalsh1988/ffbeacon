@@ -38,10 +38,56 @@ type PlayerPageProps = {
   searchParams: Promise<{ format?: string; source?: string; tab?: string }>;
 };
 
+/**
+ * Per-tab title suffix and description (SEO-T972 -- see plan section 4.5,
+ * "The tab-canonical problem on player pages"). Statistics and trades carry
+ * data unique to that tab (the game log, the trade ledger); Beacon Brief
+ * carries the player's own news coverage, which is unique in the same way.
+ * Overview is the default and keeps the original title/description below,
+ * unmodified by this table.
+ *
+ * `description` is a suffix that STARTS with the name, so the shared cap
+ * below can shorten only the name for an unusually long one, not the fixed
+ * sentence that explains the tab.
+ */
+const TAB_METADATA: Record<
+  Exclude<PlayerTabId, "overview">,
+  { titleSuffix: string; description: (name: string) => string }
+> = {
+  statistics: {
+    titleSuffix: "Game Log",
+    description: (name) =>
+      `${name} weekly fantasy football stat line: points, targets, carries, and box score totals for every game this season.`,
+  },
+  trades: {
+    titleSuffix: "Trade History",
+    description: (name) =>
+      `${name} trade history: every fantasy football trade this player has been part of, graded with market value and a verdict.`,
+  },
+  "beacon-brief": {
+    titleSuffix: "News",
+    description: (name) =>
+      `${name} fantasy football news: every Beacon Brief article that mentions this player.`,
+  },
+};
+
+/** Shorten only the name at the front of a description so the fixed sentence
+ *  after it never gets cut mid-word for an unusually long player name. */
+function capDescription(name: string, buildDescription: (name: string) => string, max = 150): string {
+  const full = buildDescription(name);
+  if (full.length <= max) return full;
+  const suffixLength = buildDescription("").length;
+  const budget = Math.max(0, max - suffixLength);
+  const cappedName = name.slice(0, budget).trimEnd();
+  return buildDescription(cappedName);
+}
+
 export async function generateMetadata({
   params,
+  searchParams,
 }: PlayerPageProps): Promise<Metadata> {
   const { slug } = await params;
+  const { tab } = await searchParams;
   const supabase = await createClient();
   const { data: player } = await supabase
     .from("players")
@@ -53,13 +99,36 @@ export async function generateMetadata({
   }
   const name = player.full_name ?? `${player.first_name} ${player.last_name}`;
   const posTeam = `${player.position}${player.team ? `, ${player.team}` : ""}`;
-  const canonical = `${SITE.url}/players/${slug}`;
+  const bareCanonical = `${SITE.url}/players/${slug}`;
+  // An unknown or invalid ?tab= value falls back to the overview metadata and
+  // the bare canonical, so an arbitrary query string can never mint a new
+  // canonical URL for this page.
+  const activeTab: PlayerTabId = VALID_TABS.includes((tab ?? "") as PlayerTabId)
+    ? (tab as PlayerTabId)
+    : "overview";
+
   // The title leads with the words a reader actually types. "Is He Worth It?"
   // was a better headline than it was a search result: it matched nothing
   // anyone looks for, and it pushed stats and trade value past where a SERP
   // truncates. Everything named here is a section the profile really has.
-  const title = `${name} Fantasy Football Stats, Trade Value, News`;
-  const description = `${name} (${posTeam}) fantasy football profile: trade value and its trend, weekly projections for start or sit calls, game-log stats, and the latest news.`;
+  let title = `${name} Fantasy Football Stats, Trade Value, News`;
+  let description = capDescription(
+    name,
+    (n) =>
+      `${n} (${posTeam}) fantasy football profile: trade value and trend, weekly projections, game-log stats, and news.`,
+  );
+  let canonical = bareCanonical;
+
+  if (activeTab !== "overview") {
+    const tabMeta = TAB_METADATA[activeTab];
+    title = `${name} ${tabMeta.titleSuffix}`;
+    description = capDescription(name, tabMeta.description);
+    // Self-referencing: the canonical keeps the tab parameter, so each tab's
+    // unique content can be indexed on its own URL instead of collapsing onto
+    // the overview.
+    canonical = `${bareCanonical}?tab=${activeTab}`;
+  }
+
   const ogImage = `${SITE.url}/api/og/player/${slug}`;
   return {
     title,

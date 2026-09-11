@@ -18,8 +18,13 @@ import { ScrollToTop } from "@/components/scroll-to-top";
  * traffic, so the soft-404 trade-off documented in app/leagues/loading.tsx
  * is negligible here.
  *
- * The section name sits in the same live region as "Loading...", so the whole
- * thing is one status update rather than two.
+ * The section name sits in the same live region as the sentence below it, so
+ * the whole thing is one status update rather than two.
+ *
+ * SEO-T980: the second line names the destination ("Loading the fantasy
+ * football rankings.") instead of a bare "Loading...", true for /rankings
+ * and every /rankings/[format] page. Real, visible text inside the existing
+ * role="status" region, not a second live announcement.
  *
  * It is deliberately NOT an <h1>. It is styled as a tiny uppercase eyebrow, and
  * marking an eyebrow as the page's only level-1 heading gives a reader
@@ -43,7 +48,7 @@ export default function Loading() {
             Rankings
           </p>
           <p className="text-sm font-medium tracking-wide text-ink-muted">
-            Loading...
+            Loading the fantasy football rankings.
           </p>
         </div>
       </div>

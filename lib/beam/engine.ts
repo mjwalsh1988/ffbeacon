@@ -61,7 +61,7 @@ const UNSUPPORTED_LINKS: Partial<Record<BeamUnsupportedReason, BeamLink[]>> = {
   "out-of-scope": [
     { href: "/tools/league-pulse", label: "Sync your league in League Pulse" },
     {
-      href: "/tools/signal-check",
+      href: "/tools/trade-calculator",
       label: "Grade a trade in the Signal Check Trade Calculator",
     },
   ],

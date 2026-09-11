@@ -102,6 +102,14 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // Never indexed: a league's pages are relevant only to the people in that
+    // league, an opaque id, unbounded and per third party. `follow: true`
+    // keeps internal link equity flowing to /tools/league-pulse and the
+    // player pages. Kept out of the sitemap too (lib/sitemap/sections.ts).
+    // Every route under /leagues/[league_id]/** carries the same pair; see
+    // section 7 of docs/seo/who-should-i-start-and-site-seo-plan.md for the
+    // owner's reasoning.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,

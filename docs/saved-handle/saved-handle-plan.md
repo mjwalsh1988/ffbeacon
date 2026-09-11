@@ -91,7 +91,7 @@ The handle is written by two near-identical client-side forms that each do a
 read-merge-write against the jsonb through the reader's own session client:
 
 - `app/my-beacon/sleeper-leagues/save-username-form.tsx`
-- `app/tools/signal-check/sleeper-import-panel.tsx` (`UsernameSaveForm`, at the
+- `app/tools/trade-calculator/sleeper-import-panel.tsx` (`UsernameSaveForm`, at the
   bottom of the file)
 
 Neither verifies that the handle exists on Sleeper before saving it.
@@ -104,8 +104,8 @@ Neither verifies that the handle exists on Sleeper before saving it.
 | My Sleeper Leagues | `app/my-beacon/sleeper-leagues/page.tsx`, `sleeper-connection.tsx`, `save-username-form.tsx` | Auto-loads leagues for the saved handle. The connection block collapses to one row with a "Change it" disclosure. This is the closest thing on the site to the card the owner describes. |
 | On The Clock | `app/tools/on-the-clock/page.tsx`, `on-the-clock-client.tsx` (steps at lines 1774 and 1833), `username-gate.tsx`, `app/api/on-the-clock/leagues/route.ts` | Prefills the gate with the saved handle. The reader still presses "Find my drafts". Step 2 has a "Change username" button that returns to step 1. |
 | FAAB Calculator | `app/tools/faab/page.tsx`, `league-panel.tsx`, `actions.ts connectSleeperLeagues` | Prefills the username field. The reader still presses "Find my leagues". The comment on `initialUsername` says this was deliberate so a reader who came for the manual calculator is not charged a lookup. |
-| Beacon Breakdown | `app/tools/beacon-breakdown/page.tsx`, `league-panel.tsx`, `actions.ts connectBreakdownLeagues` | No prefill at all. League mode sits behind a "Connect a league" button that opens an empty form. |
-| Signal Check import | `app/tools/signal-check/page.tsx`, `sleeper-import-panel.tsx`, `import-actions.ts listImportLeagues` | Requires sign-in. With a saved handle it goes straight to the league picker. With none it shows the inline save form. The league picker is a `<select>`. |
+| Beacon Breakdown | `app/tools/who-should-i-start/page.tsx`, `league-panel.tsx`, `actions.ts connectBreakdownLeagues` | No prefill at all. League mode sits behind a "Connect a league" button that opens an empty form. |
+| Signal Check import | `app/tools/trade-calculator/page.tsx`, `sleeper-import-panel.tsx`, `import-actions.ts listImportLeagues` | Requires sign-in. With a saved handle it goes straight to the league picker. With none it shows the inline save form. The league picker is a `<select>`. |
 | Manager Pulse | `app/tools/manager-pulse/page.tsx`, `manager-search-form.tsx` | Requires sign-in. Prefills the search with the reader's OWN handle, even though the tool exists to look up OTHER managers. |
 | League deep views (10 routes) | `app/leagues/[league_id]/page.tsx` and `decisions`, `lineups`, `positional-war`, `power-pulse`, `schedules`, `schedules/[week]/[roster_id]`, `teams/[roster_id]`, `trade-ideas`, `transactions` | Each page derives `searchedUsername` from `?username=` with the same four-line expression, copied ten times. It drives "your team" highlighting (`lib/league-viewer.ts matchViewerRoster`), the default roster on Lineups, the identity on Trade Ideas, the back link to League Pulse, and the "other leagues" switcher (`lib/league-header-data.ts`, `lib/league-switcher-data.ts`). With no `?username=`, none of that knows who the reader is, even when they are signed in with a saved handle. |
 
@@ -132,8 +132,8 @@ Two things the table makes visible:
 | League detail sheet (mobile dialog) | `app/tools/league-pulse/league-detail-sheet.tsx` | same | Yes, unused |
 | On The Clock draft picker | `app/tools/on-the-clock/league-picker.tsx` | `LeagueCard` from `/api/on-the-clock/leagues` | Yes, `LeagueCard.avatar` is already populated by the route and never rendered |
 | FAAB league picker | `app/tools/faab/league-panel.tsx` | `ConnectedLeague` from `connectSleeperLeagues` | No. A `<select>`. |
-| Beacon Breakdown league picker | `app/tools/beacon-breakdown/league-panel.tsx` | `BreakdownLeague` from `connectBreakdownLeagues` | No. A list of buttons. |
-| Signal Check import league picker | `app/tools/signal-check/sleeper-import-panel.tsx` | `ImportLeague` from `listImportLeagues` | No. A `<select>`. |
+| Beacon Breakdown league picker | `app/tools/who-should-i-start/league-panel.tsx` | `BreakdownLeague` from `connectBreakdownLeagues` | No. A list of buttons. |
+| Signal Check import league picker | `app/tools/trade-calculator/sleeper-import-panel.tsx` | `ImportLeague` from `listImportLeagues` | No. A `<select>`. |
 | Deep-view league switcher | `components/league-switcher.tsx` | `SwitcherLeague` from `lib/league-switcher-data.ts` (live Sleeper payload) | No |
 | Projected finishes panel | `components/league-projections-panel.tsx` | `ProjectionInput` built in `app/my-beacon/sleeper-leagues/page.tsx` from the live payload | No |
 | Player exposure panel | `components/player-exposure-panel.tsx` | `ExposureLeague` from `lib/player-exposure.ts` (reads `leagues` rows) | No |
@@ -514,7 +514,7 @@ copy of the grammar and is already client-safe. This module exists so the
 save form and the server action agree, and so nothing new imports
 `lib/manager-pulse/*` for a reason unrelated to Manager Pulse. Note, not
 changed by this plan: `app/tools/faab/actions.ts` and
-`app/tools/beacon-breakdown/actions.ts` each carry a looser
+`app/tools/who-should-i-start/actions.ts` each carry a looser
 `USERNAME_PATTERN` (dot and hyphen, 64 chars) and `lib/on-the-clock/validation.ts`
 a stricter one (32 chars, case-sensitive). Reconciling them is debt recorded
 in Part 8, not work in this plan.
@@ -855,7 +855,7 @@ through `loadSavedSleeperHandle` (never from the client), returns the same
 error shape when there is none, and uses the cached user id. `ConnectedLeague`
 gains `avatar: string | null` from the Sleeper payload. Rate bucket unchanged.
 
-### 5.5 Beacon Breakdown, `/tools/beacon-breakdown`
+### 5.5 Beacon Breakdown, `/tools/who-should-i-start`
 
 `page.tsx`: resolve the gate and pass it to `LeaguePanel`.
 
@@ -871,7 +871,7 @@ applied) is unchanged apart from the logo beside the league name.
 `actions.ts`: same `saved: true` branch as FAAB; `BreakdownLeague` gains
 `avatar`.
 
-### 5.6 Signal Check import, `/tools/signal-check`
+### 5.6 Signal Check import, `/tools/trade-calculator`
 
 `sleeper-import-panel.tsx` (D10): `PanelHeader` for the signed-in-with-handle
 state becomes `SleeperIdentityCard` with `SaveHandleForm mode="settings"` as
@@ -1138,27 +1138,27 @@ Pass the gate state through. Removes the page's guard line.
 
 Part 5.4 panel. Depends on SH-T013, SH-T014, SH-T024.
 
-#### SH-T027 | `app/tools/beacon-breakdown/actions.ts`
+#### SH-T027 | `app/tools/who-should-i-start/actions.ts`
 
 Part 5.5 actions. `BreakdownLeague.avatar`.
 
-#### SH-T028 | `app/tools/beacon-breakdown/page.tsx`
+#### SH-T028 | `app/tools/who-should-i-start/page.tsx`
 
 Resolve the gate, pass it.
 
-#### SH-T029 | `app/tools/beacon-breakdown/league-panel.tsx`
+#### SH-T029 | `app/tools/who-should-i-start/league-panel.tsx`
 
 Part 5.5 panel. Depends on SH-T013, SH-T014, SH-T027.
 
-#### SH-T030 | `app/tools/signal-check/import-actions.ts`
+#### SH-T030 | `app/tools/trade-calculator/import-actions.ts`
 
 Part 5.6 actions. Removes its guard line.
 
-#### SH-T031 | `app/tools/signal-check/page.tsx`
+#### SH-T031 | `app/tools/trade-calculator/page.tsx`
 
 Resolve the gate. Removes its guard line.
 
-#### SH-T032 | `app/tools/signal-check/sleeper-import-panel.tsx`
+#### SH-T032 | `app/tools/trade-calculator/sleeper-import-panel.tsx`
 
 Part 5.6 panel. Deletes the private `UsernameSaveForm`.
 

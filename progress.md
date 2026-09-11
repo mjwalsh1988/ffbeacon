@@ -13257,3 +13257,1348 @@ T719 | completed | Bookmarks: a league is not the tool, and each page of one is 
      | whether to load, so the chunk would be fetched for everyone anyway. The
      | root layout is unchanged at +2 kB raw, and no bookmark chunk is served to
      | a request with no session; verified again by curl against next start.
+
+---
+
+# Who Should I Start, the trade calculator slug, and the site SEO audit (SEO-T###)
+
+Plan of record: `docs/seo/who-should-i-start-and-site-seo-plan.md`. Section 6
+of that document is the task list; the ids below are its T numbers with an
+SEO- prefix so each line maps straight back to the plan. Deviations from the
+plan are recorded here under the task id rather than decided in place.
+
+Session of 2026-09-10. Orchestrated build: each atomic task is executed by a
+sub-agent, and this file is updated by the orchestrator as each one reports.
+NOT COMMITTED and NOT PUSHED, by instruction.
+
+## Start/sit engine
+
+SEO-T900 | completed | Add scoringSettingsForFormat to lib/league-scoring.ts with tests
+     | files: lib/league-scoring.ts, lib/league-scoring.test.ts
+     | depends on: none
+     | notes: adds FormatScoringInput ({ scoring_type, te_premium_bonus })
+       and scoringSettingsForFormat(format): ScoringSettings. The test file
+       already existed, so the four plan cases were added to it and run
+       through closestScoringBase and scoreWithFallback, plus a case that
+       omits bonus_rec_te when the bonus is zero or null.
+     | verified: vitest lib/league-scoring.test.ts 33 passed; tsc clean in
+       its files. Final reviews pending (SEO-T990 to T994).
+
+SEO-T901 | completed | Adopt scoringSettingsForFormat in lib/breakdown/load-extras.ts and pin the PPR points column with a test
+     | files: lib/breakdown/load-extras.ts, lib/breakdown/load-extras.test.ts
+     | depends on: SEO-T900
+     | notes: load-extras holds a resolved ExtrasContext (scoringKey and
+       tePremiumPerReception) rather than a format row, so it gained a thin
+       adapter, scoringSettingsForContext, that feeds scoringSettingsForFormat
+       with no new query. projectPlayerWeek now gets real scoring settings
+       instead of null. The test pins PPR to the PPR column (20 against std
+       10), plus half PPR and standard.
+     | verified: vitest lib/breakdown, league-scoring and projections, 301
+       passed; tsc clean. Final reviews pending.
+
+SEO-T902 | completed | Extend AdjustedProjection with sigma, opponentMultiplier, beatRate, availabilityRate, weeksPlayed
+     | files: lib/projections/read.ts, lib/projections/read.test.ts
+     | depends on: none
+     | notes: AdjustedProjection gains sigma and opponentMultiplier (from
+       projectPlayerWeek), beatRate, availabilityRate and weeksPlayed (from
+       the accuracy row the loop already holds; null, null and 0 when there
+       is none). No new database read. Two new test cases cover populated and
+       default values.
+     | verified: vitest read, source-guard and raw-column-guard, 35 passed with
+       no allow-list entry; tsc clean. Final reviews pending.
+
+SEO-T903 | completed | Add loadDefenseRanks to lib/power-pulse/load.ts
+     | files: lib/power-pulse/load.ts, lib/power-pulse/load.test.ts
+     | depends on: none
+     | notes: loadDefenseRanks(supabase, scoring, season) returns a Map keyed
+       `${team}|${position}` to { rank, of }, with the pure core exported as
+       rankDefenseRows. Rank 1 is the defence allowing the most points. It
+       ranks on shrunk_multiplier ?? multiplier, the same figure
+       opponentMultiplier applies to a projection, and deliberately not on the
+       table's generosity_rank column, which ranks a different, unshrunk
+       figure; otherwise a reason sentence could point one way while the
+       number on the card moved the other. A failed read returns an empty Map.
+       The first agent stopped at the session limit after writing its tests;
+       the orchestrator ran them.
+     | verified: vitest lib/power-pulse/load.test.ts passing (16 files, 277
+       tests in the combined run); tsc clean in its files. Final reviews
+       pending.
+
+SEO-T904 | completed | Move resolveSeasonClock to lib/start-sit/clock.ts, re-export from load-extras
+     | files: lib/start-sit/clock.ts, lib/breakdown/load-extras.ts
+     | depends on: none
+     | notes: resolveSeasonClock and SeasonClock now live in
+       lib/start-sit/clock.ts; load-extras imports and re-exports both, so the
+       BEAM capabilities that import from load-extras resolve unchanged. The
+       first agent stopped at the session limit before its final tsc; the
+       orchestrator ran it.
+     | verified: vitest lib/breakdown passing; tsc clean in its files. Final
+       reviews pending.
+
+SEO-T905 | completed | lib/start-sit/types.ts with the constants and shapes
+     | files: lib/start-sit/types.ts
+     | depends on: none
+     | notes: constants and the three shapes exactly as plan 2.6, plus a
+       StartSitCallLabel alias used by StartSitVerdict. Type-only imports, so
+       client-safe. The repo has two types named GameEnvironment; this uses
+       the one in lib/nfl-game-environment.ts, which is what loadGameEnvironment
+       returns.
+     | verified: tsc clean in its file. Final reviews pending.
+
+SEO-T906 | completed | lib/start-sit/rank.ts with tests
+     | files: lib/start-sit/rank.ts, lib/start-sit/rank.test.ts
+     | depends on: SEO-T905
+     | notes: rankForWeek(candidates, projections, startCount) returns
+       { starters, bench, startCount } plus an exported clampStartCount. A
+       missing projection row counts as null points. Ties: floor, then beat
+       rate, then slug. 13 tests.
+     | verified: vitest lib/start-sit 24 passed; tsc clean in its files. Final
+       reviews pending.
+
+SEO-T907 | completed | lib/start-sit/confidence.ts with tests
+     | files: lib/start-sit/confidence.ts, lib/start-sit/confidence.test.ts
+     | depends on: SEO-T905
+     | notes: computeConfidence(starter, benched) takes { points, sigma }
+       pairs and uses winProbability from lib/power-pulse/math.ts;
+       callLabelFor and the 0.65 and 0.55 thresholds are exported. 11 tests,
+       including both boundaries.
+     | verified: vitest lib/start-sit 24 passed; tsc clean in its files. Final
+       reviews pending.
+
+SEO-T908 | completed | lib/start-sit/reasons.ts with tests including the banned-character fixture
+     | files: lib/start-sit/reasons.ts, lib/start-sit/reasons.test.ts
+     | depends on: SEO-T905
+     | notes: buildStartSitReasons(input) and buildStartSitVerdictLine(input)
+       over one StartSitReasonInput. Deviations, each recorded in the file
+       header: no he, his or him anywhere (the owner's pronoun rule), so the
+       templates repeat the surname; every two-player sentence compares the
+       same borderline pair (last starter against first bench), where the
+       plan's reliability example mixed two bench players; MIN_GRADED_WEEKS is
+       a local copy (4) because the metrics.ts one is unexported and importing
+       that registry into a pure module is heavy; the ceiling wording was
+       written here because the plan only gives the floor case.
+     | verified: vitest lib/start-sit 47 passed; tsc clean. Final reviews
+       pending.
+
+SEO-T909 | completed | lib/start-sit/engine.ts computeStartSit with fixture tests
+     | files: lib/start-sit/engine.ts, lib/start-sit/engine.test.ts
+     | depends on: SEO-T906, SEO-T907, SEO-T908
+     | notes: computeStartSit(StartSitEngineInput) calls rank, confidence and
+       reasons only. An "out" player is ranked on a copy with points nulled,
+       so it is never started or counted toward K, while its card and reasons
+       still see the real figure. Margin and confidence are measured on the
+       last starter against the first benched player with rank-adjusted
+       points. With nothing to compare, verdictLine reads "There are no
+       projections to compare for Week N." types.ts gains verdictLine on
+       StartSitVerdict.
+     | verified: vitest lib/start-sit 88 passed; tsc clean. Final reviews
+       pending.
+
+SEO-T910 | completed | lib/start-sit/load.ts, the three-wave read through loadAdjustedProjections
+     | files: lib/start-sit/load.ts
+     | depends on: SEO-T900, SEO-T902, SEO-T903, SEO-T904, SEO-T905
+     | notes: loadStartSitBoard(params) in three waves, with pure helpers
+       tested in load.test.ts (25 cases). Deviations: loadPowerPulseSettings is
+       not called directly because loadAdjustedProjections already resolves
+       it; PLAYER_SELECT is unexported in lib/beacon-breakdown.ts, so the same
+       column list is mirrored locally with a comment. Orchestrator check
+       found a defect: a bye was inferred from a team's absence in the odds
+       table, which only covers the slate the odds sync has reached, so any
+       later week would have called every player on bye. A follow-up agent is
+       tightening the rule.
+     | notes: bye fix: a player is on bye only when the week's slate is
+       complete (MIN_COMPLETE_SLATE_TEAMS = 26 teams in the odds map), the
+       team, normalised through normalizeEspnTeam (which carries the WSH and
+       WAS alias), is absent, and the adjusted points are null.
+       detectOnBye(team, byTeam, points). Six cases added. The fix agent ran
+       git stash and git stash pop against the standing rule while other
+       agents were writing; the orchestrator checked afterwards: the stash
+       list is empty, tsc shows only the stale .next/types errors, and the
+       full suite passes (323 files, 4902 tests).
+     | verified: vitest lib/start-sit and lib/projections, 283 passed; tsc
+       clean. Final reviews pending.
+
+SEO-T911 | completed | lib/start-sit/toughest-calls.ts with tests and the unstable_cache wrapper
+     | files: lib/start-sit/toughest-calls.ts, lib/start-sit/toughest-calls.test.ts
+     | depends on: SEO-T909, SEO-T910
+     | notes: pure selectToughestCalls(input) returning { grid, byPosition },
+       plus loadStartSitToughestCalls and loadStartSitToughestCallsCached.
+       Key ["start-sit-toughest", season, week, formatSlug, rankingsSource,
+       projectionSource], revalidate 21600, tag CACHE_TAGS.playerProjections;
+       the projection source is resolved before the key is built. Cost: one
+       rankings query (position_rank up to 36, well under the row cap) and one
+       loadAdjustedProjections call for the whole field; both guards pass with
+       no allow-list entry. Deviations: rankingsSource added to the key
+       (different value sources rank players differently); defence ranks,
+       game environment and availability are not read, because the verdict
+       line and confidence use only points and sigma. Found in review: without
+       availability a ruled-out player with a projection could appear as a
+       toughest call; SEO-T921 adds that exclusion.
+     | verified: vitest lib/start-sit and lib/projections, 303 passed; tsc
+       clean in its files. Final reviews pending.
+
+## Generalising the pairwise breakdown engine
+
+SEO-T912 | completed | Add scalar() to every Metric in lib/breakdown/metrics.ts
+     | files: lib/breakdown/metrics.ts
+     | depends on: none
+     | notes: the registry has grown since the plan was written: 21 scored
+       metrics plus the 2 unscored blended rows, so 21 scalars rather than
+       the plan's 17. New lib/breakdown/metrics.test.ts pins, for every
+       metric, that scalar ordering matches share() and that nulls agree. The
+       first agent stopped at the session limit after adding the type member;
+       a second agent finished it.
+     | verified: vitest lib/breakdown 69 passed; tsc clean in lib/breakdown.
+       Final reviews pending.
+
+SEO-T913 | completed | computeGroupEdge in lib/breakdown/edge.ts with the N=2 parity test
+     | files: lib/breakdown/edge.ts, lib/breakdown/edge.test.ts, lib/breakdown/types.ts
+     | depends on: SEO-T912
+     | notes: first pass built computeGroupEdge on the plan's rank formula
+       ((N - rank) / (N - 1)) with GroupEdge, GroupEdgeSide,
+       GroupEdgeContribution and BreakdownGroup types. Orchestrator review: at
+       N = 2 that formula turns every metric into a 1 or 0 share, so it cannot
+       always reproduce computeEdge's label, which the plan also requires; the
+       agent found a borderline pair where the two disagreed (Clear against
+       Strong Edge) and retuned the fixture until the test passed. Reopened:
+       a follow-up agent replaces the composite with the mean of the pairwise
+       share() values against every other side (exactly computeEdge at N = 2,
+       by construction), keeps scalar ranks for the "Best" badge only, and
+       restores strict parity tests including the pair that failed.
+     | notes: correction landed. Each side's share per metric is the mean of
+       pairShare(i, j) against every other side, with pairShare forced
+       antisymmetric (share(i, j) for i < j, 1 - share(j, i) otherwise); weights
+       renormalise per side over the metrics that resolved for it; a side with
+       nothing resolved sits at 0.5, as computeEdge does. At N = 2 this is
+       computeEdge by construction. scalar() ranks drive the Best badge only.
+       BreakdownGroup.edges is Record<LensId, GroupEdge>, since the lens
+       switch now lives in the tab. Deviation from the plan's rank formula,
+       recorded because that formula cannot meet the plan's own N = 2 parity
+       requirement.
+     | verified: parity harness (leader, label, and side 0 composite within
+       1e-9) over the original fixtures, a pair near the Slight Edge threshold
+       and a seeded sweep of 220 random pairs in all three lenses; vitest
+       lib/breakdown, lib/beam and lib/beacon-breakdown, 179 passed; tsc clean
+       in its files. Final reviews pending.
+
+SEO-T914 | completed | loadBreakdown takes a slug list; loadBreakdownPair wrapper for BEAM and the pair OG route
+     | files: lib/beacon-breakdown.ts, lib/beam/capabilities/player-compare-verdict.ts, app/api/og/breakdown/[a]/[b]/route.tsx
+     | depends on: SEO-T913
+     | notes: a private loadBreakdownCore(slugs) reads every side in one
+       parallel wave. loadBreakdownPair is the old two-player function,
+       unchanged in behaviour, and BEAM's player-compare-verdict and the pair
+       OG route now call it (player-compare-stat never used these loaders).
+       loadBreakdown(slugs, params) validates two to eight slugs and returns {
+       group, extras (Map by playerId), context } with all three lenses.
+       loadBreakdownExtras already took a subject list, so load-extras needed
+       no change. Stats stay a separate load in the route folder, where the
+       plan keeps them. The page's old two-argument call now fails tsc until
+       SEO-T928 rewrites it.
+     | verified: as SEO-T913.
+
+## Start/sit board UI (built under the old path first, per plan 2.15)
+
+SEO-T915 | completed | components/start-sit-badge.tsx
+     | files: components/start-sit-badge.tsx
+     | depends on: none
+     | notes: StartSitBadge({ call, rank?, total?, reason?, size? }), a server
+       component on the TeamStatusBadge pattern. START is signal-success with a
+       check icon; SIT is ink-muted with a minus icon. No aria-label, so the
+       accessible name is the visible text ("Start 1 of 2", "Sit (Bye week)").
+     | verified: vitest components and app/tools/beacon-breakdown, 138 passed;
+       tsc clean. Final reviews pending.
+
+SEO-T916 | completed | start-sit-picker.tsx: multi-player combobox with chips and the start-count stepper
+     | files: app/tools/beacon-breakdown/start-sit-picker.tsx
+     | depends on: SEO-T905
+     | notes: StartSitPicker({ basePath, initialPlayers?, initialStart?,
+       formatDisplay, sourceDisplay }) plus a pure buildStartSitHref in
+       picker-url.ts with tests. Focus stays in the combobox after an add;
+       a chip removal returns focus to it; a duplicate raises role="alert"; at
+       the cap the input is disabled and one visible paragraph is also its
+       aria-describedby. The stepper clamps through clampStartCount. The run
+       button pushes ?p=&start= keeping every other parameter and stripping
+       the retired a and b. No-JS: one GET form with a noscript text input
+       for p. The page (SEO-T928) must therefore accept player names as well
+       as slugs in ?p=.
+     | verified: vitest app/tools/beacon-breakdown and lib/start-sit, 84
+       passed; tsc clean in its files. Final reviews pending.
+
+SEO-T917 | completed | week-select.tsx
+     | files: app/tools/beacon-breakdown/week-select.tsx
+     | depends on: none
+     | notes: WeekSelect({ currentWeek, weeks }), a client component. Native
+       select with a visible label; router.push keeps every other parameter
+       and drops ?week when the live week is chosen. Wrapped in a GET form
+       with hidden inputs and a noscript submit button, so it works without
+       JavaScript. 44 px targets.
+     | verified: as SEO-T915.
+
+SEO-T918 | completed | start-sit-card.tsx
+     | files: app/tools/beacon-breakdown/start-sit-card.tsx
+     | depends on: SEO-T915
+     | notes: StartSitCard({ candidate, projection, call, rank?, total?,
+       reason?, formatLabel, market?, layout? }). Reuses Panel, StatTile,
+       StartSitBadge, PlayerHeadshot, POSITION_BADGE, opponentLabel,
+       matchupPhrase, ENVIRONMENT_TIER_LABEL and BeaconValue. Bye replaces the
+       week block with "On bye"; "out" keeps it and says "Ruled out for Week
+       N". Deviations: matchup wording is the existing matchupPhrase
+       (American spelling); the defence rank is stated without "of N" because
+       the projection carries no total; POSITION_PLURAL and the injury tone
+       are local copies of private helpers. Open for the accessibility
+       reviewer: Panel renders a named section, so each card nests a region
+       landmark inside its article.
+     | notes: pre-review fix, resolving the open landmark question above:
+       Panel (components/dashboard-panel.tsx) gains an optional as prop,
+       "section" by default so its 57 existing callers render unchanged; with
+       "div" it drops aria-labelledby and keeps the same heading. The start/sit
+       card and every toughest-call card pass as="div" inside their named
+       article, which removes one region landmark per card (about twenty on a
+       full board plus grid). Heading navigation is unchanged.
+       vitest components and app/tools/beacon-breakdown, 155 passed; tsc clean
+       in the three files.
+     | verified: vitest app/tools/beacon-breakdown, components and
+       lib/start-sit, 233 passed; tsc clean. Final reviews pending.
+
+SEO-T919 | completed | start-sit-board.tsx: verdict line, card row, confidence bar, reasons, copy buttons
+     | files: app/tools/beacon-breakdown/start-sit-board.tsx
+     | depends on: SEO-T909, SEO-T910, SEO-T918
+     | notes: StartSitBoard({ board, verdict, market?, basePath? }) plus a
+       client CardRowToggle({ rowView, listView }). Order: a role="alert" for
+       unknown or refused players when present, the role="status" verdict
+       line (the only live announcement of the result), the no-projections
+       sentence (no weekday claimed; projections sync once a day), the
+       live-week sentence (current week and a kickoff already passed), the
+       list toggle and the card row, the value line rewritten without a
+       pronoun or a negative parallelism, the confidence meter (WinProbBar's
+       own sr-only sentence, so no second one) or its null sentence, the
+       reasons, and Copy link and Copy as image built by one helper, with
+       source always the value source. Both card layouts render on the server
+       and the toggle flips the hidden attribute.
+     | verified: vitest app/tools/beacon-breakdown, lib/start-sit and
+       components, 233 passed; tsc clean in its files. Final reviews pending.
+
+SEO-T920 | completed | written-sections.tsx: every H2 from section 2.4 with its copy
+     | files: app/tools/beacon-breakdown/written-sections.tsx
+     | depends on: none
+     | notes: WrittenSections({ week, season, projectionSourceName, formatSlug,
+       formatDisplay, closestCalls? }) renders the plan's H2s from "How the
+       Beacon Breakdown start/sit verdict is calculated" onward; a positional
+       "Closest calls" H3 renders only when its slot is filled.
+       lib/start-sit/copy.ts exports START_SIT_FAQ (seven entries, plain
+       text, for the FAQPage JSON-LD), START_SIT_CALL_LABEL_TEXT and
+       weekLabel. Deviation: vercel.json syncs projections and injury status
+       once a day and nothing re-syncs on an injury move, so the cadence
+       sentence says "refresh once a day" instead of the plan's "nightly and
+       again when injury reports move". Two negative-parallelism sentences in
+       the first draft were rewritten as plain statements.
+     | verified: tsc clean in its files; vitest lib/start-sit 47 passed. Final
+       reviews pending.
+
+SEO-T921 | completed | toughest-calls.tsx grid
+     | files: app/tools/beacon-breakdown/toughest-calls.tsx
+     | depends on: SEO-T911
+     | notes: ToughestCalls({ result, basePath, week }) renders the H2 and a
+       list of 8 to 12 article cards, each with an "X or Y?" H3, the verdict
+       sentence, both players, a confidence pill and a link to ?p=a,b with
+       anchor text rotated over four templates. An empty grid renders one
+       sentence. ClosestCallsList and buildStartSitClosestCalls map byPosition
+       into the written sections' slots (K and DEF merged into K_DEF, FLEX
+       left empty because pairs are within one position). SEO-T911 data fix:
+       the field now excludes availability "out" and Out, IR, PUP and
+       Suspended (Questionable and Doubtful stay), with one extra
+       availability read on the resolved source and tests for every status.
+     | verified: vitest lib/start-sit, lib/projections and
+       app/tools/beacon-breakdown, 331 passed; tsc clean in its files. Final
+       reviews pending.
+
+SEO-T922 | completed | Generalise the Head to head tab to N players (table, ranked bars, lens button group)
+     | files: app/tools/beacon-breakdown/breakdown-table.tsx, beacon-edge-meter.tsx, edge-contribution-chart.tsx, lens-switch.tsx, breakdown-summary.tsx
+     | depends on: SEO-T913
+     | notes: BreakdownTable({ sides, edge, valueIsBeacon }) with row headers,
+       player column headers and a text "Best" badge from isBest (ties all
+       badged, an all-tied row reads "Even"); BeaconEdgeMeter as RankedBars
+       with a ranked table; EdgeContributionChart diverging at N = 2 and one
+       StackedShareBar per player above that; LensSwitch is now a client
+       button group with aria-pressed that toggles three server-rendered
+       panels (default This week, no URL change, no request). QuickTakeaways
+       is rebuilt from GroupEdge, because buildTakeaways is pairwise only; the
+       reviewers should confirm two-player takeaways still read correctly.
+       Orchestrator review: the phone layout became a horizontal scroll where
+       the plan keeps each row as the category then a two-up grid of cells; a
+       follow-up agent restores the plan's layout.
+     | notes: follow-up landed: below sm each category is its label, help
+       text and weight note followed by a two-column grid of cells naming the
+       player, the value and the Best badge, wrapping as N grows (the plan's
+       layout); sm and up keeps the N-column table in its named scroll
+       region. One layout is display:none at any width, so only one copy is
+       in the accessibility tree. Props unchanged.
+     | verified: vitest app/tools/beacon-breakdown, lib/breakdown and
+       components, 257 passed; tsc clean in its files (page.tsx pending
+       SEO-T928). Final reviews pending.
+
+SEO-T923 | completed | Generalise the Projections tab to N series and extend POSITION_SERIES to eight entries
+     | files: app/tools/beacon-breakdown/projections-tab.tsx, components/chart-kit.tsx
+     | depends on: SEO-T914
+     | notes: ProjectionsTab({ sides, extras, projectionSourceDisplay }), the
+       engine name required so it cannot fall back to a hardcoded word (two
+       hardcoded "Sleeper" mentions are gone). Deviation: POSITION_SERIES is a
+       Record keyed by the six positions and feeds five Positional WAR files,
+       so it cannot take two more keys; chart-kit.tsx gains an ordered
+       eight-entry PLAYER_SERIES instead (the six existing styles, then solid
+       grey #A8A8B8 with a plus marker at 8.35:1 and dotted #F4F4F8 with a
+       hexagon at 17.85:1 against the #0B0B14 panel; the site ships dark mode
+       only, so one background). Schedule strip and range bars are N rows.
+       Follow-up for SEO-T928: the market and reliability tabs must use
+       PLAYER_SERIES too.
+     | verified: vitest app/tools/beacon-breakdown, components and
+       lib/breakdown, 257 passed; tsc clean in its files (page.tsx call site
+       pending SEO-T928). Final reviews pending.
+
+SEO-T924 | completed | Generalise the Reliability tab to N
+     | files: app/tools/beacon-breakdown/reliability-tab.tsx
+     | depends on: SEO-T914
+     | notes: ReliabilityTab({ sides, extras }) renders N cards and N strips in
+       group order; cards stack to one column on a phone, strips keep their
+       table disclosure. The empty sentence reads "None of these players has
+       enough graded games yet". The heading "Can you count on him?" became
+       "them" (the pronoun rule). Follow-up for SEO-T928: the tab carries a
+       local eight-entry series whose seventh and eighth colours are not
+       contrast-checked; it moves to the shared POSITION_SERIES that SEO-T923
+       extends.
+     | verified: vitest app/tools/beacon-breakdown and lib/breakdown, 119
+       passed; tsc clean in its file (page.tsx call site pending SEO-T928).
+       Final reviews pending.
+
+SEO-T925 | completed | Generalise the Market tab to N
+     | files: app/tools/beacon-breakdown/market-tab.tsx
+     | depends on: SEO-T914
+     | notes: MarketTab({ sides: MarketSide[], sourceDisplay, formatDisplay })
+       where MarketSide is { player, market, trades }. Cards and chart lines
+       share one series style taken from POSITION_SERIES in order. The 90-day
+       overlay draws N lines and marks only each line's endpoint, so eight
+       lines stay legible. Real trades sit under a per-player details element
+       whose summary names the player and the count.
+     | verified: vitest app/tools/beacon-breakdown and lib/breakdown, 119
+       passed; tsc clean in its file (page.tsx call site pending SEO-T928).
+       Final reviews pending.
+
+SEO-T926 | completed | Generalise the Stats tab to N
+     | files: app/tools/beacon-breakdown/stats-compare.tsx, stats-data.ts, load-stats.ts
+     | depends on: SEO-T914
+     | notes: StatsCompare({ players }) and loadBreakdownStats(supabase,
+       players[]) returning PlayerStatsPayload[]. One paged .in() read for all
+       N players (one round trip for a normal board). stats-data.ts gains
+       bestIndices (interceptions are the one lower-is-better stat; ties all
+       get the badge; a missing value is never best) and allEmpty, with 10
+       tests. Both the season table and the weekly table became N columns in a
+       named, focusable scroll region with row headers; nothing hidden on a
+       phone.
+     | verified: vitest 17 passed across the two touched test files; tsc clean
+       in its files (page.tsx call sites pending SEO-T928). Final reviews
+       pending.
+
+SEO-T927 | completed | Generalise the Your lineup tab to N
+     | files: app/tools/beacon-breakdown/league-tab.tsx, lib/breakdown/league-mode.ts, lib/breakdown/league-impact.ts
+     | depends on: SEO-T914
+     | notes: calculateLeagueImpact takes candidateSleeperIds (two to eight,
+       checked before any read) and returns impacts[]; LeagueModeRequest takes
+       sleeperIds[] with the cache key joining all ids; the breakdown_league
+       rate-limit order (validate, then claim) is untouched. Every read and the
+       baseline simulation run once regardless of N; only each candidate's
+       swap and simulation run per candidate, under Promise.all.
+       LeagueTab({ sides, report }) with a pure describeLeagueTabHeadline in
+       league-tab-headline.ts. The weekly grid is one named, focusable scroll
+       row per player. Deviation: the two-tone purple and cyan pairing only
+       meant something for two players, so the best side now carries a "Best
+       fit" badge (icon, word and colour).
+     | verified: new tests assert the shared-read counts at N = 3 and 4 and
+       two-player wording parity; vitest lib/breakdown,
+       app/tools/beacon-breakdown and lib/power-pulse, 305 passed; tsc clean in
+       its files (page.tsx pending SEO-T928). Final reviews pending.
+
+SEO-T928 | completed | page.tsx: new metadata, H1 in both states, ?p= and ?start= and ?week= parsing with ?a=&b= alias, Suspense layout
+     | files: app/tools/beacon-breakdown/page.tsx
+     | depends on: SEO-T916, SEO-T917, SEO-T919, SEO-T920, SEO-T921, SEO-T922
+     | notes: page.tsx rewritten; page-helpers.ts holds TOOL_PATH and the pure
+       title, description, canonical, ?p= parsing and OG path builders. Title
+       is the fixed absolute string; the description carries the live week
+       from resolveSeasonClock; the canonical is always the bare path; the OG
+       image is the start/sit card when two or more ?p= entries resolve,
+       otherwise the generic page card. ?p= entries that are not slugs resolve
+       through searchFantasyPlayers; ?a=&b= applies only without ?p=; ?lens=
+       is ignored. JSON-LD: WebApplication (dateModified from the freshest
+       projection timestamp) and FAQPage from START_SIT_FAQ; BreadcrumbList
+       comes from the app shell. Outside Suspense two Promise.all waves (clock,
+       settings, format and source; then projection source and the cached
+       toughest calls); inside, loadStartSitBoard and loadBreakdown in
+       parallel, then computeStartSit, then stats, trades and league mode in
+       one wave. Market and reliability tabs now use PLAYER_SERIES; the
+       selector, matchup header and chart-kit shim are deleted. Two fixes
+       outside its list: three chart headings used fixed ids repeated across
+       the three mounted lens panels (now useId), and each card's id is now
+       qualified by layout because both layouts are mounted. Orchestrator
+       review: the "Who should I start in Week {N}?" H2 rendered only once
+       players were loaded, where the plan puts the picker, week select and
+       board under it in both states; fixed ahead of SEO-T929.
+     | verified: vitest over six scopes, 505 passed; tsc clean apart from the
+       stale .next/types entries. Final reviews pending.
+
+SEO-T929 | completed | Metadata test: title under 60, description under 155 at Week 18, canonical bare, week rollover
+     | files: app/tools/beacon-breakdown/page.test.ts
+     | depends on: SEO-T928
+     | notes: first, finishing SEO-T928: the "Who should I start in Week {N}?"
+       H2 and its section now render in both states, wrapping the picker, the
+       chips, the week select and (when loaded) the board. Then page.test.ts,
+       11 tests: the absolute title equals the confirmed string and is under
+       60; the description is 155 or fewer for weeks 1 to 18 and names its
+       week; the canonical carries no query across nine parameter mixes; and
+       with a mocked client, resolveSeasonClock's rollover (week 2 played
+       gives Week 3, week 3 played gives Week 4, preseason stays Week 1) is
+       the week the description names.
+     | verified: 11 passed before the move and again after it. Final reviews
+       pending.
+
+SEO-T930 | completed | app/api/og/start-sit/route.tsx
+     | files: app/api/og/start-sit/route.tsx
+     | depends on: SEO-T909, SEO-T910
+     | notes: GET /api/og/start-sit?p=&start=&week=&format=&source=, nodejs,
+       1200 by 630, pure layout helpers in layout.ts with tests. Slugs are
+       normalised and pattern-checked before the "og_breakdown" claim (20 per
+       minute), validate first and claim second, as the pair route does. It
+       runs loadStartSitBoard and computeStartSit, so the card cannot disagree
+       with the page. Bad or unknown input returns the branded fallback card.
+       Deviation: a refused rate-limit claim returns a plain 429 with
+       no-store, the pair route's own documented choice, so a placeholder is
+       never cached in place of a real card. No in-process render cache
+       exists (none of the sibling routes has one); the header comment says a
+       future one must key on the projection source. Brand check: #07070D and
+       #0F0F1A, gradient bar, Geist, the wordmark, ffbeacon.com. The SIT badge
+       reuses an amber from the team OG route, for the brand reviewer to
+       confirm.
+     | verified: vitest lib/start-sit and app/api/og, 135 passed; tsc clean in
+       its files. Final reviews pending.
+
+## The move to /tools/who-should-i-start
+
+SEO-T931 | completed | git mv the route folder to app/tools/who-should-i-start and add the redirect
+     | files: app/tools/who-should-i-start/**, next.config.ts
+     | depends on: SEO-T928
+     | notes: git mv app/tools/beacon-breakdown app/tools/who-should-i-start
+       (three files SEO-T928 had already deleted were staged with git rm
+       first, because git mv refused the folder with them missing). TOOL_PATH
+       and league-panel.tsx's sign-in nextPath now say
+       /tools/who-should-i-start. next.config.ts gains a permanent redirect
+       from /tools/beacon-breakdown beside the trade-calculator entries; the
+       query string survives, so old ?a=&b= links still work through the
+       alias. No module imported the old folder. app/api/og/breakdown and
+       app/api/breakdown stay where they are. Links elsewhere still name the
+       old path until SEO-T932 and T933; the redirect covers them meanwhile.
+     | verified: vitest over six scopes, 398 passed; tsc clean apart from the
+       stale .next/types entries for both moved routes. The 308 itself is
+       checked with curl -I after deploy, per plan 2.15.
+
+SEO-T932 | completed | Labels and paths: lib/site.ts, tools-catalog, breadcrumbs, nav-tree, bookmarks icon, sitemap sections (plus the manager-pulse sitemap entry)
+     | files: lib/site.ts, lib/tools-catalog.ts, lib/breadcrumbs.ts, lib/nav-tree.ts, lib/bookmarks/icon.ts, lib/sitemap/sections.ts, app/tools/page.tsx
+     | depends on: SEO-T931
+     | notes: extra items queued during the build: the footer's Learn column
+       in lib/site.ts hardcodes its guide list and needs "How FF Beacon
+       works" (/guides/how-ff-beacon-works); the /tools meta description
+       still says the retired "compare two players" (reword, 150 or fewer);
+       sitemap gets /tools/who-should-i-start at 0.7 and the missing
+       /tools/manager-pulse. Waits for SEO-T931 so link and crawl tests see
+       the new route.
+     | notes: done by the orchestrator directly, at the owner's request (no
+       sub-agents except the final reviewers). lib/site.ts: TOOLS_NAV "Start /
+       Sit" with "Beacon Breakdown: who should I start this week";
+       SEARCHABLE_TOOLS "Start / Sit (Beacon Breakdown)" with the start/sit
+       keywords added; the footer tools link reads "Start / Sit"; the footer
+       Learn column gains "How FF Beacon Works". lib/tools-catalog.ts: the
+       union, the ordering comment, and the card (eyebrow "Start / Sit",
+       title "Beacon Breakdown: Who Should I Start?", cta "Find out who to
+       start", the retired pitch and bullets rewritten). Breadcrumb label
+       "Start / Sit"; bookmark and nav-tree keys moved (the two alphabetical
+       maps keep their order); sitemap: /tools/who-should-i-start at 0.7 and
+       /tools/manager-pulse added; /tools icon key moved and its description
+       now says "find out who to start" (146 characters) instead of the
+       retired "compare two players". A first run put the breadcrumb label in
+       the NON_NAVIGABLE set; caught by the test run and moved into the label
+       map.
+     | verified: vitest lib/bookmarks, lib/llms, lib/sitemap, lib/beam,
+       lib/guides, 161 passed. Final reviews pending.
+
+SEO-T933 | completed | Inbound prose links and copy: home, about, author, team page, lineups reciprocal link, BEAM links, OG page card, llms glossary, terms guide
+     | files: app/page.tsx, app/about/page.tsx, app/author/michael/page.tsx, app/leagues/[league_id]/teams/[roster_id]/page.tsx, app/leagues/[league_id]/lineups/page.tsx, lib/beam/capabilities/player-compare-verdict.ts, lib/beam/capabilities/player-compare-stat.ts, app/api/og/page/[key]/route.tsx, lib/llms/context.ts, lib/guides/fantasy-football-terms.ts
+     | depends on: SEO-T931
+     | notes: besides the plan's list, two live hrefs still point at
+       /tools/beacon-breakdown: app/guides/how-ff-beacon-works/page.tsx and
+       app/tools/trade-calculator/written-sections.tsx; move both, keeping
+       their anchor text. The IndexNow ping in the projection sync already
+       names the new path. Waits for SEO-T931.
+     | notes: done by the orchestrator directly. Home card (title "Beacon
+       Breakdown: Who Should I Start?", the plan's description, cta "Find out
+       who to start"); About tile "Start / Sit" with the plan's body; the
+       League Pulse team page links /tools/who-should-i-start?league=&roster=
+       with "Who should I start from this roster?"; the generic OG page card
+       copy ("Who should / I start?", the plan's subhead and facts); BEAM links
+       now ?p=a,b with "Open the start/sit breakdown" (the retired ?lens= is
+       dropped) and the stat link on the new path; llms glossary gains "Start/sit
+       verdict" and Beacon Edge is rewritten as the background-tab meter; the
+       FLEX glossary entry links "our start/sit tool"; the methodology page and
+       the trade calculator's written sections now link the new path. The
+       author page names no Beacon Breakdown link, so it needed nothing. The
+       Lineups reciprocal link is the last item.
+     | notes: last item landed: the League Pulse Lineups page gains a
+       StartSitBenchLink, shown only before the games (weekStatus.showsAdvice)
+       and only with two or more projectable bench players, linking
+       /tools/who-should-i-start?p=<bench names>&league=&roster= with the
+       anchor "compare just these players" (names, because a roster row
+       carries no slug and the start/sit page resolves names). The only
+       remaining "/tools/beacon-breakdown" strings in app, components, lib and
+       scripts are the redirect source in next.config.ts and two comments in
+       page-helpers.ts that describe the legacy URL.
+     | verified: vitest lib/bookmarks, lib/llms, lib/sitemap, lib/beam and
+       lib/guides, 161 passed; tsc clean apart from the stale .next/types
+       entries for the two moved routes. Final reviews pending.
+
+SEO-T934 | completed | Stale comments and docs citing the old path
+     | files: see plan section 2.12
+     | depends on: SEO-T931
+     | notes: run before the folder move because it touches only comments and
+       docs outside the route folder; the resulting text is the same either
+       way. Comments in chart-kit, league-category-tabs, the signal-scout
+       leaderboard panel, sleeper-handle/validate, signal-scout/stats-bundle,
+       beam/stats/registry, lib/beacon-breakdown.ts and lib/start-sit/reasons.ts
+       now cite app/tools/who-should-i-start or /tools/who-should-i-start.
+       Docs updated: beam-plan, saved-handle-plan, league-providers plan, and
+       the performance audit (a dated row, so the new path sits beside the
+       old). The positional WAR plan and the two dated bundle snapshots stay
+       as history. Two live hrefs it found (the methodology page and the trade
+       calculator's written sections) are behaviour, moved under SEO-T933.
+     | verified: tsc clean outside the in-flight page. Final reviews pending.
+
+SEO-T935 | completed | Accessibility audit of the board (sub-agent), fix findings
+     | files: as found
+     | depends on: SEO-T928
+     | notes: run inside the final accessibility review, SEO-T992, with the
+       board and its screen-reader walk named explicitly in that reviewer's
+       scope.
+     | verified: no
+
+SEO-T936 | completed | Security review of the new route and OG route (sub-agent), fix findings
+     | files: as found
+     | depends on: SEO-T930, SEO-T931
+     | notes: run inside the final security review, SEO-T993, with both routes
+       named explicitly in that reviewer's scope.
+     | verified: no
+
+## The trade calculator slug
+
+SEO-T940 | completed | git mv app/tools/signal-check to app/tools/trade-calculator, fix the on-the-clock import, add the two redirects
+     | files: app/tools/trade-calculator/**, app/tools/on-the-clock/actions.ts, next.config.ts
+     | depends on: none
+     | notes: folder moved with git mv (twelve files, including v/[shareId]).
+       The only module import of the old path was app/tools/on-the-clock/
+       actions.ts. Two explicit permanent redirects added beside the
+       trade-finder entry, with a comment in the house style. The first agent
+       on this task stopped at the session limit after its tests passed; the
+       orchestrator ran tsc afterwards.
+     | verified: tsc clean apart from stale .next/types entries that still
+       name app/tools/signal-check (build output, regenerated by next build).
+       Redirect behaviour is checked with curl -I after deploy, per plan 2.15.
+       Final reviews pending.
+
+SEO-T941 | completed | Every URL reference for the trade calculator (plan section 3 step 4)
+     | files: see plan section 3
+     | depends on: SEO-T940
+     | notes: every path string in plan section 3 step 4 moved to
+       /tools/trade-calculator, including the ToolHref union, breadcrumb and
+       NON_NAVIGABLE keys, the share URL templates and the #sleeper-import
+       anchor. Internal identifiers (the og page map key, API routes, admin,
+       tables, settings) are untouched. The 21 remaining hits are code
+       comments, left for SEO-T943.
+     | verified: vitest over the six test files under the touched lib paths,
+       161 passed; tsc clean apart from stale .next/types. Final reviews
+       pending.
+
+SEO-T942 | completed | lib/llms/build.test.ts share-path regex
+     | files: lib/llms/build.test.ts
+     | depends on: SEO-T940
+     | notes: the share-path regex now matches /tools/trade-calculator/v/.
+     | verified: vitest lib/llms passing (as SEO-T941).
+
+SEO-T943 | completed | Stale comments and docs citing signal-check paths
+     | files: see plan section 3 step 8
+     | depends on: SEO-T940
+     | notes: every comment and doc path moved to /tools/trade-calculator;
+       product names and internal identifiers kept. plan.md lines 1501 and
+       1502 changed only in their route paths (the owner-approved SEO plan
+       lists them); the two API route names there stay. Finishing SEO-T960:
+       the transactions body now uses the same cached getSyncedLeague as its
+       metadata, so the route makes one sync call per request. What remains of
+       "tools/signal-check" is the redirect sources, two dated bundle
+       snapshots in docs/performance, and the SEO plan itself.
+     | verified: vitest would-you-rather, league-relay and
+       league-pick-position, 241 passed; tsc clean. Final reviews pending.
+
+SEO-T944 | completed | Trade calculator written sections under the builder
+     | files: app/tools/trade-calculator/page.tsx, app/tools/trade-calculator/written-sections.tsx
+     | depends on: SEO-T940
+     | notes: written-sections.tsx under the builder: how a trade is graded
+       (value source and format, the concentration credit, the margin formula
+       abs(A-B)/(A+B), the near-even and lopsided thresholds read live from
+       settings, dynasty-only picks with the KTC fallback), what a fair trade
+       is, and four FAQ questions, answer first. Links: "trade suggestions for
+       your league" to /tools/league-pulse, Would You Rather, and "who should I
+       start this week" to the start/sit tool. FAQPage JSON-LD built from the
+       same buildTradeCalculatorFaq(settings) the page renders. The sr-only H2
+       "Build a trade" stays sr-only.
+     | verified: as SEO-T945.
+
+SEO-T945 | completed | Trade calculator generateMetadata reads the admin label so title and H1 cannot drift
+     | files: app/tools/trade-calculator/page.tsx
+     | depends on: SEO-T940
+     | notes: generateMetadata reads loadSignalCheckSettings, the page's own
+       loader, which memoTtl caches for a minute, so no second query. One
+       helper, buildTradeCalculatorTitle(featureLabel), builds both the title
+       and the H1; the default label reproduces the shipped title exactly.
+       Canonical, share metadata and description unchanged.
+     | verified: vitest lib/signal-check and app/tools/trade-calculator, 74
+       passed; tsc clean. Final reviews pending.
+
+## IndexNow
+
+SEO-T950 | completed | lib/indexnow.ts with tests
+     | files: lib/indexnow.ts, lib/indexnow.test.ts
+     | depends on: none
+     | notes: submitIndexNow(urls) never throws, 20-second abort, drops
+       foreign hosts, de-duplicates, caps at 10,000, no retry. The
+       server-only import was left out because plain tsx cannot resolve it,
+       which would break the npm script; lib/email/send.ts and lib/sleeper.ts
+       make the same choice.
+     | verified: vitest lib/indexnow.test.ts and reserved-routes, 13 passed;
+       tsc clean in its files. Final reviews pending.
+
+SEO-T951 | completed | public/{key}.txt plus the env-agreement test
+     | files: public/<key>.txt, lib/indexnow.test.ts
+     | depends on: SEO-T950
+     | notes: public/<key>.txt holds the 32-character hex key from
+       INDEXNOW_KEY (the value the owner updated on 2026-09-10), with no
+       trailing newline. The agreement test finds the file by shape and
+       checks the env value only when it is set. New
+       lib/signal/reserved-routes.test.ts confirms the file name can never
+       match the handle pattern (it contains a dot).
+     | verified: as SEO-T950. A live ping needs the key file deployed, so it
+       is part of the post-deploy steps in plan 2.15.
+
+SEO-T952 | completed | IndexNow pings from the Brief worker, the projection sync and recalculate-derived
+     | files: lib/beacon-brief/worker.ts, the projection sync cron route, app/api/cron/recalculate-derived/route.ts
+     | depends on: SEO-T950
+     | notes: three call sites, each inside next/server after() so the ping
+       runs post-response and can never extend or fail the job. Brief: a
+       published insert (handleArticleWrite) and a rewrite of a published
+       article (applyRewriteToArticle, which now selects slug and status),
+       sending the article URL and /brief. Projection sync
+       (app/api/cron/sync-weekly-projections/route.ts) when rows were stored:
+       /tools/who-should-i-start and every active /rankings/{format}.
+       recalculate-derived when rankings and trends both succeed: /rankings
+       and every format page. Formats come from getActiveFormats.
+     | verified: vitest indexnow, sync-weekly-projections, seed-rankings and
+       calculate-trends-staleness, 36 passed; tsc clean in its files. Final
+       reviews pending.
+
+SEO-T953 | completed | npm run indexnow script
+     | files: scripts/indexnow.ts, package.json
+     | depends on: SEO-T950
+     | notes: scripts/indexnow.ts takes paths or absolute URLs, refuses to
+       run with none, exits 1 on failure. package.json gains the indexnow
+       script.
+     | verified: tsc clean in its files. Final reviews pending.
+
+## Site SEO audit backlog
+
+SEO-T960 | completed | League routes: generateMetadata through getSyncedLeague on decisions, positional-war, power-pulse, trade-ideas, transactions
+     | files: the five page.tsx files
+     | depends on: none
+     | notes: decisions, positional-war, power-pulse and trade-ideas gained the
+       cached getSyncedLeague helper (React cache over pulseLeagueCore plus the
+       LEAGUE_CORE_COLUMNS fallback, the lineups and schedules pattern), used
+       by both generateMetadata and the body. Transactions routed only its
+       metadata through it at first, because its body sits between comments
+       reserved for SEO-T943; SEO-T943 finishes that body change.
+     | verified: vitest app/leagues and league-pulse, 10 passed; tsc clean in
+       its files. Final reviews pending.
+
+SEO-T961 | completed | League routes: robots noindex follow on all ten
+     | files: app/leagues/[league_id]/**/page.tsx
+     | depends on: none
+     | notes: there is no layout under app/leagues/[league_id]/, so robots
+       { index: false, follow: true } is set in the metadata of all ten pages.
+       The overview page carries the owner's reasoning; the other nine point
+       back to it. League routes were already outside the sitemap.
+     | verified: as SEO-T960.
+
+SEO-T962 | completed | Trim every description over 150 characters (plan section 4.2 item 3)
+     | files: app/page.tsx, app/rankings/page.tsx, lib/rankings-formats.ts, app/guides/fantasy-football-draft-guide/page.tsx, app/tools/page.tsx, app/brief/page.tsx, app/games/page.tsx, app/games/signal-scout/page.tsx, app/games/would-you-rather/page.tsx, app/players/[slug]/page.tsx
+     | depends on: none
+     | notes: ten descriptions trimmed to 143 to 150 characters; the rankings
+       suffix lands at 149 for the longest format name (checked against every
+       format_configs row); the player overview goes through capDescription.
+       The scan found three more over 150 outside this task's files (faab
+       158, trade calculator 151, on-the-clock 152), trimmed under SEO-T967.
+       Two follow-ups for later tasks: the /tools description still says
+       "compare two players" (retired copy, SEO-T932), and Signal Scout's
+       "How few does it take you to name him?" guesses a pronoun (SEO-T967).
+     | verified: vitest lib/rankings-formats 12 passed; tsc clean. Final
+       reviews pending.
+
+SEO-T963 | completed | Manager Pulse report description
+     | files: app/tools/manager-pulse/[handle]/page.tsx
+     | depends on: none
+     | notes: description built from the handle; 146 characters at the
+       32-character maximum handle. noindex unchanged. The page sets no
+       openGraph or twitter block, so none was added.
+     | verified: vitest lib/beacon-brief and lib/manager-pulse, 428 passed; tsc
+       clean. Final reviews pending.
+
+SEO-T964 | completed | Brief feed h2 above the grid
+     | files: components/beacon-brief/brief-feed.tsx
+     | depends on: none
+     | notes: a visible h2 "Latest articles" above the grid. It reads
+       correctly on all five callers (index, category, tag, player, team), so
+       no label prop was needed. Card titles stay h3.
+     | verified: as SEO-T963. Final reviews pending.
+
+SEO-T965 | completed | Brief tag pages: index gate
+     | files: app/brief/tag/[tag]/page.tsx
+     | depends on: none
+     | notes: index only when the tag has three indexable articles, through
+       isArticleIndexable from lib/beacon-brief/index-quality.ts (the article
+       page's own rule). It scans up to 20 of the newest articles and stops at
+       three. The plan's cited gap comment no longer existed, so a new comment
+       explains the gate.
+     | verified: as SEO-T963. Final reviews pending.
+
+SEO-T966 | completed | Organization and WebSite JSON-LD in the root layout
+     | files: app/layout.tsx, lib/json-ld.ts
+     | depends on: none
+     | notes: lib/json-ld.ts already held serializeJsonLd, so it gained
+       organizationJsonLd() and websiteJsonLd(). Organization: name, url, logo
+       (/img/ff-beacon-logo.png), sameAs from the enabled SOCIAL_LINKS made
+       absolute, founder Person linking /author/michael. WebSite: name and url,
+       no SearchAction. One script tag in the root layout head; the layout
+       stays a sync server component. New lib/json-ld.test.ts, 7 tests.
+     | verified: vitest lib/json-ld.test.ts 7 passed; tsc clean in its files.
+       Final reviews pending.
+
+SEO-T967 | completed | webApplicationJsonLd helper and emit on every tool and game page
+     | files: lib/json-ld.ts, app/tools/*/page.tsx, app/games/*/page.tsx
+     | depends on: SEO-T966
+     | notes: webApplicationJsonLd({ name, description, url, category,
+       dateModified? }) with operatingSystem Any, a free Offer and no
+       aggregateRating; 4 new tests. Emitted on faab, league-pulse,
+       manager-pulse (both branches), on-the-clock and trade-calculator as
+       SportsApplication, and on signal-scout and would-you-rather as
+       GameApplication (static copy only on the latter, per its no-hint rule),
+       each reusing the page's own title and description constants. Leftovers
+       from SEO-T962 done here: faab 158 to 144, trade calculator 151 to 145,
+       on-the-clock 152 to 143. Pronoun fixes: Signal Scout now asks "How few
+       clues do you need?"; the draft guide FAQ answer says "them" and "they".
+       Open for SEO-T995: the draft guide body prose still says "drafting
+       him" once.
+     | verified: vitest lib/json-ld.test.ts 17 passed; tsc clean in its files.
+       Final reviews pending.
+
+SEO-T968 | completed | Person JSON-LD on Signal profiles; ItemList and OG image on boards
+     | files: components/signal/profile-view.tsx, components/signal/board-view.tsx, app/api/og/board/[handle]/[boardId]/route.tsx
+     | depends on: none
+     | notes: lib/json-ld.ts gains personJsonLd and itemListJsonLd. Profiles
+       emit a Person (image and sameAs only from what the page shows, links
+       only from placed link blocks). Boards emit an ItemList of the rendered
+       players and gain an openGraph description, image and a
+       summary_large_image card. New /api/og/board/[handle]/[boardId]
+       validates the params as the page does, reads through loadPublicBoard
+       (visibility-gated, cached an hour), checks the owner handle, and
+       returns one identical fallback card for every failure, so a private
+       board cannot be told apart from a missing one. Deviation: it mirrors
+       /api/og/player (system font, no rate limiter) rather than lib/og/assets
+       and a limiter, because a board card is one cached read, the same class
+       as the player, league and signal cards; only the breakdown card is
+       limited, because it computes per request. For the security reviewer to
+       confirm.
+     | verified: vitest json-ld, components/signal and lib/signal, 336 passed;
+       tsc clean in its files. Final reviews pending.
+
+SEO-T969 | completed | Root openGraph and twitter defaults, manifest, viewport
+     | files: app/layout.tsx, app/manifest.ts
+     | depends on: none
+     | notes: root openGraph (siteName, type website, locale en_US) and a
+       summary_large_image twitter card, both using /api/og/page/home; that
+       route has a home key and no generic default key. app/manifest.ts uses
+       three icon files that exist (96, 180 and 512 px; the 512 px file is
+       square, checked). export const viewport sets themeColor #07070D. No
+       verification key exists, so none was added. The only page that set
+       openGraph without images was League Pulse Decisions, fixed under
+       SEO-T970.
+     | verified: tsc clean in its files. Final reviews pending.
+
+SEO-T970 | completed | Decisions OG image, transactions title casing and shared description
+     | files: app/leagues/[league_id]/decisions/page.tsx, app/leagues/[league_id]/transactions/page.tsx
+     | depends on: none
+     | notes: Decisions now carries /api/og/league/[league_id] in openGraph
+       and twitter, like its siblings. Transactions has a capitalised title
+       and one title and one description reused across the three blocks.
+     | verified: as SEO-T960.
+
+SEO-T971 | completed | Player page tab metadata and canonical per tab
+     | files: app/players/[slug]/page.tsx
+     | depends on: none
+     | notes: generateMetadata validates ?tab against the page's own
+       VALID_TABS. Statistics is "{name} Game Log", trades "{name} Trade
+       History", and the Beacon Brief tab "{name} News" (it carries unique
+       per-player coverage too). Each keeps a self-referencing canonical with
+       its tab; the overview and any unknown tab keep the bare canonical.
+       capDescription trims only the name part, so every tab description is
+       150 characters or fewer.
+     | verified: tsc clean in its files. Final reviews pending.
+
+SEO-T972 | completed | Player page factual summary sentence (template over facts)
+     | files: components/player-profile/player-hero.tsx or overview-tab.tsx
+     | depends on: none
+     | notes: buildPlayerSummary in lib/player-profile/summary.ts, rendered as
+       a visible paragraph at the top of the overview tab. Up to two
+       sentences: rank plus 30-day trend (gated like the trend chip), then
+       next projection with the resolved engine named through
+       projectionSourceDisplay, plus the last three finishes. Deviation:
+       position rank was not loaded anywhere on the page, so overview-tab.tsx
+       gained one rankings read (loadPositionRank, the BEAM player-rank query
+       scoped to format, source and week null). Found, not fixed, out of
+       scope: lib/beam/capabilities/player-value.ts multiplies change_30d_pct
+       by 100 a second time.
+     | verified: vitest lib/player-profile/summary.test.ts 10 passed; tsc
+       clean. Final reviews pending (the performance reviewer should look at
+       the new read).
+
+SEO-T973 | completed | Home links to guides, donate and author
+     | files: app/page.tsx, lib/home-content.ts
+     | depends on: none
+     | notes: a guides card linking /guides (glossary term count and the draft
+       guide; the unwritten accessibility guide is left out), a real "Support
+       the site" link to /donate in the CTA row, and "Built by Michael" in the
+       hero linking /author/michael with rel="author". lib/home-content.ts
+       needed no change.
+     | verified: tsc clean in its files. Final reviews pending.
+
+SEO-T974 | completed | Rankings pages link their glossary terms
+     | files: components/rankings/rankings-view.tsx
+     | depends on: none
+     | notes: glossaryLinksForFormat(format) picks the terms each format
+       actually involves (scoring type, TE premium, superflex, best ball,
+       dynasty or redraft), filtered against the glossary's own ids so a link
+       cannot point at a missing entry. GlossaryTermsNote renders them once
+       under the board intro as one sentence, one link per term, with varied
+       anchor text; no two formats carry the identical sentence.
+     | verified: tsc clean. Final reviews pending.
+
+SEO-T975 | completed | Delete PRIMARY_NAV; align /join canonical and description; time elements on legal dates
+     | files: lib/site.ts, app/join/page.tsx, app/privacy/page.tsx, app/terms/page.tsx
+     | depends on: none
+     | notes: PRIMARY_NAV had no importers and is deleted (NavItem stays, it is
+       still exported). /join uses a relative canonical and one
+       PAGE_DESCRIPTION for all three description fields. /privacy and /terms
+       wrap the effective date in <time dateTime="2026-09-06">, visible text
+       unchanged.
+     | verified: tsc clean in its files. Final reviews pending.
+
+SEO-T976 | completed | Methodology page /guides/how-ff-beacon-works, linked from every tool page
+     | files: app/guides/how-ff-beacon-works/page.tsx, lib/guides catalogue, tool pages
+     | depends on: none
+     | notes: /guides/how-ff-beacon-works: title "How FF Beacon Works",
+       description 140 characters, relative canonical, Article and
+       BreadcrumbList like the other guides. Sections: projections (engine
+       named live through currentProjectionSourceCached), the matchup model,
+       the reliability discount, the confidence figure, values and sources
+       (read live from source_registry; the pick source resolved, never a
+       hardcoded KTC), what the models do not know. Linked from faab,
+       league-pulse, manager-pulse (both branches), on-the-clock and
+       trade-calculator pages plus both written-sections files, anchors all
+       different; a card on /guides; a breadcrumb label. Orchestrator review
+       found two problems, fixed by a follow-up agent: the page said betting
+       lines are not modelled, which is false for the FF Beacon engine (it
+       feeds implied team totals into volume and script); and the page was
+       registered with a one-off sitemap entry instead of PUBLISHED_GUIDES,
+       which also feeds llms.txt and the footer.
+     | notes: follow-up landed. The betting-market paragraph now branches on the
+       resolved engine: under FF Beacon it says spreads and totals are read
+       from nfl_game_odds (verified in nfl-game-environment.ts, volume.ts
+       environmentEffect and engine.ts); under Sleeper it says they are not.
+       Weather (no field anywhere) and injury timing (06:00 UTC daily sync,
+       read by both engines) checked and kept. The guide is in
+       PUBLISHED_GUIDES, the one-off sitemap entry is gone, and the page reads
+       its dates from findPublishedGuide like the other two guides, so it
+       reaches the sitemap and llms.txt once each. The footer's Learn column
+       hardcodes its own list, so its link is added under SEO-T932.
+     | verified: vitest lib/llms, lib/guides and lib/sitemap, 42 passed; tsc
+       clean in its files. Final reviews pending.
+
+SEO-T977 | completed | Draft guide FAQ block
+     | files: app/guides/fantasy-football-draft-guide/page.tsx
+     | depends on: none
+     | notes: "Draft day questions, answered" with four H3 questions, each
+       answer restating what the guide already says (steal against fade, tier
+       breaks, dynasty and superflex, using the list live), links to /rankings
+       and On The Clock, added to the table of contents, and FAQPage JSON-LD
+       mirroring the visible answers, as the glossary page already does.
+     | verified: vitest app/guides and lib/guides, 6 passed; tsc clean in its
+       file. Final reviews pending.
+
+SEO-T978 | completed | Rankings board cache keyed by format, source and freshest generated_at
+     | files: components/rankings/rankings-view.tsx or its loader
+     | depends on: none
+     | notes: the inline board read moved to a new lib/rankings-board.ts.
+       loadFreshestRankingsGeneratedAt is one unfiltered row on
+       idx_rankings_generated_at (seed-rankings stamps one timestamp per run,
+       so the global freshest equals the per-format one).
+       loadRankingsBoardCached is unstable_cache keyed [formatConfigId,
+       rankingsSource, valueHistorySource, generatedAt], revalidate 900,
+       tagged CACHE_TAGS.playerValues, which recalculate-derived already
+       revalidates. Position is filtered in memory so one entry serves every
+       position view. The "Values as of" read is kept inside the cached
+       loader. force-dynamic and generateStaticParams untouched.
+     | verified: vitest lib/rankings 12 passed; tsc clean; prettier run.
+       Final reviews pending.
+
+SEO-T979 | completed | /brief/player noindex follow
+     | files: app/brief/player/[slug]/page.tsx
+     | depends on: none
+     | notes: robots noindex, follow, with a comment naming /players/[slug]
+       as the canonical home. The route was already outside the sitemap
+       (lib/sitemap/sections.ts line 47).
+     | verified: as SEO-T963. Final reviews pending.
+
+SEO-T980 | completed | Loading skeletons carry one real sentence
+     | files: the seven loading.tsx files
+     | depends on: none
+     | notes: each boundary keeps exactly one role="status". Five skeletons
+       replaced "Loading..." with a sentence naming the destination; the two
+       games skeletons made PulseLoader decorative and put a visible sentence
+       in one wrapping live region; the Manager Pulse report skeleton already
+       owns an sr-only status, so it gained a plain, non-live visible sentence.
+     | verified: tsc clean in its files. Final reviews pending.
+
+SEO-T981 | completed | docs/README.md gains the seo folder row (plan section 7 housekeeping)
+     | files: docs/README.md
+     | depends on: none
+     | notes: docs/README.md gains the seo row after the security rows.
+     | verified: n/a (docs).
+
+## Review round (owner-requested: five reviewers after all work is done)
+
+SEO-T990 | completed | Sub-agent review: implementation against the plan
+     | notes: implementation review. One low finding: the "Who should I start
+       in Week {N}?" H2 named the live week even when ?week= chose another,
+       disagreeing with the board's own week line; fixed under SEO-T995. Clean:
+       rank, confidence, reasons and engine (K clamping, bye, out, all-null,
+       tie-breaks); the projection source contract (resolved once, named from
+       the resolved slug, in both cache keys, no guard allow-list entries);
+       computeGroupEdge's N = 2 reduction, checked by hand; loadBreakdownPair
+       unchanged for BEAM and the pair OG route; ?p=, the alias, ?start,
+       ?week and league mode; the Suspense placement; both folder moves and
+       their redirects; IndexNow and its three callers. No progress.md
+       deviation judged unjustified.
+     | verified: full suite 5016 passing across 330 files; tsc clean.
+SEO-T991 | completed | Sub-agent review: SEO accuracy
+     | notes: SEO accuracy review. Medium: /api/og/start-sit coloured the SIT
+       badge amber (signal.warning), where the page's badge is ink.muted per
+       plan 2.14, so the share image read SIT as a warning; not DPC gold, but
+       wrong semantics; fixed under SEO-T995. Low: the card row's aria-label
+       "Player comparison cards" reused retired copy; fixed. Clean: the 58
+       character title, the H1 in both states and the 150 character Week 18
+       description; all three redirects; anchor rules and rotation; no retired
+       marketing copy; the sitemap; robots on leagues, brief tag and brief
+       player; descriptions (the only strings over 150 are admin copy and UI
+       card text); every JSON-LD block; player tab canonicals; the trade
+       calculator title and FAQ; IndexNow and its key file; board OG colours.
+     | verified: 313 relevant tests passing.
+SEO-T992 | completed | Sub-agent review: accessibility (includes SEO-T935)
+     | notes: accessibility review, includes SEO-T935. Findings: (1) high,
+       beacon-edge-meter.tsx renders its headline as an h2 inside the page's
+       h2 section, and its ChartFigure then skips to h4; should be h3 like the
+       contribution chart. (2) high, guessed pronouns for players in
+       league-tab.tsx, market-tab.tsx, projections-tab.tsx, written-sections.tsx
+       and app/guides/how-ff-beacon-works/page.tsx. (3) medium,
+       breakdown-table.tsx Cell: an sr-only "{name}, best:" prefix plus the
+       visible Best pill announces best twice. (4) low, AnalysisSkeleton in
+       page.tsx pulses with no motion-reduce guard. Clean: picker, week select,
+       the single role=status verdict, the scroll region and list toggle, card
+       structure and colour-plus-word badges, FAQ disclosures, the seven
+       loading boundaries, the Lineups link, PLAYER_SERIES contrast. No data
+       hidden at any breakpoint.
+     | verified: read-only walk of the markup in browse and table modes.
+SEO-T993 | completed | Sub-agent review: security (includes SEO-T936)
+     | notes: security review, includes SEO-T936. One medium finding: ?p= was
+       split with no bound, and every non-slug entry cost a player search, run
+       twice per request on a public GET with no limiter, so hundreds of
+       tokens meant hundreds of parallel queries; fixed under SEO-T995. Low:
+       /api/og/board has no limiter; judged optional (uuid ids cannot be
+       enumerated, the read is cached an hour and bounded, private boards
+       return the identical fallback). Clean: every one of 22 JSON-LD emitters
+       goes through serializeJsonLd (which escapes <, >, &, U+2028 and U+2029),
+       including Person and ItemList with user text; IndexNow has a fixed
+       endpoint and own-host URLs only; no redirect builds its destination
+       from input; /api/og/start-sit validates before claiming and fails
+       closed, and its headshot fetch is pinned to sleepercdn.com; league mode,
+       rankings-board and the brief tag gate are parameterised and bounded.
+       npm audit --omit=dev: two advisories in the postcss that next pulls in;
+       the only fix is a forced major next upgrade, out of scope, reported to
+       the owner.
+     | verified: 184 tests across the touched modules passing.
+SEO-T994 | completed | Sub-agent review: speed and performance
+     | notes: performance review. High: resolveSeasonClock runs about four
+       times per board render with no cache, up to three sequential reads
+       each; the /brief/tag index gate loops up to 20 articles with two
+       sequential reads each, uncached, on every render (about 41 round
+       trips). Medium: resolveStartSitEntries runs in both generateMetadata and
+       the page body, and the body awaits it after the first wave instead of
+       inside it; lens-switch.tsx (a client file) imports LENSES through the
+       lib/beacon-breakdown barrel. Deferred with reasons: league-impact's
+       six sequential awaits (opt-in league mode, rate-limited, cached five
+       minutes); the player summary's rankings read (uncached but parallel,
+       adds no latency); per-player trade RPCs (parallel, capped at three).
+       Clean: rankings-board, load-stats, league getSyncedLeague, the root
+       layout and manifest, IndexNow inside after(), /api/og/start-sit.
+     | verified: read-only review.
+SEO-T995 | completed | Fix the review findings that are related and make sense
+     | notes: known candidates before the reviews run: the draft guide body
+       prose still says "drafting him" once; /api/og/board has no rate
+       limiter (player-card precedent, security to confirm); the player
+       overview's extra rankings read (performance to confirm); the start/sit
+       OG SIT badge amber (brand to confirm); two-player QuickTakeaways
+       wording (implementation to confirm). Report only, out of scope:
+       lib/beam/capabilities/player-value.ts doubles change_30d_pct.
+     | notes: first fix done ahead of the reviews: the draft guide's body
+       prose (app/guides/fantasy-football-draft-guide/page.tsx, line 619) said
+       "where the room is drafting him"; it now says "them", the last guessed
+       pronoun from SEO-T967. Reviewer findings are fixed by the orchestrator
+       directly as they arrive.
+     | notes: security fix: parseRawPlayerEntries now bounds ?p= (and the
+       a and b alias) before any database work: case-insensitive dedupe,
+       entries over 80 characters dropped, capped at MAX_START_SIT_PLAYERS,
+       with four regression tests in page.test.ts. Implementation fix: the H2
+       now names selectedWeek, from the same resolveBoardWeek the metadata
+       uses; the week select, toughest calls and written sections keep the
+       live week on purpose.
+     | notes: FIX LIST from the four reviews in so far (tick off as done):
+       [done] ?p= bound (security); [done] H2 names the selected week
+       (implementation); [done] draft guide pronoun. Remaining: lens-switch
+       imports LENSES from lib/breakdown/types; AnalysisSkeleton gets
+       motion-reduce:animate-none; beacon-edge-meter headline h2 to h3;
+       breakdown-table Cell drops ", best" from the sr-only prefix;
+       resolveSeasonClock wrapped in React cache(); resolveStartSitEntries
+       wrapped in React cache() keyed by a string and moved into the first
+       wave; the /brief/tag gate parallelised and cached; the pronoun rewrites
+       in the five files named under SEO-T992. The SEO accuracy review
+       (SEO-T991) had not reported when this was written.
+     | notes: every finding fixed by the orchestrator directly, except three
+       deferred performance items (reasons under SEO-T994). Security: ?p= and
+       the a and b alias bounded in parseRawPlayerEntries before any database
+       work (dedupe, 80 character entry cap, MAX_START_SIT_PLAYERS), four
+       regression tests. Implementation: the Week H2 names the selected week.
+       SEO: the OG SIT badge is INK_SUBTLE like the page (the unused AMBER
+       constant and its comment removed); the card row label is "Start/sit
+       player cards". Accessibility: the Beacon Edge headline is an h3; the
+       table cell's sr-only label no longer repeats "best"; the skeleton pulse
+       honours motion-reduce; guessed pronouns rewritten in league-tab,
+       market-tab, projections-tab, written-sections, the methodology page and
+       the draft guide (a grep of those files finds no he, him or his).
+       Performance: resolveSeasonClock wrapped in React cache();
+       resolveStartSitEntries served once per request through a cache() keyed
+       by the JSON of the entries (so the body reuses the metadata's result);
+       the /brief/tag gate is three waves (articles, one article_players read,
+       parallel ranked checks) instead of up to 41 sequential reads;
+       lens-switch imports LENSES from lib/breakdown/types, not the barrel.
+       Not fixed, reported: npm audit's two postcss advisories inside next need
+       a major next upgrade; lib/beam/capabilities/player-value.ts doubles
+       change_30d_pct (outside this build).
+SEO-T996 | completed | Final verification: tsc, full vitest, next build, banned-character scan
+     | notes: partial, run while the reviewers work: npx vitest run, 330
+       files and 5016 tests passing. Banned-character scan over app,
+       components, lib, scripts and public/*.txt: every hit is either a test
+       fixture that asserts rejection, the BANNED_CHARS pattern in
+       scripts/backfill-article-seo.ts, or lib/league-relay/trade-writeup.ts
+       line 414, which joins with a middle dot and swaps it for " | " in the
+       same expression; none reaches a reader and none is new in this build.
+       Still to run after the review fixes: tsc, the full suite again, and
+       npm run build.
+     | notes: final verification after every review fix. The first npm run
+       build failed: the start/sit OG route's pure helper was named
+       app/api/og/start-sit/layout.ts, a reserved Next.js file name inside
+       app/, so the build type-checked it as a layout. Renamed to
+       card-layout.ts (and its test to card-layout.test.ts) with both imports
+       updated; the rebuild passed.
+     | verified: npm run build succeeds (486 pages; /tools/who-should-i-start
+       15.4 kB, 125 kB first load); npx tsc --noEmit reports zero errors now
+       that the build regenerated .next/types; npx vitest run 330 files and
+       5020 tests passing (plus the renamed OG helper's 19); banned-character
+       scan clean for this build. NOT COMMITTED and NOT PUSHED, by
+       instruction.
+
+## Design pass on Who Should I Start and the trade calculator (owner request, 2026-09-11)
+
+The owner asked for the written content under both tools, the start/sit
+result cards and the toughest-calls grid to look premium: icons, large icon
+headers, side-by-side sections, pill tags, team logos, a graph, and an
+unmistakable full-card highlight with a "start this player" banner on the
+recommended players. Presentation only: no engine, loader, query or copy
+change beyond splitting paragraphs at sentence boundaries. NOT COMMITTED.
+
+DSN-T001 | completed | Shared section header with a large icon tile
+     | files: components/feature-section-header.tsx
+     | depends on: none
+     | notes: FeatureSectionHeader (tile, eyebrow, h2, optional intro; inline
+       or stacked) and FeatureIconTile (lg, md, sm). Tile and eyebrow are
+       aria-hidden, following components/guides/guide-section-header.tsx.
+     | verified: tsc clean.
+
+DSN-T002 | completed | Shared FAQ accordion
+     | files: components/faq-accordion.tsx
+     | depends on: none
+     | notes: native details/summary with the h3 inside summary, as both pages
+       had; a number tile and a plus that turns to a cross, both aria-hidden;
+       min-h-14 summary. Replaces two identical hand-rolled copies.
+     | verified: tsc clean.
+
+DSN-T003 | completed | NFL team logo
+     | files: components/nfl-team-logo.tsx
+     | depends on: none
+     | notes: sleepercdn.com/images/team_logos/nfl/{code}.png, the path
+       lib/og/assets.ts already uses. Code validated to 2 to 4 letters (a
+       leading "@" stripped) or nothing renders. Always decorative (alt=""),
+       the team code is always visible text beside it.
+     | verified: tsc clean.
+
+DSN-T004 | completed | Start/sit card redesign
+     | files: app/tools/who-should-i-start/start-sit-card.tsx, app/tools/who-should-i-start/projection-range.tsx
+     | depends on: DSN-T003
+     | notes: START cards get a full-width green "Start this player" banner
+       (plus "Starter N of K" when K > 1), a green border and glow, and a
+       gradient headshot frame; SIT cards a quiet "Sit this player" banner
+       with the reason. The banner is row 1 visually and right after the h3
+       in the DOM (explicit grid rows), so a screen reader still hears name
+       then call. Team and opponent logos; DEF cards show the team logo in
+       place of a headshot. Hero projected points with a floor-to-ceiling
+       range strip on ONE scale shared by every card (the board says so in a
+       visible sentence). Matchup and game environment rows with icon tiles
+       and tone pills whose thresholds are matchupPhrase's own. Beat rate,
+       availability, value and rank as icon tiles. Panel is no longer the
+       shell (it cannot run a full-width banner); the article is still the
+       only landmark.
+     | verified: tsc clean; checked in the browser at 1920px.
+
+DSN-T005 | completed | Recent form chart on each card
+     | files: app/tools/who-should-i-start/recent-form-chart.tsx, app/tools/who-should-i-start/recent-form-chart.test.ts, app/tools/who-should-i-start/page.tsx
+     | depends on: DSN-T004
+     | notes: last six graded weeks, scored as a column and projected as a
+       tick, from the reliability weeks the Beacon Breakdown load already
+       returns (no new read). SVG aria-hidden plus an sr-only sentence per
+       week. Two problems found in the browser and fixed: (1) the loader keeps
+       every projected week of the graded season, so upcoming 2026 weeks
+       charted as "did not play"; page.tsx now trims to weeks before the live
+       week. (2) Week 1 showed "did not play" for three healthy starters
+       because Week 1 stats had not synced, and the loader flags any projected
+       week with no stats row as missed. selectRecentFormWeeks now charts only
+       through the last week with a real score. Five unit tests.
+     | notes: NOT FIXED, pre-existing, reported to the owner: the Reliability
+       tab reads the same weeks and so lists unplayed and unsynced weeks as
+       "Did not play" (lib/breakdown/load-extras.ts loadReliabilityWeeks has
+       no week bound).
+     | verified: vitest 11 files, 167 tests passing; tsc clean.
+
+DSN-T006 | completed | Board: verdict panel, row fill, confidence and reasons side by side
+     | files: app/tools/who-should-i-start/start-sit-board.tsx, app/tools/who-should-i-start/page.tsx
+     | depends on: DSN-T004, DSN-T005
+     | notes: the role="status" verdict now sits in a gradient panel with an
+       icon tile and a static "The verdict" eyebrow (still the only live
+       region). From lg the cards grow to share the row (300px to 26rem) and
+       the row centres with justify-content: safe center. Confidence and Why
+       are panels with icon tiles, side by side from lg. The "Week N, season.
+       Projections updated" line is a pill with a clock icon (formatEastern
+       unchanged).
+     | verified: tsc clean; checked in the browser at 1920px.
+
+DSN-T007 | completed | Toughest calls redesign
+     | files: app/tools/who-should-i-start/toughest-calls.tsx
+     | depends on: DSN-T001, DSN-T003
+     | notes: section header with icon; each card shows both players side by
+       side with "vs", framed headshots, badges, team logos and points, a
+       split bar of the pair's projection (aria-hidden, both figures are
+       text), and the link as a button with the same rotated anchor text.
+       Closest-calls rows gained overlapping headshots. Dropped an
+       aria-labelledby that sat on a role-less div.
+     | verified: tsc clean; checked in the browser at 1920px.
+
+DSN-T008 | completed | Who Should I Start written sections redesign
+     | files: app/tools/who-should-i-start/written-sections.tsx
+     | depends on: DSN-T001, DSN-T002
+     | notes: four calculation steps as step cards with h3s; the format
+       section with a side panel naming the reader's format and one line per
+       format; a position jump nav; each position as a card with a coloured
+       position tile, factor chips drawn from its own paragraph, and closest
+       calls beside the prose from lg; the five-sentence method as a numbered
+       list ("And" dropped from the last sentence); the FAQ beside its
+       heading; the League Pulse handoff as a CTA panel whose button keeps the
+       plan's anchor text. Every h2, id and paragraph otherwise unchanged.
+     | verified: tsc clean; checked in the browser at 1920px.
+
+DSN-T009 | completed | Trade calculator written sections redesign
+     | files: app/tools/trade-calculator/written-sections.tsx, app/tools/trade-calculator/page.tsx
+     | depends on: DSN-T001, DSN-T002
+     | notes: the four grading paragraphs as cards with h3s; a margin scale
+       drawn from the admin thresholds with a text legend; the two readings of
+       fair side by side; the FAQ beside its heading; the closing link
+       paragraph as three LinkTiles with the same anchor text. Width 3xl to
+       5xl, and the trailing methodology link to match.
+     | verified: tsc clean; checked in the browser at 1920px.
+
+DSN-T010 | completed | Sub-agent reviews: accessibility, and implementation plus security
+     | depends on: DSN-T001 to DSN-T009
+     | notes: accessibility review: no high findings. The START/SIT banner
+       order passes 1.3.2 (DOM order name then call, nothing focusable). No
+       data hidden at any breakpoint. Fixed: the recent form values were
+       sr-only (now a visible table that doubles as the chart's axis, plus a
+       visible met-or-beat sentence); the projection tick at 1.65:1 against
+       the column (now on a dark halo); red pill text at 4.4:1 on START cards
+       (now red-400, about 5:1); the purple eyebrow at 4.3:1 (eyebrows now use
+       purple-400); eyebrows were aria-hidden (now exposed); "opponent" and
+       "multiplier" added as sr-only words; "Where to go next" is now an h3.
+       Not fixed, reported: components/league-schedule/win-prob-bar.tsx
+       (committed, unchanged here) draws percentages aria-hidden beside an
+       sr-only twin and truncates long names.
+     | notes: implementation and security review: no high findings. Content
+       preserved word for word apart from the intended splits; every h2 and id
+       unchanged; the team logo URL validation holds. Fixed: factor lists were
+       labelled "What the tool weighs", which overclaims the engine (now "Key
+       factors"); a sentence fragment inside the methodology tile; LinkTile
+       title and body ran together as one link name (sr-only full stop added
+       in components/link-tile.tsx, which also improves About and the author
+       page); the margin legend said only the middle band names a side and
+       blurred the boundary; the superflex definition; a NaN guard on the
+       range strip; a flat mark for a zero-point week and a "Last N weeks"
+       caption; the season fallback in the page trim. Not fixed, reported: the
+       signal-check admin validator does not require near-even below
+       lopsided; emerald-300/400 are Tailwind defaults rather than theme
+       tokens.
+     | verified: both reports read in full; fixes applied as exact string
+       replacements with occurrence checks.
+
+DSN-T011 | completed | Final verification
+     | depends on: DSN-T010
+     | verified: npx tsc --noEmit zero errors; npx vitest run 331 files and
+       5025 tests passing, plus two render tests for the recent form chart
+       (7 in that file); npm run build succeeds (486 pages;
+       /tools/who-should-i-start 15.4 kB, /tools/trade-calculator 18.6 kB);
+       banned-character scan clean over every touched file. Browser checked
+       at 1920px; a 400px check was not possible (the window would not shrink
+       and the site refuses framing), so mobile rests on the review's class
+       audit. ESLint did not run: npx fetched ESLint 10 and the repo has no
+       eslint.config file. NOT COMMITTED and NOT PUSHED, by instruction.

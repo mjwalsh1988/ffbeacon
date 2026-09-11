@@ -1498,8 +1498,8 @@ beacon_settings              new rows, categories signal_check / _verdict /
 
 ### E. Public + admin surface
 
-- Public: `/tools/signal-check` (builder), `/tools/signal-check/v/[shareId]`
-  (frozen share), `/tools/signal-check/import` (auth-gated Sleeper import),
+- Public: `/tools/trade-calculator` (builder), `/tools/trade-calculator/v/[shareId]`
+  (frozen share), `/tools/trade-calculator/import` (auth-gated Sleeper import),
   `GET /api/signal-check/search` (public autocomplete, safe fields only, min
   length 4, no values), `GET /api/og/signal-check/[shareId]` (OG, public_payload
   only, FF Beacon brand).

@@ -16,7 +16,7 @@
  * So the sentence is renamed on the way out, and only here. The rename cannot
  * change what the sentence means: A stays A, B stays B, and nothing but the
  * noun moves. The alternative, editing the global template, would rewrite
- * /tools/signal-check and the League Pulse transactions feed to suit a game.
+ * /tools/trade-calculator and the League Pulse transactions feed to suit a game.
  *
  * Pure and word-boundaried, so "Sideline" and "Inside" are untouched and a
  * template that already says "Team A" is left exactly as it is.

@@ -82,13 +82,13 @@ export const TOOLS_NAV: NavChild[] = [
     // trade calculator searches for "Signal Check". The brand name stays in the
     // hint under it, and on the tool's own page.
     label: "Trade Calculator",
-    href: "/tools/signal-check",
+    href: "/tools/trade-calculator",
     description: "Signal Check: grade any trade with the Beacon Verdict",
   },
   {
-    label: "Beacon Breakdown",
-    href: "/tools/beacon-breakdown",
-    description: "Compare two players head-to-head",
+    label: "Start / Sit",
+    href: "/tools/who-should-i-start",
+    description: "Beacon Breakdown: who should I start this week",
   },
   {
     label: "FAAB Calculator",
@@ -111,21 +111,6 @@ export const GAMES_NAV: NavChild[] = [
     href: "/games/would-you-rather",
     description: "Two sides of a real trade. One vote.",
   },
-];
-
-export const PRIMARY_NAV: NavItem[] = [
-  { label: "Tools", href: "/tools", children: TOOLS_NAV },
-  {
-    label: "Games",
-    href: "/games",
-    children: GAMES_NAV,
-    overviewLabel: "All Games",
-    overviewDescription: "See every game on one page",
-  },
-  { label: "Rankings", href: "/rankings" },
-  { label: "The Beacon Brief", href: "/brief" },
-  { label: "Guides", href: "/guides" },
-  { label: "About", href: "/about" },
 ];
 
 /** A destination the site search can match on the client. Tools and top-level
@@ -152,7 +137,7 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
   },
   {
     label: "Signal Check Trade Calculator",
-    href: "/tools/signal-check",
+    href: "/tools/trade-calculator",
     description: "Grade any trade with the Beacon Verdict",
     keywords: [
       "trade",
@@ -167,10 +152,25 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     ],
   },
   {
-    label: "Beacon Breakdown",
-    href: "/tools/beacon-breakdown",
-    description: "Compare two players head-to-head",
-    keywords: ["compare", "comparison", "versus", "vs", "player", "breakdown", "head to head"],
+    label: "Start / Sit (Beacon Breakdown)",
+    href: "/tools/who-should-i-start",
+    description: "Beacon Breakdown: who should I start this week",
+    keywords: [
+      "start",
+      "sit",
+      "who should i start",
+      "who do i start",
+      "start sit",
+      "start or sit",
+      "lineup",
+      "compare",
+      "comparison",
+      "versus",
+      "vs",
+      "player",
+      "breakdown",
+      "head to head",
+    ],
   },
   {
     label: "On The Clock",
@@ -284,8 +284,8 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "On The Clock", href: "/tools/on-the-clock" },
       { label: "Manager Pulse", href: "/tools/manager-pulse" },
-      { label: "Trade Calculator", href: "/tools/signal-check" },
-      { label: "Beacon Breakdown", href: "/tools/beacon-breakdown" },
+      { label: "Trade Calculator", href: "/tools/trade-calculator" },
+      { label: "Start / Sit", href: "/tools/who-should-i-start" },
       { label: "FAAB Calculator", href: "/tools/faab" },
     ],
   },
@@ -307,6 +307,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
       // exist, and was disabled to hide that. The guide is real and lives at the
       // year-free path, so the link now goes to it.
       { label: "Draft Guide", href: "/guides/fantasy-football-draft-guide" },
+      { label: "How FF Beacon Works", href: "/guides/how-ff-beacon-works" },
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.
       { label: "Rankings Board", href: "/rankings" },

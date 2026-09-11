@@ -108,6 +108,10 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,

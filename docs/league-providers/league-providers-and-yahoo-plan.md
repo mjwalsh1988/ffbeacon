@@ -2664,8 +2664,8 @@ is a no-op for a Yahoo league when the reader is not connected.
 
 ### 9.4 The tools' entry points
 
-`/tools/league-pulse`, `/tools/faab`, `/tools/beacon-breakdown`,
-`/tools/signal-check` (import panel) and `/dashboard` list leagues from
+`/tools/league-pulse`, `/tools/faab`, `/tools/who-should-i-start`,
+`/tools/trade-calculator` (import panel) and `/dashboard` list leagues from
 EVERY active provider the reader can reach: Sleeper via the saved handle
 or `?username=`, Yahoo via the connection. The lists are grouped as today
 by `categorizeLeague` and each row shows its provider mark

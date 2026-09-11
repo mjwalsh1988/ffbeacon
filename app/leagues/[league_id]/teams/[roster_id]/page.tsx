@@ -64,6 +64,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return {
     title,
     description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,
@@ -270,10 +274,10 @@ export default async function TeamDetailPage({
             roster's remaining weeks rather than a generic format. */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
           <Link
-            href={`/tools/beacon-breakdown?league=${encodeURIComponent(sleeperLeagueId)}&roster=${sleeperRosterId}`}
+            href={`/tools/who-should-i-start?league=${encodeURIComponent(sleeperLeagueId)}&roster=${sleeperRosterId}`}
             className="inline-flex min-h-11 items-center gap-2 rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2 text-sm font-semibold text-brand-cyan hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            Compare two players for this team
+            Who should I start from this roster?
           </Link>
           <p className="text-xs text-ink-subtle">
             Opens the Beacon Breakdown with this league connected, so it prices both players

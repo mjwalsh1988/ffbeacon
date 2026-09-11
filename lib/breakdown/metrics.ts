@@ -96,6 +96,14 @@ export type Metric = {
   display: (side: MetricSide) => string;
   note?: (side: MetricSide) => string | undefined;
   share: (a: MetricSide, b: MetricSide) => number | null;
+  /**
+   * Per-side value where higher is better, on the same footing share() already
+   * compares (negated where lower is better). Null exactly where share() would
+   * treat this side's value as missing. Undefined on the blended, unscored rows,
+   * which have no single value of their own to rank. computeGroupEdge (edge.ts)
+   * uses this to rank N sides without a pairwise share() call.
+   */
+  scalar?: (side: MetricSide) => number | null;
   /** Raw weight per lens. Renormalized over the metrics that resolve. */
   weights: Record<LensId, number>;
 };
@@ -137,6 +145,7 @@ export const METRICS: Metric[] = [
     isBeaconValue: true,
     display: (s) => fmtValue(s.player.value),
     share: (a, b) => shareHigh(a.player.value, b.player.value),
+    scalar: (s) => s.player.value,
     weights: { dynasty: 0.32, "win-now": 0.08, "this-week": 0 },
   },
   {
@@ -152,6 +161,7 @@ export const METRICS: Metric[] = [
         ? `${s.player.rankChange30d > 0 ? "Up" : "Down"} ${Math.abs(s.player.rankChange30d)} in 30 days`
         : undefined,
     share: (a, b) => shareLow(a.player.overallRank, b.player.overallRank),
+    scalar: (s) => (s.player.overallRank != null ? -s.player.overallRank : null),
     weights: { dynasty: 0.1, "win-now": 0.14, "this-week": 0 },
   },
   {
@@ -167,6 +177,7 @@ export const METRICS: Metric[] = [
         : "-",
     note: (s) => (s.player.tier != null ? `Tier ${s.player.tier}` : undefined),
     share: (a, b) => shareLow(a.player.positionRank, b.player.positionRank),
+    scalar: (s) => (s.player.positionRank != null ? -s.player.positionRank : null),
     weights: { dynasty: 0.08, "win-now": 0.06, "this-week": 0 },
   },
   {
@@ -182,6 +193,7 @@ export const METRICS: Metric[] = [
         ? `Range ${s.player.low30d.toLocaleString()} to ${s.player.high30d.toLocaleString()}`
         : undefined,
     share: (a, b) => shareSigned(a.player.change30dPct, b.player.change30dPct),
+    scalar: (s) => s.player.change30dPct,
     weights: { dynasty: 0.08, "win-now": 0.02, "this-week": 0 },
   },
 
@@ -204,6 +216,10 @@ export const METRICS: Metric[] = [
     },
     share: (a, b) =>
       shareLow(a.player.latestFinish?.finish ?? null, b.player.latestFinish?.finish ?? null),
+    scalar: (s) => {
+      const finish = s.player.latestFinish?.finish ?? null;
+      return finish != null ? -finish : null;
+    },
     weights: { dynasty: 0.06, "win-now": 0.1, "this-week": 0 },
   },
   {
@@ -217,6 +233,7 @@ export const METRICS: Metric[] = [
     note: (s) =>
       s.player.depthOrder != null ? `Depth chart slot ${s.player.depthOrder}` : undefined,
     share: (a, b) => shareHigh(roleWeight(a.player.depthRole), roleWeight(b.player.depthRole)),
+    scalar: (s) => roleWeight(s.player.depthRole),
     weights: { dynasty: 0.03, "win-now": 0.08, "this-week": 0.12 },
   },
   {
@@ -234,6 +251,11 @@ export const METRICS: Metric[] = [
       if (a.player.injuryStatus == null && b.player.injuryStatus == null) return null;
       return shareHigh(healthScore(a.player.injuryStatus), healthScore(b.player.injuryStatus));
     },
+    // healthScore always returns a number (a null status reads as fully healthy),
+    // so this never reads as missing on its own; share() only skips the whole
+    // metric when both sides are the same non-designation, which two equal
+    // scalars already reproduce.
+    scalar: (s) => healthScore(s.player.injuryStatus),
     weights: { dynasty: 0.01, "win-now": 0.04, "this-week": 0.1 },
   },
 
@@ -253,6 +275,7 @@ export const METRICS: Metric[] = [
       return p ? `${p.weeks.length} game${p.weeks.length === 1 ? "" : "s"} left` : undefined;
     },
     share: (a, b) => shareHigh(proj(a)?.totalPoints ?? null, proj(b)?.totalPoints ?? null),
+    scalar: (s) => proj(s)?.totalPoints ?? null,
     weights: { dynasty: 0.04, "win-now": 0.24, "this-week": 0 },
   },
   {
@@ -271,6 +294,7 @@ export const METRICS: Metric[] = [
       )}`;
     },
     share: (a, b) => shareHigh(proj(a)?.perGame ?? null, proj(b)?.perGame ?? null),
+    scalar: (s) => proj(s)?.perGame ?? null,
     weights: { dynasty: 0.02, "win-now": 0.1, "this-week": 0.04 },
   },
   {
@@ -287,6 +311,7 @@ export const METRICS: Metric[] = [
       return nw.opponent ? `Week ${nw.week} vs ${nw.opponent}` : `Week ${nw.week}`;
     },
     share: (a, b) => shareHigh(proj(a)?.nextWeek?.points ?? null, proj(b)?.nextWeek?.points ?? null),
+    scalar: (s) => proj(s)?.nextWeek?.points ?? null,
     weights: { dynasty: 0, "win-now": 0.02, "this-week": 0.34 },
   },
   {
@@ -310,6 +335,7 @@ export const METRICS: Metric[] = [
         proj(a)?.nextWeek?.opponentMultiplier ?? null,
         proj(b)?.nextWeek?.opponentMultiplier ?? null,
       ),
+    scalar: (s) => proj(s)?.nextWeek?.opponentMultiplier ?? null,
     weights: { dynasty: 0, "win-now": 0.02, "this-week": 0.16 },
   },
   {
@@ -326,6 +352,7 @@ export const METRICS: Metric[] = [
     },
     share: (a, b) =>
       shareHigh(proj(a)?.scheduleMultiplier ?? null, proj(b)?.scheduleMultiplier ?? null),
+    scalar: (s) => proj(s)?.scheduleMultiplier ?? null,
     weights: { dynasty: 0, "win-now": 0.06, "this-week": 0 },
   },
 
@@ -345,6 +372,7 @@ export const METRICS: Metric[] = [
       return r ? `${r.weeksPlayed} graded game${r.weeksPlayed === 1 ? "" : "s"}` : undefined;
     },
     share: (a, b) => shareHigh(gradedRel(a)?.beatRate ?? null, gradedRel(b)?.beatRate ?? null),
+    scalar: (s) => gradedRel(s)?.beatRate ?? null,
     weights: { dynasty: 0.02, "win-now": 0.1, "this-week": 0.14 },
   },
   {
@@ -357,6 +385,7 @@ export const METRICS: Metric[] = [
     display: (s) => fmtPct(gradedRel(s)?.availabilityRate ?? null),
     share: (a, b) =>
       shareHigh(gradedRel(a)?.availabilityRate ?? null, gradedRel(b)?.availabilityRate ?? null),
+    scalar: (s) => gradedRel(s)?.availabilityRate ?? null,
     weights: { dynasty: 0.02, "win-now": 0.08, "this-week": 0 },
   },
   {
@@ -372,6 +401,10 @@ export const METRICS: Metric[] = [
       return r?.ratioStdev != null ? `Spread ${r.ratioStdev.toFixed(2)}` : undefined;
     },
     share: (a, b) => shareLow(gradedRel(a)?.ratioStdev ?? null, gradedRel(b)?.ratioStdev ?? null),
+    scalar: (s) => {
+      const stdev = gradedRel(s)?.ratioStdev ?? null;
+      return stdev != null ? -stdev : null;
+    },
     weights: { dynasty: 0.02, "win-now": 0.06, "this-week": 0.1 },
   },
 
@@ -392,6 +425,7 @@ export const METRICS: Metric[] = [
         ? `${s.player.yearsExperience === 0 ? "Rookie" : `Year ${s.player.yearsExperience + 1}`}`
         : undefined,
     share: (a, b) => shareHigh(youthScore(a.player.age), youthScore(b.player.age)),
+    scalar: (s) => youthScore(s.player.age),
     weights: { dynasty: 0.18, "win-now": 0, "this-week": 0 },
   },
   {
@@ -407,6 +441,7 @@ export const METRICS: Metric[] = [
         safetyScore(a.player, gradedRel(a)?.ratioStdev ?? null),
         safetyScore(b.player, gradedRel(b)?.ratioStdev ?? null),
       ),
+    scalar: (s) => safetyScore(s.player, gradedRel(s)?.ratioStdev ?? null),
     weights: { dynasty: 0.06, "win-now": 0.02, "this-week": 0 },
   },
   {
@@ -418,6 +453,7 @@ export const METRICS: Metric[] = [
     guard: 0.05,
     display: (s) => upsidePhrase(s.player),
     share: (a, b) => shareHigh(upsideScore(a.player), upsideScore(b.player)),
+    scalar: (s) => upsideScore(s.player),
     weights: { dynasty: 0.12, "win-now": 0.02, "this-week": 0 },
   },
 
@@ -443,6 +479,7 @@ export const METRICS: Metric[] = [
     // 0.4 against 0.2 a blowout. The shift compresses that into a sane share.
     share: (a, b) =>
       shareSigned(a.league?.netPointsPerWeek ?? null, b.league?.netPointsPerWeek ?? null, 6),
+    scalar: (s) => s.league?.netPointsPerWeek ?? null,
     weights: { dynasty: 0.05, "win-now": 0.3, "this-week": 0.22 },
   },
   {
@@ -456,6 +493,7 @@ export const METRICS: Metric[] = [
       s.league ? `${s.league.weeksStarting} of ${s.league.weeksConsidered}` : "-",
     share: (a, b) =>
       shareSigned(a.league?.weeksStarting ?? null, b.league?.weeksStarting ?? null, 2),
+    scalar: (s) => s.league?.weeksStarting ?? null,
     weights: { dynasty: 0, "win-now": 0.1, "this-week": 0.1 },
   },
   {
@@ -483,6 +521,10 @@ export const METRICS: Metric[] = [
           : null,
         0.25,
       ),
+    scalar: (s) =>
+      s.league?.playoffOddsAfter != null && s.league?.playoffOddsBefore != null
+        ? s.league.playoffOddsAfter - s.league.playoffOddsBefore
+        : null,
     weights: { dynasty: 0, "win-now": 0.12, "this-week": 0.04 },
   },
 

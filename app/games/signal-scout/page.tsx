@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
+import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import { cookies, headers } from "next/headers";
 import { Radar, Zap, Target, type LucideIcon } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
@@ -30,16 +31,18 @@ import { MyStatsPanel } from "./my-stats-panel";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 
+const META_TITLE = "Signal Scout: Guess the Hidden NFL Player";
+const META_DESCRIPTION =
+  "A new hidden player every day. Clues cost points, and buying too many burns your signal out. How few clues do you need? Free, with streaks.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/games/signal-scout" },
-  title: "Signal Scout: Guess the Hidden NFL Player",
-  description:
-    "A new hidden player every day. Clues cost you points and buying too many burns your signal out, so how few does it take you to name him? Free, with streaks to keep.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "signal-scout",
-    title: "Signal Scout: Guess the Hidden NFL Player",
-    description:
-      "A new hidden player every day. Clues cost you points and buying too many burns your signal out, so how few does it take you to name him? Free, with streaks to keep.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/games/signal-scout",
   }),
 };
@@ -267,8 +270,20 @@ export default async function SignalScoutPage() {
     },
   };
 
+  const webApplicationLd = webApplicationJsonLd({
+    name: META_TITLE,
+    description: META_DESCRIPTION,
+    url: "/games/signal-scout",
+    category: "GameApplication",
+  });
+
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+      />
       {/* The masthead is rendered INSIDE the game column rather than above the
           whole page, because the game takes it away once a round is live and a
           page-level masthead could not be removed from in here. */}

@@ -19,9 +19,17 @@
  * A league with no stored schedule loses playoff odds and says so, rather than
  * reaching out to Sleeper from a comparison tool.
  *
- * SHARED WORK. Both candidates are measured against the same projected league,
- * so the expensive half (loading and projecting every roster) happens once. Only
- * the lineup swap and one extra simulation are per-candidate.
+ * SHARED WORK, TWO TO EIGHT CANDIDATES. Every candidate is measured against the
+ * same projected league, so the expensive half (loading and projecting every
+ * roster, and the "before" simulation) happens exactly once regardless of how
+ * many players the reader put on the board. Only the lineup swap and the
+ * candidate's own simulations are per-candidate, and those run independently of
+ * each other: each one reads only the shared context built above and touches no
+ * state another candidate's computation could see, so `Promise.all` runs the
+ * whole batch as one wave instead of awaiting them one at a time. (Node is
+ * single-threaded, so this is not multi-core parallelism; it is the same
+ * "no candidate serializes behind another" property the group Beacon Breakdown
+ * loader already relies on for its own N-sided reads.)
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -55,6 +63,7 @@ import { computeLineupSwap, type CandidateWeek } from "@/lib/faab/marginal";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { MIN_START_SIT_PLAYERS, MAX_START_SIT_PLAYERS } from "@/lib/start-sit/types";
 import type { LeagueImpact } from "./metrics";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -72,8 +81,13 @@ const SIMULATION_RUNS = 2000;
 export type LeagueImpactInput = {
   leagueRowId: string;
   sleeperRosterId: number;
-  /** Sleeper ids of the two players being compared, in slot order. */
-  candidateSleeperIds: [string | null, string | null];
+  /**
+   * Sleeper ids of the players being compared, two to eight, in board order.
+   * A pairwise comparison is simply the N-of-2 case: nothing below branches on
+   * length, so the two-candidate call site keeps behaving exactly as it did
+   * before this file supported more than two.
+   */
+  candidateSleeperIds: (string | null)[];
 };
 
 export type LeagueImpactReport = {
@@ -93,8 +107,12 @@ export type LeagueImpactReport = {
     name: string;
     record: string;
   };
-  /** Impact per slot. Null when we could not measure that player here. */
-  impacts: [LeagueImpact | null, LeagueImpact | null];
+  /**
+   * Impact per candidate, same length and order as
+   * LeagueImpactInput.candidateSleeperIds. Null when we could not measure that
+   * player here.
+   */
+  impacts: (LeagueImpact | null)[];
   /** Anything the reader needs told plainly rather than inferred. */
   notices: string[];
 };
@@ -215,6 +233,16 @@ export async function calculateLeagueImpact(
   supabase: ServiceClient,
   input: LeagueImpactInput,
 ): Promise<LeagueImpactOutcome> {
+  if (
+    input.candidateSleeperIds.length < MIN_START_SIT_PLAYERS ||
+    input.candidateSleeperIds.length > MAX_START_SIT_PLAYERS
+  ) {
+    return {
+      ok: false,
+      error: `We need ${MIN_START_SIT_PLAYERS} to ${MAX_START_SIT_PLAYERS} players to compare against your roster.`,
+    };
+  }
+
   const league = await loadLeague(supabase, input.leagueRowId);
   if (!league) return { ok: false, error: "We do not have this league synced yet." };
 
@@ -341,7 +369,10 @@ export async function calculateLeagueImpact(
     rosterMetaById.get(mine.sleeperRosterId) ?? new Map();
   const notices: string[] = [];
 
-  function impactFor(sleeperId: string | null): LeagueImpact | null {
+  // Async only so every candidate's call can be kicked off in the same
+  // `Promise.all` wave below rather than awaited one at a time; the body itself
+  // does no I/O; it only reads the shared, read-only context built above.
+  async function impactFor(sleeperId: string | null): Promise<LeagueImpact | null> {
     if (!sleeperId) return null;
     const candidate = players.get(sleeperId);
     if (!candidate) return null;
@@ -467,10 +498,12 @@ export async function calculateLeagueImpact(
     };
   }
 
-  const impacts: [LeagueImpact | null, LeagueImpact | null] = [
-    impactFor(input.candidateSleeperIds[0]),
-    impactFor(input.candidateSleeperIds[1]),
-  ];
+  // One wave, not one call per candidate awaited in turn: each impactFor call
+  // reads only the shared context above and touches nothing another candidate's
+  // call could see, so there is nothing to serialize on.
+  const impacts: (LeagueImpact | null)[] = await Promise.all(
+    input.candidateSleeperIds.map((sleeperId) => impactFor(sleeperId)),
+  );
 
   if (oddsBefore === null) {
     notices.push(
@@ -482,9 +515,15 @@ export async function calculateLeagueImpact(
       "This league's scoring settings were not complete enough to score against directly, so we used the closest standard scoring instead.",
     );
   }
-  if (impacts[0] === null || impacts[1] === null) {
+  const measuredCount = impacts.filter((impact) => impact !== null).length;
+  if (measuredCount > 0 && measuredCount < impacts.length) {
+    const missingCount = impacts.length - measuredCount;
     notices.push(
-      "We could only measure one of these two against your roster. The other has no weekly projections on file from here on.",
+      impacts.length === 2
+        ? "We could only measure one of these two against your roster. The other has no weekly projections on file from here on."
+        : `We could only measure ${measuredCount} of these ${impacts.length} against your roster. ${
+            missingCount === 1 ? "The other has" : "The rest have"
+          } no weekly projections on file from here on.`,
     );
   }
   if (rosterFull) {

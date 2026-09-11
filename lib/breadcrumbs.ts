@@ -41,6 +41,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/guides": "Guides",
   "/guides/fantasy-football-terms": "Fantasy Football Terms",
   "/guides/fantasy-football-draft-guide": "Draft Guide",
+  "/guides/how-ff-beacon-works": "How FF Beacon Works",
   "/join": "Join the Discord",
   "/login": "Sign in",
   "/my-beacon": "My Beacon",
@@ -63,12 +64,12 @@ const ROUTE_LABELS: Record<string, string> = {
   "/rankings": "Rankings",
   "/terms": "Terms of Service",
   "/tools": "Tools",
-  "/tools/beacon-breakdown": "Beacon Breakdown",
   "/tools/faab": "FAAB Calculator",
   "/tools/league-pulse": "League Pulse",
   "/tools/on-the-clock": "On The Clock",
-  "/tools/signal-check": "Signal Check Trade Calculator",
-  "/tools/signal-check/v": "Shared Verdict",
+  "/tools/trade-calculator": "Signal Check Trade Calculator",
+  "/tools/trade-calculator/v": "Shared Verdict",
+  "/tools/who-should-i-start": "Start / Sit",
   "/u": "Profiles",
 };
 
@@ -84,7 +85,7 @@ const NON_NAVIGABLE = new Set([
   "/brief/tag",
   "/brief/team",
   "/players",
-  "/tools/signal-check/v",
+  "/tools/trade-calculator/v",
   "/u",
 ]);
 

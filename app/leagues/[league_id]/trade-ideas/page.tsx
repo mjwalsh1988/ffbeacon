@@ -81,6 +81,38 @@ const INITIAL_WINDOW = 12;
 export const dynamic = "force-dynamic";
 
 /**
+ * The core sync and the league row, once per request.
+ *
+ * generateMetadata and the page body both need this league. Cached (React's
+ * per-request `cache()`, not the Next data cache), they share one
+ * `pulseLeagueCore` call and one fallback select instead of generateMetadata
+ * reading a possibly-unsynced row on its own, which is what let a crawler
+ * index "League not found" over a full page on a league's first visit.
+ *
+ * Reads the row off `pulseLeagueCore`'s own result rather than selecting it
+ * again: every column this page asks for is already in LEAGUE_CORE_COLUMNS.
+ * The fallback select only runs on the null branch the core's own contract
+ * allows.
+ */
+const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
+  const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
+  if (!pulse.ok) return null;
+
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
+});
+
+/**
  * Build mode's league read, done once per request.
  *
  * Three separate places on the page need the same rosters, values, and picks:
@@ -129,14 +161,9 @@ export async function generateMetadata({
   params: Promise<{ league_id: string }>;
 }): Promise<Metadata> {
   const { league_id } = await params;
-  const supabase = await createClient();
-
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("name")
-    .eq("sleeper_league_id", league_id)
-    .maybeSingle();
-  if (!league) return { title: "League not found" };
+  const synced = await getSyncedLeague(league_id);
+  if (!synced) return { title: "League not found" };
+  const league = synced.league;
 
   const title = `${league.name} Trade Ideas`;
   const description = `Trades worth offering in ${league.name}, and a builder that grades any deal you propose against your lineup and your value.`;
@@ -144,6 +171,10 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,
@@ -181,8 +212,9 @@ export default async function LeagueTradeFinderPage({
   // only: the derived half feeds the suggestion engine, so it runs inside the
   // streamed section below instead of holding the header back.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
-  if (!pulseResult.ok) notFound();
+  const synced = await getSyncedLeague(sleeperLeagueId);
+  if (!synced) notFound();
+  const { league, cached: pulseCached } = synced;
 
   const supabase = await createClient();
 
@@ -193,20 +225,6 @@ export default async function LeagueTradeFinderPage({
   const viewer = await resolveSleeperViewer(supabase, sp.username);
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
-
-  // The row the core already read, rather than a second read of the same one.
-  // The fallback is not dead code: the core's contract allows a null row, and
-  // a page that assumed otherwise would 500 instead of rendering.
-  const league =
-    pulseResult.league ??
-    (
-      await supabase
-        .from("leagues")
-        .select(LEAGUE_CORE_COLUMNS)
-        .eq("sleeper_league_id", sleeperLeagueId)
-        .maybeSingle()
-    ).data;
-  if (!league) notFound();
 
   const sleeperLeague = league.metadata as unknown as Parameters<
     typeof resolveLeagueContext
@@ -260,7 +278,7 @@ export default async function LeagueTradeFinderPage({
     }),
     scoringTags: buildLeagueScoringTags(league.scoring_settings),
     lastUpdatedLabel: lastPulsed ? formatRelative(lastPulsed) : "never",
-    cached: pulseResult.cached,
+    cached: pulseCached,
     coverage: context.coverage,
     sourceDisplay: coverageOk ? context.sourceDisplay : "N/A",
     formatDisplay: coverageOk ? context.formatDisplay : "N/A",
@@ -352,7 +370,7 @@ export default async function LeagueTradeFinderPage({
                   )}
                   sleeperLeagueId={sleeperLeagueId}
                   leagueRowId={league.id}
-                  resynced={!pulseResult.cached}
+                  resynced={!pulseCached}
                   sourceSlug={resolvedSource.slug}
                   season={league.season ?? null}
                   searchedUsername={searchedUsername}
@@ -378,7 +396,7 @@ export default async function LeagueTradeFinderPage({
                   <TradeFinderSection
                     sleeperLeagueId={sleeperLeagueId}
                     leagueRowId={league.id}
-                    resynced={!pulseResult.cached}
+                    resynced={!pulseCached}
                     sourceSlug={resolvedSource.slug}
                     season={league.season ?? null}
                     searchedUsername={searchedUsername}
@@ -406,7 +424,7 @@ export default async function LeagueTradeFinderPage({
                 <YourTeamRail
                   sleeperLeagueId={sleeperLeagueId}
                   leagueRowId={league.id}
-                  resynced={!pulseResult.cached}
+                  resynced={!pulseCached}
                   sourceSlug={resolvedSource.slug}
                   formatConfigId={context.formatConfigId}
                   season={league.season ?? null}

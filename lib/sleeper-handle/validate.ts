@@ -11,7 +11,7 @@
  * outside Manager Pulse grows a reason to import `lib/manager-pulse/*`.
  *
  * Debt, recorded and not fixed here: `app/tools/faab/actions.ts` and
- * `app/tools/beacon-breakdown/actions.ts` each carry a looser
+ * `app/tools/who-should-i-start/actions.ts` each carry a looser
  * `USERNAME_PATTERN` (dot and hyphen, 64 characters) and
  * `lib/on-the-clock/validation.ts` a stricter one. Making this the one gate
  * for all of them is a follow-up.

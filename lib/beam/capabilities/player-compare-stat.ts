@@ -182,7 +182,7 @@ export const playerCompareStat: BeamCapability<Params, Result> = {
         playerLink(params.a),
         playerLink(params.b),
         {
-          href: `/tools/beacon-breakdown?a=${encodeURIComponent(params.a.slug)}&b=${encodeURIComponent(params.b.slug)}`,
+          href: `/tools/who-should-i-start?p=${encodeURIComponent(params.a.slug)},${encodeURIComponent(params.b.slug)}`,
           label: "Full head-to-head in Beacon Breakdown",
         },
       ],

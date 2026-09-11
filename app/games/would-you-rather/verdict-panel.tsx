@@ -7,7 +7,7 @@
  * `BuilderView` the Signal Check pipeline produced for this trade: the verdict
  * sentence, the value margin, the trade shape, the confidence, the per-asset
  * prices and the plain-language read. It is what a reader would get typing the
- * same trade into /tools/signal-check in the same format, which is the whole
+ * same trade into /tools/trade-calculator in the same format, which is the whole
  * point of showing it after the vote rather than a softened version of it.
  *
  * THE SIDES ARE NAMED Team A AND Team B, and there is no link back to the

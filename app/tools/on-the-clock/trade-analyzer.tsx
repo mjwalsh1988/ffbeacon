@@ -21,7 +21,7 @@
  * ONE VERDICT
  * Each side shows its running board total, so the numbers move at the speed of
  * clicking. The only graded answer is Signal Check's, which lands underneath
- * after a round trip: the same pipeline /tools/signal-check runs, with
+ * after a round trip: the same pipeline /tools/trade-calculator runs, with
  * calibration, the value adjustment, thresholds, confidence, and the written
  * explanation. There used to be a second verdict here, a plain totals
  * comparison printed above the button, and it regularly disagreed with the one

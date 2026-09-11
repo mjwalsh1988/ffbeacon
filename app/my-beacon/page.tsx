@@ -90,7 +90,7 @@ const TOOLS: Destination[] = [
     icon: Timer,
   },
   {
-    href: "/tools/signal-check",
+    href: "/tools/trade-calculator",
     title: "Signal Check Trade Calculator",
     body: "Grade a trade and see the margin, the shape, and how confident the read is.",
     icon: Scale,

@@ -30,12 +30,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/tools" },
   title: "Free Fantasy Football Tools",
   description:
-    "Sync your Sleeper leagues, get help live in the draft, find out if a trade is fair, compare two players, and know what to bid on waivers. Free, no signup, redraft and dynasty.",
+    "Sync your Sleeper leagues, get live draft help, check if a trade is fair, find out who to start, and know what to bid on waivers. Free, no signup.",
   ...pageShareMetadata({
     key: "tools",
     title: "Free Fantasy Football Tools",
     description:
-      "Sync your Sleeper leagues, get help live in the draft, find out if a trade is fair, compare two players, and know what to bid on waivers. Free, no signup, redraft and dynasty.",
+      "Sync your Sleeper leagues, get live draft help, check if a trade is fair, find out who to start, and know what to bid on waivers. Free, no signup.",
     path: "/tools",
   }),
 };
@@ -102,8 +102,8 @@ const TOOL_ICONS: Record<ToolHref, LucideIcon> = {
   "/tools/league-pulse": Workflow,
   "/tools/on-the-clock": Timer,
   "/tools/manager-pulse": UserSearch,
-  "/tools/beacon-breakdown": Swords,
-  "/tools/signal-check": Scale,
+  "/tools/who-should-i-start": Swords,
+  "/tools/trade-calculator": Scale,
   "/tools/faab": Calculator,
 };
 

@@ -72,7 +72,7 @@ lib/signal-check/
     interpreter.ts    matchCondition(), applyValueAction(), applySideAction(), selectApplicableRules()
   *.test.ts           Vitest suites (run: npm test)
 
-app/tools/signal-check/
+app/tools/trade-calculator/
   page.tsx                       Public builder page (server)
   signal-check-workspace.tsx     Swaps between the builder and the Sleeper import (one at a time)
   signal-check-builder.tsx       Builder client (toolbar, sides, run, empty/loading states)
@@ -221,8 +221,8 @@ points winning and says nothing about why. The four surfaces today:
 
 | Surface | File |
 | --- | --- |
-| Calculator + Sleeper import | `app/tools/signal-check/trade-result.tsx` |
-| Public share page | `app/tools/signal-check/v/[shareId]/page.tsx` |
+| Calculator + Sleeper import | `app/tools/trade-calculator/trade-result.tsx` |
+| Public share page | `app/tools/trade-calculator/v/[shareId]/page.tsx` |
 | League transactions feed, player profile trades tab | `components/signal-check-trade-card.tsx` |
 | On The Clock report | `app/tools/on-the-clock/signal-check-report.tsx` |
 
@@ -369,7 +369,7 @@ depending on which source answered. A test pins them together.
 
 Applied wherever the league is known and the pick came from Sleeper: the league
 transactions feed, the player-profile trades tab, the Sleeper import on
-/tools/signal-check, and Trade Finder inside a league (which previously priced
+/tools/trade-calculator, and Trade Finder inside a league (which previously priced
 every roster's own future picks as "mid"). NOT the manual builder and NOT On The
 Clock: both send a slot the user chose, and an estimate must never overrule a
 real choice.
@@ -426,8 +426,8 @@ Picks the resolver cannot place, a 2028 pick today, still blend.
 
 ## Public builder + autocomplete
 
-`/tools/signal-check` renders two sides, a format selector (all FF Beacon
-formats), and `/tools/signal-check` calls the `runSignalCheck` server action.
+`/tools/trade-calculator` renders two sides, a format selector (all FF Beacon
+formats), and `/tools/trade-calculator` calls the `runSignalCheck` server action.
 The autocomplete (`asset-autocomplete.tsx`) is a WAI-ARIA combobox (arrow/Enter/
 Escape, `aria-activedescendant`, `aria-live` result count). It calls
 `/api/signal-check/search`.

@@ -222,7 +222,7 @@ export default async function SleeperLeaguesPage() {
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
             <Link
-              href="/tools/signal-check#sleeper-import"
+              href="/tools/trade-calculator#sleeper-import"
               className="inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
             >
               Analyze a completed trade in the Signal Check Trade Calculator

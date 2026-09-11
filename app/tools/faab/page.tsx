@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
+import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
@@ -25,7 +26,7 @@ import { isDiscordMember } from "@/lib/discord-membership";
 
 const META_TITLE = "FAAB Calculator for Fantasy Football: What to Bid";
 const META_DESCRIPTION =
-  "A free fantasy football FAAB calculator: how much to bid on any waiver claim, and when to walk away. Priced against your roster, your rivals, and your league.";
+  "A free fantasy football FAAB calculator: how much to bid on any waiver claim, and when to walk away. Priced against your roster and your rivals.";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/faab" },
@@ -159,8 +160,20 @@ export default async function FaabPage({
   if (valueSourceName) {
     mastheadChips.push({ label: `Values via ${valueSourceName}`, tone: "purple" });
   }
+  const webApplicationLd = webApplicationJsonLd({
+    name: META_TITLE,
+    description: META_DESCRIPTION,
+    url: "/tools/faab",
+    category: "SportsApplication",
+  });
+
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+      />
       <PageBody>
         {fallbackBanner && (
           <p
@@ -216,6 +229,16 @@ export default async function FaabPage({
           handleGate={handleGate}
           urlViewer={urlViewer}
         />
+        <p className="mt-8 text-sm leading-relaxed text-ink-muted">
+          Curious what these bids are actually built from?{" "}
+          <Link
+            href="/guides/how-ff-beacon-works"
+            className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
+          >
+            See how FF Beacon's projections and matchups are calculated
+          </Link>
+          .
+        </p>
       </PageBody>
       <DiscordCtaSection
         eyebrow="Waivers are stressful"

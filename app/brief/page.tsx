@@ -7,7 +7,7 @@ import { BriefFeed } from "@/components/beacon-brief/brief-feed";
 
 const TITLE = "The Beacon Brief: Fantasy Football News That Changes Your Lineup";
 const DESCRIPTION =
-  "Injuries, trades, snap counts, and depth chart moves, written plainly and tied to the players you actually roster. Every story says what it means for your team, not just what happened.";
+  "Injuries, trades, snap counts, and depth chart moves, written plainly and tied to the players you roster. Each story says what it means for your team.";
 
 type PageProps = { searchParams: Promise<{ page?: string }> };
 

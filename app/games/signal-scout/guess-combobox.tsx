@@ -2,7 +2,7 @@
 
 /**
  * Guess combobox: the WAI-ARIA combobox the player uses to name the target.
- * Mirrors the house pattern in app/tools/signal-check/asset-autocomplete.tsx
+ * Mirrors the house pattern in app/tools/trade-calculator/asset-autocomplete.tsx
  * (useId-wired ids, role=combobox input with aria-activedescendant, debounced
  * fetch effect with a cancelled flag, outside-click close, arrow/enter/escape
  * handling, onMouseDown commit, sr-only aria-live status) but is not a clone

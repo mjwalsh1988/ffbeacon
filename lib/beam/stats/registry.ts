@@ -18,7 +18,7 @@
  * a defense's targets returns "we do not track that for a defense", not zero. A
  * zero would be a lie in the shape of an answer.
  *
- * RELATIONSHIP TO THE BREAKDOWN. app/tools/beacon-breakdown/stats-data.ts has a
+ * RELATIONSHIP TO THE BREAKDOWN. app/tools/who-should-i-start/stats-data.ts has a
  * similar list for the comparison table. It is not shared: that one is built for
  * a two-column UI and carries `better` and `weekly` flags this has no use for,
  * while this one carries phrasings and position gating that one has no use for.

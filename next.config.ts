@@ -128,6 +128,37 @@ const nextConfig: NextConfig = {
         destination: "/leagues/:league_id/trade-ideas",
         permanent: true,
       },
+      // Signal Check became the trade calculator: same tool, the slug now
+      // matches the label already shipping in the nav and footer, and it is
+      // the head term readers search for. Two explicit entries rather than a
+      // :path* catch-all, matching the trade-finder precedent above, so a
+      // future child route under the old path is a deliberate decision rather
+      // than a silent forward. Share links to a graded trade live in Discord
+      // messages and group chats indefinitely; the second entry is what keeps
+      // those working.
+      {
+        source: "/tools/signal-check",
+        destination: "/tools/trade-calculator",
+        permanent: true,
+      },
+      {
+        source: "/tools/signal-check/v/:shareId",
+        destination: "/tools/trade-calculator/v/:shareId",
+        permanent: true,
+      },
+      // Beacon Breakdown became Who Should I Start: same start/sit tool, the
+      // new slug carries the head search term ("who should i start") the
+      // owner confirmed for it rather than a brand-only name. Next.js
+      // preserves the query string on a redirect by default, so an old
+      // ?a=&b= link lands on the new page where that alias still works. Kept
+      // as a permanent 308 forever, like the trade-calculator entries above:
+      // the Copy link button published this path and it is already sitting
+      // in shared links.
+      {
+        source: "/tools/beacon-breakdown",
+        destination: "/tools/who-should-i-start",
+        permanent: true,
+      },
       // The activity log stopped being a route of its own. It rendered the
       // same panel, from the same loader, that the league overview already
       // carries; the team filter the page added now lives on the panel, so the

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
+import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { Workflow, Sparkles, Lock, ArrowRight, Activity } from "lucide-react";
 import { LeagueResults } from "./league-results";
@@ -29,16 +30,18 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { isDiscordMember } from "@/lib/discord-membership";
 
+const META_TITLE = "Sleeper League Pulse: All Your Leagues, One Page";
+const META_DESCRIPTION =
+  "Type your Sleeper username and see every league you are in: real rosters, recent trades, and who is actually winning. No login needed to look around.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/league-pulse" },
-  title: "Sleeper League Pulse: All Your Leagues, One Page",
-  description:
-    "Type your Sleeper username and see every league you are in: real rosters, recent trades, and who is actually winning. No login needed to look around.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "league-pulse",
-    title: "Sleeper League Pulse: All Your Leagues, One Page",
-    description:
-      "Type your Sleeper username and see every league you are in: real rosters, recent trades, and who is actually winning. No login needed to look around.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/tools/league-pulse",
   }),
 };
@@ -171,8 +174,20 @@ export default async function LeaguePulsePage({
   // down to the lookup form, and the bottom CTA points at the rest of the tools.
   const isMember = await isDiscordMember();
 
+  const webApplicationLd = webApplicationJsonLd({
+    name: META_TITLE,
+    description: META_DESCRIPTION,
+    url: "/tools/league-pulse",
+    category: "SportsApplication",
+  });
+
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+      />
       <PageBody>
         {/* The "sign in to save" sentence is only true for a reader who has
             nothing saved. Saying it to someone whose handle is already on file
@@ -366,6 +381,18 @@ export default async function LeaguePulsePage({
         )}
 
         {!isLoggedIn && <CtaSection />}
+
+        <p className="mt-10 text-sm leading-relaxed text-ink-muted">
+          Power Pulse, Positional WAR, and the Lineups projections behind every league here all
+          run on the same engine.{" "}
+          <Link
+            href="/guides/how-ff-beacon-works"
+            className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
+          >
+            See how FF Beacon's numbers are put together
+          </Link>
+          .
+        </p>
       </PageBody>
       <DiscordCtaSection
         eyebrow="Need a hand with your league?"

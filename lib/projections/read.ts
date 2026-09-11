@@ -41,6 +41,16 @@ export type AdjustedProjection = {
   /** Before our multipliers. */
   rawPoints: number;
   opponent: string | null;
+  /** From projectPlayerWeek's ProjectedWeek: the week's point variance. */
+  sigma: number;
+  /** From projectPlayerWeek's ProjectedWeek: the opponent strength multiplier applied. */
+  opponentMultiplier: number;
+  /** From the player's AccuracyRow (lib/power-pulse/load.ts): share of weeks the raw projection was beaten. */
+  beatRate: number | null;
+  /** From the player's AccuracyRow: share of scheduled weeks the player actually played. */
+  availabilityRate: number | null;
+  /** From the player's AccuracyRow: weeks of history the accuracy figures are built on. */
+  weeksPlayed: number;
 };
 
 export type AdjustedProjectionSummary = {
@@ -204,6 +214,11 @@ export async function loadAdjustedProjections(params: {
         points: projected.points,
         rawPoints: projected.rawPoints,
         opponent: projected.opponent,
+        sigma: projected.sigma,
+        opponentMultiplier: projected.opponentMultiplier,
+        beatRate: accuracyRow?.beatRate ?? null,
+        availabilityRate: accuracyRow?.availabilityRate ?? null,
+        weeksPlayed: accuracyRow?.weeksPlayed ?? 0,
       });
       total += projected.points;
       weeks += 1;

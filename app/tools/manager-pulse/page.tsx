@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Gauge, LogIn, UserPlus } from "lucide-react";
 import { pageShareMetadata } from "@/lib/page-og";
+import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import { createClient } from "@/lib/supabase/server";
 import { loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
 import { SleeperIdentityCard } from "@/components/sleeper-handle/identity-card";
@@ -17,16 +18,18 @@ import { ManagerSearchForm } from "./manager-search-form";
 // and caption rules from docs/manager-pulse/manager-pulse-plan.md 7.3. Takes no props.
 import { SampleManagerReport } from "@/components/manager-pulse/sample-report";
 
+const META_TITLE = "Manager Pulse: Know Who You're Trading With";
+const META_DESCRIPTION =
+  "Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, who they keep buying, and what they overpay for.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/manager-pulse" },
-  title: "Manager Pulse: Know Who You're Trading With",
-  description:
-    "Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, who they keep buying, and what they overpay for.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "manager-pulse",
-    title: "Manager Pulse: Know Who You're Trading With",
-    description:
-      "Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, who they keep buying, and what they overpay for.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/tools/manager-pulse",
   }),
 };
@@ -61,6 +64,13 @@ export default async function ManagerPulsePage() {
     recent = lookups;
   }
 
+  const webApplicationLd = webApplicationJsonLd({
+    name: META_TITLE,
+    description: META_DESCRIPTION,
+    url: "/tools/manager-pulse",
+    category: "SportsApplication",
+  });
+
   // SIGNED IN: the form and the reader's history in the main column, what the
   // report contains in the rail. The page used to be one input field alone in
   // the middle of an empty screen, which told a reader nothing about what
@@ -68,6 +78,11 @@ export default async function ManagerPulsePage() {
   if (user) {
     return (
       <main id="main">
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+        />
         <PageMasthead
           eyebrow="Tools"
           title="Manager Pulse"
@@ -102,6 +117,14 @@ export default async function ManagerPulsePage() {
           </section>
           {!saved && <SaveHandleHint />}
           <RecentLookups lookups={recent} />
+          <p className="mt-6 text-sm leading-relaxed text-ink-muted">
+            <Link
+              href="/guides/how-ff-beacon-works"
+              className="font-medium text-brand-purple underline-offset-4 hover:underline"
+            >
+              How FF Beacon calculates these numbers
+            </Link>
+          </p>
         </PageColumns>
       </main>
     );
@@ -109,6 +132,11 @@ export default async function ManagerPulsePage() {
 
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+      />
       <PageBody>
         <PageMasthead
           eyebrow="Tools"
@@ -139,6 +167,14 @@ export default async function ManagerPulsePage() {
             <SampleManagerReport />
           </div>
         </section>
+        <p className="mt-10 text-sm leading-relaxed text-ink-muted">
+          <Link
+            href="/guides/how-ff-beacon-works"
+            className="font-medium text-brand-purple underline-offset-4 hover:underline"
+          >
+            How FF Beacon calculates these numbers
+          </Link>
+        </p>
       </PageBody>
     </main>
   );

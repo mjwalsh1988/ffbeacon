@@ -23,6 +23,7 @@ import { headers } from "next/headers";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
+import { MIN_START_SIT_PLAYERS, MAX_START_SIT_PLAYERS } from "@/lib/start-sit/types";
 import {
   calculateLeagueImpact,
   type LeagueImpactReport,
@@ -95,14 +96,13 @@ const cachedImpact = (key: string) =>
     async (
       leagueRowId: string,
       sleeperRosterId: number,
-      sleeperA: string | null,
-      sleeperB: string | null,
+      sleeperIds: (string | null)[],
     ) => {
       const admin = createAdminClient();
       return calculateLeagueImpact(admin, {
         leagueRowId,
         sleeperRosterId,
-        candidateSleeperIds: [sleeperA, sleeperB],
+        candidateSleeperIds: sleeperIds,
       });
     },
     ["breakdown-league-impact", key],
@@ -114,8 +114,13 @@ export type LeagueModeRequest = {
   sleeperLeagueId: string;
   /** Sleeper roster id from the URL. */
   rosterId: number;
-  sleeperA: string | null;
-  sleeperB: string | null;
+  /**
+   * Sleeper ids of the players on the board, two to eight, in board order. A
+   * pairwise call passes a two-element array; nothing below branches on
+   * length, so that call keeps behaving exactly as it did when this took
+   * `sleeperA` and `sleeperB` separately.
+   */
+  sleeperIds: (string | null)[];
 };
 
 /**
@@ -131,18 +136,22 @@ export async function loadLeagueMode(
   if (!Number.isInteger(request.rosterId) || request.rosterId <= 0) {
     return { report: null, notice: "That team link does not look right." };
   }
-  const sleeperA =
-    request.sleeperA && SLEEPER_PLAYER_ID_PATTERN.test(request.sleeperA)
-      ? request.sleeperA
-      : null;
-  const sleeperB =
-    request.sleeperB && SLEEPER_PLAYER_ID_PATTERN.test(request.sleeperB)
-      ? request.sleeperB
-      : null;
-  if (!sleeperA && !sleeperB) {
+  if (
+    request.sleeperIds.length < MIN_START_SIT_PLAYERS ||
+    request.sleeperIds.length > MAX_START_SIT_PLAYERS
+  ) {
+    return { report: null, notice: "That comparison link does not look right." };
+  }
+  const sleeperIds = request.sleeperIds.map((id) =>
+    id && SLEEPER_PLAYER_ID_PATTERN.test(id) ? id : null,
+  );
+  if (sleeperIds.every((id) => !id)) {
     return {
       report: null,
-      notice: "Neither of these players maps to a Sleeper id, so we cannot place them on a roster.",
+      notice:
+        sleeperIds.length === 2
+          ? "Neither of these players maps to a Sleeper id, so we cannot place them on a roster."
+          : "None of these players maps to a Sleeper id, so we cannot place them on a roster.",
     };
   }
 
@@ -170,8 +179,8 @@ export async function loadLeagueMode(
   }
 
   try {
-    const key = `${league.id}:${request.rosterId}:${sleeperA ?? "-"}:${sleeperB ?? "-"}`;
-    const outcome = await cachedImpact(key)(league.id, request.rosterId, sleeperA, sleeperB);
+    const key = `${league.id}:${request.rosterId}:${sleeperIds.map((id) => id ?? "-").join(":")}`;
+    const outcome = await cachedImpact(key)(league.id, request.rosterId, sleeperIds);
     if (!outcome.ok) return { report: null, notice: outcome.error };
     return { report: outcome.report, notice: null };
   } catch (err) {

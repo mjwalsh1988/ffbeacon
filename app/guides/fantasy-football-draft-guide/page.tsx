@@ -57,7 +57,7 @@ const UPDATED_AT = GUIDE?.updatedAt ?? PUBLISHED_AT;
 
 const TITLE = "Fantasy Football Draft Guide: Steals, Swings, and Fades";
 const DESCRIPTION =
-  "The players going later than they should, by format, plus a plain-English explainer on tier-based drafting. We compare FF Beacon values and projected points above a replacement starter against real draft ADP, then show the gap.";
+  "The players going later than they should, by format, plus a guide to tier-based drafting. We compare values and points above replacement to real ADP.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -114,8 +114,40 @@ const TOC_ITEMS = [
   { id: "fades-heading", label: "Fades" },
   { id: "tiers-heading", label: "Tier-based drafting" },
   { id: "strategy-heading", label: "What to do on draft day" },
+  { id: "faq-heading", label: "Questions" },
   { id: "closing-heading", label: "Where the numbers come from" },
 ];
+
+/**
+ * FAQ. Every answer restates something this page already says elsewhere, and
+ * each question's answer leads with the sentence that answers it, matching the
+ * house pattern from /guides/fantasy-football-terms. Visible text carries the
+ * content; the FAQPage block below mirrors it verbatim for engines that read
+ * structured data, since Google retired the FAQ rich result but the markup is
+ * still cheap and still read elsewhere.
+ */
+const DRAFT_GUIDE_FAQS = [
+  {
+    question: "What makes a player a steal instead of a fade?",
+    answer:
+      "A steal is a player whose cliff sits well below where the room is drafting them, so you can wait and still get the tier. A fade is the reverse: the room is paying an earlier pick than our board says they are worth.",
+  },
+  {
+    question: "What is a tier break?",
+    answer:
+      "It is the gap between the last player in one tier and the first player in the next, the point where players stop being roughly interchangeable and start being a real downgrade. The rankings board carries a tier on every player if you want to see the breaks directly.",
+  },
+  {
+    question: "Does the board change for dynasty and superflex leagues?",
+    answer:
+      "Yes. Switching formats with the picker above the lists reprices every player, and a superflex league moves quarterbacks earlier because it needs twice as many starters at the position, which pushes every other position too.",
+  },
+  {
+    question: "Can I use this list during my live draft?",
+    answer:
+      "Yes. On The Clock runs the same comparison live inside your Sleeper draft and flags a player falling past his slot while you are still on the clock.",
+  },
+] as const;
 
 export default async function DraftGuidePage({
   searchParams,
@@ -181,6 +213,15 @@ export default async function DraftGuidePage({
         { "@type": "ListItem", position: 2, name: "Guides", item: `${SITE.url}/guides` },
         { "@type": "ListItem", position: 3, name: TITLE, item: CANONICAL },
       ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: DRAFT_GUIDE_FAQS.map((faq) => ({
+        "@type": "Question",
+        name: faq.question,
+        acceptedAnswer: { "@type": "Answer", text: faq.answer },
+      })),
     },
   ];
 
@@ -276,6 +317,7 @@ export default async function DraftGuidePage({
 
             <Tiers />
             <Strategy />
+            <FaqSection />
             <Closing />
           </div>
         </article>
@@ -574,7 +616,7 @@ function Tiers() {
       <GuideSubheading className="mt-8">How this page fits</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         The lists above are the tier idea aimed at one specific question. A steal is a player whose
-        cliff sits well below where the room is drafting him, which is another way of saying you
+        cliff sits well below where the room is drafting them, which is another way of saying you
         can wait on him and still get the tier. A fade is the reverse: you are being asked to pay a
         tier early. Working out where the cliffs are is the job; this page does the arithmetic for
         the format you picked.
@@ -651,6 +693,64 @@ function Strategy() {
         back to the question this whole page is built on: which player available right now is
         furthest ahead of where he should be going. That is usually not the position that just ran.
       </p>
+    </section>
+  );
+}
+
+/* ---------- FAQ ---------- */
+
+/**
+ * Visible answers for the two FAQ entries that link to a tool. Written apart
+ * from DRAFT_GUIDE_FAQS.answer so the plain-text version stays the exact
+ * string the FAQPage block emits, while the rendered page can carry a real
+ * link with written anchor text through the same words.
+ */
+function FaqAnswer({ index }: { index: number }) {
+  const toolLinkClassName =
+    "font-semibold text-brand-cyan underline underline-offset-2 hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+
+  if (index === 1) {
+    return (
+      <>
+        It is the gap between the last player in one tier and the first player in the next, the
+        point where players stop being roughly interchangeable and start being a real downgrade.
+        The{" "}
+        <Link href="/rankings" className={toolLinkClassName}>
+          rankings board
+        </Link>{" "}
+        carries a tier on every player if you want to see the breaks directly.
+      </>
+    );
+  }
+
+  if (index === 3) {
+    return (
+      <>
+        Yes.{" "}
+        <Link href="/tools/on-the-clock" className={toolLinkClassName}>
+          On The Clock
+        </Link>{" "}
+        runs the same comparison live inside your Sleeper draft and flags a player falling past
+        his slot while you are still on the clock.
+      </>
+    );
+  }
+
+  return DRAFT_GUIDE_FAQS[index].answer;
+}
+
+function FaqSection() {
+  return (
+    <section aria-labelledby="faq-heading" className="mt-12">
+      <GuideSectionHeader id="faq-heading" eyebrow="Questions" heading="Draft day questions, answered" />
+      {DRAFT_GUIDE_FAQS.map((faq, index) => (
+        <div key={faq.question} className="mt-6">
+          <GuideSubheading>{faq.question}</GuideSubheading>
+          <p className="my-3 leading-relaxed text-ink-muted">
+            <FaqAnswer index={index} />
+          </p>
+        </div>
+      ))}
     </section>
   );
 }

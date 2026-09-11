@@ -10,7 +10,7 @@
  * the shareable Beacon Breakdown card makes, in the same order, and reads the
  * verdict out:
  *
- *   loadBreakdown        -> resolve format and source, load both players
+ *   loadBreakdownPair    -> resolve format and source, load both players
  *   loadBreakdownExtras  -> projections, reliability, market
  *   assembleBreakdown    -> the composite, the takeaways, the verdict
  *
@@ -34,7 +34,7 @@ import type { BeamAnswer, BeamCapability } from "@/lib/beam/types";
 import {
   EMPTY_EXTRAS,
   assembleBreakdown,
-  loadBreakdown,
+  loadBreakdownPair,
   mergeMarket,
 } from "@/lib/beacon-breakdown";
 import { loadBreakdownExtras } from "@/lib/breakdown/load-extras";
@@ -97,17 +97,17 @@ export const playerCompareVerdict: BeamCapability<Params, Result> = {
   async run(params, ctx): Promise<Result | null> {
     const lens = params.lens as LensId;
 
-    // Format and source are passed explicitly rather than left to loadBreakdown's
-    // own resolver. Two reasons: BEAM has already resolved them once for this
-    // request and the answer must not silently use a different pair, and the
-    // resolver's cookie fallback calls next/headers, which only exists inside a
-    // request. Handing it the answer keeps this capability callable from a
-    // script or a test.
-    // The settings row depends on nothing loadBreakdown produces, so the two go
-    // in one wave. Serializing them put a whole round trip on the critical path
-    // of BEAM's slowest capability for no reason.
+    // Format and source are passed explicitly rather than left to
+    // loadBreakdownPair's own resolver. Two reasons: BEAM has already resolved
+    // them once for this request and the answer must not silently use a
+    // different pair, and the resolver's cookie fallback calls next/headers,
+    // which only exists inside a request. Handing it the answer keeps this
+    // capability callable from a script or a test.
+    // The settings row depends on nothing loadBreakdownPair produces, so the
+    // two go in one wave. Serializing them put a whole round trip on the
+    // critical path of BEAM's slowest capability for no reason.
     const [lookup, pulseSettings] = await Promise.all([
-      loadBreakdown(ctx.supabase, params.slugA, params.slugB, {
+      loadBreakdownPair(ctx.supabase, params.slugA, params.slugB, {
         lens,
         formatParam: ctx.formatSlug,
         sourceParam: ctx.sourceSlug ?? undefined,
@@ -222,8 +222,8 @@ export const playerCompareVerdict: BeamCapability<Params, Result> = {
       context,
       links: [
         {
-          href: `/tools/beacon-breakdown?a=${encodeURIComponent(params.slugA)}&b=${encodeURIComponent(params.slugB)}&lens=${encodeURIComponent(params.lens)}`,
-          label: "Open the full breakdown",
+          href: `/tools/who-should-i-start?p=${encodeURIComponent(params.slugA)},${encodeURIComponent(params.slugB)}`,
+          label: "Open the start/sit breakdown",
         },
       ],
       caveats,

@@ -87,9 +87,14 @@ export const BEACON_TERMS: Array<{ term: string; definition: string }> = [
       "The name of FF Beacon's fantasy football trade calculator. It prices both sides of a trade, players and dynasty draft picks together, in a chosen league format, and returns the Beacon Verdict.",
   },
   {
+    term: "Start/sit verdict",
+    definition:
+      "Beacon Breakdown's answer to who should I start: two to eight players ranked by this week's projected points under the reader's scoring, the chosen number marked START and the rest SIT, with a confidence figure giving the chance the last starter outscores the best benched player.",
+  },
+  {
     term: "Beacon Edge",
     definition:
-      "The single head-to-head meter at the top of a Beacon Breakdown comparison, saying which of two players has the advantage before the row-by-row detail underneath it.",
+      "The head-to-head meter in Beacon Breakdown's background tabs, ranking the compared players on value, production, role and outlook under a Dynasty, Win now or This week lens.",
   },
   {
     term: "Power Pulse",

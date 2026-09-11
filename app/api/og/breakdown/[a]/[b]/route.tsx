@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import {
   assembleBreakdown,
-  loadBreakdown,
+  loadBreakdownPair,
   mergeMarket,
   EMPTY_EXTRAS,
 } from "@/lib/beacon-breakdown";
@@ -110,7 +110,7 @@ export async function GET(
 
   let result;
   try {
-    const lookup = await loadBreakdown(supabase, slugA, slugB, {
+    const lookup = await loadBreakdownPair(supabase, slugA, slugB, {
       formatParam: url.searchParams.get("format") ?? undefined,
       sourceParam: url.searchParams.get("source") ?? undefined,
       lens,

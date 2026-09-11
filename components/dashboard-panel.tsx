@@ -26,6 +26,7 @@ export function Panel({
   className = "",
   bodyClassName = "",
   headingFocusable = false,
+  as = "section",
   children,
 }: {
   id?: string;
@@ -44,14 +45,26 @@ export function Panel({
    * anchor targets, and a heading is not normally in the tab order.
    */
   headingFocusable?: boolean;
+  /**
+   * "section" (the default) renders a <section aria-labelledby>, which a
+   * screen reader announces as a region landmark. Every existing caller gets
+   * this unchanged. Pass "div" when the panel already sits inside another
+   * element that carries the same accessible name (an <article
+   * aria-labelledby> wrapper, for example): the heading still renders as a
+   * real heading, so heading navigation is unaffected, but the div carries
+   * no aria-labelledby and adds no landmark of its own. This is how a grid of
+   * many Panel-shaped cards avoids adding one region per card.
+   */
+  as?: "section" | "div";
   children: ReactNode;
 }) {
   const Heading = (`h${headingLevel}` as const) as "h2" | "h3" | "h4";
   const titleId = id ? `${id}-title` : undefined;
+  const Container = as;
   return (
-    <section
+    <Container
       id={id}
-      aria-labelledby={titleId}
+      aria-labelledby={as === "section" ? titleId : undefined}
       className={`relative overflow-hidden rounded-modal border border-line bg-surface/50 ${className}`}
       style={glow ? { boxShadow: "0 0 80px -48px rgba(168, 85, 247, 0.55)" } : undefined}
     >
@@ -106,7 +119,7 @@ export function Panel({
       {/* A supplied bodyClassName REPLACES the default padding, so callers can
           render a full-bleed table (bodyClassName="p-0") inside the panel. */}
       <div className={bodyClassName || "px-4 py-4 sm:px-5"}>{children}</div>
-    </section>
+    </Container>
   );
 }
 

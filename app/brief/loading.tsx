@@ -26,8 +26,14 @@ import { ScrollToTop } from "@/components/scroll-to-top";
  * below (see this repo's session notes for PERF-T034): a high-volume,
  * indexed, free-text-addressable content type where 404s are routine.
  *
- * The section name sits in the same live region as "Loading...", so the whole
- * thing is one status update rather than two.
+ * The section name sits in the same live region as the sentence below it, so
+ * the whole thing is one status update rather than two.
+ *
+ * SEO-T980: the second line names the destination ("Loading the latest
+ * fantasy football news.") instead of a bare "Loading...", true for /brief
+ * and every article, category, team and tag page under it. Real, visible
+ * text inside the existing role="status" region, not a second live
+ * announcement.
  *
  * It is deliberately NOT an <h1>. It is styled as a tiny uppercase eyebrow, and
  * marking an eyebrow as the page's only level-1 heading gives a reader
@@ -51,7 +57,7 @@ export default function Loading() {
             Beacon Brief
           </p>
           <p className="text-sm font-medium tracking-wide text-ink-muted">
-            Loading...
+            Loading the latest fantasy football news.
           </p>
         </div>
       </div>

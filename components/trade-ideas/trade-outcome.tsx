@@ -51,7 +51,7 @@ import type { ImpactGaps, ResolvedAsset, TeamImpact } from "@/lib/trade-impact/t
  *   The call is a word before it is a colour, every tone chip carries its own
  *   label, and each arrow icon is paired with text. The graph is aria-hidden
  *   with a sentence beneath it that states the same split in words, the pattern
- *   app/tools/signal-check/trade-margin-graph.tsx already set.
+ *   app/tools/trade-calculator/trade-margin-graph.tsx already set.
  *
  * WHY THE VERDICT IS NOT GENERATED
  *   See lib/trade-impact/outcome.ts. Every figure here comes from the model, by
@@ -294,7 +294,7 @@ function Headline({
  * even the split lands on without reading a number.
  *
  * Hidden from the accessibility tree with a sentence underneath, the same shape
- * app/tools/signal-check/trade-margin-graph.tsx uses.
+ * app/tools/trade-calculator/trade-margin-graph.tsx uses.
  */
 function BalanceBar({
   outcome,

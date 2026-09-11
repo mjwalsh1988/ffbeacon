@@ -114,7 +114,7 @@ export interface LoadedRound {
  *
  * It is an hour rather than a day because a reader is being shown a GRADE. The
  * values behind it move on the nightly sync, so a longer window would risk the
- * reveal disagreeing with what /tools/signal-check says about the same trade at
+ * reveal disagreeing with what /tools/trade-calculator says about the same trade at
  * the same moment, which is a small lie for a large saving. Same TTL as
  * LEAGUE_PULSE_TTL_MS, for the same kind of reason.
  */

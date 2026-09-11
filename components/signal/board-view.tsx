@@ -19,6 +19,7 @@ import { ArrowLeft } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { loadPublicBoard, type BoardTopNPlayer } from "@/lib/signal-profile";
 import { scopeLabel, tierLabel } from "@/lib/ranking-boards";
+import { itemListJsonLd, serializeJsonLd } from "@/lib/json-ld";
 
 export async function buildBoardMetadata(
   rawHandle: string,
@@ -32,12 +33,25 @@ export async function buildBoardMetadata(
   }
   const title = `${view.board.name} by ${view.owner.displayName}`;
   const url = `${SITE.url}${canonicalBase}/${view.owner.handle}/rankings/${view.board.id}`;
+  const description = `${view.owner.displayName}'s ${scopeLabel(view.board.scope)} ranking board on ${SITE.name}.`;
+  const ogImage = `${SITE.url}/api/og/board/${view.owner.handle}/${view.board.id}`;
   return {
     title,
-    description: `${view.owner.displayName}'s ${scopeLabel(view.board.scope)} ranking board on ${SITE.name}.`,
+    description,
     alternates: { canonical: url },
-    openGraph: { type: "article", title, url },
-    twitter: { card: "summary", title },
+    openGraph: {
+      type: "article",
+      title,
+      description,
+      url,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
 
@@ -64,8 +78,29 @@ export async function BoardView({
   const { board, owner, players } = view;
   const profileHref = `${canonicalBase}/${owner.handle}`;
 
+  // The ranked players exactly as rendered below, capped at the board's own
+  // visible length, so the ItemList never claims more than the page shows.
+  const itemList =
+    players.length > 0
+      ? itemListJsonLd(
+          players.map((p) => ({
+            position: p.rank,
+            url: `${SITE.url}/players/${p.slug}`,
+            name: p.name,
+          })),
+        )
+      : null;
+
   return (
     <main id="main" className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      {itemList && (
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(itemList) }}
+        />
+      )}
+
       <Link
         href={profileHref}
         className="inline-flex items-center gap-1 text-sm font-medium text-brand-cyan hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

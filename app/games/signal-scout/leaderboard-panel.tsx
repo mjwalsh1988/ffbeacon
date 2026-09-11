@@ -198,7 +198,7 @@ export function LeaderboardPanel({
   // and its aria-labelledby would point at a tab id that does not exist.
   const tabbed = tabs.length > 1;
 
-  // Automatic-activation tabs, matching app/tools/beacon-breakdown/breakdown-tabs.tsx:
+  // Automatic-activation tabs, matching app/tools/who-should-i-start/breakdown-tabs.tsx:
   // arrow keys move focus and switch board in one step, Home/End jump to the ends.
   const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let next = index;

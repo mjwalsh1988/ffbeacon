@@ -23,6 +23,8 @@ import { LineupSummary } from "@/components/league-lineups/lineup-summary";
 import { LineupBoard } from "@/components/league-lineups/lineup-board";
 import { OptimizerPanel } from "@/components/league-lineups/optimizer-panel";
 import { DropPanel, WaiverPanel } from "@/components/league-lineups/roster-moves";
+import Link from "next/link";
+import type { LineupPlayer } from "@/lib/league-lineups/types";
 import { WeekStatusBanner } from "@/components/league-lineups/week-status";
 import { WeekRecapPanel } from "@/components/league-lineups/week-recap";
 import { SeasonContextPanel } from "@/components/league-lineups/season-context";
@@ -130,6 +132,10 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
       title,
       description,
@@ -515,6 +521,14 @@ async function LineupBody({
             </div>
           </Panel>
 
+          {view.weekStatus.showsAdvice && (
+            <StartSitBenchLink
+              bench={view.bench}
+              sleeperLeagueId={sleeperLeagueId}
+              sleeperRosterId={view.sleeperRosterId}
+            />
+          )}
+
           {/* ADVICE BEFORE THE WEEK, RETROSPECT AFTER IT, AND NOTHING ELSE.
               The panel flips its own wording on `isFinal`. What it must not do
               is run mid-week, where the optimum is still graded on projections
@@ -862,4 +876,51 @@ async function resolveRosterId(
   }
 
   return ids[0];
+}
+
+/** Positions the start/sit tool can project; anything else it refuses. */
+const START_SIT_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
+
+/**
+ * THE RECIPROCAL LINK TO THE START/SIT TOOL. This page sets a whole lineup;
+ * the start/sit tool makes one call between a few players, so the anchor names
+ * that different job (plan section 2.2) and never says "who should I start",
+ * which would compete with the tool's own page. The bench travels in ?p= as
+ * names, which the start/sit page resolves, because a roster row carries no
+ * slug; ?league= and ?roster= open the tool's "Your lineup" tab on this team.
+ * Rendered only when at least two projectable bench players exist, capped at
+ * the tool's eight-player limit.
+ */
+function StartSitBenchLink({
+  bench,
+  sleeperLeagueId,
+  sleeperRosterId,
+}: {
+  bench: LineupPlayer[];
+  sleeperLeagueId: string;
+  sleeperRosterId: number;
+}) {
+  const names = bench
+    .filter((p) => START_SIT_POSITIONS.has(p.position))
+    .map((p) => p.name.replace(/,/g, " ").trim())
+    .filter((n) => n.length > 0)
+    .slice(0, 8);
+  if (names.length < 2) return null;
+  const params = new URLSearchParams({
+    p: names.join(","),
+    league: sleeperLeagueId,
+    roster: String(sleeperRosterId),
+  });
+  return (
+    <p className="text-sm text-ink-muted">
+      For a single call between bench players,{" "}
+      <Link
+        href={`/tools/who-should-i-start?${params.toString()}`}
+        className="inline-flex min-h-11 items-center font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        compare just these players
+      </Link>{" "}
+      in the start/sit tool.
+    </p>
+  );
 }

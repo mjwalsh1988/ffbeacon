@@ -5,7 +5,7 @@
  *
  * The cockpit already totals both sides off the board the instant an asset is
  * added, which is fast and is not a grade. This action produces the real thing:
- * the same pipeline /tools/signal-check runs, with the calibration rules, the
+ * the same pipeline /tools/trade-calculator runs, with the calibration rules, the
  * consolidation and value-adjustment pass, the verdict thresholds, confidence,
  * and the written explanation.
  *
@@ -20,7 +20,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/server";
-import { runSignalCheck, type RunSignalCheckResult } from "@/app/tools/signal-check/actions";
+import { runSignalCheck, type RunSignalCheckResult } from "@/app/tools/trade-calculator/actions";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { detectLeagueFormat, ffbeaconFormatCandidates } from "@/lib/on-the-clock/format-detect";
 import type { SleeperLeague } from "@/lib/sleeper";

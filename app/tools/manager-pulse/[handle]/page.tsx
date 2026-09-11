@@ -77,8 +77,16 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { handle: rawHandle } = await params;
   const handle = rawHandle.trim().toLowerCase();
+  if (!isValidSleeperHandle(handle)) {
+    return { title: "Manager Pulse", robots: { index: false, follow: false } };
+  }
+  // Sleeper handles run up to 32 characters (HANDLE_PATTERN in
+  // lib/manager-pulse/handle.ts), and this template stays at or under 150
+  // characters at that length, so no separate truncation is needed.
+  const description = `${handle}'s Sleeper scouting report: draft tendencies, trade patterns, and roster moves across every league they've played.`;
   return {
-    title: isValidSleeperHandle(handle) ? `Manager Pulse: ${handle}` : "Manager Pulse",
+    title: `Manager Pulse: ${handle}`,
+    description,
     robots: { index: false, follow: false },
   };
 }

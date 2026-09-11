@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 const EFFECTIVE_DATE = "September 6, 2026";
+const EFFECTIVE_DATE_ISO = "2026-09-06";
 const OPERATOR = SITE.author.legalName;
 const CONTACT = SITE.legalContactEmail;
 
@@ -36,7 +37,11 @@ export default function PrivacyPage() {
         <PageMasthead
           eyebrow="Legal"
           title="Privacy Policy"
-          description={`Effective ${EFFECTIVE_DATE}`}
+          description={
+            <>
+              Effective <time dateTime={EFFECTIVE_DATE_ISO}>{EFFECTIVE_DATE}</time>
+            </>
+          }
         />
         <article className="mt-8 space-y-8 text-ink-muted">
           <p>

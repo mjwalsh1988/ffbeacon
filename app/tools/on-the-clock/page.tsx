@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
+import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import {
   Target,
@@ -29,16 +30,18 @@ import { isDiscordMember } from "@/lib/discord-membership";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 
+const META_TITLE = "Live Draft Helper for Sleeper Drafts";
+const META_DESCRIPTION =
+  "Follows your Sleeper draft live, clears out everyone already taken, and tells you who is worth your pick. Works on a phone, and reads out loud.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/on-the-clock" },
-  title: "Live Draft Helper for Sleeper Drafts",
-  description:
-    "Follows your Sleeper draft as it happens, clears out everyone already taken, and tells you who is worth your pick. Works on a phone, and reads out loud.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "on-the-clock",
-    title: "Live Draft Helper for Sleeper Drafts",
-    description:
-      "Follows your Sleeper draft as it happens, clears out everyone already taken, and tells you who is worth your pick. Works on a phone, and reads out loud.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/tools/on-the-clock",
   }),
 };
@@ -93,8 +96,20 @@ export default async function OnTheClockPage({
   // at the rest of the toolkit instead.
   const isMember = await isDiscordMember();
 
+  const webApplicationLd = webApplicationJsonLd({
+    name: META_TITLE,
+    description: META_DESCRIPTION,
+    url: "/tools/on-the-clock",
+    category: "SportsApplication",
+  });
+
   return (
     <main id="main">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
+      />
       <PageBody>
         {/* The hero belongs to the steps before a draft is open, so it is handed
             to the client rather than rendered here. Once you are inside a room,
@@ -131,6 +146,14 @@ export default async function OnTheClockPage({
             )}
           </div>
         </div>
+        <p className="mx-auto mt-8 max-w-[96rem] text-sm leading-relaxed text-ink-muted">
+          <Link
+            href="/guides/how-ff-beacon-works"
+            className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
+          >
+            The methodology behind every value on this board
+          </Link>
+        </p>
       </PageBody>
       <DiscordCtaSection
         eyebrow="Need a hand mid-draft?"

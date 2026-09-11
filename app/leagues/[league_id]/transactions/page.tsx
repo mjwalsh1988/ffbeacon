@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
@@ -44,33 +44,61 @@ import { LayoutDashboard, Users, ArrowRight, type LucideIcon } from "lucide-reac
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The core sync, shared by generateMetadata and the page body.
+ *
+ * generateMetadata used to do a raw, unsynced leagues select, so a crawler
+ * hitting this route before anything else had synced the league would index
+ * "League not found" over a full page. Cached (React's per-request `cache()`,
+ * not the Next data cache), so metadata and the page body share one
+ * `pulseLeagueCore` call rather than each running its own sync.
+ */
+const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
+  const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
+  if (!pulse.ok) return null;
+
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
+});
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ league_id: string }>;
 }): Promise<Metadata> {
   const { league_id } = await params;
-  const supabase = await createClient();
+  const synced = await getSyncedLeague(league_id);
+  if (!synced) return { title: "League not found" };
+  const league = synced.league;
 
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("name, season")
-    .eq("sleeper_league_id", league_id)
-    .maybeSingle();
-  if (!league) return { title: "League not found" };
-
+  const title = `${league.name} Transactions`;
+  const description = `All trades, waiver claims, and free agent moves for ${league.name}.`;
   const ogPath = `/api/og/league/${league_id}`;
   return {
-    title: `${league.name} transactions`,
-    description: `All trades, waiver claims, and free agent moves for ${league.name}.`,
+    title,
+    description,
+    // Never indexed: relevant only to the people in this league. See
+    // app/leagues/[league_id]/page.tsx and section 7 of
+    // docs/seo/who-should-i-start-and-site-seo-plan.md.
+    robots: { index: false, follow: true },
     openGraph: {
-      title: `${league.name} transactions`,
-      description: `All trades, waiver claims, and free agent moves for ${league.name}.`,
+      title,
+      description,
       images: [{ url: ogPath, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${league.name} transactions`,
+      title,
       images: [ogPath],
     },
   };
@@ -94,38 +122,26 @@ export default async function LeagueTransactionsPage({
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
-  // First-touch pulse, split in two exactly as the deep view does. The core is
-  // the league, its rosters and its members: everything the header, tabs and
-  // info panel need. The derived half (transaction history, trade values, Power
-  // Pulse) is what the feed waits on, and it waits inside a Suspense boundary
-  // below, so the page paints its shell immediately instead of holding a blank
-  // screen for the whole sync.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
-  if (!pulseResult.ok) notFound();
-
   const supabase = await createClient();
 
+  // Neither of these needs the other's result, so they run together rather
+  // than one after another. The core sync (split from the derived half
+  // exactly as the deep view does: transaction history, trade values and
+  // Power Pulse wait inside a Suspense boundary below, so the page paints
+  // its shell immediately instead of holding a blank screen for the whole
+  // sync) is the same call generateMetadata already made for this request.
   // Who this page is acting for: the ?username= handle when there is one,
   // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
   // `linkUsername` is what a link built here may carry, which is the handle
   // only when the reader arrived on one.
-  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const [synced, viewer] = await Promise.all([
+    getSyncedLeague(sleeperLeagueId),
+    resolveSleeperViewer(supabase, sp.username),
+  ]);
+  if (!synced) notFound();
+  const { league, cached: pulseCached } = synced;
   const linkUsername = viewerLinkUsername(viewer);
-
-  // The row the core already read, rather than a second read of the same one.
-  // The fallback is not dead code: the core's contract allows a null row, and
-  // a page that assumed otherwise would 500 instead of rendering.
-  const league =
-    pulseResult.league ??
-    (
-      await supabase
-        .from("leagues")
-        .select(LEAGUE_CORE_COLUMNS)
-        .eq("sleeper_league_id", sleeperLeagueId)
-        .maybeSingle()
-    ).data;
-  if (!league) notFound();
 
   // The two shell reads. Both are needed before first paint (the switcher, and
   // the source/format line on the info panel), and neither feeds the other.
@@ -193,7 +209,7 @@ export default async function LeagueTransactionsPage({
     formatTags,
     scoringTags,
     lastUpdatedLabel: lastPulsedLabel,
-    cached: pulseResult.cached,
+    cached: pulseCached,
     coverage: context.coverage,
     sourceDisplay,
     formatDisplay,
@@ -236,7 +252,7 @@ export default async function LeagueTransactionsPage({
               context={context}
               filter={filter}
               sp={sp}
-              resynced={!pulseResult.cached}
+              resynced={!pulseCached}
             />
           </Suspense>
         </div>
@@ -314,7 +330,7 @@ async function TransactionsFeed({
 
   // Grade every trade on this page through the real Signal Check pipeline (FF
   // Beacon values, the league's derived format, the published ruleset), so each
-  // trade shows the same verdict a user gets typing it into /tools/signal-check.
+  // trade shows the same verdict a user gets typing it into /tools/trade-calculator.
   const tradeRows = rows.filter((r) => r.type === "trade");
   // From the loaded identity map rather than the first row, so the labels are
   // right on a page whose first row happens to be a non-trade (or is empty).

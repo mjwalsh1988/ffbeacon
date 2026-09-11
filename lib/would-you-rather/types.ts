@@ -159,7 +159,7 @@ export interface WyrReview {
   alreadyVoted: boolean;
   tally: WyrTally;
   /**
-   * The full Signal Check read, exactly as /tools/signal-check would produce
+   * The full Signal Check read, exactly as /tools/trade-calculator would produce
    * it for the same trade in the same format. Null when Signal Check is off or
    * the league's format has no published values, in which case the review says
    * so rather than showing an empty card.

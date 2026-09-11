@@ -3,7 +3,7 @@
 /**
  * The Signal Check verdict, rendered inside the draft room.
  *
- * Deliberately the same information in the same order as /tools/signal-check:
+ * Deliberately the same information in the same order as /tools/trade-calculator:
  * the verdict sentence, both sides with their assets, the value adjustment when
  * one applied, the trade shape, the confidence, and the written explanation. A
  * draft-room trade and a builder trade are the same analysis, so they should

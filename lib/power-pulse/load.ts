@@ -677,6 +677,98 @@ export async function loadDefenseSplits(
   return out;
 }
 
+export type DefenseRank = {
+  /** 1 = allows the most fantasy points to the position, the easiest matchup. */
+  rank: number;
+  /** Defenses ranked for this position and season. */
+  of: number;
+};
+
+/** One row of the pure ranking input: the figure rankDefenseRows sorts on. */
+export type DefenseRankInput = {
+  team: string;
+  position: PulsePosition;
+  /**
+   * The same multiplier opponentMultiplier (./project.ts) would apply for this
+   * team and position: shrunk when a shrunk figure exists, raw otherwise. That
+   * function reads `row.shrunkMultiplier ?? row.multiplier` under the default
+   * `settings.opponent.useAdjusted`, so ranking on that same figure means the
+   * "{opponent} allows the {nth}-most points to {position plural}" reason
+   * sentence describes the exact number already bent the player's own
+   * projection. This deliberately does NOT read the table's own
+   * `generosity_rank` column: that column ranks on
+   * `adjusted_points_allowed_per_game`, a different (and un-shrunk) figure the
+   * projection path never applies to a player's points, so a reason built from
+   * it could point one way while the number on the card moved the other.
+   */
+  effectiveMultiplier: number;
+};
+
+/**
+ * Pure ranking core, so the test exercises it with a fixture and no database.
+ *
+ * Rank 1 = the highest effectiveMultiplier for the position, i.e. the defense
+ * allowing the MOST fantasy points relative to the position average, the
+ * softest matchup. Ties are broken by team code so the order is stable and
+ * deterministic rather than dependent on read order.
+ */
+export function rankDefenseRows(
+  rows: DefenseRankInput[],
+): Map<string, DefenseRank> {
+  const out = new Map<string, DefenseRank>();
+  const byPosition = new Map<PulsePosition, DefenseRankInput[]>();
+  for (const row of rows) {
+    const list = byPosition.get(row.position) ?? [];
+    list.push(row);
+    byPosition.set(row.position, list);
+  }
+  for (const [position, list] of byPosition) {
+    const sorted = [...list].sort((a, b) => {
+      if (b.effectiveMultiplier !== a.effectiveMultiplier) {
+        return b.effectiveMultiplier - a.effectiveMultiplier;
+      }
+      return a.team.localeCompare(b.team);
+    });
+    sorted.forEach((row, i) => {
+      out.set(`${row.team}|${position}`, { rank: i + 1, of: sorted.length });
+    });
+  }
+  return out;
+}
+
+/**
+ * Rank within one season and scoring base of every defense's strength against
+ * every position, for the start/sit matchup reason sentence (section 2.6 of
+ * the who-should-i-start plan). Keyed `${team}|${position}`, matching the
+ * `${team}|${season}|${position}` convention loadDefenseSplits uses one
+ * segment narrower, since this reader is already scoped to one season.
+ *
+ * A failed read degrades to an empty Map rather than throwing, matching
+ * loadCompletedResults above: this feeds one optional reason sentence on a
+ * start/sit card, not a required number, so a start/sit board must still
+ * render without it.
+ */
+export async function loadDefenseRanks(
+  supabase: ServiceClient,
+  scoring: string,
+  season: number,
+): Promise<Map<string, DefenseRank>> {
+  const { data, error } = await supabase
+    .from("nfl_defense_vs_position")
+    .select("team, position, multiplier, shrunk_multiplier")
+    .eq("scoring", scoring)
+    .eq("season", season);
+  if (error || !data) return new Map();
+
+  return rankDefenseRows(
+    data.map((row) => ({
+      team: row.team,
+      position: row.position as PulsePosition,
+      effectiveMultiplier: numOrNull(row.shrunk_multiplier) ?? Number(row.multiplier),
+    })),
+  );
+}
+
 /** The head-to-head slate, plus the set lineup Sleeper has on file per week. */
 export async function loadSchedule(
   supabase: ServiceClient,
