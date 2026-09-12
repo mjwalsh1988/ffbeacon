@@ -163,10 +163,13 @@
  *   2. `.team-anthem-glow`: drifting, pulsing radial "spotlights" in the same
  *      three colors, screen-blended over the sweep for a lively stadium-lights
  *      feel (this is what makes each team's banner read as distinct and hype).
- *   3. a soft corner vignette (Tailwind bg on the component) for framing only.
- *   4. a faded-black plate behind the chant text (on the component) so the white
+ *   3. `.team-anthem-crest`: the team's own crest, oversized, tilted and bled
+ *      off the right edge, sitting under the color layers so the band reads as
+ *      having a back wall. Static, so it costs one image and no frame work.
+ *   4. a soft corner vignette (Tailwind bg on the component) for framing only.
+ *   5. a faded-black plate behind the chant text (on the component) so the white
  *      text stays legible over any color without darkening the whole banner.
- *   5. `.team-anthem` ::after sheen: a diagonal highlight sweeping across for a
+ *   6. `.team-anthem` ::after sheen: a diagonal highlight sweeping across for a
  *      premium "trophy shine".
  * All animation halts under prefers-reduced-motion, leaving a static, still
  * fully legible and fully colored banner.
@@ -230,6 +233,48 @@
     anthem-drift 11s ease-in-out infinite,
     anthem-pulse 4.5s ease-in-out infinite;
   will-change: background-position, opacity;
+}
+
+/* The player masthead's corner crest: the same crest at texture strength,
+   filling the empty top corner of the card. The radial mask feathers the edge
+   so a crest with a solid silhouette (the Raiders shield, the Patriots
+   wordmark) fades into the card instead of ending on a hard line. */
+.player-hero-crest {
+  opacity: 0.05;
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 0, 0, 1) 40%,
+    rgba(0, 0, 0, 0) 76%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 0, 0, 1) 40%,
+    rgba(0, 0, 0, 0) 76%
+  );
+}
+
+/* The anthem band's crest, faded back into the color. Plain opacity rather
+   than a blend mode, because soft-light over the brighter team colors erased
+   the crest entirely. The drop shadow gives the edge enough definition to
+   survive a pale team, where a light crest on a light sweep would otherwise
+   flatten out, and the same radial mask feathers the silhouette. Rotation is
+   a Tailwind utility on the element so it composes with the centering
+   translate. */
+.team-anthem-crest {
+  opacity: 0.32;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.45));
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 0, 0, 1) 38%,
+    rgba(0, 0, 0, 0.55) 62%,
+    rgba(0, 0, 0, 0) 78%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 0, 0, 1) 38%,
+    rgba(0, 0, 0, 0.55) 62%,
+    rgba(0, 0, 0, 0) 78%
+  );
 }
 
 @keyframes anthem-sheen {

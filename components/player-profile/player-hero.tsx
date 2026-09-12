@@ -4,8 +4,10 @@
  * addition the shared props cannot express: a large headshot floating on a glow
  * to the left of the identity column. Beside it sit the position, team, status,
  * and depth-role badges, then the player's last three positional finishes for
- * the active format's scoring. A Team Anthem band in the team's colors closes
- * the card. Server component.
+ * the active format's scoring. The team crest appears twice, at two strengths:
+ * sharp inside the team chip, and ghosted into the top-right corner as
+ * texture. A Team Anthem band in the team's colors closes the card. Server
+ * component.
  */
 
 import {
@@ -13,6 +15,7 @@ import {
   MASTHEAD_TITLE_SIZE,
 } from "@/components/app-shell/masthead-card";
 import { PlayerPortrait } from "@/components/player-profile/player-portrait";
+import { NflTeamLogo, nflTeamLogoUrl } from "@/components/nfl-team-logo";
 import { TeamAnthem } from "@/components/player-profile/team-anthem";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
 import { RoleBadge } from "@/components/player-profile/role-badge";
@@ -75,8 +78,34 @@ export function PlayerHero({
     </div>
   );
 
+  // The crest that ghosts into the masthead corner. Decorative at every turn:
+  // the team is named in the chip below it and again in the anthem band, and
+  // nflTeamLogoUrl validates the code rather than trusting a stored string.
+  const crest = nflTeamLogoUrl(player.team);
+
   return (
     <MastheadCard labelledBy="player-masthead-title">
+      {/* The team crest, ghosted and tilted into the top-right corner, under
+          the position wash. It sits at texture strength (5%), so it fills the
+          empty corner with the player's team without competing with anything
+          in front of it. The same URL the team chip and the anthem band load,
+          so all three share one fetch and one decode. Static: no animation,
+          no layout cost, one small PNG. */}
+      {crest && (
+        // eslint-disable-next-line @next/next/no-img-element -- external CDN
+        // image; next/image buys nothing for a fixed-size decorative layer.
+        <img
+          src={crest}
+          alt=""
+          aria-hidden="true"
+          width={360}
+          height={360}
+          decoding="async"
+          loading="lazy"
+          className="player-hero-crest pointer-events-none absolute -right-10 -top-8 h-[230px] w-[230px] -rotate-[10deg] select-none object-contain sm:h-[360px] sm:w-[360px]"
+        />
+      )}
+
       {/* Position-tinted corner wash, so the team color still reads on a
           player's card. */}
       <div
@@ -114,7 +143,24 @@ export function PlayerHero({
                 {player.position}
               </span>
               {player.team && (
-                <span className="inline-flex items-center rounded-md bg-base px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                /* Crest chip: the team logo sits inside the team badge, the
+                   same pairing Who Should I Start uses (logo decorative, the
+                   code beside it carries the meaning). The chip is tinted with
+                   the team's own primary color when we have the nfl_teams row,
+                   so the badge row picks up the team's brand rather than
+                   sitting in neutral grey. */
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line/70 bg-base px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-ink-muted"
+                  style={
+                    team
+                      ? {
+                          backgroundColor: `${team.primary_color}1F`,
+                          borderColor: `${team.primary_color}59`,
+                        }
+                      : undefined
+                  }
+                >
+                  <NflTeamLogo team={player.team} size={16} />
                   {player.team}
                 </span>
               )}

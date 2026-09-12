@@ -3,7 +3,8 @@
  * team brand colors (from the nfl_teams table) behind the team's crowd chant.
  * The three colors power two stacked animated layers: a flowing gradient sweep
  * and drifting, pulsing color spotlights (a "stadium lights" feel), with a soft
- * trophy-shine passing over the top. Colors stay vivid, so different teams read
+ * trophy-shine passing over the top, and the team's own crest oversized and
+ * tilted behind all of it. Colors stay vivid, so different teams read
  * as visibly different banners. Legibility is handled locally: the chant sits on
  * a faded-black, lightly blurred plate, so white text stays readable no matter
  * how light a team color is (rather than darkening the whole banner and muddying
@@ -14,9 +15,15 @@
 
 import type { CSSProperties } from "react";
 import { Megaphone } from "lucide-react";
+import { nflTeamLogoUrl } from "@/components/nfl-team-logo";
 import type { NflTeamRow } from "@/lib/player-profile";
 
 export function TeamAnthem({ team }: { team: NflTeamRow }) {
+  // The crest watermark. Decorative: the team is named in the section label,
+  // in the plate under the chant, and again in the hero's team chip, so the
+  // image carries no meaning of its own. nflTeamLogoUrl validates the code,
+  // so a stored string can never choose the path.
+  const crest = nflTeamLogoUrl(team.abbreviation);
   // Custom properties feed both animated color layers in globals.css.
   const colorStyle = {
     "--anthem-c1": team.primary_color,
@@ -40,7 +47,29 @@ export function TeamAnthem({ team }: { team: NflTeamRow }) {
       <div aria-hidden="true" className="team-anthem-sweep absolute inset-0" />
       {/* 2. Drifting, pulsing team-color spotlights for depth and motion. */}
       <div aria-hidden="true" className="team-anthem-glow absolute inset-0" />
-      {/* 3. Soft corner vignette for framing (keeps the center colors vivid). */}
+      {/* 3. The team crest, tilted off-axis in the open space to the right of
+             the chant, so the band reads as having a back wall behind the
+             color rather than a flat fill. It sits clear of the swatch column
+             rather than behind it, which only made both harder to read. One
+             <img>, no animation of its own: the sheen in
+             .team-anthem::after passes over it for free, and the file is the
+             same URL the hero's team chip already loads, so the browser
+             fetches and decodes it once for both. */}
+      {crest && (
+        // eslint-disable-next-line @next/next/no-img-element -- external CDN
+        // image; next/image buys nothing for a fixed-size decorative layer.
+        <img
+          src={crest}
+          alt=""
+          aria-hidden="true"
+          width={200}
+          height={200}
+          decoding="async"
+          loading="lazy"
+          className="team-anthem-crest pointer-events-none absolute right-10 top-1/2 h-[145px] w-[145px] -translate-y-1/2 -rotate-[14deg] select-none object-contain sm:right-[4.5rem] sm:h-[170px] sm:w-[170px]"
+        />
+      )}
+      {/* 4. Soft corner vignette for framing (keeps the center colors vivid). */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
