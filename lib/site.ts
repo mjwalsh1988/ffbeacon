@@ -57,25 +57,17 @@ export type NavItem = {
 /** Every tool on the site, in display order. Single source of truth shared
  * by the navigation rail (via lib/nav-tree.ts) and the footer Tools column.
  * Keep descriptions short and jargon-free. */
-// Ordered by how much of a manager's season the tool covers, widest first:
-// a whole league, then a draft, then a single trade, then two players, then one
-// waiver bid. The footer Tools column follows the same order. Rankings Board is
-// intentionally not listed here (it is its own top-level nav item).
+// In-season order, set by the owner on 2026-09-12: the league first, then the
+// weekly decisions (a trade, a lineup, a waiver bid), then scouting a manager,
+// and the draft room last now that drafting season is over. The footer Tools
+// column, the homepage cards and the all-tools page follow the same order.
+// Rankings Board is intentionally not listed here (it is its own top-level nav
+// item).
 export const TOOLS_NAV: NavChild[] = [
   {
     label: "Sleeper League Pulse",
     href: "/tools/league-pulse",
     description: "Sync and analyze your Sleeper leagues",
-  },
-  {
-    label: "On The Clock",
-    href: "/tools/on-the-clock",
-    description: "Live Sleeper draft helper",
-  },
-  {
-    label: "Manager Pulse",
-    href: "/tools/manager-pulse",
-    description: "Scout any manager before you offer",
   },
   {
     // The menu label is the job, not the product name: nobody looking for a
@@ -94,6 +86,16 @@ export const TOOLS_NAV: NavChild[] = [
     label: "FAAB Calculator",
     href: "/tools/faab",
     description: "Recommended waiver bid ranges",
+  },
+  {
+    label: "Manager Pulse",
+    href: "/tools/manager-pulse",
+    description: "Scout any manager before you offer",
+  },
+  {
+    label: "On The Clock",
+    href: "/tools/on-the-clock",
+    description: "Live Sleeper draft helper",
   },
 ];
 
@@ -282,11 +284,11 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     // it now sits under Learn beside the guides.
     links: [
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
-      { label: "On The Clock", href: "/tools/on-the-clock" },
-      { label: "Manager Pulse", href: "/tools/manager-pulse" },
       { label: "Trade Calculator", href: "/tools/trade-calculator" },
       { label: "Start / Sit", href: "/tools/who-should-i-start" },
       { label: "FAAB Calculator", href: "/tools/faab" },
+      { label: "Manager Pulse", href: "/tools/manager-pulse" },
+      { label: "On The Clock", href: "/tools/on-the-clock" },
     ],
   },
   {

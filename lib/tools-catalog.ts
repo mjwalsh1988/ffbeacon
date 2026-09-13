@@ -15,12 +15,10 @@
  * the page that draws one, keyed by href, matching how lib/nav-tree.ts resolves
  * its own icons.
  *
- * Order is this page's own, and it is NOT TOOLS_NAV's: the nav runs
- * league-pulse, on-the-clock, manager-pulse, trade-calculator, who-should-i-start,
- * faab, while this puts Beacon Breakdown ahead of Manager Pulse. That predates
- * the extraction and is left alone rather than quietly changed, but it now
- * drives the two machine-readable documents as well as the all-tools page, so
- * it is written down here instead of being asserted wrongly.
+ * Order matches TOOLS_NAV in lib/site.ts: league-pulse, trade-calculator,
+ * who-should-i-start, faab, manager-pulse, on-the-clock. It drives the two
+ * machine-readable documents as well as the all-tools page, so a reorder in one
+ * place is a reorder here too.
  *
  * The rankings board is deliberately absent: it is a reference surface with its
  * own top-level route rather than something you run against your own league.
@@ -65,18 +63,18 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
     cta: "Sync a league",
   },
   {
-    href: "/tools/on-the-clock",
-    eyebrow: "Live drafts",
-    title: "On The Clock",
+    href: "/tools/trade-calculator",
+    eyebrow: "Trade analysis",
+    title: "Signal Check Trade Calculator",
     pitch:
-      "Connect your active Sleeper draft and FF Beacon points you to the best pick for your team, then keeps everything else you need in one hub. Built to work the same by eye or by ear.",
+      "Build any trade in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why. Powered by FF Beacon Values and weighted for your league format, with a plain-language reason for every call.",
     bullets: [
-      "Best Available and Team Need picks tuned to your league format",
-      "A trade calculator and an analyzer for startup and rookie drafts",
-      "Every team roster plus the full trade and transaction history",
-      "Live power rankings, startup draft grades, and awards",
+      "Add players and, in dynasty, draft picks to either side",
+      "FF Beacon Values weighted to your exact league format",
+      "A clear margin and a near-even guard so tiny edges aren't oversold",
+      "Freeze and share a clean public verdict link",
     ],
-    cta: "Open the draft room",
+    cta: "Analyze a trade",
   },
   {
     href: "/tools/who-should-i-start",
@@ -93,6 +91,20 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
     cta: "Find out who to start",
   },
   {
+    href: "/tools/faab",
+    eyebrow: "Waivers & bids",
+    title: "FAAB Calculator",
+    pitch:
+      "Take the guesswork out of waiver Tuesday. Get a recommended bid range that factors in the player's actual value and how badly your roster needs them.",
+    bullets: [
+      "Search any player, not just the top names everyone is chasing",
+      "Bids weighted by current value, your league size, and remaining FAAB",
+      "Adjusts for your roster's positional need at that spot",
+      "Explains the recommendation in plain English so you can adjust",
+    ],
+    cta: "Run a bid",
+  },
+  {
     href: "/tools/manager-pulse",
     eyebrow: "Know your league mates",
     title: "Manager Pulse",
@@ -107,31 +119,17 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
     cta: "Scout a manager",
   },
   {
-    href: "/tools/trade-calculator",
-    eyebrow: "Trade analysis",
-    title: "Signal Check Trade Calculator",
+    href: "/tools/on-the-clock",
+    eyebrow: "Live drafts",
+    title: "On The Clock",
     pitch:
-      "Build any trade in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why. Powered by FF Beacon Values and weighted for your league format, with a plain-language reason for every call.",
+      "Connect your active Sleeper draft and FF Beacon points you to the best pick for your team, then keeps everything else you need in one hub. Built to work the same by eye or by ear.",
     bullets: [
-      "Add players and, in dynasty, draft picks to either side",
-      "FF Beacon Values weighted to your exact league format",
-      "A clear margin and a near-even guard so tiny edges aren't oversold",
-      "Freeze and share a clean public verdict link",
+      "Best Available and Team Need picks tuned to your league format",
+      "A trade calculator and an analyzer for startup and rookie drafts",
+      "Every team roster plus the full trade and transaction history",
+      "Live power rankings, startup draft grades, and awards",
     ],
-    cta: "Analyze a trade",
-  },
-  {
-    href: "/tools/faab",
-    eyebrow: "Waivers & bids",
-    title: "FAAB Calculator",
-    pitch:
-      "Take the guesswork out of waiver Tuesday. Get a recommended bid range that factors in the player's actual value and how badly your roster needs them.",
-    bullets: [
-      "Search any player, not just the top names everyone is chasing",
-      "Bids weighted by current value, your league size, and remaining FAAB",
-      "Adjusts for your roster's positional need at that spot",
-      "Explains the recommendation in plain English so you can adjust",
-    ],
-    cta: "Run a bid",
+    cta: "Open the draft room",
   },
 ];

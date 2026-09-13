@@ -79,16 +79,17 @@ type FeaturedTool = {
   description: string;
   cta: string;
   icon: LucideIcon;
-  /** Optional highlight pill (e.g. "Draft season") shown in the card corner. */
+  /** Optional highlight pill (e.g. "New features") shown in the card corner. */
   badge?: string;
   /**
    * Which accented treatment the card gets, if any.
    *
-   * Two colours because two cards are highlighted for different reasons and a
-   * reader should be able to tell them apart at a glance: "purple" is the
-   * seasonal push (On The Clock during draft season), "cyan" is a tool that is
-   * new, "green" is an existing tool that has grown. One colour across all
-   * three would read as the same promotion running three times.
+   * Separate colours because highlighted cards are highlighted for different
+   * reasons and a reader should be able to tell them apart at a glance:
+   * "purple" is a seasonal push (On The Clock carried it during draft season,
+   * and nothing does in-season), "cyan" is a tool that is new, "green" is an
+   * existing tool that has grown. One colour for every reason would read as
+   * the same promotion running several times.
    */
   featured?: "purple" | "cyan" | "green";
 };
@@ -105,14 +106,30 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     featured: "green",
   },
   {
-    href: "/tools/on-the-clock",
-    title: "On The Clock",
+    href: "/tools/trade-calculator",
+    title: "Signal Check Trade Calculator",
     description:
-      "Drafting right now? Connect your live Sleeper draft and we will call out where your team needs help, run trade offers with a calculator and an analyzer for startup and rookie drafts, and open every team roster, the full trade history, live power rankings, and startup draft grades and awards.",
-    cta: "Open the draft room",
-    icon: Timer,
-    badge: "Draft season",
-    featured: "purple",
+      "Thinking about a trade? Build both sides in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
+    cta: "Analyze a trade",
+    icon: Scale,
+  },
+  {
+    href: "/tools/who-should-i-start",
+    title: "Beacon Breakdown: Who Should I Start?",
+    description:
+      "Put your players in and get a start/sit verdict built from this week's projections and matchups, with the confidence to back it.",
+    cta: "Find out who to start",
+    icon: Swords,
+    badge: "New features",
+    featured: "green",
+  },
+  {
+    href: "/tools/faab",
+    title: "FAAB Calculator",
+    description:
+      "Heading into waivers and not sure what to spend? Get a recommended bid range that weighs a player's real value against how badly your roster needs them, in plain English.",
+    cta: "Run a bid",
+    icon: Calculator,
   },
   {
     href: "/tools/manager-pulse",
@@ -125,28 +142,12 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     featured: "cyan",
   },
   {
-    href: "/tools/who-should-i-start",
-    title: "Beacon Breakdown: Who Should I Start?",
+    href: "/tools/on-the-clock",
+    title: "On The Clock",
     description:
-      "Put your players in and get a start/sit verdict built from this week's projections and matchups, with the confidence to back it.",
-    cta: "Find out who to start",
-    icon: Swords,
-  },
-  {
-    href: "/tools/trade-calculator",
-    title: "Signal Check Trade Calculator",
-    description:
-      "Thinking about a trade? Build both sides in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
-    cta: "Analyze a trade",
-    icon: Scale,
-  },
-  {
-    href: "/tools/faab",
-    title: "FAAB Calculator",
-    description:
-      "Heading into waivers and not sure what to spend? Get a recommended bid range that weighs a player's real value against how badly your roster needs them, in plain English.",
-    cta: "Run a bid",
-    icon: Calculator,
+      "Drafting right now? Connect your live Sleeper draft and we will call out where your team needs help, run trade offers with a calculator and an analyzer for startup and rookie drafts, and open every team roster, the full trade history, live power rankings, and startup draft grades and awards.",
+    cta: "Open the draft room",
+    icon: Timer,
   },
 ];
 
