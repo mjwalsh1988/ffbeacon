@@ -39,12 +39,12 @@ export function AdminSwitch({
     >
       <span
         aria-hidden="true"
-        className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${
+        className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors motion-reduce:transition-none ${
           checked ? "border-brand-cyan bg-brand-cyan/30" : "border-line bg-base"
         }`}
       >
         <span
-          className={`inline-block h-5 w-5 transform rounded-full bg-ink transition-transform ${
+          className={`inline-block h-5 w-5 transform rounded-full bg-ink transition-transform motion-reduce:transition-none ${
             checked ? "translate-x-6" : "translate-x-1"
           }`}
         />

@@ -1,5 +1,6 @@
 import { getNavViewer } from "@/lib/nav-viewer";
 import { buildNavTree } from "@/lib/nav-tree";
+import { loadSiteLayout } from "@/lib/site-layout/settings";
 import { AppRail } from "./app-rail";
 
 /**
@@ -15,7 +16,8 @@ import { AppRail } from "./app-rail";
  * have shipped the whole list to everyone.
  */
 export async function AppRailSections() {
-  const sections = buildNavTree(await getNavViewer());
+  const [viewer, layout] = await Promise.all([getNavViewer(), loadSiteLayout()]);
+  const sections = buildNavTree(viewer, layout);
   return <AppRail sections={sections} />;
 }
 

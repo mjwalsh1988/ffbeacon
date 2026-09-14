@@ -15,10 +15,11 @@
  * the page that draws one, keyed by href, matching how lib/nav-tree.ts resolves
  * its own icons.
  *
- * Order matches TOOLS_NAV in lib/site.ts: league-pulse, trade-calculator,
- * who-should-i-start, faab, manager-pulse, on-the-clock. It drives the two
- * machine-readable documents as well as the all-tools page, so a reorder in one
- * place is a reorder here too.
+ * The order here is the DEFAULT order. The all-tools page renders in the order
+ * stored at /admin/site-layout (lib/site-layout), and falls back to this one if
+ * that cannot be read. The two llms documents use this code order as it is:
+ * they are rebuilt on deploy rather than per request, and the order of a list
+ * handed to a crawler is not something a reader sees.
  *
  * The rankings board is deliberately absent: it is a reference surface with its
  * own top-level route rather than something you run against your own league.

@@ -31,15 +31,21 @@ import {
   BarChart3,
   Users2,
   CheckCircle2,
-  Flame,
-  Sparkles,
-  Zap,
   HeartHandshake,
   type LucideIcon,
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
 import { SITE } from "@/lib/site";
 import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
+import type { ToolHref } from "@/lib/tools-catalog";
+import type { HomepageToolCard } from "@/lib/site-layout/default-settings";
+import { loadSiteLayout } from "@/lib/site-layout/settings";
+import {
+  CARD_ACCENT_CLASSES,
+  CARD_GLOW,
+  CARD_WIDTH_CLASSES,
+  ToolBadgePill,
+} from "@/components/tool-badge";
 
 // What the homepage says about itself to a search engine and to anyone who
 // pastes the link into a group chat. Leads with what is free and what you get,
@@ -73,83 +79,65 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-type FeaturedTool = {
-  href: string;
+/**
+ * What each homepage tool card says: only the words and the icon.
+ *
+ * Which order the cards run in, how wide each one is, and which carry a tag or
+ * a highlight is the admin-edited site layout (lib/site-layout, edited at
+ * /admin/site-layout). Typed as a full record over every tool, so a tool added
+ * to the catalog without card copy is a type error rather than a blank card.
+ */
+type ToolCardContent = {
   title: string;
   description: string;
   cta: string;
   icon: LucideIcon;
-  /** Optional highlight pill (e.g. "New features") shown in the card corner. */
-  badge?: string;
-  /**
-   * Which accented treatment the card gets, if any.
-   *
-   * Separate colours because highlighted cards are highlighted for different
-   * reasons and a reader should be able to tell them apart at a glance:
-   * "purple" is a seasonal push (On The Clock carried it during draft season,
-   * and nothing does in-season), "cyan" is a tool that is new, "green" is an
-   * existing tool that has grown. One colour for every reason would read as
-   * the same promotion running several times.
-   */
-  featured?: "purple" | "cyan" | "green";
 };
 
-const FEATURED_TOOLS: FeaturedTool[] = [
-  {
-    href: "/tools/league-pulse",
+const TOOL_CARD_CONTENT: Record<ToolHref, ToolCardContent> = {
+  "/tools/league-pulse": {
     title: "Sleeper League Pulse",
     description:
       "Type in your Sleeper username, or save it once and skip the typing, and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
     cta: "Check your league's pulse",
     icon: Workflow,
-    badge: "New features",
-    featured: "green",
   },
-  {
-    href: "/tools/trade-calculator",
+  "/tools/trade-calculator": {
     title: "Signal Check Trade Calculator",
     description:
       "Thinking about a trade? Build both sides in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
     cta: "Analyze a trade",
     icon: Scale,
   },
-  {
-    href: "/tools/who-should-i-start",
+  "/tools/who-should-i-start": {
     title: "Beacon Breakdown: Who Should I Start?",
     description:
       "Put your players in and get a start/sit verdict built from this week's projections and matchups, with the confidence to back it.",
     cta: "Find out who to start",
     icon: Swords,
-    badge: "New features",
-    featured: "green",
   },
-  {
-    href: "/tools/faab",
+  "/tools/faab": {
     title: "FAAB Calculator",
     description:
       "Heading into waivers and not sure what to spend? Get a recommended bid range that weighs a player's real value against how badly your roster needs them, in plain English.",
     cta: "Run a bid",
     icon: Calculator,
   },
-  {
-    href: "/tools/manager-pulse",
+  "/tools/manager-pulse": {
     title: "Manager Pulse",
     description:
       "About to offer a trade and want to know who you are dealing with? Type their Sleeper username and see four seasons of how they actually play: the players they keep buying, what they overpay for, and how often they win.",
     cta: "Scout a manager",
     icon: UserSearch,
-    badge: "New tool",
-    featured: "cyan",
   },
-  {
-    href: "/tools/on-the-clock",
+  "/tools/on-the-clock": {
     title: "On The Clock",
     description:
       "Drafting right now? Connect your live Sleeper draft and we will call out where your team needs help, run trade offers with a calculator and an analyzer for startup and rookie drafts, and open every team roster, the full trade history, live power rankings, and startup draft grades and awards.",
     cta: "Open the draft room",
     icon: Timer,
   },
-];
+};
 
 /**
  * How many of the homepage's linked articles get a full card.
@@ -181,7 +169,10 @@ async function loadMemberContext(): Promise<MemberContext> {
 }
 
 export default async function HomePage() {
-  const { articles, formats, sources } = await loadHomeContent();
+  const [{ articles, formats, sources }, layout] = await Promise.all([
+    loadHomeContent(),
+    loadSiteLayout(),
+  ]);
 
   // Started here, not awaited: Hero and CtaSection each read this same promise
   // from their own Suspense boundary, so the auth check and the Discord call
@@ -191,7 +182,7 @@ export default async function HomePage() {
   return (
     <main id="main">
       <Hero memberContext={memberContext} />
-      <ToolsSection />
+      <ToolsSection cards={layout.homepage.cards} />
       <GamesSection />
       <ArticlesSection articles={articles} />
       <GuidesSection />
@@ -540,7 +531,7 @@ function formatCount(n: number): string {
 
 /* ---------- Featured tools ---------- */
 
-function ToolsSection() {
+function ToolsSection({ cards }: { cards: HomepageToolCard[] }) {
   return (
     <section
       aria-labelledby="tools-heading"
@@ -582,12 +573,14 @@ function ToolsSection() {
           </Link>
         </div>
 
-        {/* Six tools, two rows of three. One grid rather than two stacked ones,
-            so the columns line up and every card is the same width. Stacks to a
-            single column on mobile. */}
+        {/* One grid: three columns from md, two from sm, one on a phone. Each
+            card's width comes from the admin layout. The flow is deliberately
+            NOT dense, so a gap a wide card leaves is left empty rather than
+            filled by a card drawn out of order; the visual order always matches
+            the reading and tab order. /admin/site-layout previews the rows. */}
         <div className="mt-12 grid gap-5 sm:grid-cols-2 md:grid-cols-3">
-          {FEATURED_TOOLS.map((tool, i) => (
-            <ToolCard key={tool.href} tool={tool} index={i} />
+          {cards.map((card, i) => (
+            <ToolCard key={card.href} card={card} index={i} />
           ))}
         </div>
       </div>
@@ -595,35 +588,22 @@ function ToolsSection() {
   );
 }
 
-function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
-  const { href, title, description, cta, icon: Icon, badge, featured } = tool;
+function ToolCard({ card, index }: { card: HomepageToolCard; index: number }) {
+  const { title, description, cta, icon: Icon } = TOOL_CARD_CONTENT[card.href];
+  const { badge, highlight } = card;
   return (
     <Link
-      href={href}
-      className={`group relative flex flex-col overflow-hidden rounded-card border p-6 shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
-        featured === "purple"
-          ? "border-brand-purple/60 bg-surface-elevated shadow-brand-purple/20 ring-1 ring-brand-purple/20 hover:border-brand-purple hover:shadow-brand-purple/30"
-          : featured === "cyan"
-            ? "border-brand-cyan/60 bg-surface-elevated shadow-brand-cyan/20 ring-1 ring-brand-cyan/20 hover:border-brand-cyan hover:shadow-brand-cyan/30"
-            : featured === "green"
-              ? "border-signal-success/60 bg-surface-elevated shadow-signal-success/20 ring-1 ring-signal-success/20 hover:border-signal-success hover:shadow-signal-success/30"
-              : "border-line bg-surface-elevated shadow-black/20 hover:border-brand-purple/60 hover:shadow-brand-purple/10"
-      }`}
+      href={card.href}
+      className={`group relative flex flex-col overflow-hidden rounded-card border p-6 shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${CARD_ACCENT_CLASSES[highlight ?? "none"]} ${CARD_WIDTH_CLASSES[card.width]}`}
     >
-      {/* Featured cards get a glow wash in the corner, in their own accent so the
-          two highlighted cards do not read as the same promotion. Decorative. */}
-      {featured && (
+      {/* A highlighted card gets a glow wash in the corner, in its own accent,
+          so two highlights chosen for different reasons do not read as the
+          same promotion. Decorative. */}
+      {highlight && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full"
-          style={{
-            background:
-              featured === "cyan"
-                ? "radial-gradient(circle, rgba(34, 211, 238, 0.20) 0%, rgba(168, 85, 247, 0.09) 50%, transparent 72%)"
-                : featured === "green"
-                  ? "radial-gradient(circle, rgba(16, 185, 129, 0.20) 0%, rgba(34, 211, 238, 0.09) 50%, transparent 72%)"
-                  : "radial-gradient(circle, rgba(168, 85, 247, 0.20) 0%, rgba(34, 211, 238, 0.09) 50%, transparent 72%)",
-          }}
+          style={{ background: CARD_GLOW[highlight] }}
         />
       )}
       <div className="relative flex items-center justify-between">
@@ -634,24 +614,7 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
           <Icon className="h-6 w-6" />
         </span>
         {badge ? (
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-black ${
-              featured === "cyan"
-                ? "bg-brand-cyan"
-                : featured === "green"
-                  ? "bg-signal-success"
-                  : "bg-beacon"
-            }`}
-          >
-            {featured === "cyan" ? (
-              <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
-            ) : featured === "green" ? (
-              <Zap aria-hidden="true" className="h-3.5 w-3.5" />
-            ) : (
-              <Flame aria-hidden="true" className="h-3.5 w-3.5" />
-            )}
-            {badge}
-          </span>
+          <ToolBadgePill badge={badge} />
         ) : (
           <span
             aria-hidden="true"

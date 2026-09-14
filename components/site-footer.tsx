@@ -1,8 +1,32 @@
 import Link from "next/link";
 import { FOOTER_COLUMNS, SOCIAL_LINKS, SITE } from "@/lib/site";
 import { BeaconMark } from "@/components/beacon-mark";
+import { applyOrder } from "@/lib/site-layout/order";
+import { loadSiteLayout } from "@/lib/site-layout/settings";
 
-export function SiteFooter() {
+/**
+ * The footer, with its Tools column in the main menu's tool order (edited at
+ * /admin/site-layout). The root layout renders this inside a Suspense boundary
+ * with SiteFooterFallback as the fallback. loadSiteLayout never throws, so the
+ * real footer always follows.
+ */
+export async function SiteFooterWithLayout() {
+  const layout = await loadSiteLayout();
+  return <SiteFooter toolOrder={layout.menu.toolOrder} />;
+}
+
+/**
+ * What holds the footer's place while the layout is read: the same top margin,
+ * border and ground, and nothing in it, the way AppRailFallback holds the
+ * rail's. Not a second full footer, which would be serialised into every page's
+ * payload beside the real one and could paint the Tools column in the wrong
+ * order for a moment.
+ */
+export function SiteFooterFallback() {
+  return <div aria-hidden="true" className="mt-24 min-h-[20rem] border-t border-line bg-surface/50" />;
+}
+
+export function SiteFooter({ toolOrder }: { toolOrder?: readonly string[] } = {}) {
   const year = new Date().getFullYear();
   return (
     <footer className="mt-24 border-t border-line bg-surface/50">
@@ -24,7 +48,10 @@ export function SiteFooter() {
                 {column.heading}
               </h2>
               <ul className="space-y-2 text-sm">
-                {column.links.map((link) => (
+                {(column.followsMenuToolOrder && toolOrder
+                  ? applyOrder(column.links, toolOrder, (link) => link.href)
+                  : column.links
+                ).map((link) => (
                   <li key={`${column.heading}-${link.label}`}>
                     {link.disabled ? (
                       <span

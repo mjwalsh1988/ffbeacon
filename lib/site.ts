@@ -57,12 +57,12 @@ export type NavItem = {
 /** Every tool on the site, in display order. Single source of truth shared
  * by the navigation rail (via lib/nav-tree.ts) and the footer Tools column.
  * Keep descriptions short and jargon-free. */
-// In-season order, set by the owner on 2026-09-12: the league first, then the
-// weekly decisions (a trade, a lineup, a waiver bid), then scouting a manager,
-// and the draft room last now that drafting season is over. The footer Tools
-// column, the homepage cards and the all-tools page follow the same order.
-// Rankings Board is intentionally not listed here (it is its own top-level nav
-// item).
+// This is the DEFAULT order, and the labels. The live order is edited at
+// /admin/site-layout (lib/site-layout), which reorders these entries in the
+// rail, the mobile drawer and the footer Tools column; the code order is what
+// renders if that setting cannot be read, and lib/site-layout/parse.test.ts
+// holds it equal to the stored default. Rankings Board is intentionally not
+// listed here (it is its own top-level nav item).
 export const TOOLS_NAV: NavChild[] = [
   {
     label: "Sleeper League Pulse",
@@ -276,20 +276,21 @@ export type FooterLink = {
   disabled?: boolean;
 };
 
-export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
+export const FOOTER_COLUMNS: Array<{
+  heading: string;
+  links: FooterLink[];
+  /** Reordered to the main menu's tool order from /admin/site-layout. */
+  followsMenuToolOrder?: true;
+}> = [
   {
     heading: "Tools",
-    // Same order as TOOLS_NAV. Rankings Board used to be appended here; it is a
-    // reference board rather than something you operate on your own league, so
-    // it now sits under Learn beside the guides.
-    links: [
-      { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
-      { label: "Trade Calculator", href: "/tools/trade-calculator" },
-      { label: "Start / Sit", href: "/tools/who-should-i-start" },
-      { label: "FAAB Calculator", href: "/tools/faab" },
-      { label: "Manager Pulse", href: "/tools/manager-pulse" },
-      { label: "On The Clock", href: "/tools/on-the-clock" },
-    ],
+    // The same entries as TOOLS_NAV, so the footer cannot list a tool the menu
+    // does not, and in the menu's admin-edited order (components/site-footer.tsx).
+    // Rankings Board used to be appended here; it is a reference board rather
+    // than something you operate on your own league, so it now sits under Learn
+    // beside the guides.
+    links: TOOLS_NAV.map(({ label, href }) => ({ label, href })),
+    followsMenuToolOrder: true,
   },
   {
     heading: "Games",

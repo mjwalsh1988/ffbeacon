@@ -31,6 +31,8 @@ import "server-only";
 import { cache } from "react";
 import type { Route } from "next";
 import { TOOLS_NAV, GAMES_NAV } from "@/lib/site";
+import { applyOrder } from "@/lib/site-layout/order";
+import type { SiteLayoutSettings } from "@/lib/site-layout/default-settings";
 import type { NavNode, NavViewer, SiteNavNode } from "@/lib/nav-types";
 import type { NavIconName } from "@/components/app-shell/nav-icons";
 
@@ -69,8 +71,10 @@ const gameChildren: SiteNavNode[] = GAMES_NAV.map((game) => ({
 }));
 
 /**
- * Every section the rail can show, before the audience filter. Order is the
- * order the rail paints them.
+ * Every section the rail can show, before the audience filter. This is the
+ * DEFAULT order; the rail paints them in the order stored at
+ * /admin/site-layout (`layout.menu.sectionOrder`), and the Tools children in
+ * `layout.menu.toolOrder`.
  */
 const ALL_SECTIONS: SiteNavNode[] = [
   {
@@ -306,6 +310,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "radio",
       },
       {
+        id: "/admin/site-layout",
+        label: "Site Layout",
+        href: "/admin/site-layout",
+        hint: "Menu order, tool order, and the homepage tool cards",
+        icon: "listOrdered",
+      },
+      {
         id: "/admin/system",
         label: "System Settings",
         href: "/admin/system",
@@ -338,19 +349,38 @@ const ALL_SECTIONS: SiteNavNode[] = [
 ];
 
 /**
+ * Every top-level section id, in code order. `lib/site-layout/parse.test.ts`
+ * holds the admin form's list of sections to this one.
+ */
+export const NAV_TREE_SECTION_IDS: string[] = ALL_SECTIONS.map((section) => section.id);
+
+/**
  * The sections one viewer can reach, in display order.
  *
- * React-cached on the viewer object. The rail and the mobile drawer both need
- * this in the same render, and both are client components, so two calls means
- * the tree is serialised into the payload twice. Called with the object
- * `getNavViewer()` returns (itself cached, so the same reference both times)
- * this returns the same array, and the payload carries it once.
+ * React-cached on its arguments. The rail and the mobile drawer both need this
+ * in the same render, and both are client components, so two calls means the
+ * tree is serialised into the payload twice. Called with the object
+ * `getNavViewer()` returns and the layout `loadSiteLayout()` returns (both
+ * cached, so the same references both times) this returns the same array, and
+ * the payload carries it once.
+ *
+ * The order is applied before the audience filter, so hiding a section from a
+ * reader never shifts where the others sit relative to each other.
  */
 export const buildNavTree = cache(
-  ({ isAuthenticated, isAdmin }: NavViewer): NavNode[] =>
-    ALL_SECTIONS.filter((section) => {
-      if (section.requires === "admin") return isAdmin;
-      if (section.requires === "authenticated") return isAuthenticated;
-      return true;
-    }),
+  ({ isAuthenticated, isAdmin }: NavViewer, layout: SiteLayoutSettings): NavNode[] =>
+    applyOrder(ALL_SECTIONS, layout.menu.sectionOrder, (section) => section.id)
+      .filter((section) => {
+        if (section.requires === "admin") return isAdmin;
+        if (section.requires === "authenticated") return isAuthenticated;
+        return true;
+      })
+      .map((section) =>
+        section.id === "tools" && section.children
+          ? {
+              ...section,
+              children: applyOrder(section.children, layout.menu.toolOrder, (child) => child.id),
+            }
+          : section,
+      ),
 );

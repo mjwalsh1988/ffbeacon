@@ -19,6 +19,7 @@ import { PreferencesMenu } from "@/components/preferences-menu";
 import { AppMobileNav } from "@/components/app-shell/app-mobile-nav";
 import { buildNavTree } from "@/lib/nav-tree";
 import { getNavViewer } from "@/lib/nav-viewer";
+import { loadSiteLayout } from "@/lib/site-layout/settings";
 import { BeamLauncher } from "@/components/beam/beam-launcher";
 import { BookmarksLauncherSlot } from "@/components/bookmarks/bookmark-slots";
 import { isHandheldRequest } from "@/lib/device";
@@ -171,7 +172,8 @@ export async function SiteHeaderControls() {
   // every admin route, and the drawer is a client component. Built from the
   // cached viewer object so this is the same array the rail gets and Flight
   // serialises it once rather than twice.
-  const navSections = buildNavTree(await getNavViewer());
+  const [navViewer, siteLayout] = await Promise.all([getNavViewer(), loadSiteLayout()]);
+  const navSections = buildNavTree(navViewer, siteLayout);
 
   const activeSource = sources.find((s) => s.slug === initialSourceSlug) ?? null;
   const supportedFormatSlugs = activeSource?.supported_format_slugs ?? null;

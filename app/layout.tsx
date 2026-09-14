@@ -11,7 +11,7 @@ import {
   websiteJsonLd,
 } from "@/lib/json-ld";
 import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { SiteFooterFallback, SiteFooterWithLayout } from "@/components/site-footer";
 import { DiscordCta } from "@/components/discord-cta";
 import { SignalGuideMount } from "@/components/signal-guide/signal-guide-mount";
 import { RouteScrollReset } from "@/components/route-scroll-reset";
@@ -208,7 +208,12 @@ export default function RootLayout({
               >
                 {children}
               </AppShell>
-              <SiteFooter />
+              {/* The Tools column follows the admin-edited menu order. Its own
+                  boundary, so the settings read never holds up the page above
+                  it; the fallback is an empty block of the footer's size. */}
+              <Suspense fallback={<SiteFooterFallback />}>
+                <SiteFooterWithLayout />
+              </Suspense>
             </div>
             </BreadcrumbLabelProvider>
           </RailSectionsProvider>

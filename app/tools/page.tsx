@@ -25,6 +25,8 @@ import {
   type ToolCatalogEntry,
   type ToolHref,
 } from "@/lib/tools-catalog";
+import { applyOrder } from "@/lib/site-layout/order";
+import { loadSiteLayout } from "@/lib/site-layout/settings";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools" },
@@ -44,12 +46,15 @@ export default async function ToolsPage() {
   // Confirmed Discord members are already in the community, and linking them
   // back to /tools from the tools page is circular, so we point them at the
   // newly launched free games instead.
-  const isMember = await isDiscordMember();
+  const [isMember, layout] = await Promise.all([isDiscordMember(), loadSiteLayout()]);
+  // The section order is the admin-edited layout (/admin/site-layout); the
+  // catalog's own order is only the fallback.
+  const tools = applyOrder(TOOLS, layout.toolsPage.toolOrder, (tool) => tool.href);
   return (
     <main id="main">
       <PageBody>
         <Masthead isMember={isMember} />
-        {TOOLS.map((tool, i) => (
+        {tools.map((tool, i) => (
           <ToolSection key={tool.href} tool={tool} tinted={i % 2 === 1} />
         ))}
         <PrinciplesSection />

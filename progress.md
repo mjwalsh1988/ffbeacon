@@ -14680,3 +14680,56 @@ SA-T113 | completed | Review fixes and final verification for the decisions
      | depends on: SA-T080 to SA-T112
      | notes: implementation review: all five correct; fixed the board-promising links, a stale editor comment, six stale path comments, the view flag leaking onto boards. SEO review: all five correct; fixed the hub description (an exception to the title freeze, recorded), both llms entries, the hub's nightly lastmod and IndexNow ping; recorded the A01 caching contract. Accessibility and security covered in the implementation review: heading order h1, h2, h3, h3, h2 on the hub; the redirect target is a slug from the active-formats list plus URLSearchParams-encoded values.
      | verified: npx tsc --noEmit zero errors; npx vitest run 335 files and 5,062 tests passing; npm run build succeeds; local production curl checks; non-ASCII scan clean.
+
+## Site Layout: the menu, the tools page and the homepage cards become admin-edited (2026-09-14)
+
+Owner request: manage the main menu order, the all tools page order and the
+homepage tool cards (order, card width, tag, and a separately toggled border
+highlight) from the admin panel, starting from the layout the site carries
+today. NOT COMMITTED and NOT PUSHED, by instruction.
+
+SL-T001 | completed | Migration 0282: site_layout_settings, one global jsonb row, service-role only, seeded with the current layout
+     | files: supabase/migrations/0282_site_layout_settings.sql, lib/database.types.ts
+     | verified: yes. Applied via MCP. RLS on, one policy (site_layout_settings_service_role_all). Anon SELECT returns 0 rows and an authenticated UPDATE affects 0 rows, both inside rolled-back transactions. Types regenerated; the helper-type hunks in that diff are prettier 3 formatting only.
+
+SL-T002 | completed | Layout shapes, defaults, tag and highlight catalogs, ordering helpers
+     | files: lib/site-layout/default-settings.ts, lib/site-layout/order.ts, lib/site-layout/order.test.ts
+
+SL-T003 | completed | Lenient merge for reads, strict validation for saves
+     | files: lib/site-layout/parse.ts, lib/site-layout/parse.test.ts
+     | notes: parse.test.ts holds the defaults equal to the 0282 seed, to TOOLS_NAV and TOOL_CATALOG code order, and to the nav tree's section ids.
+
+SL-T004 | completed | Memoised loader (React cache plus one-minute memoTtl) and the save
+     | files: lib/site-layout/settings.ts
+     | depends on: SL-T001
+
+SL-T005 | completed | Rail and phone drawer render the stored section and tool order
+     | files: lib/nav-tree.ts, components/app-shell/app-rail-sections.tsx, components/site-header-controls.tsx
+     | depends on: SL-T004
+
+SL-T006 | completed | Footer Tools column follows the menu tool order
+     | files: components/site-footer.tsx, app/layout.tsx, lib/site.ts
+     | depends on: SL-T004
+
+SL-T007 | completed | Homepage cards take order, width, tag and highlight from the layout
+     | files: app/page.tsx, components/tool-badge.tsx
+     | depends on: SL-T004
+
+SL-T008 | completed | All tools page takes its order from the layout
+     | files: app/tools/page.tsx, lib/tools-catalog.ts
+     | depends on: SL-T004
+
+SL-T009 | completed | Admin page /admin/site-layout, its save action, and the admin nav entry
+     | files: app/admin/site-layout/page.tsx, app/admin/site-layout/actions.ts, app/admin/site-layout/site-layout-manager.tsx, lib/nav-tree.ts
+     | depends on: SL-T003, SL-T004
+
+SL-T010 | completed | Implementation, accessibility and security reviews, and their fixes
+     | files: lib/site-layout/settings.ts, lib/site-layout/parse.ts, lib/site-layout/parse.test.ts, lib/site-layout/default-settings.ts, app/admin/site-layout/page.tsx, app/admin/site-layout/actions.ts, app/admin/site-layout/site-layout-manager.tsx, components/site-footer.tsx, app/layout.tsx, components/site-header-controls.tsx, components/tool-badge.tsx, components/admin/admin-controls.tsx, supabase/migrations/0282_site_layout_settings.sql (comment only)
+     | depends on: SL-T001 to SL-T009
+     | notes: Caching moved from the in-process memo to Next's data cache with a tag the save revalidates, because /brief/[slug] and /rankings/[format] are prerendered and bake the menu and footer into their HTML; a failed read is thrown inside the cache so it is never cached. Implementation review: the admin page kept a failed read apart from a missing row (no form on error, so a save cannot overwrite the stored layout with defaults); saves are conditional on the updated_at the form loaded with and refuse on a conflict; the seeded row is not described as "last saved"; the seed test is pinned to a frozen 2026-09-14 layout; the footer fallback is an empty placeholder rather than a second footer. Security review: 0283 revokes default grants; the save returns a generic error and logs the database's; the schema uses strictObject. Accessibility review: Save stays focusable while saving; focus restored in a layout effect; button names no longer carry the position; the two Match buttons have distinct names; in-app links ask before discarding unsaved changes; the preview says tag and highlight in words; labels raised to AAA; the AdminSwitch respects reduced motion. Left for the owner: the beacon-gradient tag pill is 5.3:1 (AA, not AAA) at its purple end, and lifting it means changing the brand gradient.
+     | verified: yes. npx tsc --noEmit zero errors; npx vitest run 337 files and 5,089 tests passing; npm run build succeeds; the conditional save's updated_at filter matches the stored row through supabase-js (read-only check); a local production run renders the stored order on the homepage cards (two New features tags, one New tool, no Draft season), the footer, the menu tree, /tools, and a prerendered Brief article; non-ASCII scan clean apart from the footer's existing copyright sign.
+
+SL-T011 | completed | Migration 0283: revoke the default anon and authenticated grants on site_layout_settings
+     | files: supabase/migrations/0283_site_layout_settings_revoke_grants.sql
+     | depends on: SL-T001
+     | verified: yes. Applied via MCP; role_table_grants now lists postgres and service_role only.
