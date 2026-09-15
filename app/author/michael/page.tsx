@@ -354,6 +354,19 @@ export default async function AuthorMichaelPage() {
               accent="purple"
             />
             <LinkTile
+              href="/guides/positional-war-explained"
+              icon={BarChart3}
+              title="Positional WAR explained"
+              body="What Positional WAR means on a fantasy roster, for beginners, and the three decisions it should change."
+            />
+            <LinkTile
+              href="/guides/faab-strategy"
+              icon={PenLine}
+              title="FAAB strategy"
+              body="How much to bid on the waiver wire, when to spend it all, and who to drop."
+              accent="purple"
+            />
+            <LinkTile
               href="/guides/how-ff-beacon-works"
               icon={Cog}
               title="How FF Beacon works"
@@ -361,7 +374,7 @@ export default async function AuthorMichaelPage() {
             />
             <LinkTile
               href="/guides"
-              icon={PenLine}
+              icon={Layers}
               title="The guides shelf"
               body="Everything above in one place, with whatever ships next added as it lands."
               accent="purple"

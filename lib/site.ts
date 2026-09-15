@@ -265,6 +265,35 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "meaning",
     ],
   },
+  {
+    label: "Positional WAR Explained",
+    href: "/guides/positional-war-explained",
+    description: "What Positional WAR means in fantasy football, in plain English",
+    keywords: [
+      "war",
+      "positional war",
+      "wins above replacement",
+      "scarcity",
+      "positional scarcity",
+      "replacement level",
+      "value over replacement",
+    ],
+  },
+  {
+    label: "FAAB Strategy",
+    href: "/guides/faab-strategy",
+    description: "How much to bid on the waiver wire, and when to spend it all",
+    keywords: [
+      "faab",
+      "faab strategy",
+      "waiver wire",
+      "waivers",
+      "bidding",
+      "how much to bid",
+      "budget",
+      "free agent",
+    ],
+  },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
@@ -310,6 +339,8 @@ export const FOOTER_COLUMNS: Array<{
       // exist, and was disabled to hide that. The guide is real and lives at the
       // year-free path, so the link now goes to it.
       { label: "Draft Guide", href: "/guides/fantasy-football-draft-guide" },
+      { label: "Positional WAR Explained", href: "/guides/positional-war-explained" },
+      { label: "FAAB Strategy", href: "/guides/faab-strategy" },
       { label: "How FF Beacon Works", href: "/guides/how-ff-beacon-works" },
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.

@@ -73,11 +73,24 @@ developers.google.com/search/docs/essentials/spam-policies.
   from the same array, and three links onward. The trade calculator and the
   start/sit tool already had a written method and FAQ and were left alone.
 
+## 3b. Written 2026-09-15
+
+- Two long-form guides in Michael's first person, registered everywhere a
+  guide lives (lib/guides/published.ts, the nav tree, the site page registry
+  and footer, breadcrumbs, the guides shelf, the per-guide OG card, the
+  author page): /guides/positional-war-explained and /guides/faab-strategy.
+  Keyword targets came from Search Console ("faab calculator" is the one
+  non-brand query the site wins, 246 impressions in 90 days) and from
+  Google's own autocomplete for "faab strategy", "how much faab",
+  "waiver wire strategy", "war fantasy football" and "positional scarcity
+  fantasy". Semrush was not used.
+- The homepage founder section rewritten in the first person.
+
 ## 4. What is still open
 
-- Fifteen to twenty-five human-written pieces (waiver wire, start/sit
-  columns, FAAB bid guides, points allowed by position, a Positional WAR for
-  beginners guide). The SEO audit's section 6D lists the targets.
+- Thirteen to twenty-three more human-written pieces (weekly waiver wire,
+  start/sit columns, points allowed by position, superflex and TE premium
+  explained). The SEO audit's section 6D lists the targets.
 - Trimming the player sitemap to players with real content, so templated
   pages are a smaller share of the index once the Brief is out.
 - Whether to honor the Global Privacy Control signal automatically now that

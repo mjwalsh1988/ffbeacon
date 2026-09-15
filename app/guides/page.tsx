@@ -3,10 +3,12 @@ import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
   BookOpen,
+  Calculator,
   Cog,
   ListOrdered,
   Check,
   ArrowRight,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -160,6 +162,32 @@ const GUIDES: Guide[] = [
     ],
   },
   {
+    icon: TrendingUp,
+    title: "Positional WAR explained",
+    href: "/guides/positional-war-explained",
+    description:
+      "What Positional WAR actually means on a fantasy roster, in plain English. Why the best quarterback is worth a fortune in one league and almost nothing in another, and how to read the curve for your own.",
+    bullets: [
+      "The replacement player, and why he decides everything",
+      "Why raw points lie to you and scarcity does not",
+      "How to read the Positional WAR curve on your League Pulse page",
+      "The three decisions it should change: drafts, FAAB and trades",
+    ],
+  },
+  {
+    icon: Calculator,
+    title: "FAAB strategy",
+    href: "/guides/faab-strategy",
+    description:
+      "How much of your budget to bid on the waiver wire, kind of pickup by kind of pickup, when to spend it all, who to drop, and the mistakes that lose leagues in October.",
+    bullets: [
+      "FAAB versus waiver priority, and how a blind auction really works",
+      "Bid ranges for a league-winner, a new starter, a streamer and a stash",
+      "Why September dollars and December dollars are not the same money",
+      "A worked example, start to finish, with the walk-away number",
+    ],
+  },
+  {
     icon: Cog,
     title: "How FF Beacon works",
     href: "/guides/how-ff-beacon-works",
@@ -187,9 +215,10 @@ function GuidesSection() {
         Start with the vocabulary, then go draft.
       </h2>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
-        The glossary, the draft guide, and the methodology page are free to
-        read right now. Each one defines a term the first time it uses it, so
-        you can start anywhere and never hit a word the page assumes you know.
+        The glossary, the draft guide, a beginner&apos;s read on Positional WAR,
+        the FAAB playbook, and the methodology page are all free to read right now.
+        Each one defines a term the first time it uses it, so you can start
+        anywhere and never hit a word the page assumes you know.
       </p>
 
       <ul

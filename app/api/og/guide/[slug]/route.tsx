@@ -49,6 +49,22 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "Steals, late-round swings, and fades in every format, from our own values and projected points above a replacement starter against real draft ADP.",
     badge: "Rebuilt nightly",
   },
+  "positional-war-explained": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "Positional WAR explained:",
+    headlineBottom: "the number that finds scarcity",
+    subhead:
+      "The replacement player, why scarcity beats raw points, and how to read the curve for your own league. Written for beginners, in plain English.",
+    badge: "For beginners",
+  },
+  "faab-strategy": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "FAAB strategy:",
+    headlineBottom: "how much to bid on waivers",
+    subhead:
+      "Bid ranges for every kind of pickup, when to spend it all, who to drop, and the waiver wire mistakes that lose leagues in October.",
+    badge: "Waiver wire",
+  },
 };
 
 /**

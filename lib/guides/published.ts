@@ -65,6 +65,24 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     updatedAt: "2026-09-10T09:00:00-04:00",
     priority: 0.6,
   },
+  {
+    slug: "positional-war-explained",
+    title: "Positional WAR explained: what WAR means in fantasy football",
+    summary:
+      "What wins above replacement means for a fantasy roster, why scarcity beats raw points, how to read the Positional WAR curve for your own league, and the three decisions it should change",
+    publishedAt: "2026-09-15T09:00:00-04:00",
+    updatedAt: "2026-09-15T09:00:00-04:00",
+    priority: 0.8,
+  },
+  {
+    slug: "faab-strategy",
+    title: "FAAB strategy: how much to bid on the waiver wire",
+    summary:
+      "What FAAB is, how much of your budget to bid on each kind of pickup, when to spend it all, who to drop, and the waiver wire mistakes that lose leagues in October",
+    publishedAt: "2026-09-15T09:00:00-04:00",
+    updatedAt: "2026-09-15T09:00:00-04:00",
+    priority: 0.8,
+  },
 ];
 
 /** Look up one published guide by slug, or undefined when it is not published. */

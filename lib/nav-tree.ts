@@ -138,6 +138,20 @@ const ALL_SECTIONS: SiteNavNode[] = [
         hint: "How to draft, start to finish",
         icon: "layers",
       },
+      {
+        id: "/guides/positional-war-explained",
+        label: "Positional WAR Explained",
+        href: "/guides/positional-war-explained",
+        hint: "Positional WAR, for beginners",
+        icon: "barChart",
+      },
+      {
+        id: "/guides/faab-strategy",
+        label: "FAAB Strategy",
+        href: "/guides/faab-strategy",
+        hint: "How much to bid on waivers",
+        icon: "calculator",
+      },
     ],
   },
   {

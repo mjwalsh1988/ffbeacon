@@ -1236,8 +1236,9 @@ function GuidesSection() {
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
               A plain-English glossary covering {TERM_COUNT} terms, from PPR to
-              aDOT, plus a draft guide rebuilt nightly with steals, fades, and a
-              plain-English verdict on every name. Both are free to read.
+              aDOT, a draft guide rebuilt nightly with steals, fades, and a
+              verdict on every name, a beginner&apos;s read on Positional WAR,
+              and a FAAB playbook for the waiver wire. All free to read.
             </p>
             <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
               Browse the guides
@@ -1256,11 +1257,12 @@ function GuidesSection() {
 /* ---------- Founder ---------- */
 
 /**
- * Who builds the site, and why it reads the way it does.
+ * Who builds the site, and why it reads the way it does. Written in Michael's
+ * own voice, first person, because a homepage that talks ABOUT its founder in
+ * the third person reads like a press release and this is a one-person site.
  *
- * Every claim here is one the about page or the author page already makes in
- * Michael's own words: twenty seasons since 2006, blind, NVDA every day, the
- * four build rules. The pull quote is lifted verbatim from /author/michael.
+ * Every claim here is one the about page or the author page already makes:
+ * twenty seasons since 2006, blind, NVDA every day, the four build rules.
  * Nothing is invented for the homepage, so the three pages cannot disagree
  * about the person behind the byline.
  *
@@ -1274,18 +1276,18 @@ type BuildRule = { icon: LucideIcon; title: string; body: string };
 const BUILD_RULES: BuildRule[] = [
   {
     icon: Accessibility,
-    title: "Semantic HTML first",
-    body: "A button is a button and a table is a table. ARIA fills the gaps HTML cannot express, never the other way round.",
+    title: "Real HTML first",
+    body: "A button is a button and a table is a table. I use ARIA to fill the gaps HTML cannot express, never the other way round.",
   },
   {
     icon: Keyboard,
     title: "Everything works by keyboard",
-    body: "Every control is reachable without a mouse, and a focus ring is never removed without a replacement.",
+    body: "Every control is reachable without a mouse, and I never remove a focus ring without putting a replacement in its place.",
   },
   {
     icon: Smartphone,
     title: "Nothing is dropped on a phone",
-    body: "When a table will not fit, the row restacks. A column is never hidden to make the layout easier.",
+    body: "When a table will not fit, the row restacks. I never hide a column to make the layout easier.",
   },
   {
     icon: Eye,
@@ -1318,46 +1320,51 @@ function FounderSection() {
           <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-14">
             {/* The story. */}
             <div className="min-w-0">
-              <SectionEyebrow>Who builds this</SectionEyebrow>
+              <SectionEyebrow>A note from the guy who built this</SectionEyebrow>
               <h2
                 id="founder-heading"
                 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
               >
-                Built by a blind fantasy manager.{" "}
-                <GradientWord>Read it by ear or by eye.</GradientWord>
+                Hi, I&apos;m Michael. I built the fantasy site I couldn&apos;t
+                find anywhere else.{" "}
+                <GradientWord>It reads by ear or by eye.</GradientWord>
               </h2>
               <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted">
-                Michael has played fantasy football since 2006, twenty seasons
-                across redraft, dynasty, superflex and tight end premium. He is
-                blind and runs every one of his leagues with a screen reader.
-                For most of those years the tools everyone else used were the
-                problem, so he built the one he wanted.
+                I&apos;ve played fantasy football since 2006, twenty seasons of
+                redraft, dynasty, superflex and tight end premium. I&apos;m also
+                blind, and I run every one of my leagues with a screen reader.
+                For most of those years the tools everyone else loved were the
+                thing standing between me and my own lineup.
               </p>
-              <blockquote className="mt-6 max-w-2xl border-l-2 border-brand-cyan/60 pl-5">
+              <div className="mt-6 max-w-2xl border-l-2 border-brand-cyan/60 pl-5">
                 <p className="text-base leading-relaxed text-ink sm:text-lg">
-                  &quot;Every app I tried had friction sighted users never
-                  notice: stats trapped inside an unlabeled chart, filters you
-                  can only reach with a mouse, player news that updates
-                  silently.&quot;
+                  Every app I tried had friction sighted users never notice:
+                  stats trapped inside an unlabeled chart, filters you can only
+                  reach with a mouse, player news that updates silently. At some
+                  point I stopped waiting for somebody else to fix it.
                 </p>
-                <footer className="mt-3 text-sm text-ink-subtle">
-                  Michael, founder of FF Beacon
-                </footer>
-              </blockquote>
+              </div>
               <p className="mt-6 max-w-2xl text-base leading-relaxed text-ink-muted">
-                That is why every screen here is written as semantic HTML first
-                and driven with a keyboard and a screen reader before it ships,
-                and why the same number reads the same whether you hear it or
-                see it. Sighted managers get a faster, cleaner site out of it
-                too, because a page that works by ear has nothing hiding in a
-                chart.
+                So every screen here is written as real HTML first, then driven
+                with a keyboard and a screen reader before it ships, and a
+                number sounds the same as it looks. If you can see just fine,
+                you still get something out of that: a site that works by ear
+                has nothing hiding in a chart, so it is faster for everyone.
+                Come find me in{" "}
+                <Link
+                  href="/join"
+                  className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  the Discord
+                </Link>
+                , I&apos;m in there too.
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Link
                   href="/author/michael"
                   className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
-                  Meet Michael
+                  More about me
                   <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
                 </Link>
                 <Link
@@ -1365,7 +1372,7 @@ function FounderSection() {
                   className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
                   <Accessibility aria-hidden="true" className="h-3.5 w-3.5" />
-                  How we build for accessibility
+                  How I build for accessibility
                 </Link>
               </div>
             </div>
@@ -1409,7 +1416,7 @@ function FounderSection() {
               </div>
 
               <h3 className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-                The rules every screen ships under
+                The rules I ship every screen under
               </h3>
               <ul role="list" className="mt-3 grid gap-3 sm:grid-cols-2">
                 {BUILD_RULES.map((rule) => (

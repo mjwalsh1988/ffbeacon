@@ -44,6 +44,8 @@ const ROUTE_LABELS: Record<string, string> = {
   "/guides/fantasy-football-terms": "Fantasy Football Terms",
   "/guides/fantasy-football-draft-guide": "Draft Guide",
   "/guides/how-ff-beacon-works": "How FF Beacon Works",
+  "/guides/positional-war-explained": "Positional WAR Explained",
+  "/guides/faab-strategy": "FAAB Strategy",
   "/join": "Join the Discord",
   "/login": "Sign in",
   "/my-beacon": "My Beacon",

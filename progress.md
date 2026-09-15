@@ -14758,3 +14758,17 @@ AD-T005 | completed | ToolExplainer component and six written explainers (FAAB, 
      | files: components/tool-explainer.tsx, app/tools/faab/written-sections.tsx, app/tools/league-pulse/written-sections.tsx, app/tools/manager-pulse/written-sections.tsx, app/tools/on-the-clock/written-sections.tsx, app/games/signal-scout/written-sections.tsx, app/games/would-you-rather/written-sections.tsx, and each page.tsx
      | notes: Trade calculator and start/sit already carried written sections and were left alone. Admin-editable numbers are passed in from settings. FAQ JSON-LD is built from the rendered array.
      | verified: yes. Opus review checked every claim against the lib modules and its factual fixes were applied; tsc clean; checked in Chrome on FAAB and League Pulse at desktop width. Not checked at phone width in a browser (the window would not resize); the grids use standard wrapping utilities.
+
+AD-T006 | completed | Guide: Positional WAR explained, for beginners, first person
+     | files: app/guides/positional-war-explained/page.tsx, lib/guides/published.ts, lib/nav-tree.ts, lib/site.ts, lib/breadcrumbs.ts, app/guides/page.tsx, app/api/og/guide/[slug]/route.tsx, app/author/michael/page.tsx, app/page.tsx
+     | notes: Every mechanical claim checked against lib/positional-war/*. The naming rule holds (lib/positional-war/naming.test.ts passes). Worked numbers are invented and labelled so in the table caption.
+     | verified: yes. tsc clean; full vitest run passing; renders on the dev server; Opus review applied.
+
+AD-T007 | completed | Guide: FAAB strategy, how much to bid on the waiver wire, first person
+     | files: app/guides/faab-strategy/page.tsx, plus the same registries as AD-T006
+     | notes: Bid ranges follow the calculator's default bid curve bands; timing follows lib/faab/market.ts urgency; drop rules follow lib/faab/marginal.ts. Worked example is invented and labelled so.
+     | verified: yes. tsc clean; full vitest run passing; renders on the dev server; Opus review applied.
+
+AD-T008 | completed | Homepage founder section rewritten in the first person
+     | files: app/page.tsx
+     | verified: yes. Every claim already on the about or author page.
