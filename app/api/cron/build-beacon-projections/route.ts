@@ -24,7 +24,7 @@ export const maxDuration = 300;
  *   09:00 UTC  sync-sleeper-stats        the usage history
  *   12:00 UTC  sync-weekly-projections   the blend partner, and the list of
  *                                        weeks that exist at all
- *   13:00 UTC  sync-nfl-odds             the game environment
+ *   13:15 UTC  sync-nfl-odds             the game environment
  *
  * 14:30 UTC is after all three with room for a slow run, and is the earliest
  * slot where every input is same-day.

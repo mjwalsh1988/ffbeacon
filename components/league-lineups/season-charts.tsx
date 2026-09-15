@@ -177,7 +177,7 @@ function ScoredAgainstBest({
       >
         <svg
           role="img"
-          aria-label={`Bar chart, ${drawn.length} settled weeks. Each week shows what your lineup scored inside an outline of the best lineup your roster could have produced. Week ${viewedWeek}, the one this page is showing, is outlined in cyan. The numbers are in the table below.`}
+          aria-label={`Bar chart, ${drawn.length} settled ${drawn.length === 1 ? "week" : "weeks"}. Each week shows what your lineup scored inside an outline of the best lineup your roster could have produced. Week ${viewedWeek}, the one this page is showing, is outlined in cyan. The numbers are in the table below.`}
           viewBox={`0 0 ${width} ${PLOT.height + 26}`}
           width={width}
           height={PLOT.height + 26}
@@ -333,7 +333,7 @@ function ProjectedAgainstActual({
       >
         <svg
           role="img"
-          aria-label={`Bar chart, ${points.length} settled weeks. Each bar is how far that week's actual score landed from its projection, above the line for a beat and below for a miss. Week ${viewedWeek}, the one this page is showing, is outlined. The numbers are in the table below.`}
+          aria-label={`Bar chart, ${points.length} settled ${points.length === 1 ? "week" : "weeks"}. Each bar is how far that week's actual score landed from its projection, above the line for a beat and below for a miss. Week ${viewedWeek}, the one this page is showing, is outlined. The numbers are in the table below.`}
           viewBox={`0 0 ${width} ${PLOT.height + 26}`}
           width={width}
           height={PLOT.height + 26}

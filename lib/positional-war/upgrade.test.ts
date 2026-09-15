@@ -105,6 +105,7 @@ function league(overrides: Partial<LeagueRow> = {}): LeagueRow {
     playoffTeams: 4,
     playoffWeekStart: PLAYOFF_WEEK_START,
     playoffRoundType: 0,
+    medianMatch: false,
     ...overrides,
   };
 }

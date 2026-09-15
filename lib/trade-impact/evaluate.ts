@@ -684,6 +684,8 @@ export async function evaluateValidatedTrade(
             seed: world.settings.simulation.seed,
             playoffTeams: world.league.playoffTeams,
             playoffWeekStart: world.league.playoffWeekStart,
+            playoffRoundType: world.league.playoffRoundType,
+            medianMatch: world.league.medianMatch,
           },
         })
       : null;

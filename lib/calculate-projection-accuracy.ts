@@ -312,22 +312,20 @@ export async function runCalculateProjectionAccuracy(
   const allInserts: Database["public"]["Tables"]["player_projection_accuracy"]["Insert"][] = [];
   const perSource: ProjectionAccuracySourceSummary[] = [];
 
+  // Within the current season only, older weeks decay, and the clock they
+  // decay against is the latest week that has actually been PLAYED. It is a
+  // calendar fact rather than a per-source one, so it is read once, off the
+  // stat rows, and shared. It was previously anchored on the latest week each
+  // source had PROJECTED, which is week 18 from the day the season's rows are
+  // published: week 1 then entered the blend at 0.5 ** (17 / 8) = 0.23 while a
+  // prior-season game entered at 0.45, the reverse of the rule that the current
+  // season outweighs the last one.
+  const latestPlayed = latestPlayedWeek(actuals, currentSeason);
+  const halfLife = Math.max(1, settings.recency.currentSeasonHalfLifeWeeks);
+  const weekWeightFor = (season: number, week: number): number =>
+    season === currentSeason ? currentSeasonWeekWeight(week, latestPlayed, halfLife) : 1;
+
   for (const [source, sourceRows] of [...bySource].sort(([a], [b]) => a.localeCompare(b))) {
-    // Within the current season only, older weeks decay. Scoped to this
-    // source's own rows: a source that has not published as many weeks yet
-    // must not have its decay curve set by a different source's coverage.
-    const latestWeekBySeason = new Map<number, number>();
-    for (const p of sourceRows) {
-      const seen = latestWeekBySeason.get(p.season) ?? 0;
-      if (p.week > seen) latestWeekBySeason.set(p.season, p.week);
-    }
-    const weekWeightFor = (season: number, week: number): number => {
-      if (season !== currentSeason) return 1;
-      const halfLife = Math.max(1, settings.recency.currentSeasonHalfLifeWeeks);
-      const latest = latestWeekBySeason.get(season) ?? week;
-      const age = Math.max(0, latest - week);
-      return 0.5 ** (age / halfLife);
-    };
 
     // Group this source's rows by player.
     const byPlayer = new Map<string, ProjectionRow[]>();
@@ -539,6 +537,40 @@ function summarizeSource(
   };
 }
 
+/**
+ * The latest week of `season` with a stat row for a game actually played.
+ * Null when nothing in that season has been played yet, which makes every
+ * current-season week weigh its full 1.0 until the first game lands.
+ */
+export function latestPlayedWeek(
+  actuals: ReadonlyArray<{ season: number; week: number; gp: number }>,
+  season: number,
+): number | null {
+  let latest: number | null = null;
+  for (const a of actuals) {
+    if (a.season !== season || a.gp <= 0) continue;
+    if (latest === null || a.week > latest) latest = a.week;
+  }
+  return latest;
+}
+
+/**
+ * Within-season decay: a game's weight halves every `halfLifeWeeks` measured
+ * back from the latest PLAYED week. The most recent played week is always 1.0,
+ * a week ahead of the anchor (projected, not yet played) is also 1.0 rather
+ * than being inflated, and an unknown anchor decays nothing.
+ */
+export function currentSeasonWeekWeight(
+  week: number,
+  latestPlayedWeek: number | null,
+  halfLifeWeeks: number,
+): number {
+  if (latestPlayedWeek === null) return 1;
+  const halfLife = Math.max(1, halfLifeWeeks);
+  const age = Math.max(0, latestPlayedWeek - week);
+  return 0.5 ** (age / halfLife);
+}
+
 type Accumulated = {
   weeksProjected: number;
   weeksPlayed: number;
@@ -702,6 +734,12 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]
       .select("player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
       .eq("season_type", "regular")
       .not("player_id", "is", null)
+      // Ordered, because Postgres promises nothing about row order without one
+      // and .range() pages over whatever order it happens to give. On a table
+      // the projection sync rewrites daily that handed back 8,771 rows twice
+      // across forty pages and skipped as many, which graded some players on
+      // the same week two or three times and others on no week at all.
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1),
       { label: `accuracy projections page ${from}` },
     );
@@ -735,6 +773,7 @@ async function loadActuals(supabase: ServiceClient, seasons: number[]): Promise<
       .select("player_id, season, week, gp, pts_ppr, pts_half_ppr, pts_std")
       .eq("season_type", "regular")
       .in("season", seasons)
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1),
       { label: `accuracy actuals page ${from}` },
     );
@@ -762,7 +801,11 @@ async function loadPositions(supabase: ServiceClient): Promise<Map<string, strin
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await withRetry(
       async () =>
-        await supabase.from("players").select("id, position").range(from, from + PAGE - 1),
+        await supabase
+          .from("players")
+          .select("id, position")
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1),
       { label: `accuracy positions page ${from}` },
     );
     if (error) throw new Error(`accuracy position load failed: ${error.message}`);

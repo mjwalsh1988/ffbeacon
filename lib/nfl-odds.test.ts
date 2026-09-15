@@ -223,3 +223,81 @@ describe("getEspnScoreboard", () => {
     expect(result?.[0]?.homeSpread).toBe(2.5);
   });
 });
+
+/**
+ * The cdn host wraps the scoreboard document one level down, at
+ * content.sbData, and takes `year` rather than `dates`. Both shapes must parse
+ * to the same rows, and the request must go to the host that still answers.
+ */
+describe("getEspnScoreboard on the cdn host", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function jsonResponse(status: number, body: unknown): Response {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: () => null },
+      text: async () => JSON.stringify(body),
+    } as unknown as Response;
+  }
+
+  const game = {
+    date: "2026-09-18T00:15Z",
+    competitions: [
+      {
+        competitors: [
+          { homeAway: "home", team: { abbreviation: "BUF" } },
+          { homeAway: "away", team: { abbreviation: "DET" } },
+        ],
+        odds: [{ provider: { name: "DraftKings" }, details: "BUF -4.5", overUnder: 53.5, spread: -4.5 }],
+      },
+    ],
+  };
+
+  it("requests cdn.espn.com with xhr, year, week and seasontype", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { content: { sbData: { events: [] } } }));
+    await getEspnScoreboard(2026, 2, "regular");
+    const url = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(url.host).toBe("cdn.espn.com");
+    expect(url.pathname).toBe("/core/nfl/scoreboard");
+    expect(url.searchParams.get("xhr")).toBe("1");
+    expect(url.searchParams.get("year")).toBe("2026");
+    expect(url.searchParams.get("week")).toBe("2");
+    expect(url.searchParams.get("seasontype")).toBe("2");
+  });
+
+  it("reads the document out of content.sbData", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, { type: "scoreboard", content: { sbData: { events: [game] } } }),
+    );
+    const result = await getEspnScoreboard(2026, 2, "regular");
+    expect(result).toHaveLength(1);
+    expect(result?.[0]).toMatchObject({
+      week: 2,
+      homeTeam: "BUF",
+      awayTeam: "DET",
+      gameTotal: 53.5,
+      homeSpread: -4.5,
+      provider: "DraftKings",
+    });
+  });
+
+  it("still reads a bare document, so a move back to site.api is a one-line change", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { events: [game] }));
+    const result = await getEspnScoreboard(2026, 2, "regular");
+    expect(result?.[0]?.homeSpread).toBe(-4.5);
+  });
+
+  it("treats a wrapper with no document as an empty slate, not a failure", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { content: {} }));
+    expect(await getEspnScoreboard(2026, 22, "post")).toEqual([]);
+  });
+});

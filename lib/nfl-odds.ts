@@ -2,9 +2,19 @@
  * ESPN scoreboard adapter: game total, spread, and the implied team totals
  * derived from them, for the projection engine's game-environment signal.
  *
- * Source: https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard,
- * public, no key, no auth. This is the ONLY file allowed to call that host, the
- * same rule lib/sleeper.ts follows for api.sleeper.app.
+ * Source: https://cdn.espn.com/core/nfl/scoreboard?xhr=1, public, no key, no
+ * auth. This is the ONLY file allowed to call that host, the same rule
+ * lib/sleeper.ts follows for api.sleeper.app.
+ *
+ * HOST. The adapter was written against site.api.espn.com's scoreboard. From
+ * 2026-09-02 that host answered every request with an Akamai "Access Denied"
+ * 403, from Vercel and from a home connection alike, with a browser user agent
+ * or ours, with or without a query string, and the daily sync failed for two
+ * weeks while the lines in the table stayed frozen at September 1. The cdn
+ * host serves the SAME scoreboard document wrapped one level down, at
+ * `content.sbData`, keyed by `year`, `week` and `seasontype`. getEspnScoreboard
+ * reads either shape, so a move back is a one-line change and the fixtures
+ * that describe the bare document still hold.
  *
  * TEAM CODES. ESPN's 32 abbreviations match nfl_teams exactly except Washington,
  * which ESPN calls WSH and we call WAS. normalizeEspnTeam() is the one place
@@ -28,8 +38,7 @@
 
 import { NFL_TEAM_CODES } from "./nfl-teams";
 
-const ESPN_SCOREBOARD_URL =
-  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+const ESPN_SCOREBOARD_URL = "https://cdn.espn.com/core/nfl/scoreboard";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -154,9 +163,22 @@ type EspnEvent = {
   date?: string;
   competitions?: EspnCompetition[];
 };
-type EspnScoreboardResponse = {
+type EspnScoreboardDocument = {
   events?: EspnEvent[];
 };
+/**
+ * The bare scoreboard document (site.api shape) or the cdn page wrapper that
+ * carries the same document at `content.sbData`.
+ */
+type EspnScoreboardResponse = EspnScoreboardDocument & {
+  content?: { sbData?: EspnScoreboardDocument };
+};
+
+/** Unwrap the cdn page wrapper when present; otherwise the payload is the document. */
+export function unwrapScoreboard(payload: EspnScoreboardResponse): EspnScoreboardDocument {
+  const wrapped = payload.content?.sbData;
+  return wrapped && typeof wrapped === "object" ? wrapped : payload;
+}
 
 /** Read a response body enforcing a hard byte cap. Returns null past the cap. */
 async function readCapped(response: Response, maxBytes: number): Promise<string | null> {
@@ -211,16 +233,18 @@ export async function getEspnScoreboard(
   seasonType: EspnSeasonType = "regular",
 ): Promise<EspnOddsGame[] | null> {
   const params = new URLSearchParams({
+    xhr: "1",
     seasontype: String(SEASON_TYPE_TO_ESPN[seasonType]),
     week: String(week),
-    dates: String(season),
+    year: String(season),
   });
   const url = `${ESPN_SCOREBOARD_URL}?${params.toString()}`;
 
   const payload = await safeFetchEspn<EspnScoreboardResponse>(url);
   if (payload === null) return null;
 
-  const events = Array.isArray(payload.events) ? payload.events : [];
+  const document = unwrapScoreboard(payload);
+  const events = Array.isArray(document.events) ? document.events : [];
   const games: EspnOddsGame[] = [];
 
   for (const event of events) {

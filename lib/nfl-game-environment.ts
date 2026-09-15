@@ -69,7 +69,30 @@ export type GameEnvironment = {
   kickoffAt: string | null;
   /** The book ESPN quoted. Shown as attribution, never as a number. */
   provider: string | null;
+  /**
+   * When the line was last fetched. A line is only as good as its age: the
+   * odds sync failed silently for two weeks in September 2026 and every page
+   * kept quoting September 1 lines as if they were current. See linesAreStale.
+   */
+  linesAsOf: string | null;
 };
+
+/** A line older than this is said to be old wherever it is described. */
+export const STALE_LINE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** True when the line behind this environment is older than STALE_LINE_MS. */
+export function linesAreStale(env: GameEnvironment | null, now: number = Date.now()): boolean {
+  if (!env || env.linesAsOf === null) return false;
+  const fetched = Date.parse(env.linesAsOf);
+  if (!Number.isFinite(fetched)) return false;
+  return now - fetched > STALE_LINE_MS;
+}
+
+/** Whole days since the line was fetched, for the sentence that says so. */
+function lineAgeDays(env: GameEnvironment, now: number): number {
+  const fetched = Date.parse(env.linesAsOf ?? "");
+  return Math.max(1, Math.floor((now - fetched) / (24 * 60 * 60 * 1000)));
+}
 
 /**
  * How rich a game environment is, as one word.
@@ -119,7 +142,11 @@ export const ENVIRONMENT_TIER_LABEL: Record<EnvironmentTier, string> = {
  * fact and the band is our reading of it. Never mentions betting, a book or a
  * line: the reader is setting a lineup, not placing a bet.
  */
-export function describeEnvironment(env: GameEnvironment | null, weekAverage: number | null): string {
+export function describeEnvironment(
+  env: GameEnvironment | null,
+  weekAverage: number | null,
+  now: number = Date.now(),
+): string {
   if (!env) return "No game found for this week.";
   if (env.impliedTotal === null) {
     return `${env.isHome ? "Home against" : "Away at"} ${env.opponent}. No scoring line published yet.`;
@@ -127,9 +154,14 @@ export function describeEnvironment(env: GameEnvironment | null, weekAverage: nu
   const tier = environmentTier(env.impliedTotal, weekAverage);
   const where = env.isHome ? `at home against ${env.opponent}` : `away at ${env.opponent}`;
   const expected = `His offense is expected to score about ${env.impliedTotal.toFixed(1)} ${where}`;
-  if (tier === "high") return `${expected}, one of the higher totals this week.`;
-  if (tier === "low") return `${expected}, one of the lower totals this week.`;
-  return `${expected}, about average for this week.`;
+  // An old line is still shown, because the number is real, but it is said to
+  // be old in the same sentence so nobody reads a two-week-old total as today's.
+  const age = linesAreStale(env, now)
+    ? ` That line is ${lineAgeDays(env, now)} days old and may have moved.`
+    : "";
+  if (tier === "high") return `${expected}, one of the higher totals this week.${age}`;
+  if (tier === "low") return `${expected}, one of the lower totals this week.${age}`;
+  return `${expected}, about average for this week.${age}`;
 }
 
 /** Favoured by, underdog by, or a pick 'em. Null spread gives null. */
@@ -155,6 +187,8 @@ export type OddsRow = {
   away_implied_total: number | null;
   kickoff_at: string | null;
   provider: string | null;
+  /** When the row was last fetched from ESPN. Absent on older callers' rows. */
+  fetched_at?: string | null;
 };
 
 /**
@@ -189,6 +223,7 @@ export function buildEnvironmentMap(rows: OddsRow[]): Map<string, GameEnvironmen
         rankedTeams: 0,
         kickoffAt: row.kickoff_at ?? null,
         provider: row.provider ?? null,
+        linesAsOf: row.fetched_at ?? null,
       });
     }
     if (!out.has(away)) {
@@ -206,6 +241,7 @@ export function buildEnvironmentMap(rows: OddsRow[]): Map<string, GameEnvironmen
         rankedTeams: 0,
         kickoffAt: row.kickoff_at ?? null,
         provider: row.provider ?? null,
+        linesAsOf: row.fetched_at ?? null,
       });
     }
   }
@@ -262,7 +298,7 @@ export async function loadGameEnvironment(
   const { data, error } = await supabase
     .from("nfl_game_odds")
     .select(
-      "home_team, away_team, game_total, home_spread, home_implied_total, away_implied_total, kickoff_at, provider",
+      "home_team, away_team, game_total, home_spread, home_implied_total, away_implied_total, kickoff_at, provider, fetched_at",
     )
     .eq("source", ODDS_SOURCE_SLUG)
     .eq("season", season)

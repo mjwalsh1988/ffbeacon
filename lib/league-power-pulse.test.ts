@@ -83,6 +83,7 @@ function fakeLeague(overrides: Partial<Record<string, unknown>> = {}) {
     playoffTeams: 12,
     playoffWeekStart: 15,
     playoffRoundType: 0,
+    medianMatch: false,
     ...overrides,
   };
 }

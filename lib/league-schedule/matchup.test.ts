@@ -767,3 +767,101 @@ describe("bench upgrades", () => {
     expect(view.home.benchUpgrades).toEqual([]);
   });
 });
+
+/**
+ * A settled week is graded against the roster AS IT STOOD THAT WEEK, not as it
+ * stands today. The IR and taxi lists are current ones, and week 2 is when
+ * week 1's injuries land on IR: grading against today's list counted the
+ * injured starter in "what you scored" and left him out of "the best lineup
+ * you had". Same rule as lib/league-lineups/build.ts and the Manager Ledger.
+ */
+describe("settled week, roster as of that week", () => {
+  it("keeps a starter who has since gone on IR and left the roster in the best lineup", () => {
+    const w = world(
+      ["QB", "RB", "BN"],
+      [
+        { id: "qb1", position: "QB", points: 20 },
+        { id: "rb1", position: "RB", points: 12 },
+        { id: "rb2", position: "RB", points: 8 },
+      ],
+    );
+    const view = buildMatchupView(
+      input(
+        w,
+        side(w.slots, {
+          starters: ["qb1", "rb1"],
+          // rb1 was dropped after the week and is on nobody's roster now.
+          all: ["qb1", "rb2"],
+          reserve: ["rb1"],
+          actualTotal: 38.1,
+          actualByPlayer: { qb1: 24.1, rb1: 14, rb2: 9 },
+        }),
+        null,
+        { isFinal: true },
+      ),
+    );
+
+    expect(view.home.optimalTotal).toBeCloseTo(38.1, 5);
+    expect(view.home.pointsLeftOnBench).toBe(0);
+    expect(view.home.benchUpgrades).toHaveLength(0);
+  });
+
+  it("still names the bench player who outscored a starter now on IR", () => {
+    const w = world(
+      ["QB", "RB", "BN"],
+      [
+        { id: "qb1", position: "QB", points: 20 },
+        { id: "rb1", position: "RB", points: 12 },
+        { id: "rb2", position: "RB", points: 8 },
+      ],
+    );
+    const view = buildMatchupView(
+      input(
+        w,
+        side(w.slots, {
+          starters: ["qb1", "rb1"],
+          all: ["qb1", "rb1", "rb2"],
+          reserve: ["rb1"],
+          actualTotal: 27.1,
+          actualByPlayer: { qb1: 24.1, rb1: 3, rb2: 12 },
+        }),
+        null,
+        { isFinal: true },
+      ),
+    );
+
+    expect(view.home.optimalTotal).toBeCloseTo(36.1, 5);
+    expect(view.home.pointsLeftOnBench).toBeCloseTo(9, 5);
+    expect(view.home.benchUpgrades).toHaveLength(1);
+    expect(view.home.benchUpgrades[0].inPlayer.sleeperId).toBe("rb2");
+    expect(view.home.benchUpgrades[0].outPlayer.sleeperId).toBe("rb1");
+    expect(view.home.benchUpgrades[0].gain).toBeCloseTo(9, 5);
+  });
+
+  it("does not let today's taxi list keep a player who started that week out of the fill", () => {
+    const w = world(
+      ["QB", "RB", "BN"],
+      [
+        { id: "qb1", position: "QB", points: 20 },
+        { id: "rb1", position: "RB", points: 12 },
+      ],
+    );
+    const view = buildMatchupView(
+      input(
+        w,
+        side(w.slots, {
+          starters: ["qb1", "rb1"],
+          all: ["qb1", "rb1"],
+          taxi: ["rb1"],
+          actualTotal: 30,
+          actualByPlayer: { qb1: 20, rb1: 10 },
+        }),
+        null,
+        { isFinal: true },
+      ),
+    );
+
+    expect(view.home.optimalTotal).toBeCloseTo(30, 5);
+    expect(view.home.pointsLeftOnBench).toBe(0);
+  });
+});

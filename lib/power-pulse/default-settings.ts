@@ -235,6 +235,23 @@ export type PowerPulseSettings = {
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
+  // pp-7 (2026-09-15): two corrections that landed with the first settled week.
+  //
+  // Median-game leagues (Sleeper's league_average_match) are simulated as
+  // such. Every team also plays the league median each week for a second win
+  // or loss, and Sleeper's roster record counts those, so the seeded record
+  // grew by two a week while the simulation added one: the projected record
+  // and the games total never added up in those leagues. The median game now
+  // runs in lib/power-pulse/simulate.ts and gamesTotal counts two results a
+  // week, in the engine and in every what-if that shares the simulator.
+  //
+  // Form needs two settled weeks before it is measured, and the driver says
+  // how many weeks it measured. After week 1 the form component carried its
+  // full weight off a single draw, z-scored across the league, and the driver
+  // said "over the last three weeks" about one.
+  //
+  // Both alter what a score means, so every cached row is stale on this bump.
+  //
   // pp-6 (2026-09-01): opponent strength now sees the current season. The
   // lookup used to be a hardcoded [season - 1, season - 2], which meant a
   // defense's rating during the 2026 season was frozen on 2025 and 2024
@@ -290,7 +307,7 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   //
   // Both change what a score means, so cached pp-2 rows are stale by definition
   // and every league rescores on next view.
-  modelVersion: "pp-6",
+  modelVersion: "pp-7",
 
   weights: {
     points: 0.55,

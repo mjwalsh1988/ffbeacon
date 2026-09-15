@@ -36,13 +36,15 @@ type FilterState = {
   gt: Record<string, unknown>;
   in: Record<string, unknown[]>;
   is: Record<string, unknown>;
+  /** Columns a `.not(col, "is", null)` filter excludes nulls on. Only that form is modelled. */
+  notNull: string[];
   limit?: number;
   head?: boolean;
   maybeSingle?: boolean;
 };
 
 function emptyState(): FilterState {
-  return { eq: {}, gte: {}, lte: {}, gt: {}, in: {}, is: {} };
+  return { eq: {}, gte: {}, lte: {}, gt: {}, in: {}, is: {}, notNull: [] };
 }
 
 /**
@@ -82,6 +84,11 @@ function makeBuilder(table: string, tables: Tables, headProbes?: string[]) {
     for (const [col, val] of Object.entries(state.is)) {
       rows = rows.filter((r) => (val === null ? r[col] == null : r[col] === val));
     }
+    // A fixture row that omits the column stands for a matched row; only an
+    // explicit null is excluded, the same convention lib/projections/source.test.ts uses.
+    for (const col of state.notNull) {
+      rows = rows.filter((r) => r[col] !== null);
+    }
     rows = [...rows].sort((a, b) =>
       String(a.id ?? "").localeCompare(String(b.id ?? "")),
     );
@@ -119,6 +126,10 @@ function makeBuilder(table: string, tables: Tables, headProbes?: string[]) {
     },
     is(col: string, val: unknown) {
       state.is[col] = val;
+      return builder;
+    },
+    not(col: string, op: string, val: unknown) {
+      if (op === "is" && val === null) state.notNull.push(col);
       return builder;
     },
     order() {

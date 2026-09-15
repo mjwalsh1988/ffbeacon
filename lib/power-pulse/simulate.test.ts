@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simulateSeason, type SimTeam } from "./simulate";
+import { simulateSeason, weekMedian, type SimTeam } from "./simulate";
 import type { ScheduleWeek } from "./types";
 
 /** Build a round-robin-ish schedule pairing roster 1v2, 3v4, and so on. */
@@ -244,5 +244,53 @@ describe("playoff round type", () => {
       );
       expect(total, `round type ${type}`).toBeCloseTo(1, 2);
     }
+  });
+});
+
+/**
+ * Sleeper's league_average_match: every team also plays the league median each
+ * week and picks up a second result for it. The roster record counts those,
+ * so the simulation must add two results a week in such a league, or the
+ * projected record is seeded from a two-a-week record and grows one a week.
+ */
+describe("simulateSeason with a weekly median game", () => {
+  const rosterIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const schedule = Array.from({ length: 14 }, (_, i) => pairedWeek(i + 1, rosterIds, i % 11));
+  const sumWins = (results: Map<number, { expectedWins: number }>) =>
+    [...results.values()].reduce((sum, r) => sum + r.expectedWins, 0);
+
+  it("hands out one extra result per team per week, half of them wins", () => {
+    const teams = rosterIds.map((id) => team(id, 115));
+    const without = simulateSeason(teams, schedule, OPTIONS);
+    const withMedian = simulateSeason(teams, schedule, { ...OPTIONS, medianMatch: true });
+    // Twelve teams, fourteen weeks: six head-to-head wins a week without the
+    // median game, twelve with it (six above the median, six below).
+    expect(sumWins(without)).toBeCloseTo(6 * 14, 5);
+    expect(sumWins(withMedian)).toBeCloseTo(12 * 14, 5);
+  });
+
+  it("favours a high scorer twice over: the median game rewards points, not the draw", () => {
+    const teams = rosterIds.map((id) => team(id, id === 1 ? 145 : 115));
+    const without = simulateSeason(teams, schedule, OPTIONS).get(1)!;
+    const withMedian = simulateSeason(teams, schedule, { ...OPTIONS, medianMatch: true }).get(1)!;
+    expect(withMedian.expectedWins).toBeGreaterThan(without.expectedWins + 7);
+  });
+
+  it("is off unless asked for, so an existing league's odds do not move", () => {
+    const teams = rosterIds.map((id) => team(id, 115));
+    const a = simulateSeason(teams, schedule, OPTIONS);
+    const b = simulateSeason(teams, schedule, { ...OPTIONS, medianMatch: false });
+    expect(a.get(1)!.expectedWins).toBe(b.get(1)!.expectedWins);
+  });
+});
+
+describe("weekMedian", () => {
+  it("takes the middle score of an odd count and the average of the two middle of an even one", () => {
+    expect(weekMedian([3, 1, 2])).toBe(2);
+    expect(weekMedian([4, 1, 3, 2])).toBe(2.5);
+  });
+
+  it("is zero for no scores rather than NaN", () => {
+    expect(weekMedian([])).toBe(0);
   });
 });

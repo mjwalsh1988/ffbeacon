@@ -401,6 +401,8 @@ export async function calculateLeagueFaab(
       seed: pulseSettings.simulation.seed,
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
+      playoffRoundType: league.playoffRoundType,
+      medianMatch: league.medianMatch,
     },
   });
 

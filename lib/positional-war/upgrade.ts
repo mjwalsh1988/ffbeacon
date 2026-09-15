@@ -416,6 +416,8 @@ export async function runUpgradeWhatIf(
       seed: pulseSettings.simulation.seed,
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
+      playoffRoundType: league.playoffRoundType,
+      medianMatch: league.medianMatch,
     },
   });
   if (!simulated) return { ok: false, reason: "no-season-left" };

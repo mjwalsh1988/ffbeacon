@@ -45,7 +45,25 @@ export type SimOptions = {
    * treated as 0, which is what this simulated before it read the setting.
    */
   playoffRoundType?: number;
+  /**
+   * Sleeper's league_average_match. When true, every team also plays the
+   * league median each remaining week: above the median is a second win,
+   * below it a second loss, level with it half of each. The seeded record
+   * already counts the played weeks' median results, so a league with the
+   * setting on and a simulation that ignores it has a record growing by one a
+   * week that started out growing by two. Absent is treated as off.
+   */
+  medianMatch?: boolean;
 };
+
+/** The median of the scores drawn this week. Even counts average the middle two. */
+export function weekMedian(scores: readonly number[]): number {
+  const sorted = [...scores].sort((a, b) => a - b);
+  const n = sorted.length;
+  if (n === 0) return 0;
+  const mid = Math.floor(n / 2);
+  return n % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 
 /** Sleeper's three playoff round shapes. */
 const ROUND_ONE_WEEK = 0;
@@ -134,6 +152,24 @@ export function simulateSeason(
         else {
           wins[a] += 0.5;
           wins[b] += 0.5;
+        }
+      }
+      // The median game, for leagues that play one. Every team that has a
+      // head-to-head game this week is measured against the median of the
+      // week's scores, which is how Sleeper does it: a team on a bye week in
+      // the league's own schedule is not in the pool and gets no result.
+      if (options.medianMatch) {
+        const playing: number[] = [];
+        for (const [rosterId] of week.opponents) {
+          const i = index.get(rosterId);
+          if (i !== undefined) playing.push(i);
+        }
+        if (playing.length > 0) {
+          const median = weekMedian(playing.map((i) => weekScores[i]));
+          for (const i of playing) {
+            if (weekScores[i] > median) wins[i] += 1;
+            else if (weekScores[i] === median) wins[i] += 0.5;
+          }
         }
       }
     }

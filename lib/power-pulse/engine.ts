@@ -165,6 +165,8 @@ export type PowerPulseTeamResult = {
     depthDropoffPct: number;
     unfilledSlotRate: number;
     formRatio: number | null;
+    /** How many settled weeks the form ratio was measured over. 0 when there is no ratio. */
+    formWeeks: number;
     usedLeagueScoring: boolean;
     weeksProjected: number;
   };
@@ -201,6 +203,7 @@ type TeamWork = {
   depthDropoffPct: number;
   unfilledSlotRate: number;
   formRatio: number | null;
+  formWeeks: number;
   positionPoints: Record<PulsePosition, number>;
   starters: Array<{
     playerId: string;
@@ -427,11 +430,18 @@ export function computePowerPulse(
     const depthDropoffPct = dropPcts.length > 0 ? mean(dropPcts) : 0;
 
     // ----- form: recent actual results against what we would have expected -----
+    // Measured over the last FORM_WINDOW_WEEKS settled weeks, and only once
+    // MIN_FORM_WEEKS have settled. One week is a single draw from the team's
+    // distribution, and handing form its full weight off one draw, z-scored
+    // across the league, let week 1 noise move every rank in every league on
+    // the first Tuesday of the season.
     const completed = input.results.get(roster.sleeperRosterId) ?? [];
     let formRatio: number | null = null;
-    if (completed.length > 0 && meanPoints > 0) {
-      const recent = completed.slice(-3).map((r) => r.points);
+    let formWeeks = 0;
+    if (completed.length >= MIN_FORM_WEEKS && meanPoints > 0) {
+      const recent = completed.slice(-FORM_WINDOW_WEEKS).map((r) => r.points);
       formRatio = mean(recent) / meanPoints;
+      formWeeks = recent.length;
     }
 
     work.push({
@@ -447,6 +457,7 @@ export function computePowerPulse(
       depthDropoffPct,
       unfilledSlotRate,
       formRatio,
+      formWeeks,
       positionPoints: positionTotals,
       starters,
       usedLeagueScoring,
@@ -497,6 +508,7 @@ export function computePowerPulse(
     playoffTeams: league.playoffTeams,
     playoffWeekStart: league.playoffWeekStart,
     playoffRoundType: league.playoffRoundType,
+    medianMatch: league.medianMatch,
   });
 
   // Strength of schedule and the per-week preview.
@@ -563,13 +575,17 @@ export function computePowerPulse(
   // get played.
   const scoredRosterIds = new Set(work.map((t) => t.roster.sleeperRosterId));
 
+  // A median-game league records two results a week (the head-to-head and the
+  // game against the league median), and the roster's played record already
+  // counts both, so the remaining weeks must count both too.
+  const resultsPerWeek = league.medianMatch ? 2 : 1;
   const gamesTotal = (team: TeamWork): number => {
     const played = team.roster.wins + team.roster.losses + team.roster.ties;
     const remaining = upcomingSchedule.filter((w) => {
       const opponent = w.opponents.get(team.roster.sleeperRosterId);
       return opponent !== undefined && scoredRosterIds.has(opponent);
     }).length;
-    return Math.max(1, played + remaining);
+    return Math.max(1, played + remaining * resultsPerWeek);
   };
 
   const rawPoints = work.map((t) => t.meanPoints);
@@ -711,6 +727,7 @@ export function computePowerPulse(
         depthDropoffPct: round(team.depthDropoffPct, 4),
         unfilledSlotRate: round(team.unfilledSlotRate, 4),
         formRatio: team.formRatio === null ? null : round(team.formRatio, 4),
+        formWeeks: team.formWeeks,
         usedLeagueScoring: team.usedLeagueScoring,
         weeksProjected: team.weekLineups.length,
       },
@@ -722,6 +739,16 @@ export function computePowerPulse(
 }
 
 /** Error function, for the win probability shown in the weekly preview. */
+/** Settled weeks the form ratio looks back over. */
+const FORM_WINDOW_WEEKS = 3;
+/** Settled weeks before form is measured at all. One week is one draw. */
+const MIN_FORM_WEEKS = 2;
+
+/** "2 weeks" or "3 weeks", for the driver sentence. Never claims three off two. */
+function formWeeksPhrase(weeks: number): string {
+  return weeks === 1 ? "week" : `${weeks} weeks`;
+}
+
 function erf(x: number): number {
   const sign = x < 0 ? -1 : 1;
   const a = Math.abs(x);
@@ -843,7 +870,7 @@ function buildDrivers(
   ) {
     drivers.push({
       label: "Running hot",
-      detail: `Scoring ${((result.components.formRatio - 1) * 100).toFixed(0)}% above projection over the last three weeks.`,
+      detail: `Scoring ${((result.components.formRatio - 1) * 100).toFixed(0)}% above projection over the last ${formWeeksPhrase(result.components.formWeeks)}.`,
       tone: "good",
     });
   } else if (
@@ -852,7 +879,7 @@ function buildDrivers(
   ) {
     drivers.push({
       label: "Running cold",
-      detail: `Scoring ${((1 - result.components.formRatio) * 100).toFixed(0)}% below projection over the last three weeks.`,
+      detail: `Scoring ${((1 - result.components.formRatio) * 100).toFixed(0)}% below projection over the last ${formWeeksPhrase(result.components.formWeeks)}.`,
       tone: "bad",
     });
   }

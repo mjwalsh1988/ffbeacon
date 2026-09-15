@@ -154,6 +154,7 @@ describe("detectOnBye", () => {
       rankedTeams: 16,
       kickoffAt: null,
       provider: "espn",
+      linesAsOf: null,
     };
   }
 

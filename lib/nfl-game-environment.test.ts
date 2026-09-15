@@ -13,6 +13,8 @@ import {
   describeEnvironment,
   describeSpread,
   environmentTier,
+  linesAreStale,
+  STALE_LINE_MS,
   weekAverageImpliedTotal,
   type OddsRow,
 } from "./nfl-game-environment";
@@ -181,5 +183,36 @@ describe("describeEnvironment", () => {
 
   it("says there is no game rather than nothing at all", () => {
     expect(describeEnvironment(null, 23)).toBe("No game found for this week.");
+  });
+});
+
+/**
+ * A line is only as good as its age. The odds sync failed silently for two
+ * weeks in September 2026 and every page kept quoting September 1 lines as if
+ * they were current. The number is still shown, but it is said to be old.
+ */
+describe("linesAreStale", () => {
+  const now = Date.parse("2026-09-15T12:00:00.000Z");
+
+  it("is stale past the threshold and fresh inside it", () => {
+    const fresh = buildEnvironmentMap([row({ fetched_at: "2026-09-14T13:15:00.000Z" })]).get("KC")!;
+    const old = buildEnvironmentMap([row({ fetched_at: "2026-09-01T22:35:00.000Z" })]).get("KC")!;
+    expect(linesAreStale(fresh, now)).toBe(false);
+    expect(linesAreStale(old, now)).toBe(true);
+    expect(now - Date.parse(old.linesAsOf!)).toBeGreaterThan(STALE_LINE_MS);
+  });
+
+  it("is never stale without a timestamp, so an older caller's rows are not flagged", () => {
+    const env = buildEnvironmentMap([row()]).get("KC")!;
+    expect(env.linesAsOf).toBeNull();
+    expect(linesAreStale(env, now)).toBe(false);
+    expect(linesAreStale(null, now)).toBe(false);
+  });
+
+  it("says the age in the description when the line is old, and nothing when it is not", () => {
+    const old = buildEnvironmentMap([row({ fetched_at: "2026-09-01T22:35:00.000Z" })]).get("KC")!;
+    expect(describeEnvironment(old, 23, now)).toContain("13 days old");
+    const fresh = buildEnvironmentMap([row({ fetched_at: "2026-09-14T13:15:00.000Z" })]).get("KC")!;
+    expect(describeEnvironment(fresh, 23, now)).not.toContain("days old");
   });
 });

@@ -321,6 +321,24 @@ function buildSide(
   const gradePoints = (player: SchedulePlayer): number | null =>
     input.isFinal ? player.actual : player.projected;
 
+  /**
+   * Who actually started this week. Decided before anything is graded, because
+   * it changes two things below: a starter is eligible for the optimal fill
+   * whatever today's IR or taxi list says, and a starter who has since left the
+   * roster is still a candidate.
+   *
+   * The roster lists are CURRENT ones (Sleeper publishes no per-week history),
+   * and week 2 is when week 1's injuries land on IR. Grading week 1 against
+   * today's list counted the injured starter in "what you scored" and left him
+   * out of "the best lineup you had", which understated the best lineup,
+   * floored the bench gap at zero and paired swaps against a lineup missing a
+   * player. The Lineups page and the Manager Ledger already follow this rule.
+   */
+  const startedIds = new Set<string>();
+  for (const entry of slotEntries) {
+    if (entry.player) startedIds.add(entry.player.sleeperId);
+  }
+
   let projectedSum = 0;
   let variance = 0;
   let projectedCount = 0;
@@ -336,7 +354,11 @@ function buildSide(
     const player = entry.player;
     if (!player) continue;
 
-    const graded = gradePoints(player);
+    // Both totals count the same players. A starter with no players row cannot
+    // enter the optimal fill (it needs his position), so his points stay out of
+    // the set total too, rather than sitting in the numerator alone and
+    // reporting a lineup that beat the best one available.
+    const graded = player.playerId === null ? null : gradePoints(player);
     if (graded !== null) {
       gradedSum += graded;
       gradedCount += 1;
@@ -363,8 +385,18 @@ function buildSide(
   // projected at all", not "which slot are they sitting in". A player occupying
   // an IDP slot therefore carries a projection in this map and none in their
   // lineup cell, which is the right answer for both readers.
+  //
+  // The pool is the current roster PLUS everyone who started this week. On a
+  // settled week Sleeper's players_points map is the roster as it stood that
+  // week, so its keys join too; a player traded away since then is still the
+  // player who was available to start.
   const rosterPlayers = new Map<string, SchedulePlayer>();
-  for (const sleeperId of side.allPlayerSleeperIds) {
+  const poolIds: string[] = [...side.allPlayerSleeperIds];
+  for (const entry of slotEntries) {
+    if (entry.player) poolIds.push(entry.player.sleeperId);
+  }
+  if (input.isFinal) poolIds.push(...side.actualByPlayer.keys());
+  for (const sleeperId of poolIds) {
     if (!sleeperId || sleeperId === "0") continue;
     if (rosterPlayers.has(sleeperId)) continue;
     rosterPlayers.set(sleeperId, buildPlayer(sleeperId, true, null));
@@ -374,7 +406,9 @@ function buildSide(
   for (const [sleeperId, player] of rosterPlayers) {
     const points = gradePoints(player);
     if (points === null) continue;
-    if (reserve.has(sleeperId) || taxi.has(sleeperId)) continue;
+    // Today's IR and taxi lists bar a player from the fill unless he actually
+    // started this week, in which case he plainly could be started.
+    if (!startedIds.has(sleeperId) && (reserve.has(sleeperId) || taxi.has(sleeperId))) continue;
     const row = input.players.get(sleeperId);
     if (!row) continue;
     candidates.push({
@@ -426,11 +460,6 @@ function buildSide(
    * longer open. pointsLeftOnBench comes from the optimal fill above and is the
    * real total; this list is the route to it, one legible move at a time.
    */
-  const startedIds = new Set<string>();
-  for (const entry of slotEntries) {
-    if (entry.player) startedIds.add(entry.player.sleeperId);
-  }
-
   const proposals: UpgradeProposal[] = [];
   for (const [sleeperId, inPlayer] of rosterPlayers) {
     if (startedIds.has(sleeperId)) continue;
@@ -462,7 +491,8 @@ function buildSide(
       // An occupied slot we cannot grade is not a target. Its holder scored or
       // projects something we do not know, and calling that zero would invent a
       // gain out of our own missing data.
-      const holderPoints = holder === null ? 0 : gradePoints(holder);
+      const holderPoints =
+        holder === null ? 0 : holder.playerId === null ? null : gradePoints(holder);
       if (holderPoints === null) continue;
 
       if (!foundTarget || holderPoints < targetPoints) {

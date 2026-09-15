@@ -14,6 +14,8 @@
 import { describe, expect, it } from "vitest";
 import {
   centeredShrunkMultiplier,
+  currentSeasonWeekWeight,
+  latestPlayedWeek,
   positionBaselineRatio,
 } from "./calculate-projection-accuracy";
 
@@ -195,5 +197,43 @@ describe("centeredShrunkMultiplier", () => {
       maxMultiplier: 1.05,
     });
     expect(result).toBe(1);
+  });
+});
+
+describe("latestPlayedWeek", () => {
+  it("is the latest week with a game actually played, not the latest row", () => {
+    const actuals = [
+      { season: 2026, week: 1, gp: 1 },
+      { season: 2026, week: 2, gp: 0 }, // a scaffold row for an inactive player
+      { season: 2025, week: 18, gp: 1 },
+    ];
+    expect(latestPlayedWeek(actuals, 2026)).toBe(1);
+  });
+
+  it("is null before the season's first game", () => {
+    expect(latestPlayedWeek([{ season: 2025, week: 18, gp: 1 }], 2026)).toBeNull();
+  });
+});
+
+describe("currentSeasonWeekWeight", () => {
+  it("weighs the latest played week at 1.0 and halves every half-life behind it", () => {
+    expect(currentSeasonWeekWeight(9, 9, 8)).toBe(1);
+    expect(currentSeasonWeekWeight(1, 9, 8)).toBeCloseTo(0.5, 10);
+    expect(currentSeasonWeekWeight(1, 17, 8)).toBeCloseTo(0.25, 10);
+  });
+
+  it("keeps week 1 at full weight while week 1 is the only week played", () => {
+    // The defect this guards: anchored on the latest PROJECTED week (18), week 1
+    // weighed 0.5 ** (17 / 8) = 0.23, below a prior-season game's 0.45.
+    expect(currentSeasonWeekWeight(1, 1, 8)).toBe(1);
+  });
+
+  it("never inflates a week ahead of the anchor and decays nothing with no anchor", () => {
+    expect(currentSeasonWeekWeight(5, 3, 8)).toBe(1);
+    expect(currentSeasonWeekWeight(1, null, 8)).toBe(1);
+  });
+
+  it("treats a half-life under one week as one week", () => {
+    expect(currentSeasonWeekWeight(1, 2, 0)).toBeCloseTo(0.5, 10);
   });
 });

@@ -95,6 +95,7 @@ const LEAGUE: LeagueRow = {
   playoffTeams: 4,
   playoffWeekStart: 7,
   playoffRoundType: 0,
+  medianMatch: false,
 };
 
 const MINE: RosterRow = {

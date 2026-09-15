@@ -85,6 +85,7 @@ function makeQuery(rows: Row[]) {
   const eqFilters: Record<string, unknown> = {};
   const gteFilters: Record<string, unknown> = {};
   const lteFilters: Record<string, unknown> = {};
+  const notNullCols: string[] = [];
   const query = {
     select() {
       return query;
@@ -101,6 +102,12 @@ function makeQuery(rows: Row[]) {
       lteFilters[col] = val;
       return query;
     },
+    // Only `.not(col, "is", null)` is modelled. A fixture row that omits the
+    // column stands for a matched row; only an explicit null is excluded.
+    not(col: string, op: string, val: unknown) {
+      if (op === "is" && val === null) notNullCols.push(col);
+      return query;
+    },
     then(
       resolve: (v: { count: number; error: null }) => void,
       _reject?: (e: unknown) => void,
@@ -114,6 +121,9 @@ function makeQuery(rows: Row[]) {
       }
       for (const [col, val] of Object.entries(lteFilters)) {
         matched = matched.filter((r) => Number(r[col]) <= Number(val));
+      }
+      for (const col of notNullCols) {
+        matched = matched.filter((r) => r[col] !== null);
       }
       resolve({ count: matched.length, error: null });
     },
@@ -278,5 +288,34 @@ describe("resolveProjectionSourceForWindow", () => {
         settings: enabledSettings,
       }),
     ).resolves.toBe(SLEEPER_SOURCE);
+  });
+});
+
+/**
+ * Parity is measured over the builder's own universe. The Sleeper sync keeps a
+ * row whose player has no `players` match, with player_id null, and the
+ * builder never mirrors one. Counting those on the Sleeper side made parity
+ * fail by exactly the unmatched count, so the switch, once enabled, would have
+ * left every reader on Sleeper with nothing saying why.
+ */
+describe("availableProjectionSources: unmatched Sleeper rows", () => {
+  it("does not count a Sleeper row with no player match against ffbeacon's coverage", async () => {
+    const client = fakeClient([
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 5, player_id: "p1" },
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 5, player_id: null },
+      { source: BEACON_SOURCE, season: 2026, season_type: "regular", week: 5, player_id: "p1" },
+    ]);
+    const available = await availableProjectionSources(client, 2026, 5, 5);
+    expect(available.sort()).toEqual([BEACON_SOURCE, SLEEPER_SOURCE].sort());
+  });
+
+  it("still excludes ffbeacon when a matched Sleeper row has no mirror", async () => {
+    const client = fakeClient([
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 5, player_id: "p1" },
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 5, player_id: "p2" },
+      { source: BEACON_SOURCE, season: 2026, season_type: "regular", week: 5, player_id: "p1" },
+    ]);
+    const available = await availableProjectionSources(client, 2026, 5, 5);
+    expect(available).toEqual([SLEEPER_SOURCE]);
   });
 });

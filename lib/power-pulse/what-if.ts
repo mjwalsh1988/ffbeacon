@@ -20,7 +20,7 @@
  */
 
 import { mean } from "./math";
-import { simulateSeason, type SimTeam } from "./simulate";
+import { simulateSeason, type SimOptions, type SimTeam } from "./simulate";
 import type { ScheduleWeek, SimulationResult } from "./types";
 
 /** A roster's projected mean and spread for each remaining week. */
@@ -107,12 +107,13 @@ export function simulateWithReplacements(params: {
   replacements: Map<number, WeeklyDistribution>;
   /** Unplayed regular-season weeks. */
   upcoming: ScheduleWeek[];
-  options: {
-    runs: number;
-    seed: number;
-    playoffTeams: number;
-    playoffWeekStart: number;
-  };
+  /**
+   * The same options the engine hands simulateSeason, so a league's what-if
+   * plays the same bracket shape and the same median game the Power Pulse
+   * page does. Callers pass `league.playoffRoundType` and `league.medianMatch`
+   * through; leaving either out silently simulates a different league.
+   */
+  options: SimOptions;
 }): {
   before: Map<number, WhatIfOutcome>;
   after: Map<number, WhatIfOutcome>;

@@ -352,6 +352,8 @@ export async function calculateLeagueImpact(
     seed: pulseSettings.simulation.seed,
     playoffTeams: league.playoffTeams,
     playoffWeekStart: league.playoffWeekStart,
+    playoffRoundType: league.playoffRoundType,
+    medianMatch: league.medianMatch,
   };
 
   let oddsBefore: { playoff: number; title: number; wins: number } | null = null;

@@ -5,7 +5,8 @@
  * unit tested; this file only loads, joins, and writes.
  *
  * WHAT IT LOADS
- *   player_stats                usage and efficiency history, back three seasons
+ *   player_stats                usage and efficiency history, this season plus
+ *                               the two completed before it
  *   player_weekly_projections   Sleeper's rows for the window, which are both
  *                               the blend partner and the list of weeks that
  *                               exist at all
@@ -74,13 +75,18 @@ const UPSERT_BATCH_SIZE = 500;
 const LAST_WEEK = 18;
 
 /**
- * How many completed seasons of history the usage model reads.
+ * How many seasons of history the usage model reads, the live one included.
  *
- * Three. The recency ladder already discounts a two-season-old game to a fifth
- * of a current one and anything older to about a twelfth, so a fourth season
- * would add load without moving a number. It is also the same depth
- * nfl_defense_vs_position uses, which keeps the two models reading the same
- * slice of history.
+ * Three: this season plus the two completed before it. The recency ladder
+ * already discounts a two-season-old game to a fifth of a current one, so a
+ * fourth season would add load without moving a number. It is also the same
+ * depth nfl_defense_vs_position uses, which keeps the two models reading the
+ * same slice of history.
+ *
+ * A consequence worth knowing when editing the admin settings: the ladder's
+ * `usage.seasonWeights.olderSeasons` rung (three or more seasons back) is never
+ * reached at this depth. Raising HISTORY_SEASONS to 4 is what would put it in
+ * play.
  */
 const HISTORY_SEASONS = 3;
 
@@ -595,28 +601,6 @@ async function loadSeasonStatRows(
     cursor = data[data.length - 1].id;
     if (data.length < PAGE) break;
   }
-}
-
-async function loadPositions(
-  supabase: ServiceClient,
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("players")
-      .select("id, position")
-      // Ordered, matching lib/draft-tracker/board.ts and
-      // lib/power-pulse/load.ts: without a stable sort Postgres can return a
-      // different order per page, and a paged range walk over an unordered
-      // query can then silently skip or duplicate rows.
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`beacon projections position load failed: ${error.message}`);
-    if (!data || data.length === 0) break;
-    for (const row of data) out.set(row.id, row.position);
-    if (data.length < PAGE) break;
-  }
-  return out;
 }
 
 /**

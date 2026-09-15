@@ -44,7 +44,12 @@ export async function loadSleeperIdMap(
     const pageFrom = from;
     const { data, error } = await withRetry(
       async () =>
-        await supabase.from("players").select("id, external_ids").range(pageFrom, pageFrom + PAGE - 1),
+        await supabase
+          .from("players")
+          .select("id, external_ids")
+          // Ordered: an unordered .range() can repeat and skip rows across pages.
+          .order("id", { ascending: true })
+          .range(pageFrom, pageFrom + PAGE - 1),
       { label: `players page ${pageFrom}` },
     );
     if (error) throw error;

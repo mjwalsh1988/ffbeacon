@@ -116,6 +116,7 @@ function withEnvironment(input: StartSitReasonInput): StartSitReasonInput {
           rankedTeams: 32,
           kickoffAt: null,
           provider: "test",
+          linesAsOf: null,
         },
       },
       b: {
@@ -131,6 +132,7 @@ function withEnvironment(input: StartSitReasonInput): StartSitReasonInput {
           rankedTeams: 32,
           kickoffAt: null,
           provider: "test",
+          linesAsOf: null,
         },
       },
     },

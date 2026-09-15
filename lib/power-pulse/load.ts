@@ -81,6 +81,14 @@ export type LeagueRow = {
    * that a single week does not.
    */
   playoffRoundType: number;
+  /**
+   * Sleeper's league_average_match. When on, every team also plays the league
+   * median each week and picks up a second win or loss for it, and Sleeper's
+   * roster record COUNTS those. The simulation has to play the same game, or
+   * a 5-1 record after three weeks is seeded onto a schedule that adds one
+   * result a week and the projected record never adds up.
+   */
+  medianMatch: boolean;
 };
 
 export type RosterRow = {
@@ -236,6 +244,7 @@ export async function loadLeague(
     // Zero is a real value here (one week per round) rather than an absent one,
     // so intOrNull, not positiveIntOrNull.
     playoffRoundType: intOrNull(settings.playoff_round_type) ?? 0,
+    medianMatch: intOrNull(settings.league_average_match) === 1,
   };
 }
 

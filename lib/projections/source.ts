@@ -158,6 +158,13 @@ export async function availableProjectionSources(
       .eq("season", season)
       .eq("season_type", "regular")
       .eq("source", source)
+      // The builder's own universe. lib/sync-weekly-projections.ts keeps a
+      // Sleeper row whose player has no players match, with player_id null,
+      // and lib/build-beacon-projections.ts never mirrors one. Counting those
+      // on the Sleeper side made parity fail by exactly the unmatched count,
+      // so the switch, once enabled, would have left every reader on Sleeper
+      // with nothing saying why.
+      .not("player_id", "is", null)
       .gte("week", fromWeek);
     if (toWeek !== undefined) q = q.lte("week", toWeek);
     const { count, error } = await q;
