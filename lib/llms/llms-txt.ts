@@ -230,7 +230,7 @@ export function buildLlmsTxt(data: LlmsData): string {
     link(
       "Sitemap index",
       u("/sitemap.xml"),
-      "Every indexable URL, split into core pages, articles, player profiles and public profiles",
+      "Every indexable URL, split into core pages, player profiles and public profiles; Beacon Brief articles are deliberately kept out of it",
     ),
     link(
       "robots.txt",

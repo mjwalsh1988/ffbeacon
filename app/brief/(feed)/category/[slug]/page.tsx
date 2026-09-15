@@ -10,6 +10,7 @@ import {
   BRIEF_PAGE_SIZE,
 } from "@/lib/beacon-brief-feed";
 import { BriefFeed } from "@/components/beacon-brief/brief-feed";
+import { BRIEF_SEARCH_INDEXING } from "@/lib/beacon-brief/index-quality";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -39,6 +40,14 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     title,
     description,
     alternates: { canonical },
+    // An archive of noindexed articles is a page of links to nothing, so it follows
+    // the Brief's master switch (lib/beacon-brief/index-quality.ts). follow stays
+    // true so a crawler still walks out to the player profiles the articles link.
+    robots: {
+      index: BRIEF_SEARCH_INDEXING,
+      follow: true,
+      googleBot: { index: BRIEF_SEARCH_INDEXING, follow: true },
+    },
     // Filtered views of the Brief share the Brief's own card. The headline
     // and the description below still name the filter, so the preview reads
     // correctly even though the artwork is the section's.

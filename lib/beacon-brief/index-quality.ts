@@ -38,7 +38,34 @@
  * filter pages, and keep their Discord card. A reader loses nothing. They leave the
  * sitemap and carry `index: false, follow: true`, so a crawler that finds one still
  * walks its links out to the player profiles rather than treating it as a dead end.
+ *
+ * THE MASTER SWITCH (2026-09-14)
+ *
+ * Google AdSense declined the site for "low value content" on 2026-09-14, and the
+ * review of why (docs/seo-audit/adsense-review-2026-09-14.md) landed on the Brief as
+ * the largest single cause: 316 indexed articles, every one drafted by the automated
+ * desk from other outlets' reporting, median length under 160 words. That is the
+ * pattern Google's spam policies name under "scaled content abuse", and its own advice
+ * for content like it is "exclude it from Search".
+ *
+ * So BRIEF_SEARCH_INDEXING is false, and while it is false NO article is indexable,
+ * however long it is and whoever it covers, and the sitemap's articles file is empty.
+ * The quality floor below is kept intact behind it (clearsQualityFloor) so flipping
+ * the switch back restores the exact rule that was in force before, rather than a
+ * guess at it. The category, team and tag archives follow the same switch, because
+ * an archive of noindexed pages is a page of links to nothing.
+ *
+ * What does NOT change while the switch is off: every article still publishes, still
+ * renders, still appears in the on-site feed, the RSS feed, the homepage and every
+ * player profile, and still goes to Discord. The /brief hub itself stays indexable.
+ * Only the search engines are told to leave the individual articles alone.
  */
+
+/**
+ * Whether ANY Beacon Brief article or archive page may be advertised to search
+ * engines. See "THE MASTER SWITCH" above for why it is off.
+ */
+export const BRIEF_SEARCH_INDEXING = false;
 
 /**
  * Below this, an article has to earn its place in the index by covering somebody
@@ -79,18 +106,31 @@ export function countArticleWords(markdown: string | null | undefined): number {
   return (text.match(/[^\s]*[A-Za-z0-9][^\s]*/g) ?? []).length;
 }
 
+type ArticleQualityInput = {
+  contentMd: string | null | undefined;
+  /** True when at least one player on the article is ranked inside the window. */
+  hasRankedPlayer: boolean;
+};
+
+/**
+ * The quality floor on its own: would this article be worth indexing if the Brief
+ * were being indexed at all? Kept separate from the switch so the rule survives
+ * being switched off, and so the tests can pin it down either way.
+ */
+export function clearsQualityFloor(input: ArticleQualityInput): boolean {
+  if (input.hasRankedPlayer) return true;
+  return countArticleWords(input.contentMd) >= THIN_ARTICLE_WORDS;
+}
+
 /**
  * Should this article be advertised to search engines?
  *
  * Takes the two inputs rather than a client, so the sitemap can answer it in bulk from
  * one scan and the article page can answer it from what it already loaded. Neither
- * caller gets to define the rule.
+ * caller gets to define the rule. While BRIEF_SEARCH_INDEXING is off the answer is
+ * always no.
  */
-export function isArticleIndexable(input: {
-  contentMd: string | null | undefined;
-  /** True when at least one player on the article is ranked inside the window. */
-  hasRankedPlayer: boolean;
-}): boolean {
-  if (input.hasRankedPlayer) return true;
-  return countArticleWords(input.contentMd) >= THIN_ARTICLE_WORDS;
+export function isArticleIndexable(input: ArticleQualityInput): boolean {
+  if (!BRIEF_SEARCH_INDEXING) return false;
+  return clearsQualityFloor(input);
 }

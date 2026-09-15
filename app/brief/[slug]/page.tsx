@@ -14,7 +14,10 @@ import {
   loadSidebar,
   publishedArticleSlugs,
 } from "@/lib/beacon-brief-feed";
-import { isArticleIndexable } from "@/lib/beacon-brief/index-quality";
+import {
+  BRIEF_SEARCH_INDEXING,
+  isArticleIndexable,
+} from "@/lib/beacon-brief/index-quality";
 import { ArticleMarkdown } from "@/components/beacon-brief/article-markdown";
 import {
   ArticleCard,
@@ -84,6 +87,9 @@ const getArticle = cache(async (slug: string) => {
  * is unreliable.
  */
 const getIsIndexable = cache(async (slug: string) => {
+  // Every article is noindex while the Brief is switched out of search, so the
+  // ranked-player query is not spent on an answer that cannot change.
+  if (!BRIEF_SEARCH_INDEXING) return false;
   const article = await getArticle(slug);
   if (!article) return false;
   const hasRankedPlayer = await anyPlayerCurrentlyRanked(

@@ -13,6 +13,7 @@ import {
 } from "@/lib/home-content";
 import { HeroLavaField } from "@/components/hero-lava-field";
 import { DiscordGlyph } from "@/components/discord-glyph";
+import { AuthorPortrait } from "@/components/author-portrait";
 import {
   Workflow,
   Calculator,
@@ -32,6 +33,12 @@ import {
   Users2,
   CheckCircle2,
   HeartHandshake,
+  Accessibility,
+  Keyboard,
+  Smartphone,
+  Eye,
+  Headphones,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
@@ -187,6 +194,7 @@ export default async function HomePage() {
       <ArticlesSection articles={articles} />
       <GuidesSection />
       <SourcesFormatsSection formats={formats} sources={sources} />
+      <FounderSection />
       <CtaSection memberContext={memberContext} />
     </main>
   );
@@ -1242,6 +1250,202 @@ function GuidesSection() {
         </div>
       </div>
     </section>
+  );
+}
+
+/* ---------- Founder ---------- */
+
+/**
+ * Who builds the site, and why it reads the way it does.
+ *
+ * Every claim here is one the about page or the author page already makes in
+ * Michael's own words: twenty seasons since 2006, blind, NVDA every day, the
+ * four build rules. The pull quote is lifted verbatim from /author/michael.
+ * Nothing is invented for the homepage, so the three pages cannot disagree
+ * about the person behind the byline.
+ *
+ * It sits low on the page on purpose. A first-time visitor wants the tools; a
+ * visitor who has scrolled this far is asking who made them and whether to
+ * trust the numbers, and that is the question this answers.
+ */
+
+type BuildRule = { icon: LucideIcon; title: string; body: string };
+
+const BUILD_RULES: BuildRule[] = [
+  {
+    icon: Accessibility,
+    title: "Semantic HTML first",
+    body: "A button is a button and a table is a table. ARIA fills the gaps HTML cannot express, never the other way round.",
+  },
+  {
+    icon: Keyboard,
+    title: "Everything works by keyboard",
+    body: "Every control is reachable without a mouse, and a focus ring is never removed without a replacement.",
+  },
+  {
+    icon: Smartphone,
+    title: "Nothing is dropped on a phone",
+    body: "When a table will not fit, the row restacks. A column is never hidden to make the layout easier.",
+  },
+  {
+    icon: Eye,
+    title: "Color never carries meaning alone",
+    body: "Every colored state is paired with words, so a verdict reads the same by ear as it looks on the page.",
+  },
+];
+
+function FounderSection() {
+  return (
+    <section aria-labelledby="founder-heading" className="border-b border-line">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <div
+          className="relative overflow-hidden rounded-modal border border-brand-purple/30 bg-surface-elevated p-6 shadow-xl shadow-black/40 sm:p-10"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 100% 0%, rgba(168, 85, 247, 0.18) 0%, transparent 50%), radial-gradient(ellipse at 0% 100%, rgba(34, 211, 238, 0.14) 0%, transparent 50%)",
+          }}
+        >
+          {/* Beacon hairline across the top of the card. Decorative. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+            }}
+          />
+
+          <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-14">
+            {/* The story. */}
+            <div className="min-w-0">
+              <SectionEyebrow>Who builds this</SectionEyebrow>
+              <h2
+                id="founder-heading"
+                className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+              >
+                Built by a blind fantasy manager.{" "}
+                <GradientWord>Read it by ear or by eye.</GradientWord>
+              </h2>
+              <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted">
+                Michael has played fantasy football since 2006, twenty seasons
+                across redraft, dynasty, superflex and tight end premium. He is
+                blind and runs every one of his leagues with a screen reader.
+                For most of those years the tools everyone else used were the
+                problem, so he built the one he wanted.
+              </p>
+              <blockquote className="mt-6 max-w-2xl border-l-2 border-brand-cyan/60 pl-5">
+                <p className="text-base leading-relaxed text-ink sm:text-lg">
+                  &quot;Every app I tried had friction sighted users never
+                  notice: stats trapped inside an unlabeled chart, filters you
+                  can only reach with a mouse, player news that updates
+                  silently.&quot;
+                </p>
+                <footer className="mt-3 text-sm text-ink-subtle">
+                  Michael, founder of FF Beacon
+                </footer>
+              </blockquote>
+              <p className="mt-6 max-w-2xl text-base leading-relaxed text-ink-muted">
+                That is why every screen here is written as semantic HTML first
+                and driven with a keyboard and a screen reader before it ships,
+                and why the same number reads the same whether you hear it or
+                see it. Sighted managers get a faster, cleaner site out of it
+                too, because a page that works by ear has nothing hiding in a
+                chart.
+              </p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link
+                  href="/author/michael"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  Meet Michael
+                  <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+                </Link>
+                <Link
+                  href="/about"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  <Accessibility aria-hidden="true" className="h-3.5 w-3.5" />
+                  How we build for accessibility
+                </Link>
+              </div>
+            </div>
+
+            {/* The person, and the rules. */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-5 rounded-card border border-line bg-base/60 p-5">
+                <AuthorPortrait size={96} className="shrink-0" />
+                {/* Each pair is one div holding a dt then a dd, with the icon
+                    inside the dt, the same shape lineup-summary.tsx uses. A div
+                    between the dl and the pair is not a valid dl child. */}
+                <dl className="grid min-w-0 flex-1 gap-2.5">
+                  <div className="min-w-0">
+                    <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+                      <Trophy aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-cyan" />
+                      Seasons
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink">
+                      Twenty, since 2006
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+                      <Layers aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-purple" />
+                      Format focus
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink">
+                      Dynasty, superflex and TEP
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+                      <Headphones aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-cyan" />
+                      Reads by
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink">
+                      Screen reader, every day
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              <h3 className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+                The rules every screen ships under
+              </h3>
+              <ul role="list" className="mt-3 grid gap-3 sm:grid-cols-2">
+                {BUILD_RULES.map((rule) => (
+                  <BuildRuleCard key={rule.title} rule={rule} />
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BuildRuleCard({ rule }: { rule: BuildRule }) {
+  const Icon = rule.icon;
+  return (
+    <li className="relative overflow-hidden rounded-card border border-line bg-base/60 p-4">
+      {/* Left accent rail. Decorative. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 w-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 items-center justify-center rounded-card border border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <h4 className="mt-3 text-sm font-semibold text-ink">{rule.title}</h4>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{rule.body}</p>
+    </li>
   );
 }
 

@@ -24,6 +24,7 @@ import {
 } from "@/lib/sleeper-handle/resolve";
 import { OnTheClockClient } from "./on-the-clock-client";
 import { StartDraftingButton } from "./start-drafting-button";
+import { WrittenSections } from "./written-sections";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
@@ -154,6 +155,7 @@ export default async function OnTheClockPage({
             The methodology behind every value on this board
           </Link>
         </p>
+        <WrittenSections />
       </PageBody>
       <DiscordCtaSection
         eyebrow="Need a hand mid-draft?"

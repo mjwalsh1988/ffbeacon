@@ -70,7 +70,7 @@ export default function GamesPage() {
             {
               label: "Playable now",
               value: String(playable),
-              detail: playable === 1 ? "More being built" : "More on the way",
+              detail: playable === 1 ? "Free to play" : "All free to play",
               accent: "cyan",
             },
             { label: "Cost", value: "$0", detail: "No account needed", accent: "purple" },

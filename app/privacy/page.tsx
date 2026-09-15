@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
@@ -11,8 +12,8 @@ export const metadata: Metadata = {
     "What FF Beacon collects, why, who we share it with, what happens when you donate, and how to delete it.",
 };
 
-const EFFECTIVE_DATE = "September 6, 2026";
-const EFFECTIVE_DATE_ISO = "2026-09-06";
+const EFFECTIVE_DATE = "September 14, 2026";
+const EFFECTIVE_DATE_ISO = "2026-09-14";
 const OPERATOR = SITE.author.legalName;
 const CONTACT = SITE.legalContactEmail;
 
@@ -22,14 +23,37 @@ const CONTACT = SITE.legalContactEmail;
  * The rule this page is written to: it describes what the code actually does,
  * and nothing else. Every processor listed here is one this repository really
  * calls, every field named is one that is really stored, and where a thing that
- * looks like it should be happening is not happening (advertising cookies, a
- * language model reading your questions) the page says so explicitly rather than
- * staying quiet and letting a reader assume the worse answer.
+ * looks like it should be happening is not happening (a language model reading
+ * your questions) the page says so explicitly rather than staying quiet and
+ * letting a reader assume the worse answer.
  *
  * That is also why it is specific about the boring parts. "We use analytics" is
  * true of a site that fingerprints every visitor and of one that counts page
  * views without a cookie, and only one of those is what happens here.
+ *
+ * ADVERTISING (2026-09-14). The site is applying to Google AdSense, and AdSense
+ * requires the privacy policy to carry a specific disclosure about third-party
+ * advertising cookies and where to opt out of personalized ads
+ * (https://support.google.com/adsense/answer/1348695). The "Advertising" block in
+ * section 1 is that disclosure, worded to Google's requirement and to the truth:
+ * ads are served by Google when they are on, and the page says what that
+ * involves before the first one renders. The earlier "we do not use advertising
+ * cookies" line was removed at the same time because it stopped being true the
+ * moment the application went in.
  */
+
+const LINK_CLASS =
+  "text-brand-cyan underline hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+
+/** An external link that says so to a screen reader. */
+function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+      {children}
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+}
 export default function PrivacyPage() {
   return (
     <main id="main">
@@ -52,9 +76,13 @@ export default function PrivacyPage() {
           </p>
           <p>
             The short version: most of {SITE.name} works without an account and without
-            you telling us anything. We do not sell your data, we do not use advertising
-            cookies, and we never see your card number. Questions or requests go to{" "}
-            {CONTACT}.
+            you telling us anything. We do not sell your data and we never see your card
+            number. Any ad you see on the site is served by Google, and the{" "}
+            <a href="#advertising" className={LINK_CLASS}>
+              Advertising
+            </a>{" "}
+            section below says exactly what that involves and how to switch
+            personalized ads off. Questions or requests go to {CONTACT}.
           </p>
 
           <section aria-labelledby="what">
@@ -165,11 +193,52 @@ export default function PrivacyPage() {
               have already voted, and to cache transient interface state.
             </p>
             <p className="mt-2">
-              We do not use third-party advertising cookies and we do not build
-              cross-site profiles. If advertising is ever introduced on the site, this
-              page will say what it collects before it starts. You can clear our cookies
-              at any time from your browser settings; clearing them signs you out and
-              resets your preferences.
+              We do not build cross-site profiles of you ourselves. The one third party
+              that may set cookies in your browser here is Google, when it serves an
+              ad, and the Advertising block just below explains what those cookies do
+              and how to opt out of personalized ads. You can clear our cookies at any
+              time from your browser settings; clearing them signs you out and resets
+              your preferences.
+            </p>
+
+            <h3 id="advertising" className="mt-4 text-base font-semibold text-ink">
+              Advertising
+            </h3>
+            <p className="mt-2">
+              {SITE.name} is free to use, and advertising is how the hosting bill gets
+              paid. Any ads on the site are served by Google AdSense. When an ad is shown,
+              third-party vendors, including Google, use cookies to serve ads based on
+              your prior visits to this website or to other websites. Google&apos;s use
+              of advertising cookies enables it and its partners to serve ads to you
+              based on your visit to this site and other sites on the Internet.
+            </p>
+            <p className="mt-2">
+              You can opt out of personalized advertising by visiting{" "}
+              <ExternalLink href="https://www.google.com/settings/ads">
+                Google&apos;s Ads Settings
+              </ExternalLink>
+              . You can also opt out of some other third-party vendors&apos; use of
+              cookies for personalized advertising at{" "}
+              <ExternalLink href="https://www.aboutads.info/choices/">
+                www.aboutads.info/choices
+              </ExternalLink>
+              . Opting out does not remove ads; it stops them being chosen from your
+              browsing history.
+            </p>
+            <p className="mt-2">
+              Google explains what it collects when it serves an ad on a site like this
+              one at{" "}
+              <ExternalLink href="https://policies.google.com/technologies/partner-sites">
+                How Google uses information from sites or apps that use our services
+              </ExternalLink>
+              . The ad technology providers Google may work with are listed at{" "}
+              <ExternalLink href="https://support.google.com/admanager/answer/9012903">
+                Google&apos;s ad technology providers page
+              </ExternalLink>
+              . We do not pass Google your name, your email address, or anything else
+              that identifies you; what an ad request carries is what your browser sends
+              to any website (an IP address and browser details) plus the page you are
+              on.
             </p>
 
             <h3 className="mt-4 text-base font-semibold text-ink">
@@ -245,6 +314,12 @@ export default function PrivacyPage() {
                 To send email digests, if and only if you explicitly opted in. Basis:
                 your consent, which you can withdraw at any time.
               </li>
+              <li>
+                To show advertising that keeps the site free. Basis: our legitimate
+                interest in paying for the service without a paywall, and, where local
+                law requires it for personalized ads, your consent, which you can
+                withdraw through the opt-out links in the Advertising block above.
+              </li>
             </ul>
           </section>
 
@@ -253,12 +328,12 @@ export default function PrivacyPage() {
               3. Who we share it with
             </h2>
             <p className="mt-3">
-              We do not sell, rent, or trade your personal information, and we do not
-              share it for cross-context behavioral advertising. The list below is
-              every third party involved in running the product, and they are not all
-              the same kind of party. Some process data on our instructions. Some are
-              independent of us and decide for themselves what they do with what you
-              give them. Some receive nothing about you at all. Each entry says which:
+              We do not sell, rent, or trade your personal information. The list below
+              is every third party involved in running the product, and they are not
+              all the same kind of party. Some process data on our instructions. Some
+              are independent of us and decide for themselves what they do with what
+              you give them. Some receive nothing about you at all. Each entry says
+              which:
             </p>
             <ul className="mt-3 list-disc space-y-1 pl-6">
               <li>
@@ -294,6 +369,14 @@ export default function PrivacyPage() {
                 sign in with one of them. They receive the fact that you authenticated
                 against the {SITE.name} app; we receive the profile fields listed above.
                 Discord additionally receives poll interactions you make in our server.
+              </li>
+              <li>
+                <strong className="text-ink">Google AdSense</strong>, which serves the
+                ads. Google acts as an independent controller of what its advertising
+                cookies collect, under its own policy, and the Advertising block in
+                section 1 says how to opt out of personalized ads. We receive aggregate
+                reporting from it (how many ads were shown and clicked), never a list
+                of who saw them.
               </li>
               <li>
                 <strong className="text-ink">Anthropic</strong>, whose language models
@@ -342,15 +425,9 @@ export default function PrivacyPage() {
             <p className="mt-3">
               {SITE.name}&apos;s use and transfer of information received from Google
               APIs to any other app will adhere to the{" "}
-              <a
-                href="https://developers.google.com/terms/api-services-user-data-policy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-cyan underline hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
+              <ExternalLink href="https://developers.google.com/terms/api-services-user-data-policy">
                 Google API Services User Data Policy
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
+              </ExternalLink>
               , including the Limited Use requirements. We use the data we receive
               solely to authenticate you and to populate your profile (name, email,
               avatar). We do not transfer this data to third parties for any purpose
@@ -395,6 +472,11 @@ export default function PrivacyPage() {
                 Rate-limit hashes: short-lived, and expire with their window.
               </li>
               <li>
+                Advertising cookies: set and expired by Google under its own policy.
+                We hold none of them, and clearing your browser&apos;s cookies removes
+                them.
+              </li>
+              <li>
                 Hosting request logs: retained by our hosting provider on a rolling
                 short-term basis, typically 30 days.
               </li>
@@ -435,13 +517,14 @@ export default function PrivacyPage() {
             <p className="mt-3">
               <strong className="text-ink">If you are in California</strong>, you have
               the rights to know, delete, and correct, and the right to opt out of sale
-              or sharing. We do not sell or share personal information as those terms
-              are defined by the CCPA, and we have not done so in the preceding twelve
-              months. We do not knowingly sell or share the personal information of
-              anyone under 16. Because there is no sale or sharing to opt out of, we do
-              not operate an opt-out mechanism and we do not currently act on the
-              Global Privacy Control browser signal; there is nothing for it to switch
-              off. If that ever changes, this page changes with it.
+              or sharing. We do not sell personal information and have not done so in
+              the preceding twelve months. Personalized advertising served by Google may
+              count as &quot;sharing&quot; as the CCPA defines it, and the opt-out for
+              it is the one in the Advertising block in section 1, because Google is
+              the party holding the data. We do not knowingly sell or share the personal
+              information of anyone under 16. We do not yet act on the Global Privacy
+              Control browser signal automatically; use the opt-out links above, and
+              this page will say so when that changes.
             </p>
           </section>
 

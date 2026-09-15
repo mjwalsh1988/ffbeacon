@@ -1,4 +1,5 @@
 import { SITE } from "@/lib/site";
+import { BRIEF_SEARCH_INDEXING } from "@/lib/beacon-brief/index-quality";
 import {
   SITEMAP_SECTIONS,
   renderSitemapIndex,
@@ -26,8 +27,16 @@ import {
 export const revalidate = 3600;
 
 export async function GET() {
+  // While the Brief is switched out of search the articles file is an empty
+  // urlset. The sitemap schema wants at least one url in a file, and Search
+  // Console reports an empty one as an error, so the index stops pointing at it.
+  // The file itself keeps resolving, because its URL is submitted in Search
+  // Console and a 404 there would be a different error.
+  const sections = SITEMAP_SECTIONS.filter(
+    (section) => section !== "articles" || BRIEF_SEARCH_INDEXING,
+  );
   const entries = await Promise.all(
-    SITEMAP_SECTIONS.map(async (section) => ({
+    sections.map(async (section) => ({
       loc: `${SITE.url}${sectionPath(section)}`,
       lastModified: await sectionLastModified(section),
     })),

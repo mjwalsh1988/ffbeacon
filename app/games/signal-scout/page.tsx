@@ -27,6 +27,7 @@ import {
 import { currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { SignalScoutClient, type MyScoutStats } from "./signal-scout-client";
 import { HowItWorks } from "./how-it-works";
+import { WrittenSections } from "./written-sections";
 import { MyStatsPanel } from "./my-stats-panel";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
@@ -346,6 +347,14 @@ export default async function SignalScoutPage() {
             </div>
           </>
         )}
+        {/* The written explainer sits under the game and the rail, open by
+            default, with every number read from the same live settings the
+            rail's How It Works uses. */}
+        <WrittenSections
+          {...howItWorksProps}
+          guestPlayEnabled={settings.guest_play_enabled}
+          wrongGuessPenalty={settings.scoring.wrong_guess_penalty}
+        />
       </PageBody>
     </main>
   );

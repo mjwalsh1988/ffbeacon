@@ -7,6 +7,7 @@ import { LeagueResults } from "./league-results";
 import { PulseHandleGate } from "./pulse-handle-gate";
 import { ScrollToResults } from "./scroll-to-results";
 import { StepRail } from "./step-rail";
+import { WrittenSections } from "./written-sections";
 import {
   getSleeperUser,
   getSleeperLeagues,
@@ -393,6 +394,7 @@ export default async function LeaguePulsePage({
           </Link>
           .
         </p>
+        <WrittenSections />
       </PageBody>
       <DiscordCtaSection
         eyebrow="Need a hand with your league?"

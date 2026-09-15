@@ -54,6 +54,10 @@
  *                       crawlable through in-page links, but advertising them would
  *                       spend crawl budget that belongs to articles and profiles.
  *   Thin Brief articles See rule 1 above.
+ *   ALL Brief articles, and the category and team archives, while
+ *                       BRIEF_SEARCH_INDEXING is false (lib/beacon-brief/
+ *                       index-quality.ts, "THE MASTER SWITCH"). The articles file
+ *                       is then an empty urlset rather than a missing one.
  */
 
 import { createAdminClient } from "@/lib/supabase/server";
@@ -61,6 +65,7 @@ import { SITE } from "@/lib/site";
 import { PUBLISHED_GUIDES } from "@/lib/guides/published";
 import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
 import {
+  BRIEF_SEARCH_INDEXING,
   countArticleWords,
   THIN_ARTICLE_WORDS,
 } from "@/lib/beacon-brief/index-quality";
@@ -344,6 +349,12 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
     });
   }
 
+  // While the Brief is switched out of search (lib/beacon-brief/index-quality.ts,
+  // "THE MASTER SWITCH") the category and team archives set noindex, so listing them
+  // here would break rule 1. The /brief hub above stays: it is the one Brief page
+  // that remains indexable.
+  if (!BRIEF_SEARCH_INDEXING) return urls;
+
   // Category filter pages, but only the ones that lead somewhere. A category with no
   // published articles renders "Nothing here yet".
   const byCategory = new Map<string, ArticleRow[]>();
@@ -400,6 +411,11 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
  * indexed rate is in question, and it is the bucket where a bad page costs the most.
  */
 async function articlesSection(supabase: Admin): Promise<SitemapUrl[]> {
+  // Every article page answers noindex while the switch is off, so the file is
+  // empty rather than removed: the URL is submitted in Search Console and must keep
+  // resolving, and an empty urlset is the truthful description of the section.
+  if (!BRIEF_SEARCH_INDEXING) return [];
+
   const articles = await publishedArticles(supabase);
 
   const thinIds = new Set(
@@ -492,6 +508,11 @@ export async function loadSitemapSection(
 export async function sectionLastModified(
   section: SitemapSection,
 ): Promise<Date | undefined> {
+  // An empty articles file never changes, so it carries no date. A lastmod that
+  // moved with every article on a file whose contents stayed the same is the
+  // unreliable-lastmod failure rule 2 at the top of this file describes.
+  if (section === "articles" && !BRIEF_SEARCH_INDEXING) return undefined;
+
   const supabase = createAdminClient();
   if (section === "players") {
     const { data } = await supabase

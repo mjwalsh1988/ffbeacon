@@ -4,11 +4,14 @@ import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import {
   BarChart3,
+  BookOpen,
   Briefcase,
   Calendar,
+  Cog,
   Headphones,
   Info,
   Layers,
+  ListOrdered,
   Mic,
   Newspaper,
   PenLine,
@@ -332,20 +335,36 @@ export default async function AuthorMichaelPage() {
         </Panel>
 
         <Panel
-          eyebrow="Elsewhere"
-          title="Speaking and writing"
-          helper="Guest spots and articles will be listed here as they happen."
+          eyebrow="Writing"
+          title="What I have written"
+          helper="The long-form guides on the site. Each one explains the analytic before it asks you to use it."
         >
           <div className="grid gap-2 sm:grid-cols-2">
-            <PlaceholderCard
-              icon={Mic}
-              title="Podcast appearances"
-              body="Nothing to list yet. Running a show and want this story on it? The message form in the rail reaches me."
+            <LinkTile
+              href="/guides/fantasy-football-terms"
+              icon={BookOpen}
+              title="Fantasy football terms 101"
+              body="Every word your league chat assumes you already know, defined in one sentence and then explained properly."
             />
-            <PlaceholderCard
+            <LinkTile
+              href="/guides/fantasy-football-draft-guide"
+              icon={ListOrdered}
+              title="Fantasy football draft guide"
+              body="Steals, swings and fades in every format, rebuilt nightly from our own values and real draft ADP."
+              accent="purple"
+            />
+            <LinkTile
+              href="/guides/how-ff-beacon-works"
+              icon={Cog}
+              title="How FF Beacon works"
+              body="The projection engine, the matchup model and the confidence figure, and what none of it knows."
+            />
+            <LinkTile
+              href="/guides"
               icon={PenLine}
-              title="Written pieces"
-              body="Nothing to list yet. Pieces on accessibility-first fantasy and analytics-first roster building will land here as they ship."
+              title="The guides shelf"
+              body="Everything above in one place, with whatever ships next added as it lands."
+              accent="purple"
             />
           </div>
         </Panel>
@@ -355,7 +374,8 @@ export default async function AuthorMichaelPage() {
             The message form in the rail lands in the same queue I read every day. If
             you would rather talk it through with more than one person, the Discord is
             full of fantasy players who will help you turn a question into a lineup
-            decision, free.
+            decision, free. Running a show and want this story on it? The same form
+            reaches me.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <MemberHeroCta
@@ -431,29 +451,6 @@ function ToolCard({
       <h3 className="mt-3 text-sm font-semibold text-ink">{title}</h3>
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
     </li>
-  );
-}
-
-function PlaceholderCard({
-  icon: Icon,
-  title,
-  body,
-}: {
-  icon: LucideIcon;
-  title: string;
-  body: string;
-}) {
-  return (
-    <article className="rounded-card border border-dashed border-line bg-base/40 p-4">
-      <span
-        aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-card border border-dashed border-line bg-surface text-ink-muted"
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <h3 className="mt-3 text-sm font-semibold text-ink">{title}</h3>
-      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
-    </article>
   );
 }
 

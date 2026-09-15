@@ -13,6 +13,7 @@ import { listRecentLookups } from "@/lib/manager-pulse/service";
 import { RecentLookups } from "@/components/manager-pulse/recent-lookups";
 import { WhatYouGet } from "@/components/manager-pulse/what-you-get";
 import { ManagerSearchForm } from "./manager-search-form";
+import { WrittenSections } from "./written-sections";
 // components/manager-pulse/sample-report.tsx (Wave 4, C4): the guest sample,
 // the same report components at full fidelity, fenced with the Sample badge
 // and caption rules from docs/manager-pulse/manager-pulse-plan.md 7.3. Takes no props.
@@ -126,6 +127,11 @@ export default async function ManagerPulsePage() {
             </Link>
           </p>
         </PageColumns>
+        {/* Below both columns at full width, the same measure the signed-out
+            branch gives it, so the two branches render one explainer one way. */}
+        <PageBody flush>
+          <WrittenSections />
+        </PageBody>
       </main>
     );
   }
@@ -175,6 +181,7 @@ export default async function ManagerPulsePage() {
             How FF Beacon calculates these numbers
           </Link>
         </p>
+        <WrittenSections />
       </PageBody>
     </main>
   );

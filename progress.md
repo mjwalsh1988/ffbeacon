@@ -14733,3 +14733,28 @@ SL-T011 | completed | Migration 0283: revoke the default anon and authenticated 
      | files: supabase/migrations/0283_site_layout_settings_revoke_grants.sql
      | depends on: SL-T001
      | verified: yes. Applied via MCP; role_table_grants now lists postgres and service_role only.
+
+## AdSense re-review preparation (2026-09-14). Record: docs/seo-audit/adsense-review-2026-09-14.md
+
+AD-T001 | completed | Beacon Brief switched out of search behind one master switch
+     | files: lib/beacon-brief/index-quality.ts, lib/beacon-brief/index-quality.test.ts, lib/sitemap/sections.ts, app/sitemap.xml/route.ts, app/brief/[slug]/page.tsx, app/brief/(feed)/category/[slug]/page.tsx, app/brief/(feed)/team/[abbr]/page.tsx, app/brief/(feed)/tag/[tag]/page.tsx, lib/llms/llms-full-txt.ts, lib/llms/llms-txt.ts
+     | notes: BRIEF_SEARCH_INDEXING is false. Every article and archive page is noindex, follow; the articles sitemap is an empty urlset the index no longer points at; the /brief hub stays indexable; the quality floor is kept behind the switch as clearsQualityFloor.
+     | verified: yes. tsc clean; vitest full run passing; a live article renders noindex, follow on the dev server; sitemap index lists core, players and profiles only.
+
+AD-T002 | completed | Homepage founder section (who builds the site, the screen reader angle)
+     | files: app/page.tsx
+     | verified: yes. Opus review fixed the dl content model; checked in Chrome at desktop width.
+
+AD-T003 | completed | Privacy policy carries the AdSense advertising disclosure
+     | files: app/privacy/page.tsx
+     | notes: Advertising block per support.google.com/adsense/answer/1348695; AdSense in the third-party list; legal basis and retention lines; CCPA paragraph rewritten. OPEN for the owner: whether to honor Global Privacy Control automatically.
+     | verified: yes. Opus review confirmed the required disclosure is complete and nothing on the page contradicts it.
+
+AD-T004 | completed | Under-construction copy removed: guides coming-soon card, author placeholder tiles, games stat detail
+     | files: app/guides/page.tsx, app/author/michael/page.tsx, app/games/page.tsx
+     | verified: yes. tsc clean; full vitest run passing.
+
+AD-T005 | completed | ToolExplainer component and six written explainers (FAAB, League Pulse, Manager Pulse, On The Clock, Signal Scout, Would You Rather)
+     | files: components/tool-explainer.tsx, app/tools/faab/written-sections.tsx, app/tools/league-pulse/written-sections.tsx, app/tools/manager-pulse/written-sections.tsx, app/tools/on-the-clock/written-sections.tsx, app/games/signal-scout/written-sections.tsx, app/games/would-you-rather/written-sections.tsx, and each page.tsx
+     | notes: Trade calculator and start/sit already carried written sections and were left alone. Admin-editable numbers are passed in from settings. FAQ JSON-LD is built from the rendered array.
+     | verified: yes. Opus review checked every claim against the lib modules and its factual fixes were applied; tsc clean; checked in Chrome on FAAB and League Pulse at desktop width. Not checked at phone width in a browser (the window would not resize); the grids use standard wrapping utilities.

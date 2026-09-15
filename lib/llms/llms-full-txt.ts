@@ -187,7 +187,7 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   source("/brief");
   p(...BRIEF_CONTEXT);
   p(
-    `${data.articleCount} articles are published. The feed is at ${u("/brief/rss.xml")}, every article URL is in ${u("/sitemaps/articles.xml")}, and an individual article is at ${u("/brief/{article-slug}")}.`,
+    `${data.articleCount} articles are published. The feed is at ${u("/brief/rss.xml")} and an individual article is at ${u("/brief/{article-slug}")}. Articles are deliberately kept out of the search sitemap and carry a noindex tag: they are short wire-service updates written for readers who are already here, and the site does not ask search engines to rank them.`,
   );
 
   h3("Categories");

@@ -2,12 +2,10 @@ import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
-  Accessibility,
   BookOpen,
   Cog,
   ListOrdered,
   Check,
-  Clock,
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
@@ -38,9 +36,12 @@ export default async function GuidesPage() {
   // at the live tools instead of the invite.
   const isMember = await isDiscordMember();
 
-  // Only published guides go in the ItemList. Advertising a "coming soon" card as
-  // a list item would point structured data at a page that does not exist.
-  const published = GUIDES.filter((g) => g.href);
+  // Every guide on the shelf has a real page, so the ItemList is the shelf. A guide
+  // that is still being written is not listed anywhere on this page until it ships
+  // (2026-09-14: the "coming soon" card was removed, because an under-construction
+  // tile is one of the things Google's publisher policies name, and a promise is
+  // not content).
+  const published = GUIDES;
   const jsonLd = [
     {
       "@context": "https://schema.org",
@@ -88,12 +89,12 @@ export default async function GuidesPage() {
         <GuidesSection />
       </PageBody>
       <DiscordCtaSection
-        eyebrow="While you wait"
-        heading="Waiting on a guide? Ask a real person right now."
-        body="Three are live and the last is being written while we build out the platform. In the meantime, drop into our Discord and real fantasy players will walk you through any concept, free. Want to know what's already live? Read about FF Beacon."
+        eyebrow="Still have a question"
+        heading="Something a guide did not cover? Ask a real person right now."
+        body="Drop into our Discord and real fantasy players will walk you through any concept, free, from what a term means to whether a trade is worth making. Want to know how the site itself works? Read about FF Beacon."
         isMember={isMember}
-        memberHeading="While the rest cook, explore the tools."
-        memberBody="You're already in the crew, so hang tight on the guides still being written. In the meantime, the free FF Beacon tools are live and ready to put to work on your team."
+        memberHeading="Read up, then put it to work."
+        memberBody="You're already in the crew, so you know where the answers live. The free FF Beacon tools are ready to put everything in these guides to work on your team."
       />
     </main>
   );
@@ -113,13 +114,9 @@ function Masthead({ published }: { published: number }) {
       title="Fantasy football explained, in plain English."
       description="Long-form explainers that make analytics readable, define every term the first time it shows up, and read the same by eye or by ear."
       stats={[
-        { label: "Live now", value: String(published), accent: "cyan" },
-        {
-          label: "Being written",
-          value: String(GUIDES.length - published),
-          accent: "purple",
-        },
-        { label: "Terms defined", value: String(TERM_COUNT) },
+        { label: "Guides", value: String(published), accent: "cyan" },
+        { label: "Terms defined", value: String(TERM_COUNT), accent: "purple" },
+        { label: "Cost to read", value: "Free" },
       ]}
     />
   );
@@ -132,8 +129,8 @@ type Guide = {
   title: string;
   description: string;
   bullets: string[];
-  /** Present once the guide has a real page. Absent means it is still being written. */
-  href?: string;
+  /** The guide's page. A guide without one does not belong on the shelf yet. */
+  href: string;
 };
 
 const GUIDES: Guide[] = [
@@ -175,17 +172,6 @@ const GUIDES: Guide[] = [
       "What the models do not know, stated plainly",
     ],
   },
-  {
-    icon: Accessibility,
-    title: "Accessible fantasy football",
-    description:
-      "The first-of-its-kind reference for fantasy players who use a screen reader. Apps that work, habits that save time, and what to look for before signing up with a host site.",
-    bullets: [
-      "Apps and tools that pair cleanly with NVDA, JAWS, and VoiceOver",
-      "Weekly habits that make lineup setting and waiver claims faster",
-      "How to evaluate a fantasy host site before you commit",
-    ],
-  },
 ];
 
 function GuidesSection() {
@@ -201,10 +187,9 @@ function GuidesSection() {
         Start with the vocabulary, then go draft.
       </h2>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
-        The glossary, the draft guide, and the methodology page are live and
-        free to read right now. The last one is being written while we focus
-        on the rest of the platform, and it&apos;ll land here when it&apos;s
-        ready.
+        The glossary, the draft guide, and the methodology page are free to
+        read right now. Each one defines a term the first time it uses it, so
+        you can start anywhere and never hit a word the page assumes you know.
       </p>
 
       <ul
@@ -221,7 +206,6 @@ function GuidesSection() {
 
 function GuideCard({ guide }: { guide: Guide }) {
   const Icon = guide.icon;
-  const isLive = Boolean(guide.href);
   return (
     <li className="flex">
       {/* The stretched link below draws no outline of its own (it covers the whole
@@ -229,129 +213,81 @@ function GuideCard({ guide }: { guide: Guide }) {
           keyboard focus ring is drawn on the card via focus-within. Removing an
           outline without a replacement is the one thing the a11y rules never allow. */}
       <article
-        className={
-          isLive
-            ? "relative flex w-full flex-col overflow-hidden rounded-card border border-line-accent bg-surface p-6 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
-            : // No hover state on a pending card. A border that lights up on
-              // hover reads as "this is clickable", and this one is not.
-              "relative flex w-full flex-col overflow-hidden rounded-card border border-dashed border-line bg-base/40 p-6"
-        }
-        style={
-          isLive
-            ? {
-                // Tinted panel plus a real purple glow, the same treatment the
-                // closing CTA panels get, so the published guide reads as the
-                // lit one on the shelf.
-                backgroundImage:
-                  "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.14) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
-                boxShadow: "0 0 60px -32px rgba(168, 85, 247, 0.75)",
-              }
-            : undefined
-        }
+        className="relative flex w-full flex-col overflow-hidden rounded-card border border-line-accent bg-surface p-6 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+        style={{
+          // Tinted panel plus a real purple glow, the same treatment the closing
+          // CTA panels get, so every guide reads as a lit one on the shelf.
+          backgroundImage:
+            "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.14) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+          boxShadow: "0 0 60px -32px rgba(168, 85, 247, 0.75)",
+        }}
       >
-        {/* Top-edge gradient accent. Only the published guide gets it; on a
-            pending card it would read as "featured" and undo the distinction. */}
-        {isLive && (
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-0.5"
-            style={{
-              backgroundImage:
-                "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          />
-        )}
+        {/* Top-edge gradient accent. Decorative. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-0.5"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
+          }}
+        />
         <div className="flex items-start justify-between gap-3">
           <span
             aria-hidden="true"
-            className={
-              isLive
-                ? "flex h-11 w-11 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-                : "flex h-11 w-11 items-center justify-center rounded-card border border-dashed border-line bg-surface text-ink-muted"
-            }
+            className="flex h-11 w-11 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
           >
             <Icon className="h-5 w-5" />
           </span>
-          {isLive ? (
-            // Solid beacon-gradient pill on black text, the same weight as a
-            // primary button, so "live" is unmistakable at a glance.
-            <span
-              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-black"
-              style={{
-                backgroundImage:
-                  "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-              }}
-            >
-              Live now
-            </span>
-          ) : (
-            // Neutral, not cyan. A brand-colored badge reads as active, which is
-            // the opposite of what this one means.
-            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line bg-base px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-              <Clock aria-hidden="true" className="h-3 w-3" />
-              Coming soon
-            </span>
-          )}
+          {/* Solid beacon-gradient pill on black text, the same weight as a
+              primary button, so "free" is unmistakable at a glance. */}
+          <span
+            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-black"
+            style={{
+              backgroundImage:
+                "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+            }}
+          >
+            Free to read
+          </span>
         </div>
-        <h3
-          className={`mt-5 text-lg font-semibold ${
-            isLive ? "text-ink" : "text-ink-muted"
-          }`}
-        >
-          {guide.href ? (
-            // Stretched link: the heading carries the accessible name and the
-            // whole card is clickable, but the card contributes exactly one tab
-            // stop rather than a heading and a duplicate "read more" link.
-            <Link
-              href={guide.href}
-              className="after:absolute after:inset-0 after:content-[''] hover:text-brand-cyan focus-visible:outline-none"
-            >
-              {guide.title}
-            </Link>
-          ) : (
-            guide.title
-          )}
+        <h3 className="mt-5 text-lg font-semibold text-ink">
+          {/* Stretched link: the heading carries the accessible name and the
+              whole card is clickable, but the card contributes exactly one tab
+              stop rather than a heading and a duplicate "read more" link. */}
+          <Link
+            href={guide.href}
+            className="after:absolute after:inset-0 after:content-[''] hover:text-brand-cyan focus-visible:outline-none"
+          >
+            {guide.title}
+          </Link>
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
           {guide.description}
         </p>
         <p className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-          {isLive ? "What you'll learn" : "What it will cover"}
+          What you&apos;ll learn
         </p>
-        {/* Pending cards step the bullet text down one level (ink-muted is still
-            about 9:1 on this background, comfortably past AA) so they read as
-            recessed without any of the copy becoming hard to read. Nothing is
-            hidden and no text drops below contrast. */}
-        <ul
-          role="list"
-          className={`space-y-1.5 text-sm leading-relaxed ${
-            isLive ? "text-ink" : "text-ink-muted"
-          }`}
-        >
+        <ul role="list" className="space-y-1.5 text-sm leading-relaxed text-ink">
           {guide.bullets.map((bullet) => (
             <li key={bullet} className="flex gap-2">
               <Check
                 aria-hidden="true"
-                className={`mt-1 h-3.5 w-3.5 shrink-0 ${
-                  isLive ? "text-brand-cyan" : "text-ink-subtle"
-                }`}
+                className="mt-1 h-3.5 w-3.5 shrink-0 text-brand-cyan"
               />
               <span>{bullet}</span>
             </li>
           ))}
         </ul>
-        {isLive && (
-          // Visual affordance only. The stretched link on the heading is the real
-          // control, so this is hidden from assistive tech to avoid announcing a
-          // second link that goes to the same place.
-          <p
-            aria-hidden="true"
-            className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-cyan"
-          >
-            Read the guide
-            <ArrowRight className="h-4 w-4" />
-          </p>
-        )}
+        {/* Visual affordance only. The stretched link on the heading is the real
+            control, so this is hidden from assistive tech to avoid announcing a
+            second link that goes to the same place. */}
+        <p
+          aria-hidden="true"
+          className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-cyan"
+        >
+          Read the guide
+          <ArrowRight className="h-4 w-4" />
+        </p>
       </article>
     </li>
   );

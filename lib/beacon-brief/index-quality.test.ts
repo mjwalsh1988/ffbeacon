@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BRIEF_SEARCH_INDEXING,
+  clearsQualityFloor,
   countArticleWords,
   isArticleIndexable,
   THIN_ARTICLE_WORDS,
@@ -50,33 +52,71 @@ describe("countArticleWords", () => {
   });
 });
 
-describe("isArticleIndexable", () => {
+describe("clearsQualityFloor", () => {
   it("keeps a short article about a ranked player", () => {
     // The Puka Nacua groin note: 85 words, and the page someone actually searches for.
     expect(
-      isArticleIndexable({ contentMd: SHORT_ARTICLE, hasRankedPlayer: true }),
+      clearsQualityFloor({ contentMd: SHORT_ARTICLE, hasRankedPlayer: true }),
     ).toBe(true);
   });
 
   it("drops a short article about nobody rostered", () => {
     expect(countArticleWords(SHORT_ARTICLE)).toBeLessThan(THIN_ARTICLE_WORDS);
     expect(
-      isArticleIndexable({ contentMd: SHORT_ARTICLE, hasRankedPlayer: false }),
+      clearsQualityFloor({ contentMd: SHORT_ARTICLE, hasRankedPlayer: false }),
     ).toBe(false);
   });
 
   it("keeps a long article whether or not anyone on it is ranked", () => {
     expect(
-      isArticleIndexable({ contentMd: LONG_ARTICLE, hasRankedPlayer: false }),
+      clearsQualityFloor({ contentMd: LONG_ARTICLE, hasRankedPlayer: false }),
     ).toBe(true);
     expect(
-      isArticleIndexable({ contentMd: LONG_ARTICLE, hasRankedPlayer: true }),
+      clearsQualityFloor({ contentMd: LONG_ARTICLE, hasRankedPlayer: true }),
     ).toBe(true);
   });
 
   it("drops an article with no body at all", () => {
     expect(
-      isArticleIndexable({ contentMd: null, hasRankedPlayer: false }),
+      clearsQualityFloor({ contentMd: null, hasRankedPlayer: false }),
     ).toBe(false);
   });
+});
+
+/**
+ * The master switch. While it is off, nothing the floor says matters: the article
+ * that most deserves an index entry is still held back, because the decision
+ * (docs/seo-audit/adsense-review-2026-09-14.md) is about the section, not the page.
+ * If the switch is ever turned back on, the second block pins the floor to the
+ * indexable answer again.
+ */
+describe("isArticleIndexable", () => {
+  if (!BRIEF_SEARCH_INDEXING) {
+    it("holds back every article while the Brief is switched out of search", () => {
+      expect(
+        isArticleIndexable({ contentMd: LONG_ARTICLE, hasRankedPlayer: true }),
+      ).toBe(false);
+      expect(
+        isArticleIndexable({ contentMd: SHORT_ARTICLE, hasRankedPlayer: true }),
+      ).toBe(false);
+      expect(
+        isArticleIndexable({ contentMd: SHORT_ARTICLE, hasRankedPlayer: false }),
+      ).toBe(false);
+    });
+  } else {
+    it("is the quality floor when the Brief is switched into search", () => {
+      const cases: Array<[string | null, boolean]> = [
+        [LONG_ARTICLE, true],
+        [LONG_ARTICLE, false],
+        [SHORT_ARTICLE, true],
+        [SHORT_ARTICLE, false],
+        [null, false],
+      ];
+      for (const [contentMd, hasRankedPlayer] of cases) {
+        expect(isArticleIndexable({ contentMd, hasRankedPlayer })).toBe(
+          clearsQualityFloor({ contentMd, hasRankedPlayer }),
+        );
+      }
+    });
+  }
 });

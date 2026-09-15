@@ -18,6 +18,7 @@ import {
 } from "@/lib/sleeper-handle/resolve";
 import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
 import { FaabForm, type FaabPlayer } from "./faab-form";
+import { WrittenSections } from "./written-sections";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -239,6 +240,9 @@ export default async function FaabPage({
           </Link>
           .
         </p>
+        {/* Outside FaabForm on purpose: the form unmounts the masthead once a
+            player is picked, and these words must stay on the page. */}
+        <WrittenSections />
       </PageBody>
       <DiscordCtaSection
         eyebrow="Waivers are stressful"

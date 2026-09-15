@@ -30,6 +30,7 @@ import {
 import { countActivePool, growPool, POOL_LOW_WATER_MARK } from "@/lib/would-you-rather/pool";
 import type { WyrErrorCode, WyrRound } from "@/lib/would-you-rather/types";
 import { WouldYouRatherClient } from "./would-you-rather-client";
+import { WrittenSections } from "./written-sections";
 
 const META_TITLE = "Would You Rather? Vote on Real Fantasy Trades";
 const META_DESCRIPTION =
@@ -275,6 +276,15 @@ export default async function WouldYouRatherPage() {
           isAuthenticated={isAuthenticated}
         />
       </PageColumns>
+      {/* Beneath both columns. Generic on purpose: it carries no round and no
+          review, only the guest allowance, which is a setting rather than an
+          answer (see the rule at the top of written-sections.tsx). */}
+      <PageBody flush>
+        <WrittenSections
+          guestVoteLimit={settings.guest_vote_limit}
+          discordEnabled={settings.discord.enabled}
+        />
+      </PageBody>
     </main>
   );
 }

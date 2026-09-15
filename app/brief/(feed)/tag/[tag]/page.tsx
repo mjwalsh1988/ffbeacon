@@ -10,6 +10,7 @@ import {
 } from "@/lib/beacon-brief-feed";
 import {
   countArticleWords,
+  BRIEF_SEARCH_INDEXING,
   isArticleIndexable,
   THIN_ARTICLE_WORDS,
 } from "@/lib/beacon-brief/index-quality";
@@ -60,6 +61,10 @@ async function tagIsIndexable(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tag: string,
 ): Promise<boolean> {
+  // The answer is no for every tag while the Brief is switched out of search, so
+  // the two queries below would be spent on a result that cannot change.
+  if (!BRIEF_SEARCH_INDEXING) return false;
+
   const { data } = await supabase
     .from("articles")
     .select("id, content_md")
