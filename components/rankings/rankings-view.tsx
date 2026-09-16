@@ -302,7 +302,10 @@ export async function RankingsView({
               sorted by current market value. Click any column header to
               re-sort, or open a player&apos;s row for the full breakdown.
             </p>
-            <GlossaryTermsNote links={glossaryLinks} />
+            <GlossaryTermsNote
+              links={glossaryLinks}
+              superflex={format.is_superflex}
+            />
           </div>
 
           {/* Filter card. Icon chip plus label, stacking gracefully on mobile:
@@ -448,7 +451,16 @@ function glossaryLinksForFormat(format: {
  * whole, since that is what lets a reader land straight on the definition
  * they need. Renders nothing when a format's settings match no known term.
  */
-function GlossaryTermsNote({ links }: { links: FormatGlossaryLink[] }) {
+function GlossaryTermsNote({
+  links,
+  superflex = false,
+}: {
+  links: FormatGlossaryLink[];
+  /** A superflex board also points at the guide on how to play the format,
+   *  since the definition alone does not tell a reader when to take a
+   *  quarterback. */
+  superflex?: boolean;
+}) {
   if (links.length === 0) return null;
 
   return (
@@ -472,6 +484,19 @@ function GlossaryTermsNote({ links }: { links: FormatGlossaryLink[] }) {
         </span>
       ))}{" "}
       in the fantasy football glossary.
+      {superflex ? (
+        <>
+          {" "}
+          Then read{" "}
+          <Link
+            href="/guides/superflex-strategy"
+            className="text-brand-cyan underline-offset-4 hover:underline"
+          >
+            the superflex strategy guide
+          </Link>{" "}
+          for how many quarterbacks to roster and when to draft them.
+        </>
+      ) : null}
     </p>
   );
 }

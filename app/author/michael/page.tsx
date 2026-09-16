@@ -400,17 +400,24 @@ export default async function AuthorMichaelPage() {
               body="How to judge any trade before you send it: value against wins, the 2-for-1 trap, and how to pitch it."
             />
             <LinkTile
+              href="/guides/superflex-strategy"
+              icon={Layers}
+              title="Superflex strategy"
+              body="How to draft, roster and trade quarterbacks when everyone needs two, with a live look at the same passers priced both ways."
+              accent="purple"
+            />
+            <LinkTile
               href="/guides/how-ff-beacon-works"
               icon={Cog}
               title="How FF Beacon works"
               body="The projection engine, the matchup model and the confidence figure, and what none of it knows."
-              accent="purple"
             />
             <LinkTile
               href="/guides"
               icon={Layers}
               title="The guides shelf"
               body="Everything above in one place, with whatever ships next added as it lands."
+              accent="purple"
             />
           </div>
         </Panel>

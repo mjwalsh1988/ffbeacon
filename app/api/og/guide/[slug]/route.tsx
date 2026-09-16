@@ -55,7 +55,7 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
     headlineBottom: "the number that finds scarcity",
     subhead:
       "The replacement player, why scarcity beats raw points, and how to read the curve for your own league. Written for beginners, in plain English.",
-    badge: "For beginners",
+    badge: "7 lessons",
   },
   "faab-strategy": {
     eyebrow: "Fantasy Football Guide",
@@ -63,7 +63,7 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
     headlineBottom: "how much to bid on waivers",
     subhead:
       "Bid ranges for every kind of pickup, when to spend it all, who to drop, and the waiver wire mistakes that lose leagues in October.",
-    badge: "Waiver wire",
+    badge: "8 lessons",
   },
   "fantasy-football-trade-guide": {
     eyebrow: "Fantasy Football Guide",
@@ -71,6 +71,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
     headlineBottom: "how to judge any trade",
     subhead:
       "Value against wins, the 2-for-1 trap, buying low without fooling yourself, dynasty picks, timing, and how to pitch a trade that gets accepted.",
+    badge: "8 lessons",
+  },
+  "superflex-strategy": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "Superflex strategy:",
+    headlineBottom: "when everyone needs two",
+    subhead:
+      "What the slot changes, how many quarterbacks to roster in redraft, dynasty and best ball, when to draft them, how to trade the spare, and how TE premium stacks on top.",
     badge: "8 lessons",
   },
 };

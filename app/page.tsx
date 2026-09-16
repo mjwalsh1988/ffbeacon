@@ -1278,6 +1278,7 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
     lessons: [
       "The replacement player, and why he decides everything",
       "How to read the Positional WAR curve for your own league",
+      "Move the replacement line yourself and watch the gap change",
     ],
   },
   "faab-strategy": {
@@ -1286,6 +1287,7 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
     lessons: [
       "Bid ranges for a league-winner, a new starter, a streamer and a stash",
       "Why September dollars and December dollars are not the same money",
+      "Reading the room: the ceiling is yours, the bid is theirs",
     ],
   },
   "fantasy-football-trade-guide": {
@@ -1296,6 +1298,16 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
       "The 2-for-1 trap, and the roster spot you get back",
       "Buying low without fooling yourself",
       "How to pitch a trade that gets accepted",
+    ],
+  },
+  "superflex-strategy": {
+    icon: Layers,
+    hint: "Quarterbacks when everyone needs two",
+    lessons: [
+      "Why the free quarterback moves twelve places, with a live table",
+      "How many quarterbacks to roster in redraft, dynasty and best ball",
+      "One pillar, then let the run tell you, from any draft slot",
+      "Your third quarterback is value, not wins",
     ],
   },
 };

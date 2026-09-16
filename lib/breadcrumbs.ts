@@ -47,6 +47,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/guides/positional-war-explained": "Positional WAR Explained",
   "/guides/faab-strategy": "FAAB Strategy",
   "/guides/fantasy-football-trade-guide": "Trade Guide",
+  "/guides/superflex-strategy": "Superflex Strategy",
   "/join": "Join the Discord",
   "/login": "Sign in",
   "/my-beacon": "My Beacon",

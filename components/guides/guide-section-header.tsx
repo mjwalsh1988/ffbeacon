@@ -3,9 +3,10 @@
  * published guides open a section the same way.
  *
  * A beacon rule marks where the section begins, a small coloured eyebrow says
- * what kind of section it is, and the heading follows. The rule and the eyebrow
- * are decorative; the heading carries the meaning and is what the section's
- * aria-labelledby points at.
+ * what kind of section it is, and the heading follows. The rule is decorative.
+ * The eyebrow is read: on the course-style guides it carries the lesson number,
+ * which is worth hearing. The heading carries the meaning and is what the
+ * section's aria-labelledby points at.
  *
  * The heading is set well below the masthead title on purpose. It was two steps
  * larger than its own h3s, which read as a second page title every time a
@@ -41,9 +42,12 @@ export function GuideSectionHeader({
           backgroundImage: `linear-gradient(90deg, ${color} 0%, ${color}33 45%, transparent 100%)`,
         }}
       />
+      {/* The eyebrow is real text. It used to be aria-hidden as decoration,
+          but on the course-style guides it says "Lesson 3 of 8", which is the
+          one thing a reader moving through the page wants to hear before the
+          heading. Visible text is not hidden from a screen reader. */}
       {eyebrow && (
         <p
-          aria-hidden="true"
           className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em]"
           style={{ color }}
         >

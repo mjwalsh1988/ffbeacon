@@ -323,6 +323,24 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "is this trade fair",
     ],
   },
+  {
+    label: "Superflex Strategy",
+    href: "/guides/superflex-strategy",
+    description:
+      "How to draft, roster and trade quarterbacks in a superflex league",
+    keywords: [
+      "superflex",
+      "superflex strategy",
+      "2qb",
+      "two quarterback",
+      "how many qbs",
+      "quarterback",
+      "qb",
+      "te premium",
+      "tep",
+      "superflex draft",
+    ],
+  },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
@@ -377,6 +395,7 @@ export const FOOTER_COLUMNS: Array<{
       },
       { label: "FAAB Strategy", href: "/guides/faab-strategy" },
       { label: "Trade Guide", href: "/guides/fantasy-football-trade-guide" },
+      { label: "Superflex Strategy", href: "/guides/superflex-strategy" },
       { label: "How FF Beacon Works", href: "/guides/how-ff-beacon-works" },
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.

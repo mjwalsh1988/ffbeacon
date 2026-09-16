@@ -10,6 +10,7 @@ import {
   ArrowRight,
   TrendingUp,
   Scale,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -169,8 +170,8 @@ const GUIDES: Guide[] = [
     description:
       "What Positional WAR actually means on a fantasy roster, in plain English. Why the best quarterback is worth a fortune in one league and almost nothing in another, and how to read the curve for your own.",
     bullets: [
+      "Seven lessons, each with a diagram or a box you can play with",
       "The replacement player, and why he decides everything",
-      "Why raw points lie to you and scarcity does not",
       "How to read the Positional WAR curve on your League Pulse page",
       "The three decisions it should change: drafts, FAAB and trades",
     ],
@@ -182,10 +183,10 @@ const GUIDES: Guide[] = [
     description:
       "How much of your budget to bid on the waiver wire, kind of pickup by kind of pickup, when to spend it all, who to drop, and the mistakes that lose leagues in October.",
     bullets: [
-      "FAAB versus waiver priority, and how a blind auction really works",
+      "Eight lessons, each with a diagram and a key idea",
       "Bid ranges for a league-winner, a new starter, a streamer and a stash",
       "Why September dollars and December dollars are not the same money",
-      "A worked example, start to finish, with the walk-away number",
+      "A bid worksheet you can try, and a pre-bid checklist",
     ],
   },
   {
@@ -199,6 +200,19 @@ const GUIDES: Guide[] = [
       "The same trade graded as a contender and as a rebuilder",
       "Picks in dynasty, the trade calendar and the deadline",
       "A pre-send checklist you can tick through on any offer",
+    ],
+  },
+  {
+    icon: Layers,
+    title: "Superflex strategy",
+    href: "/guides/superflex-strategy",
+    description:
+      "How to play a league where everyone starts two quarterbacks. What the slot changes, how many quarterbacks to roster, when to draft them, how to trade the spare, and how TE premium stacks on top.",
+    bullets: [
+      "Eight lessons, with a live table of the same quarterbacks priced both ways",
+      "A roster planner for redraft, dynasty, best ball and 2QB",
+      "A draft plan for every seat, and the bye-week trap",
+      "A pre-draft checklist you can tick through",
     ],
   },
   {
@@ -230,10 +244,12 @@ function GuidesSection() {
       </h2>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
         The glossary, the draft guide, a beginner&apos;s read on Positional WAR,
-        the FAAB playbook, the trade guide, and the methodology page are all
-        free to read right now. Each one defines a term the first time it uses
-        it, so you can start anywhere and never hit a word the page assumes you
-        know.
+        the FAAB playbook, the trade guide, the superflex guide, and the
+        methodology page are all free to read right now. Each one defines a
+        term the first time it uses it, so you can start anywhere and never hit
+        a word the page assumes you know. The strategy guides are built as
+        short courses: numbered lessons, a diagram for each idea, and boxes you
+        can try for yourself.
       </p>
 
       <ul

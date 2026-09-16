@@ -244,6 +244,7 @@ export function SendChecklist() {
       </ul>
       <p
         aria-live="polite"
+        aria-atomic="true"
         className="mt-3 text-xs font-semibold text-brand-cyan"
       >
         {done} of {CHECKLIST.length} checked

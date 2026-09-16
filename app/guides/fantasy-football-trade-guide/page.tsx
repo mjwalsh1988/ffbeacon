@@ -912,8 +912,12 @@ function PicksSection() {
       </Para>
       <Para>
         What a pick is worth depends on the league more than people think. The
-        1.01 in a twelve-team superflex league is a quarterback market, and it
-        is worth a lot more than the 1.01 in a ten-team one-quarterback league,
+        1.01 in a twelve-team{" "}
+        <Link href="/guides/superflex-strategy" className={LINK_CLASS}>
+          superflex
+        </Link>{" "}
+        league is a quarterback market, and it is worth a lot more than the
+        1.01 in a ten-team one-quarterback league,
         where the same rookie is competing with a deeper free agent pool. A
         known pick is worth more than an unknown one: a 2027 first from a team
         that is 1 and 5 is a different asset from a 2027 first from a team that

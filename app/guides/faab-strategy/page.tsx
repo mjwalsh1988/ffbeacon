@@ -8,14 +8,18 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { GuideShell } from "@/components/guides/guide-shell";
 import { GuideToc } from "@/components/guides/guide-toc";
-import {
-  GuideSectionHeader,
-  GuideSubheading,
-} from "@/components/guides/guide-section-header";
+import { GuideSectionHeader } from "@/components/guides/guide-section-header";
 import { FaqAccordion, type FaqAccordionItem } from "@/components/faq-accordion";
 import { faqPageJsonLd } from "@/components/tool-explainer";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
+import {
+  BidBandsFigure,
+  BidLadderFigure,
+  DollarCalendarFigure,
+  PickupWorthFigure,
+} from "./faab-figures";
+import { BidWorksheet, PreBidChecklist } from "./faab-classroom";
 
 /**
  * /guides/faab-strategy
@@ -44,7 +48,10 @@ import { isDiscordMember } from "@/lib/discord-membership";
  * are lib/faab/ladder.ts and lib/faab/marginal.ts. An admin can change those
  * defaults, so the page says "by default" where it quotes them.
  *
- * THE WORKED EXAMPLE IS INVENTED AND SAYS SO.
+ * EIGHT LESSONS, FOUR DIAGRAMS, TWO INTERACTIVES, the same shape as the trade
+ * guide. The diagrams are in faab-figures.tsx and the interactives in
+ * faab-classroom.tsx. EVERY WORKED NUMBER IS INVENTED AND SAYS SO, in the
+ * figure captions, in the worksheet, and in the worked example.
  *
  * Article plus BreadcrumbList plus FAQPage, the FAQPage built from the same
  * array the accordion renders.
@@ -116,6 +123,7 @@ const TOC_ITEMS = [
   { id: "dynasty-heading", label: "Dynasty and rookies" },
   { id: "mistakes-heading", label: "Mistakes I see every year" },
   { id: "example-heading", label: "A worked example" },
+  { id: "checklist-heading", label: "Before you bid" },
   { id: "faq-heading", label: "Questions, answered" },
 ];
 
@@ -209,6 +217,7 @@ export default async function FaabStrategyGuide() {
           chips={[
             { label: "Guide", tone: "cyan" },
             { label: "Waiver wire", tone: "purple" },
+            { label: "8 lessons", tone: "cyan" },
           ]}
         >
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-subtle">
@@ -230,6 +239,7 @@ export default async function FaabStrategyGuide() {
       <GuideShell toc={<GuideToc items={TOC_ITEMS} />}>
         <article>
           <TheShortVersion />
+          <Syllabus />
 
           <div className="text-[15px] sm:text-base">
             <WhatSection />
@@ -242,6 +252,7 @@ export default async function FaabStrategyGuide() {
             <DynastySection />
             <MistakesSection />
             <ExampleSection />
+            <ChecklistSection />
             <FaqSection />
             <ClosingSection />
           </div>
@@ -278,6 +289,47 @@ function BulletList({ items }: { items: React.ReactNode[] }) {
         <li key={i}>{item}</li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * A boxed idea: the one sentence a lesson exists to leave behind. The label is
+ * decorative; the sentence is real text.
+ */
+function KeyIdea({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-6 rounded-card border-l-4 border-brand-purple bg-surface p-4 sm:p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-purple">
+        Key idea
+      </p>
+      <p className="mt-1 text-base font-medium leading-relaxed text-ink">{children}</p>
+    </div>
+  );
+}
+
+/** A pointer at the tool that runs the lesson's arithmetic. */
+function TryIt({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-6 flex flex-col gap-3 rounded-card border border-brand-cyan/40 bg-brand-cyan/5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <p className="text-sm leading-relaxed text-ink-muted">
+        <span className="font-semibold text-brand-cyan">Try it. </span>
+        {children}
+      </p>
+      <Link
+        href={href}
+        className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        {label}
+      </Link>
+    </div>
   );
 }
 
@@ -354,14 +406,104 @@ function TheShortVersion() {
   );
 }
 
-/* ---------- What FAAB is ---------- */
+/* ---------- Syllabus ---------- */
+
+const LESSONS: { n: string; title: string; href: string; takeaway: string }[] = [
+  {
+    n: "01",
+    title: "What FAAB is",
+    href: "#what-heading",
+    takeaway: "A blind auction, not a queue.",
+  },
+  {
+    n: "02",
+    title: "The one rule",
+    href: "#rule-heading",
+    takeaway: "Weeks started times points over the cut.",
+  },
+  {
+    n: "03",
+    title: "How much to bid",
+    href: "#how-much-heading",
+    takeaway: "Four kinds of pickup, four bands.",
+  },
+  {
+    n: "04",
+    title: "Timing",
+    href: "#timing-heading",
+    takeaway: "A September dollar and a December dollar.",
+  },
+  {
+    n: "05",
+    title: "Reading the room",
+    href: "#room-heading",
+    takeaway: "You only have to beat one person.",
+  },
+  {
+    n: "06",
+    title: "Who to drop",
+    href: "#drop-heading",
+    takeaway: "Every add is also a cut.",
+  },
+  {
+    n: "07",
+    title: "When to spend it all",
+    href: "#all-in-heading",
+    takeaway: "Three things have to be true.",
+  },
+  {
+    n: "08",
+    title: "Dynasty and rookies",
+    href: "#dynasty-heading",
+    takeaway: "A stash is worth next year, not this Sunday.",
+  },
+];
+
+function Syllabus() {
+  return (
+    <section aria-labelledby="syllabus-heading" className="mt-8">
+      <h2
+        id="syllabus-heading"
+        className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+      >
+        The eight lessons
+      </h2>
+      <ol role="list" className="mt-3 grid gap-2 sm:grid-cols-2">
+        {LESSONS.map((l) => (
+          <li key={l.n}>
+            <a
+              href={l.href}
+              className="flex min-h-11 items-start gap-3 rounded-card border border-line bg-surface/60 p-3 transition-colors hover:border-line-accent hover:bg-ink/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <span
+                aria-hidden="true"
+                className="font-mono text-sm font-semibold tabular-nums text-brand-cyan"
+              >
+                {l.n}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">
+                  <span className="sr-only">Lesson {Number(l.n)}: </span>
+                  {l.title}
+                </span>
+                <span className="block text-xs text-ink-muted">{l.takeaway}</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/* ---------- Lesson 1: what FAAB is ---------- */
 
 function WhatSection() {
   return (
     <section aria-labelledby="what-heading" className="mt-12">
       <GuideSectionHeader
         id="what-heading"
-        eyebrow="Start here"
+        eyebrow="Lesson 1 of 8"
         heading="What FAAB is, and how it differs from waiver priority"
         tone="purple"
       />
@@ -386,18 +528,22 @@ function WhatSection() {
         settings before you assume a tie goes your way. And a player nobody bids on usually
         becomes a free agent after waivers clear, where anyone can add him for nothing.
       </Para>
+      <KeyIdea>
+        FAAB is a blind auction with money you cannot get back. Every bid is a guess about the
+        room as much as a price on the player.
+      </KeyIdea>
     </section>
   );
 }
 
-/* ---------- The one rule ---------- */
+/* ---------- Lesson 2: the one rule ---------- */
 
 function RuleSection() {
   return (
     <section aria-labelledby="rule-heading" className="mt-12">
       <GuideSectionHeader
         id="rule-heading"
-        eyebrow="The one rule"
+        eyebrow="Lesson 2 of 8"
         heading="Bid on what he does for your lineup, not on the hype"
       />
       <Para>
@@ -414,6 +560,7 @@ function RuleSection() {
         that already has three good backs is worth almost nothing, because he would sit on your
         bench, and you cannot score points from the bench.
       </Para>
+      <PickupWorthFigure />
       <Para>
         This is why the same player deserves a different bid from every team in the league, and
         why copying a bid from a podcast is a coin flip. The{" "}
@@ -424,18 +571,26 @@ function RuleSection() {
         with him and without him, in your league's own scoring, with the player you would cut
         already subtracted. The rest of this guide is the reasoning it runs on.
       </Para>
+      <KeyIdea>
+        A pickup is worth weeks started times points over the player you cut. Two numbers, both
+        about your team, neither about the highlight.
+      </KeyIdea>
+      <TryIt href="/tools/faab" label="Price a claim">
+        Connect your Sleeper league and the calculator runs every remaining week with and without
+        the player, under your league&apos;s own scoring, with the cut already subtracted.
+      </TryIt>
     </section>
   );
 }
 
-/* ---------- How much ---------- */
+/* ---------- Lesson 3: how much ---------- */
 
 function HowMuchSection() {
   return (
     <section aria-labelledby="how-much-heading" className="mt-12">
       <GuideSectionHeader
         id="how-much-heading"
-        eyebrow="The numbers"
+        eyebrow="Lesson 3 of 8"
         heading="How much to bid, by kind of pickup"
         tone="purple"
       />
@@ -447,6 +602,7 @@ function HowMuchSection() {
         on when it cannot project a player, merged into buckets you can actually remember. With a
         league connected it prices the specific player against your specific roster instead.
       </Para>
+      <BidBandsFigure />
       <GuideTable
         caption="Rough bid ranges as a share of your remaining budget. The calculator prices a specific player against your specific roster; this is the shape of the answer."
         head={["Kind of pickup", "What he is", "Share of remaining budget"]}
@@ -491,18 +647,22 @@ function HowMuchSection() {
         runs out fast is worth more than the same points at a position where the next guy is
         nearly as good.
       </Para>
+      <KeyIdea>
+        Put him in a bucket before you put a number on him. Most overpays are a second-bucket
+        player priced like a first-bucket one.
+      </KeyIdea>
     </section>
   );
 }
 
-/* ---------- Timing ---------- */
+/* ---------- Lesson 4: timing ---------- */
 
 function TimingSection() {
   return (
     <section aria-labelledby="timing-heading" className="mt-12">
       <GuideSectionHeader
         id="timing-heading"
-        eyebrow="The calendar"
+        eyebrow="Lesson 4 of 8"
         heading="September dollars and December dollars are not the same money"
       />
       <Para>
@@ -520,6 +680,7 @@ function TimingSection() {
         then raises it week by week until it is adding up to forty percent late in the season
         when a real upgrade has nothing left to be saved for.
       </Para>
+      <DollarCalendarFigure />
       <Para>
         The practical rule: spend real money early only on a change you can name, like an
         injury to the starter ahead of him or a trade that emptied a depth chart. Spend freely
@@ -527,18 +688,22 @@ function TimingSection() {
         half your budget left, you have been too careful, and the fix is to be the highest bidder
         on the next real upgrade rather than the second-highest on three.
       </Para>
+      <KeyIdea>
+        Pay for facts in September and spend freely in December. A dollar you carry into the
+        playoffs bought nothing.
+      </KeyIdea>
     </section>
   );
 }
 
-/* ---------- Reading the room ---------- */
+/* ---------- Lesson 5: reading the room ---------- */
 
 function RoomSection() {
   return (
     <section aria-labelledby="room-heading" className="mt-12">
       <GuideSectionHeader
         id="room-heading"
-        eyebrow="The auction"
+        eyebrow="Lesson 5 of 8"
         heading="Reading the room: you only have to beat one person"
         tone="purple"
       />
@@ -581,16 +746,28 @@ function RoomSection() {
         to lose him. Walk away above is the ceiling, the point where winning stops being worth
         it, and it is the most useful number on the page.
       </Para>
+      <BidLadderFigure />
+      <div className="mt-6">
+        <BidWorksheet />
+      </div>
+      <KeyIdea>
+        The ceiling comes from your roster. The bid comes from their wallets. Keep the two
+        numbers apart, and never let the second one climb past the first.
+      </KeyIdea>
+      <TryIt href="/tools/faab" label="See the real ladder">
+        With a league connected, the calculator reads every rival&apos;s remaining budget and
+        your league&apos;s own bid history, and prints the three rungs for the actual player.
+      </TryIt>
     </section>
   );
 }
 
-/* ---------- Who to drop ---------- */
+/* ---------- Lesson 6: who to drop ---------- */
 
 function DropSection() {
   return (
     <section aria-labelledby="drop-heading" className="mt-12">
-      <GuideSectionHeader id="drop-heading" eyebrow="The other half" heading="Who to drop" />
+      <GuideSectionHeader id="drop-heading" eyebrow="Lesson 6 of 8" heading="Who to drop" />
       <Para>
         Every add is also a cut, and the cut is half the decision. The right player to drop is
         the one your lineup would miss least, which is not always the one with the fewest points.
@@ -614,18 +791,22 @@ function DropSection() {
         bench spot and do not need to cut anyone, or every player it could name is one you would
         rather keep, in which case it says so and leaves that call to you.
       </Para>
+      <KeyIdea>
+        Drop the player your lineup would miss least, which is rarely the one with the fewest
+        points. A handcuff or a dynasty asset is never the price of a streamer.
+      </KeyIdea>
     </section>
   );
 }
 
-/* ---------- When to spend it all ---------- */
+/* ---------- Lesson 7: when to spend it all ---------- */
 
 function AllInSection() {
   return (
     <section aria-labelledby="all-in-heading" className="mt-12">
       <GuideSectionHeader
         id="all-in-heading"
-        eyebrow="Going big"
+        eyebrow="Lesson 7 of 8"
         heading="When to spend it all"
         tone="purple"
       />
@@ -651,18 +832,22 @@ function AllInSection() {
         5 percent, the calculator will not tell you to empty the budget, and neither will I.
         Save it, or better, trade the player you would have cut to a contender for a pick.
       </Para>
+      <KeyIdea>
+        Empty the budget only when he is a league-winner, you are contending, and he fills a
+        hole. Three yeses. Two is a big bid, not an all-in.
+      </KeyIdea>
     </section>
   );
 }
 
-/* ---------- Dynasty and rookies ---------- */
+/* ---------- Lesson 8: dynasty and rookies ---------- */
 
 function DynastySection() {
   return (
     <section aria-labelledby="dynasty-heading" className="mt-12">
       <GuideSectionHeader
         id="dynasty-heading"
-        eyebrow="Dynasty"
+        eyebrow="Lesson 8 of 8"
         heading="Dynasty FAAB, and how much to spend on rookies"
       />
       <Para>
@@ -685,6 +870,14 @@ function DynastySection() {
         the weeks when contenders are desperate. Let them empty their budgets in October. Your
         pickups are the ones that matter in March.
       </Para>
+      <KeyIdea>
+        In dynasty a stash is worth next year, a rookie name is worth a dollar, and a rebuilder&apos;s
+        budget is worth the most in the week the contenders run out.
+      </KeyIdea>
+      <TryIt href="/guides/fantasy-football-trade-guide" label="Read the trade guide">
+        The player you were going to cut in a dynasty league is usually worth a late pick to
+        somebody. The trade guide covers what a pick is worth, and when.
+      </TryIt>
     </section>
   );
 }
@@ -766,12 +959,12 @@ function ExampleSection() {
           [
             "2. Points gained",
             "How much more do I score than with the player I cut?",
-            "He projects 14 a week; the flex is 8. About 6 a week, over 13 weeks",
+            "He projects 11 a week; the flex is 8. About 3 a week, over 13 weeks",
           ],
           [
             "3. Odds",
             "What does that do to my playoff chances?",
-            "From about 70 percent to about 82 percent. Real, not decorative",
+            "From about 70 percent to about 78 percent. Real, and short of the calculator's all-in line",
           ],
           [
             "4. Kind of pickup",
@@ -806,12 +999,34 @@ function ExampleSection() {
   );
 }
 
+/* ---------- Checklist ---------- */
+
+function ChecklistSection() {
+  return (
+    <section aria-labelledby="checklist-heading" className="mt-12">
+      <GuideSectionHeader
+        id="checklist-heading"
+        eyebrow="Pre-flight"
+        heading="Before you bid"
+        tone="purple"
+      />
+      <Para>
+        Eight questions, one claim. If you cannot tick one, you do not know enough to put the
+        bid in yet, and waivers do not process until Wednesday.
+      </Para>
+      <div className="mt-6">
+        <PreBidChecklist />
+      </div>
+    </section>
+  );
+}
+
 /* ---------- FAQ ---------- */
 
 function FaqSection() {
   return (
     <section aria-labelledby="faq-heading" className="mt-12">
-      <GuideSectionHeader id="faq-heading" eyebrow="FAQ" heading="Questions, answered" tone="purple" />
+      <GuideSectionHeader id="faq-heading" eyebrow="FAQ" heading="Questions, answered" />
       <div className="mt-6">
         <FaqAccordion items={FAQ} />
       </div>
@@ -824,7 +1039,12 @@ function FaqSection() {
 function ClosingSection() {
   return (
     <section aria-labelledby="closing-heading" className="mt-12">
-      <GuideSectionHeader id="closing-heading" eyebrow="Next" heading="Run it on your own claim" />
+      <GuideSectionHeader
+        id="closing-heading"
+        eyebrow="Next"
+        heading="Run it on your own claim"
+        tone="purple"
+      />
       <Para>
         Everything above is what the{" "}
         <Link href="/tools/faab" className={LINK_CLASS}>

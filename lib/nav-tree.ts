@@ -159,6 +159,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         hint: "How to judge any trade",
         icon: "scale",
       },
+      {
+        id: "/guides/superflex-strategy",
+        label: "Superflex Strategy",
+        href: "/guides/superflex-strategy",
+        hint: "Quarterbacks when everyone needs two",
+        icon: "layers",
+      },
     ],
   },
   {

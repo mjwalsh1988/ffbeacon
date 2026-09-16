@@ -188,8 +188,8 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "Since nearly everyone fills it with a quarterback, most teams start two, and quarterback value climbs dramatically. If a set of rankings looks wrong to you, checking whether you are in a superflex league is the first thing to rule out. It is the largest single swing in fantasy valuation.",
         ],
         link: {
-          href: "/rankings/dynasty-ppr-sflex",
-          label: "See superflex rankings",
+          href: "/guides/superflex-strategy",
+          label: "Read the superflex strategy guide",
         },
       },
       {
@@ -199,6 +199,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A 2QB league requires two starting quarterbacks with no option to fill the slot any other way.",
           "It behaves like superflex, only harder. In a 12-team 2QB league, 24 of roughly 32 starting quarterbacks are locked into lineups every week, so the position runs dry almost immediately.",
         ],
+        link: {
+          href: "/guides/superflex-strategy#league-heading",
+          label: "How 2QB changes the superflex plan",
+        },
       },
       {
         id: "idp",

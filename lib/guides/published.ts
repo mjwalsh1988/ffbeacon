@@ -71,7 +71,9 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     summary:
       "What wins above replacement means for a fantasy roster, why scarcity beats raw points, how to read the Positional WAR curve for your own league, and the three decisions it should change",
     publishedAt: "2026-09-15T09:00:00-04:00",
-    updatedAt: "2026-09-15T09:00:00-04:00",
+    // 2026-09-16: rebuilt as seven lessons with diagrams and two interactive
+    // boxes. The prose changed shape, so the date moves.
+    updatedAt: "2026-09-16T09:00:00-04:00",
     priority: 0.8,
   },
   {
@@ -80,7 +82,9 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     summary:
       "What FAAB is, how much of your budget to bid on each kind of pickup, when to spend it all, who to drop, and the waiver wire mistakes that lose leagues in October",
     publishedAt: "2026-09-15T09:00:00-04:00",
-    updatedAt: "2026-09-15T09:00:00-04:00",
+    // 2026-09-16: rebuilt as eight lessons with diagrams, a bid worksheet and
+    // a pre-bid checklist.
+    updatedAt: "2026-09-16T09:00:00-04:00",
     priority: 0.8,
   },
   {
@@ -92,6 +96,17 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // does not expire.
     publishedAt: "2026-09-15T12:00:00-04:00",
     updatedAt: "2026-09-15T12:00:00-04:00",
+    priority: 0.8,
+  },
+  {
+    slug: "superflex-strategy",
+    title: "Superflex strategy: how to draft, roster and trade quarterbacks",
+    summary:
+      "What a superflex slot changes, how many quarterbacks to roster in redraft, dynasty and best ball, when to draft them, how to trade the spare, managing byes, and how TE premium stacks on top",
+    // No year in the slug, for the same reason as the draft and trade guides:
+    // the method does not expire. The one live figure refreshes itself.
+    publishedAt: "2026-09-16T09:00:00-04:00",
+    updatedAt: "2026-09-16T09:00:00-04:00",
     priority: 0.8,
   },
 ];
