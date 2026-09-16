@@ -107,16 +107,32 @@ export default async function AuthorMichaelPage() {
           title="Michael"
           description="Founder of FF Beacon. Twenty seasons in fantasy, an active dynasty manager who plays the game stats-first, and the reason this site is built the way it is."
           stats={[
-            { label: "Seasons", value: "20+", detail: "Since 2006", accent: "purple" },
-            { label: "Format focus", value: "Dynasty", detail: "Superflex and TEP", accent: "cyan" },
-            { label: "Reads by", value: "Ear", detail: "Screen reader, daily", accent: "purple" },
+            {
+              label: "Seasons",
+              value: "20+",
+              detail: "Since 2006",
+              accent: "purple",
+            },
+            {
+              label: "Format focus",
+              value: "Dynasty",
+              detail: "Superflex and TEP",
+              accent: "cyan",
+            },
+            {
+              label: "Reads by",
+              value: "Ear",
+              detail: "Screen reader, daily",
+              accent: "purple",
+            },
           ]}
         >
           <span
             aria-hidden="true"
             className="block w-fit rounded-full p-[2px]"
             style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+              backgroundImage:
+                "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
             }}
           >
             <span className="block rounded-full bg-surface p-1">
@@ -139,7 +155,11 @@ export default async function AuthorMichaelPage() {
               placeholder="What would you like to ask?"
             />
 
-            <Panel eyebrow="Connect" title="Other ways to reach me" headingLevel={2}>
+            <Panel
+              eyebrow="Connect"
+              title="Other ways to reach me"
+              headingLevel={2}
+            >
               <p className="text-sm leading-relaxed text-ink-muted">
                 {isMember
                   ? "You are already in the Discord, so you know where to find the community and me in it. Email works for anything longer."
@@ -158,7 +178,11 @@ export default async function AuthorMichaelPage() {
               </div>
             </Panel>
 
-            <Panel eyebrow="Read next" title="Where to go from here" headingLevel={2}>
+            <Panel
+              eyebrow="Read next"
+              title="Where to go from here"
+              headingLevel={2}
+            >
               <div className="grid gap-2">
                 <LinkTile
                   href="/about"
@@ -185,47 +209,50 @@ export default async function AuthorMichaelPage() {
         >
           <div className="space-y-4 text-sm leading-relaxed text-ink-muted sm:text-base">
             <p>
-              I have been playing fantasy football since 2006, twenty seasons. For most
-              of those years I ran one or two leagues. In 2023 I jumped into dynasty,
-              and within a year I was managing more rosters than I could keep in my
-              head. The unlock was not free time. It was finally learning how to
-              actually use the data.
+              I have been playing fantasy football since 2006, twenty seasons.
+              For most of those years I ran one or two leagues. In 2023 I jumped
+              into dynasty, and within a year I was managing more rosters than I
+              could keep in my head. The unlock was not free time. It was
+              finally learning how to actually use the data.
             </p>
             <p>
-              I am blind. That cuts both ways in fantasy. Every app I tried had friction
-              sighted users never notice: stats trapped inside an unlabeled chart,
-              filters you can only reach with a mouse, player news that updates
-              silently. So I leaned on what does work for me. Stat lines, target shares,
-              snap counts, analyst tape breakdowns on audio, and advanced metrics that
-              travel well as text.
+              I am blind. That cuts both ways in fantasy. Every app I tried had
+              friction sighted users never notice: stats trapped inside an
+              unlabeled chart, filters you can only reach with a mouse, player
+              news that updates silently. So I leaned on what does work for me.
+              Stat lines, target shares, snap counts, analyst tape breakdowns on
+              audio, and advanced metrics that travel well as text.
             </p>
             <p>
               That accidentally made me a better fantasy player. I was already
-              evaluating players the way successful managers do, numbers and tape first,
-              vibes last.
+              evaluating players the way successful managers do, numbers and
+              tape first, vibes last.
             </p>
           </div>
         </Panel>
 
-        <Panel eyebrow="Why FF Beacon" title="The product I wish existed when I started">
+        <Panel
+          eyebrow="Why FF Beacon"
+          title="The product I wish existed when I started"
+        >
           <div className="space-y-4 text-sm leading-relaxed text-ink-muted sm:text-base">
             <p>
-              Two things were obvious. There is a large gap in fantasy resources for
-              people who do not already speak analytics, and almost nothing was built
-              for fantasy players who use a screen reader.
+              Two things were obvious. There is a large gap in fantasy resources
+              for people who do not already speak analytics, and almost nothing
+              was built for fantasy players who use a screen reader.
             </p>
             <p>
-              FF Beacon closes both at once. Every component is checked against keyboard
-              navigation, semantic HTML, and screen reader announcements before it
-              ships. Every guide explains the analytic before it asks you to use it. No
-              column is hidden on a phone to make a table easier to lay out, because the
-              data you can reach on a laptop is the data you should be able to reach in
-              a draft.
+              FF Beacon closes both at once. Every component is checked against
+              keyboard navigation, semantic HTML, and screen reader
+              announcements before it ships. Every guide explains the analytic
+              before it asks you to use it. No column is hidden on a phone to
+              make a table easier to lay out, because the data you can reach on
+              a laptop is the data you should be able to reach in a draft.
             </p>
             <p>
-              If you have ever felt locked out of fantasy football by the jargon or the
-              interface, this site is for you. Read it by ear or by eye. It works both
-              ways.
+              If you have ever felt locked out of fantasy football by the jargon
+              or the interface, this site is for you. Read it by ear or by eye.
+              It works both ways.
             </p>
           </div>
         </Panel>
@@ -367,28 +394,37 @@ export default async function AuthorMichaelPage() {
               accent="purple"
             />
             <LinkTile
+              href="/guides/fantasy-football-trade-guide"
+              icon={Scale}
+              title="Fantasy football trade guide"
+              body="How to judge any trade before you send it: value against wins, the 2-for-1 trap, and how to pitch it."
+            />
+            <LinkTile
               href="/guides/how-ff-beacon-works"
               icon={Cog}
               title="How FF Beacon works"
               body="The projection engine, the matchup model and the confidence figure, and what none of it knows."
+              accent="purple"
             />
             <LinkTile
               href="/guides"
               icon={Layers}
               title="The guides shelf"
               body="Everything above in one place, with whatever ships next added as it lands."
-              accent="purple"
             />
           </div>
         </Panel>
 
-        <Panel eyebrow="Connect" title="Want to talk about accessibility, fantasy, or analytics?">
+        <Panel
+          eyebrow="Connect"
+          title="Want to talk about accessibility, fantasy, or analytics?"
+        >
           <p className="text-sm leading-relaxed text-ink-muted">
-            The message form in the rail lands in the same queue I read every day. If
-            you would rather talk it through with more than one person, the Discord is
-            full of fantasy players who will help you turn a question into a lineup
-            decision, free. Running a show and want this story on it? The same form
-            reaches me.
+            The message form in the rail lands in the same queue I read every
+            day. If you would rather talk it through with more than one person,
+            the Discord is full of fantasy players who will help you turn a
+            question into a lineup decision, free. Running a show and want this
+            story on it? The same form reaches me.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <MemberHeroCta

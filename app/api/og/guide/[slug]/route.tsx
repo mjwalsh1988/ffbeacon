@@ -65,6 +65,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "Bid ranges for every kind of pickup, when to spend it all, who to drop, and the waiver wire mistakes that lose leagues in October.",
     badge: "Waiver wire",
   },
+  "fantasy-football-trade-guide": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "The trade guide:",
+    headlineBottom: "how to judge any trade",
+    subhead:
+      "Value against wins, the 2-for-1 trap, buying low without fooling yourself, dynasty picks, timing, and how to pitch a trade that gets accepted.",
+    badge: "8 lessons",
+  },
 };
 
 /**
@@ -78,155 +86,153 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
-  const card = GUIDE_CARDS[slug];
+  const card = Object.hasOwn(GUIDE_CARDS, slug) ? GUIDE_CARDS[slug] : undefined;
   if (!card) {
     return new Response("Not found", { status: 404 });
   }
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: SIZE.width,
+        height: SIZE.height,
+        display: "flex",
+        flexDirection: "column",
+        background: `linear-gradient(135deg, ${BG_BASE} 0%, ${BG} 60%, ${BG_BASE} 100%)`,
+        color: INK,
+        padding: 64,
+        fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
+        position: "relative",
+      }}
+    >
+      {/* Beacon gradient accent */}
       <div
         style={{
-          width: SIZE.width,
-          height: SIZE.height,
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: 6,
+          background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
+        }}
+      />
+
+      {/* Brand wordmark */}
+      <div
+        style={{
           display: "flex",
-          flexDirection: "column",
-          background: `linear-gradient(135deg, ${BG_BASE} 0%, ${BG} 60%, ${BG_BASE} 100%)`,
-          color: INK,
-          padding: 64,
-          fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
-          position: "relative",
+          alignItems: "center",
+          gap: 14,
+          marginBottom: 40,
         }}
       >
-        {/* Beacon gradient accent */}
         <div
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: 6,
+            width: 44,
+            height: 44,
+            borderRadius: 10,
             background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
           }}
         />
-
-        {/* Brand wordmark */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            marginBottom: 40,
-          }}
-        >
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 10,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p
-            style={{
-              fontSize: 32,
-              fontWeight: 700,
-              letterSpacing: -0.5,
-              margin: 0,
-            }}
-          >
-            FF Beacon
-          </p>
-        </div>
-
         <p
           style={{
-            fontSize: 20,
-            color: CYAN,
-            margin: 0,
-            textTransform: "uppercase",
-            letterSpacing: 4,
-            fontWeight: 600,
-          }}
-        >
-          {card.eyebrow}
-        </p>
-
-        <h1
-          style={{
-            fontSize: 76,
+            fontSize: 32,
             fontWeight: 700,
-            letterSpacing: -2,
-            margin: "18px 0 6px 0",
-            lineHeight: 1.04,
-          }}
-        >
-          {card.headlineTop}
-        </h1>
-        <h1
-          style={{
-            fontSize: 76,
-            fontWeight: 700,
-            letterSpacing: -2,
+            letterSpacing: -0.5,
             margin: 0,
-            lineHeight: 1.04,
-            background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            backgroundClip: "text",
-            color: "transparent",
-            display: "flex",
           }}
         >
-          {card.headlineBottom}
-        </h1>
-
-        <p
-          style={{
-            fontSize: 26,
-            color: INK_MUTED,
-            margin: "28px 0 0 0",
-            lineHeight: 1.4,
-            maxWidth: 940,
-          }}
-        >
-          {card.subhead}
+          FF Beacon
         </p>
-
-        <div
-          style={{
-            position: "absolute",
-            bottom: 56,
-            left: 64,
-            right: 64,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderTop: `1px solid ${LINE}`,
-            paddingTop: 20,
-          }}
-        >
-          <p
-            style={{
-              fontSize: 22,
-              color: INK_SUBTLE,
-              margin: 0,
-              letterSpacing: 1,
-            }}
-          >
-            ffbeacon.com/guides/{slug}
-          </p>
-          <p
-            style={{
-              fontSize: 22,
-              color: INK_SUBTLE,
-              margin: 0,
-              letterSpacing: 1,
-            }}
-          >
-            {card.badge}
-          </p>
-        </div>
       </div>
-    ),
+
+      <p
+        style={{
+          fontSize: 20,
+          color: CYAN,
+          margin: 0,
+          textTransform: "uppercase",
+          letterSpacing: 4,
+          fontWeight: 600,
+        }}
+      >
+        {card.eyebrow}
+      </p>
+
+      <h1
+        style={{
+          fontSize: 76,
+          fontWeight: 700,
+          letterSpacing: -2,
+          margin: "18px 0 6px 0",
+          lineHeight: 1.04,
+        }}
+      >
+        {card.headlineTop}
+      </h1>
+      <h1
+        style={{
+          fontSize: 76,
+          fontWeight: 700,
+          letterSpacing: -2,
+          margin: 0,
+          lineHeight: 1.04,
+          background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
+          backgroundClip: "text",
+          color: "transparent",
+          display: "flex",
+        }}
+      >
+        {card.headlineBottom}
+      </h1>
+
+      <p
+        style={{
+          fontSize: 26,
+          color: INK_MUTED,
+          margin: "28px 0 0 0",
+          lineHeight: 1.4,
+          maxWidth: 940,
+        }}
+      >
+        {card.subhead}
+      </p>
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: 56,
+          left: 64,
+          right: 64,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderTop: `1px solid ${LINE}`,
+          paddingTop: 20,
+        }}
+      >
+        <p
+          style={{
+            fontSize: 22,
+            color: INK_SUBTLE,
+            margin: 0,
+            letterSpacing: 1,
+          }}
+        >
+          ffbeacon.com/guides/{slug}
+        </p>
+        <p
+          style={{
+            fontSize: 22,
+            color: INK_SUBTLE,
+            margin: 0,
+            letterSpacing: 1,
+          }}
+        >
+          {card.badge}
+        </p>
+      </div>
+    </div>,
     {
       ...SIZE,
       headers: {

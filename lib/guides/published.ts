@@ -83,7 +83,25 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     updatedAt: "2026-09-15T09:00:00-04:00",
     priority: 0.8,
   },
+  {
+    slug: "fantasy-football-trade-guide",
+    title: "Fantasy football trade guide: how to judge any trade",
+    summary:
+      "How to judge a fantasy football trade before you send it: value against wins, the 2-for-1 trap, buying low without fooling yourself, dynasty picks, timing, and how to pitch it",
+    // No year in the slug, for the same reason as the draft guide: the method
+    // does not expire.
+    publishedAt: "2026-09-15T12:00:00-04:00",
+    updatedAt: "2026-09-15T12:00:00-04:00",
+    priority: 0.8,
+  },
 ];
+
+/** The most recently published guide, for surfaces that spotlight the newest one. */
+export function newestPublishedGuide(): PublishedGuide {
+  return [...PUBLISHED_GUIDES].sort(
+    (a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
+  )[0];
+}
 
 /** Look up one published guide by slug, or undefined when it is not published. */
 export function findPublishedGuide(slug: string): PublishedGuide | undefined {

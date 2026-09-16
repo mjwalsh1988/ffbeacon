@@ -152,6 +152,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         hint: "How much to bid on waivers",
         icon: "calculator",
       },
+      {
+        id: "/guides/fantasy-football-trade-guide",
+        label: "Trade Guide",
+        href: "/guides/fantasy-football-trade-guide",
+        hint: "How to judge any trade",
+        icon: "scale",
+      },
     ],
   },
   {
@@ -366,7 +373,9 @@ const ALL_SECTIONS: SiteNavNode[] = [
  * Every top-level section id, in code order. `lib/site-layout/parse.test.ts`
  * holds the admin form's list of sections to this one.
  */
-export const NAV_TREE_SECTION_IDS: string[] = ALL_SECTIONS.map((section) => section.id);
+export const NAV_TREE_SECTION_IDS: string[] = ALL_SECTIONS.map(
+  (section) => section.id,
+);
 
 /**
  * The sections one viewer can reach, in display order.
@@ -382,7 +391,10 @@ export const NAV_TREE_SECTION_IDS: string[] = ALL_SECTIONS.map((section) => sect
  * reader never shifts where the others sit relative to each other.
  */
 export const buildNavTree = cache(
-  ({ isAuthenticated, isAdmin }: NavViewer, layout: SiteLayoutSettings): NavNode[] =>
+  (
+    { isAuthenticated, isAdmin }: NavViewer,
+    layout: SiteLayoutSettings,
+  ): NavNode[] =>
     applyOrder(ALL_SECTIONS, layout.menu.sectionOrder, (section) => section.id)
       .filter((section) => {
         if (section.requires === "admin") return isAdmin;
@@ -393,7 +405,11 @@ export const buildNavTree = cache(
         section.id === "tools" && section.children
           ? {
               ...section,
-              children: applyOrder(section.children, layout.menu.toolOrder, (child) => child.id),
+              children: applyOrder(
+                section.children,
+                layout.menu.toolOrder,
+                (child) => child.id,
+              ),
             }
           : section,
       ),

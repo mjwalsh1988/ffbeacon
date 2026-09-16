@@ -46,6 +46,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/guides/how-ff-beacon-works": "How FF Beacon Works",
   "/guides/positional-war-explained": "Positional WAR Explained",
   "/guides/faab-strategy": "FAAB Strategy",
+  "/guides/fantasy-football-trade-guide": "Trade Guide",
   "/join": "Join the Discord",
   "/login": "Sign in",
   "/my-beacon": "My Beacon",
@@ -219,14 +220,16 @@ export function breadcrumbJsonLd(
   if (crumbs.length === 0) return null;
 
   const base = siteUrl.replace(/\/$/, "");
-  const items = [{ label: "Home", href: "/" }, ...crumbs].map((crumb, index) => ({
-    "@type": "ListItem",
-    position: index + 1,
-    name: crumb.label,
-    // Structured data names canonical pages, so any query a crumb's visible link
-    // carries (the rankings hub flag, see CRUMB_HREF_OVERRIDES) is dropped here.
-    item: `${base}${(crumb.href ?? pathname).split("?")[0]}`,
-  }));
+  const items = [{ label: "Home", href: "/" }, ...crumbs].map(
+    (crumb, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: crumb.label,
+      // Structured data names canonical pages, so any query a crumb's visible link
+      // carries (the rankings hub flag, see CRUMB_HREF_OVERRIDES) is dropped here.
+      item: `${base}${(crumb.href ?? pathname).split("?")[0]}`,
+    }),
+  );
 
   return {
     "@context": "https://schema.org",

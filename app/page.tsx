@@ -4,7 +4,10 @@ import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { getDiscordGuildStats, type DiscordGuildStats } from "@/lib/discord-stats";
+import {
+  getDiscordGuildStats,
+  type DiscordGuildStats,
+} from "@/lib/discord-stats";
 import {
   loadHomeContent,
   type HomeArticleRow,
@@ -39,11 +42,15 @@ import {
   Eye,
   Headphones,
   Trophy,
+  ListOrdered,
+  TrendingUp,
+  Cog,
   type LucideIcon,
 } from "lucide-react";
-import { SITE_TIME_ZONE } from "@/lib/datetime";
+import { SITE_TIME_ZONE, formatEasternShortDate } from "@/lib/datetime";
 import { SITE } from "@/lib/site";
 import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
+import { PUBLISHED_GUIDES, newestPublishedGuide } from "@/lib/guides/published";
 import type { ToolHref } from "@/lib/tools-catalog";
 import type { HomepageToolCard } from "@/lib/site-layout/default-settings";
 import { loadSiteLayout } from "@/lib/site-layout/settings";
@@ -248,8 +255,8 @@ function Hero({ memberContext }: { memberContext: Promise<MemberContext> }) {
             We are a community first, and everything we build grows out of that.
             Our mission is simple: keep sharp fantasy football help free for
             everyone. The heart of it lives in our Discord, where real people
-            answer your lineup, trade, and draft questions, no matter how new you
-            are. No paywall, no gatekeeping.
+            answer your lineup, trade, and draft questions, no matter how new
+            you are. No paywall, no gatekeeping.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             {/* Short labels on purpose: the hero shows two of these three
@@ -398,8 +405,13 @@ function DiscordCardFallback() {
         <div className="h-24 animate-pulse rounded-card border border-line bg-base/60" />
         <div className="h-24 animate-pulse rounded-card border border-line bg-base/60" />
       </div>
-      <div aria-hidden="true" className="mt-5 h-11 animate-pulse rounded-card bg-base/60" />
-      <span className="sr-only">Loading our Discord community's live numbers</span>
+      <div
+        aria-hidden="true"
+        className="mt-5 h-11 animate-pulse rounded-card bg-base/60"
+      />
+      <span className="sr-only">
+        Loading our Discord community's live numbers
+      </span>
     </div>
   );
 }
@@ -498,7 +510,8 @@ function DiscordCommunityCard({
           aria-hidden="true"
           className="bg-clip-text font-semibold text-transparent"
           style={{
-            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+            backgroundImage:
+              "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
           }}
         >
           Real people. Real answers. Real results.
@@ -792,9 +805,13 @@ const BEACON_SOURCE_SLUG = "ffbeacon";
 
 /** How many of the currently active formats a source actually publishes for.
  *  A null supported list means "every active format" (see source_registry). */
-function coverageCount(source: SourceRow, activeFormatSlugs: Set<string>): number {
+function coverageCount(
+  source: SourceRow,
+  activeFormatSlugs: Set<string>,
+): number {
   if (!source.supported_format_slugs) return activeFormatSlugs.size;
-  return source.supported_format_slugs.filter((s) => activeFormatSlugs.has(s)).length;
+  return source.supported_format_slugs.filter((s) => activeFormatSlugs.has(s))
+    .length;
 }
 
 /** Plain-English expansion of a format's abbreviations, for sighted and
@@ -839,9 +856,9 @@ function SourcesFormatsSection({
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
           Compare {sources.length} trusted ranking source
           {sources.length === 1 ? "" : "s"} side by side, or just trust our own
-          FF Beacon number. Every set of rankings is tuned to your exact scoring,
-          across {formats.length} league types. Pick yours once and the whole
-          site follows along.
+          FF Beacon number. Every set of rankings is tuned to your exact
+          scoring, across {formats.length} league types. Pick yours once and the
+          whole site follows along.
         </p>
 
         {/* --- Sources --- */}
@@ -925,7 +942,8 @@ function MetaPill({ children }: { children: React.ReactNode }) {
 
 function sourceMetaPills(source: SourceRow, coverage: number) {
   const cadence =
-    source.update_cadence.charAt(0).toUpperCase() + source.update_cadence.slice(1);
+    source.update_cadence.charAt(0).toUpperCase() +
+    source.update_cadence.slice(1);
   const hasPicks = source.data_type.includes("draft_pick_values");
   return (
     <>
@@ -933,7 +951,9 @@ function sourceMetaPills(source: SourceRow, coverage: number) {
       <MetaPill>
         {coverage} format{coverage === 1 ? "" : "s"}
       </MetaPill>
-      <MetaPill>{hasPicks ? "Player and pick values" : "Player values"}</MetaPill>
+      <MetaPill>
+        {hasPicks ? "Player and pick values" : "Player values"}
+      </MetaPill>
     </>
   );
 }
@@ -1024,7 +1044,9 @@ function SourceCard({
         >
           <Layers className="h-4 w-4" />
         </span>
-        <h4 className="text-base font-semibold text-ink">{source.display_name}</h4>
+        <h4 className="text-base font-semibold text-ink">
+          {source.display_name}
+        </h4>
         {source.is_default && (
           <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
             Default
@@ -1109,8 +1131,8 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
             </span>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
               Fresh Beacon Brief stories are on the way. In the meantime the
-              rankings, the FAAB calculator, and league sync are live and updating
-              daily.
+              rankings, the FAAB calculator, and league sync are live and
+              updating daily.
             </p>
           </div>
         ) : (
@@ -1202,52 +1224,302 @@ function ArticleCard({ article }: { article: ArticleRow }) {
 /* ---------- Guides ---------- */
 
 /**
- * A single card pointing at /guides, styled like the tool cards above so a
- * guides link reads as part of the same set of free resources. The
- * description names what is actually live there today: the glossary
- * (TERM_COUNT terms) and the nightly-rebuilt draft guide. A third guide
- * (accessible fantasy football) is still being written, so it is left out
- * of this card rather than advertised early.
+ * The guides shelf on the homepage: one spotlight and a stack.
+ *
+ * This used to be a single card pointing at /guides, written when the shelf
+ * held one guide. It now reads the register (lib/guides/published.ts), so a
+ * guide that ships appears here the same day without a homepage edit. The
+ * newest guide gets the spotlight, with its date and the lessons inside it, and
+ * the rest sit in a stack beside it as rows a reader can scan in one pass.
+ *
+ * HOME_GUIDE_DETAILS holds the words this surface needs that the register does
+ * not carry: an icon, a one-line hint, and the lessons for the spotlight. A
+ * guide with no entry still renders, on a book icon and its register summary,
+ * so a missing row here is a duller card rather than a missing guide.
+ *
+ * Every column renders at every width. On a phone the spotlight stacks above
+ * the shelf; nothing is hidden.
  */
+type HomeGuideDetail = {
+  icon: LucideIcon;
+  hint: string;
+  /** What the spotlight lists under "Inside". Only read for the newest guide. */
+  lessons?: string[];
+};
+
+const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
+  "fantasy-football-terms": {
+    icon: BookOpen,
+    hint: `${TERM_COUNT} terms, each defined once and then explained properly`,
+    lessons: [
+      "PPR, superflex, FAAB and every other word your league chat assumes",
+      "What the analytics measure, from target share to yards per route run",
+    ],
+  },
+  "fantasy-football-draft-guide": {
+    icon: ListOrdered,
+    hint: "Steals, swings and fades in every format, rebuilt nightly",
+    lessons: [
+      "The players going later than they should, per format",
+      "Tier-based drafting and how to read a cliff",
+    ],
+  },
+  "how-ff-beacon-works": {
+    icon: Cog,
+    hint: "The methodology behind every number on the site",
+    lessons: [
+      "The projection engine and the matchup model",
+      "The reliability discount and the confidence figure",
+    ],
+  },
+  "positional-war-explained": {
+    icon: TrendingUp,
+    hint: "Why scarcity beats raw points, for beginners",
+    lessons: [
+      "The replacement player, and why he decides everything",
+      "How to read the Positional WAR curve for your own league",
+    ],
+  },
+  "faab-strategy": {
+    icon: Calculator,
+    hint: "How much to bid on the waiver wire, and when to spend it all",
+    lessons: [
+      "Bid ranges for a league-winner, a new starter, a streamer and a stash",
+      "Why September dollars and December dollars are not the same money",
+    ],
+  },
+  "fantasy-football-trade-guide": {
+    icon: Scale,
+    hint: "How to judge any trade before you send it",
+    lessons: [
+      "Why value and wins are two different scales",
+      "The 2-for-1 trap, and the roster spot you get back",
+      "Buying low without fooling yourself",
+      "How to pitch a trade that gets accepted",
+    ],
+  },
+};
+
+const FALLBACK_GUIDE_DETAIL: HomeGuideDetail = { icon: BookOpen, hint: "" };
+
+function guideDetail(slug: string): HomeGuideDetail {
+  return HOME_GUIDE_DETAILS[slug] ?? FALLBACK_GUIDE_DETAIL;
+}
+
 function GuidesSection() {
+  const newest = newestPublishedGuide();
+  const shelf = PUBLISHED_GUIDES.filter((g) => g.slug !== newest.slug);
+  const spotlight = guideDetail(newest.slug);
+  const SpotlightIcon = spotlight.icon;
+
   return (
-    <section aria-labelledby="guides-heading" className="border-b border-line">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+    <section
+      aria-labelledby="guides-heading"
+      className="relative overflow-hidden border-b border-line"
+    >
+      {/* The same ambient wash the tools section carries, mirrored to the
+          right, so the shelf reads as lit rather than as a footer. Decorative. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 right-0 h-[380px] w-[620px] translate-x-1/4"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, rgba(168, 85, 247, 0.07) 45%, transparent 72%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>Learn the game</SectionEyebrow>
-        <h2
-          id="guides-heading"
-          className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          New to fantasy? Start with the vocabulary.
-        </h2>
-        <div className="mt-10 max-w-2xl">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+          <h2
+            id="guides-heading"
+            className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+          >
+            Guides written the way a good friend explains it.
+          </h2>
           <Link
             href="/guides"
-            className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            Browse all guides
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="mt-10 grid items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-8">
+          {/* The spotlight: the newest guide, with what is inside it. */}
+          <article
+            aria-labelledby="guide-spotlight-heading"
+            className="relative flex flex-col overflow-hidden rounded-modal border border-line-accent bg-surface-elevated p-6 shadow-lg shadow-black/20 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan sm:p-8"
+            style={{
+              backgroundImage:
+                "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.16) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+            }}
           >
             <span
               aria-hidden="true"
-              className="flex h-12 w-12 items-center justify-center rounded-card bg-beacon text-black"
-            >
-              <BookOpen className="h-6 w-6" />
-            </span>
-            <h3 className="mt-5 text-xl font-semibold text-ink">
-              Fantasy football guides
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-              A plain-English glossary covering {TERM_COUNT} terms, from PPR to
-              aDOT, a draft guide rebuilt nightly with steals, fades, and a
-              verdict on every name, a beginner&apos;s read on Positional WAR,
-              and a FAAB playbook for the waiver wire. All free to read.
-            </p>
-            <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
-              Browse the guides
-              <ArrowRight
+              className="absolute inset-x-0 top-0 h-0.5"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
+              }}
+            />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span
+                className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-black"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+                }}
+              >
+                Newest guide
+              </span>
+              <time
+                dateTime={newest.publishedAt}
+                className="text-xs text-ink-subtle"
+              >
+                {formatEasternShortDate(newest.publishedAt)}
+              </time>
+              <span className="text-xs text-ink-subtle">Free to read</span>
+            </div>
+
+            <div className="mt-5 flex items-start gap-4">
+              <span
                 aria-hidden="true"
-                className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
-              />
-            </span>
-          </Link>
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-card bg-beacon text-black"
+              >
+                <SpotlightIcon className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <h3
+                  id="guide-spotlight-heading"
+                  className="text-2xl font-semibold tracking-tight text-ink"
+                >
+                  {/* Stretched link: the heading is the accessible name and the
+                      whole spotlight is clickable, one tab stop. */}
+                  <Link
+                    href={`/guides/${newest.slug}`}
+                    className="after:absolute after:inset-0 after:content-[''] hover:text-brand-cyan focus-visible:outline-none"
+                  >
+                    {newest.title}
+                  </Link>
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                  {newest.summary}.
+                </p>
+              </div>
+            </div>
+
+            {spotlight.lessons && spotlight.lessons.length > 0 && (
+              <div className="mt-6">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                  Inside
+                </p>
+                <ul role="list" className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {spotlight.lessons.map((lesson, i) => (
+                    <li
+                      key={lesson}
+                      className="flex items-start gap-2.5 rounded-card border border-line bg-base/50 px-3 py-2.5 text-sm leading-relaxed text-ink"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="mt-0.5 font-mono text-xs font-semibold tabular-nums text-brand-cyan"
+                      >
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span>{lesson}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Visual affordance only. The stretched link on the heading is the
+                real control, so this is hidden from assistive tech. */}
+            <p
+              aria-hidden="true"
+              className="mt-6 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan"
+            >
+              Read the guide
+              <ArrowRight className="h-3.5 w-3.5" />
+            </p>
+          </article>
+
+          {/* The shelf: every other guide as a row, in register order, which
+              is also the order a new reader should take them in. */}
+          <div className="flex flex-col gap-4">
+            <h3
+              id="guide-shelf-heading"
+              className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+            >
+              The rest of the shelf
+            </h3>
+            <ul
+              aria-labelledby="guide-shelf-heading"
+              role="list"
+              className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface"
+            >
+              {shelf.map((guide) => {
+                const detail = guideDetail(guide.slug);
+                const Icon = detail.icon;
+                return (
+                  <li key={guide.slug}>
+                    <Link
+                      href={`/guides/${guide.slug}`}
+                      className="group flex min-h-11 items-center gap-3 px-4 py-3 transition-colors hover:bg-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-ink group-hover:text-brand-cyan">
+                          {guide.title}
+                        </span>
+                        {detail.hint && (
+                          <span className="block text-xs leading-relaxed text-ink-muted">
+                            {detail.hint}
+                          </span>
+                        )}
+                      </span>
+                      <ArrowRight
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 text-ink-subtle transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-brand-cyan motion-reduce:transition-none"
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <dl className="grid grid-cols-3 gap-2">
+              <div className="rounded-card border border-line bg-base/50 px-3 py-2.5 text-center">
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                  Guides
+                </dt>
+                <dd className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-brand-cyan">
+                  {PUBLISHED_GUIDES.length}
+                </dd>
+              </div>
+              <div className="rounded-card border border-line bg-base/50 px-3 py-2.5 text-center">
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                  Terms defined
+                </dt>
+                <dd className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-brand-purple">
+                  {TERM_COUNT}
+                </dd>
+              </div>
+              <div className="rounded-card border border-line bg-base/50 px-3 py-2.5 text-center">
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                  Cost to read
+                </dt>
+                <dd className="mt-0.5 font-mono text-lg font-semibold text-ink">
+                  Free
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </div>
     </section>
@@ -1320,7 +1592,9 @@ function FounderSection() {
           <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-14">
             {/* The story. */}
             <div className="min-w-0">
-              <SectionEyebrow>A note from the guy who built this</SectionEyebrow>
+              <SectionEyebrow>
+                A note from the guy who built this
+              </SectionEyebrow>
               <h2
                 id="founder-heading"
                 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
@@ -1387,7 +1661,10 @@ function FounderSection() {
                 <dl className="grid min-w-0 flex-1 gap-2.5">
                   <div className="min-w-0">
                     <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
-                      <Trophy aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-cyan" />
+                      <Trophy
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 shrink-0 text-brand-cyan"
+                      />
                       Seasons
                     </dt>
                     <dd className="mt-0.5 text-sm font-semibold text-ink">
@@ -1396,7 +1673,10 @@ function FounderSection() {
                   </div>
                   <div className="min-w-0">
                     <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
-                      <Layers aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-purple" />
+                      <Layers
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 shrink-0 text-brand-purple"
+                      />
                       Format focus
                     </dt>
                     <dd className="mt-0.5 text-sm font-semibold text-ink">
@@ -1405,7 +1685,10 @@ function FounderSection() {
                   </div>
                   <div className="min-w-0">
                     <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
-                      <Headphones aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-cyan" />
+                      <Headphones
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 shrink-0 text-brand-cyan"
+                      />
                       Reads by
                     </dt>
                     <dd className="mt-0.5 text-sm font-semibold text-ink">
@@ -1458,7 +1741,11 @@ function BuildRuleCard({ rule }: { rule: BuildRule }) {
 
 /* ---------- CTA ---------- */
 
-function CtaSection({ memberContext }: { memberContext: Promise<MemberContext> }) {
+function CtaSection({
+  memberContext,
+}: {
+  memberContext: Promise<MemberContext>;
+}) {
   return (
     <section aria-labelledby="cta-heading">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">

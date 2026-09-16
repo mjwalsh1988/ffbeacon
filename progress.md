@@ -14772,3 +14772,13 @@ AD-T007 | completed | Guide: FAAB strategy, how much to bid on the waiver wire, 
 AD-T008 | completed | Homepage founder section rewritten in the first person
      | files: app/page.tsx
      | verified: yes. Every claim already on the about or author page.
+
+AD-T009 | completed | Guide: Fantasy football trade guide, eight lessons with diagrams, first person
+     | files: app/guides/fantasy-football-trade-guide/page.tsx, app/guides/fantasy-football-trade-guide/trade-figures.tsx, app/guides/fantasy-football-trade-guide/trade-classroom.tsx, lib/guides/published.ts, lib/nav-tree.ts, lib/site.ts, lib/breadcrumbs.ts, app/guides/page.tsx, app/api/og/guide/[slug]/route.tsx, app/author/michael/page.tsx
+     | notes: Margin bands read live from Signal Check settings. Value-versus-wins split follows lib/trade-impact/types.ts; team bands follow lib/league-team-status.ts; pick pricing and the KTC fallback follow lib/signal-check/values.ts. Every worked number is invented and each figure caption says so. Not committed: owner review pending.
+     | verified: yes. tsc clean; full vitest run passing (337 files, 5113 tests); rendered on the dev server at desktop and phone width; accessibility, implementation and security reviews applied (nine a11y items, four factual corrections, one OG route guard).
+
+AD-T010 | completed | Homepage guides area: newest-guide spotlight plus a shelf, read from the guide register
+     | files: app/page.tsx, lib/guides/published.ts (newestPublishedGuide)
+     | notes: Replaces the single card written when one guide existed. A guide added to lib/guides/published.ts now appears on the homepage without an edit; HOME_GUIDE_DETAILS supplies the icon, hint and lessons. Not committed: owner review pending.
+     | verified: yes. Rendered at desktop and phone width; nothing hidden at any breakpoint; one tab stop per guide.

@@ -211,7 +211,16 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     label: "Signal Scout",
     href: "/games/signal-scout",
     description: "Decode the profile. Find the player.",
-    keywords: ["game", "games", "guess", "mystery", "player", "scout", "clues", "trivia"],
+    keywords: [
+      "game",
+      "games",
+      "guess",
+      "mystery",
+      "player",
+      "scout",
+      "clues",
+      "trivia",
+    ],
   },
   {
     label: "Would You Rather?",
@@ -268,7 +277,8 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
   {
     label: "Positional WAR Explained",
     href: "/guides/positional-war-explained",
-    description: "What Positional WAR means in fantasy football, in plain English",
+    description:
+      "What Positional WAR means in fantasy football, in plain English",
     keywords: [
       "war",
       "positional war",
@@ -292,6 +302,25 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "how much to bid",
       "budget",
       "free agent",
+    ],
+  },
+  {
+    label: "Trade Guide",
+    href: "/guides/fantasy-football-trade-guide",
+    description: "How to judge any fantasy football trade before you send it",
+    keywords: [
+      "trade",
+      "trades",
+      "trade guide",
+      "trade tips",
+      "trade advice",
+      "trade strategy",
+      "buy low",
+      "sell high",
+      "2 for 1",
+      "consolidation",
+      "trade deadline",
+      "is this trade fair",
     ],
   },
 ];
@@ -334,13 +363,20 @@ export const FOOTER_COLUMNS: Array<{
     links: [
       { label: "The Beacon Brief", href: "/brief" },
       { label: "Guides", href: "/guides" },
-      { label: "Fantasy Football Terms", href: "/guides/fantasy-football-terms" },
+      {
+        label: "Fantasy Football Terms",
+        href: "/guides/fantasy-football-terms",
+      },
       // Was pointed at /guides/2026-fantasy-football-draft-guide, which does not
       // exist, and was disabled to hide that. The guide is real and lives at the
       // year-free path, so the link now goes to it.
       { label: "Draft Guide", href: "/guides/fantasy-football-draft-guide" },
-      { label: "Positional WAR Explained", href: "/guides/positional-war-explained" },
+      {
+        label: "Positional WAR Explained",
+        href: "/guides/positional-war-explained",
+      },
       { label: "FAAB Strategy", href: "/guides/faab-strategy" },
+      { label: "Trade Guide", href: "/guides/fantasy-football-trade-guide" },
       { label: "How FF Beacon Works", href: "/guides/how-ff-beacon-works" },
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.
@@ -382,8 +418,16 @@ export const SOCIAL_LINKS: Array<{
   { label: "Discord", href: "/join", external: true },
   { label: "X", href: "https://x.com/ffbeacon", external: true },
   { label: "TikTok", href: "https://tiktok.com/@ffbeacon", external: true },
-  { label: "YouTube", href: "https://www.youtube.com/@FFBeacon", external: true },
-  { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
+  {
+    label: "YouTube",
+    href: "https://www.youtube.com/@FFBeacon",
+    external: true,
+  },
+  {
+    label: "Instagram",
+    href: "https://instagram.com/ffbeacon",
+    external: true,
+  },
 ];
 
 export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;

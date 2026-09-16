@@ -9,6 +9,7 @@ import {
   Check,
   ArrowRight,
   TrendingUp,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -23,12 +24,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/guides" },
   title: "Fantasy Football Guides in Plain English",
   description:
-    "What the words actually mean and how to use them, with nothing assumed. Start with the glossary, then take the draft guide into your next draft.",
+    "What the words actually mean and how to use them, with nothing assumed. Start with the glossary, then take the draft guide into your next draft and the trade guide into your next offer.",
   ...pageShareMetadata({
     key: "guides",
     title: "Fantasy Football Guides in Plain English",
     description:
-      "What the words actually mean and how to use them, with nothing assumed. Start with the glossary, then take the draft guide into your next draft.",
+      "What the words actually mean and how to use them, with nothing assumed. Start with the glossary, then take the draft guide into your next draft and the trade guide into your next offer.",
     path: "/guides",
   }),
 };
@@ -188,6 +189,19 @@ const GUIDES: Guide[] = [
     ],
   },
   {
+    icon: Scale,
+    title: "Fantasy football trade guide",
+    href: "/guides/fantasy-football-trade-guide",
+    description:
+      "How to judge a trade before you send it. Why value and wins are two different scales, what a calculator cannot see, the 2-for-1 trap, buying low without fooling yourself, and how to pitch a deal that gets accepted.",
+    bullets: [
+      "Eight lessons, each with a diagram and a worked number",
+      "The same trade graded as a contender and as a rebuilder",
+      "Picks in dynasty, the trade calendar and the deadline",
+      "A pre-send checklist you can tick through on any offer",
+    ],
+  },
+  {
     icon: Cog,
     title: "How FF Beacon works",
     href: "/guides/how-ff-beacon-works",
@@ -216,9 +230,10 @@ function GuidesSection() {
       </h2>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
         The glossary, the draft guide, a beginner&apos;s read on Positional WAR,
-        the FAAB playbook, and the methodology page are all free to read right now.
-        Each one defines a term the first time it uses it, so you can start
-        anywhere and never hit a word the page assumes you know.
+        the FAAB playbook, the trade guide, and the methodology page are all
+        free to read right now. Each one defines a term the first time it uses
+        it, so you can start anywhere and never hit a word the page assumes you
+        know.
       </p>
 
       <ul
@@ -256,8 +271,7 @@ function GuideCard({ guide }: { guide: Guide }) {
           aria-hidden="true"
           className="absolute inset-x-0 top-0 h-0.5"
           style={{
-            backgroundImage:
-              "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
+            backgroundImage: "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
           }}
         />
         <div className="flex items-start justify-between gap-3">
@@ -296,7 +310,10 @@ function GuideCard({ guide }: { guide: Guide }) {
         <p className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
           What you&apos;ll learn
         </p>
-        <ul role="list" className="space-y-1.5 text-sm leading-relaxed text-ink">
+        <ul
+          role="list"
+          className="space-y-1.5 text-sm leading-relaxed text-ink"
+        >
           {guide.bullets.map((bullet) => (
             <li key={bullet} className="flex gap-2">
               <Check
