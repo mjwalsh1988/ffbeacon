@@ -88,6 +88,20 @@ export default async function BeaconBriefModerationPage() {
     for (const r of relayRows ?? []) relayHeadlineById.set(r.id, r.headline);
   }
 
+  // A Brief review row names its article; the review page is keyed by the
+  // brief_editions id, so look those up in one read.
+  const briefArticleIds = (data ?? [])
+    .filter((m) => (m.type === "brief_review" || m.type === "brief_correction") && typeof m.article_id === "string")
+    .map((m) => m.article_id as string);
+  const editionIdByArticle = new Map<string, string>();
+  if (briefArticleIds.length > 0) {
+    const { data: editionRows } = await admin
+      .from("brief_editions")
+      .select("id, article_id")
+      .in("article_id", briefArticleIds.slice(0, 300));
+    for (const e of editionRows ?? []) editionIdByArticle.set(e.article_id, e.id);
+  }
+
   const items: ModerationItem[] = (data ?? []).map((m) => {
     const art = (m as { articles?: { title?: string; slug?: string } | null })
       .articles;
@@ -140,6 +154,17 @@ export default async function BeaconBriefModerationPage() {
       };
     }
 
+    if (m.type === "brief_review" || m.type === "brief_correction") {
+      return {
+        type: m.type,
+        id: m.id,
+        created_at: m.created_at,
+        articleTitle,
+        editionId: m.article_id ? (editionIdByArticle.get(m.article_id) ?? null) : null,
+        post,
+      };
+    }
+
     const detail = m.detail as { source_external_id?: string } | null;
     return {
       type: "deletion",
@@ -159,7 +184,7 @@ export default async function BeaconBriefModerationPage() {
   return (
     <BeaconBriefPageShell
       title="Moderation"
-      description="Three kinds of review land here, and nothing is auto-applied. Deleted source posts wait for you to retract or keep the article. Player and team names the curator could not confidently match wait for you to pick the right one (or dismiss) so news shows on the correct profile. Tasks that failed after every retry wait for you to retry them or skip them."
+      description="Four kinds of review land here, and nothing is auto-applied. Deleted source posts wait for you to retract or keep the Relay. Player and team names the curator could not confidently match wait for you to pick the right one (or dismiss) so news shows on the correct profile. Tasks that failed after every retry wait for you to retry them or skip them. A Brief edition waiting for review is listed here with a link, and is approved or rejected on the Brief desk page, not here."
     >
       <ModerationManager items={items} teams={teams} />
     </BeaconBriefPageShell>

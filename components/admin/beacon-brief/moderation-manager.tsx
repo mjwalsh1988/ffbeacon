@@ -59,7 +59,25 @@ export interface FailedTaskItem {
   relayHeadline: string | null;
 }
 
-export type ModerationItem = DeletionItem | MatchItem | FailedTaskItem;
+/**
+ * A Brief edition waiting for review (brief_review), or a published edition
+ * whose cited Relay was retracted (brief_correction). Neither is decided
+ * here: the Brief desk review page owns approve, reject and edit, so this row
+ * is a signpost with a link and no buttons. Before it existed these rows fell
+ * through to the deletion row, which offered to retract a source post that
+ * had nothing to do with the edition.
+ */
+export interface BriefReviewItem {
+  type: "brief_review" | "brief_correction";
+  id: string;
+  created_at: string;
+  articleTitle: string | null;
+  /** The brief_editions row, for the review link; null when the edition row is gone. */
+  editionId: string | null;
+  post: IngestedPost | null;
+}
+
+export type ModerationItem = DeletionItem | MatchItem | FailedTaskItem | BriefReviewItem;
 
 export interface TeamOption {
   id: string;
@@ -417,6 +435,33 @@ function jobTypeLabel(jobType: string): string {
   return JOB_TYPE_LABELS[jobType] ?? jobType;
 }
 
+function BriefReviewRow({ item }: { item: BriefReviewItem }) {
+  const isReview = item.type === "brief_review";
+  const href = item.editionId ? `/admin/brief-desk/editions/${item.editionId}` : "/admin/brief-desk/editions";
+  return (
+    <div>
+      <p className="font-medium text-ink">
+        {isReview ? "Brief edition waiting for your review" : "Brief edition needs a correction"}
+      </p>
+      {item.articleTitle && <p className="mt-1 text-sm text-ink">{item.articleTitle}</p>}
+      <p className="mt-1 text-xs text-ink-subtle">
+        {isReview
+          ? "The draft is in the Brief desk queue. Read it there, edit what needs editing, then approve or reject it on that page. Nothing about it is decided here."
+          : "A Relay this published edition cites was retracted. Open the edition and decide the correction; the system never edits a published Brief on its own."}
+      </p>
+      <div className="mt-3">
+        <a href={href} className={`${btnClass} inline-flex items-center`}>
+          Open the edition
+          <span className="sr-only">
+            {" "}
+            in the Brief desk{item.articleTitle ? `: ${item.articleTitle}` : ""}
+          </span>
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function FailedTaskRow({
   item,
   pending,
@@ -570,13 +615,18 @@ export function ModerationManager({
               <DeletionRow item={m} pending={pending} run={run} />
             ) : m.type === "failed_task" ? (
               <FailedTaskRow item={m} pending={pending} run={run} />
-            ) : (
+            ) : m.type === "player_match" || m.type === "team_match" ? (
               <MatchResolver
                 item={m}
                 teams={teams}
                 pending={pending}
                 run={run}
               />
+            ) : (
+              // The ternary chain above has excluded every other member of the
+              // union; the compiler does not follow the two-literal discriminant
+              // through a nested ternary, so the last branch names it.
+              <BriefReviewRow item={m as BriefReviewItem} />
             )}
           </li>
         ))}
