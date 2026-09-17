@@ -561,6 +561,17 @@ export async function setRelayStatus(
   relayId: string,
   status: RelayStatus,
   reason: string | null,
+  options: {
+    /**
+     * The OWNER'S override. Publishes without re-running the grounding check,
+     * for a Relay the owner has read against the source post and judged
+     * correct where the check disagreed. The check exists to stop the model
+     * publishing from memory; it was never meant to outrank the person whose
+     * byline the site carries. Recorded in status_reason so the override is
+     * visible in the manager afterwards.
+     */
+    force?: boolean;
+  } = {},
 ): Promise<{ ok: boolean; error?: string; failures?: GroundingFailure[] }> {
   const { data: relay } = await admin
     .from("relays")
@@ -573,7 +584,7 @@ export async function setRelayStatus(
     return { ok: false, error: "A reason is required." };
   }
 
-  if (status === "published" && relay.status !== "published") {
+  if (status === "published" && relay.status !== "published" && !options.force) {
     const check = await recheckStoredGrounding(admin, relay);
     if (check && !check.ok) {
       return {

@@ -219,6 +219,23 @@ export async function unhideRelay(relayId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Publish a hidden Relay WITHOUT the grounding re-check: the owner has read
+ * it against the source post and is overruling the check. The reason recorded
+ * says so, so the override is visible in the manager afterwards.
+ */
+export async function publishRelayAnyway(relayId: string): Promise<ActionResult> {
+  await requireAdmin(RELAYS);
+  const id = parse(ID, relayId);
+  if (!id.ok) return fail(id.error);
+  const admin = createAdminClient();
+  const res = await setRelayStatus(admin, id.data, "published", "Published by the owner over a grounding failure", { force: true });
+  if (!res.ok) return fail(res.error ?? "publish failed");
+  revalidatePath(RELAYS);
+  revalidatePath("/brief");
+  return { ok: true };
+}
+
 export async function retractRelay(relayId: string, reason: string): Promise<ActionResult> {
   await requireAdmin(RELAYS);
   const id = parse(ID, relayId);

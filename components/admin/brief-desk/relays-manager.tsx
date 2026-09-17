@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { editRelay, hideRelay, retractRelay, unhideRelay } from "@/app/admin/brief-desk/actions";
+import { editRelay, hideRelay, publishRelayAnyway, retractRelay, unhideRelay } from "@/app/admin/brief-desk/actions";
 import type { GroundingFailure } from "@/lib/relays/grounding";
 import {
   RELAY_FACT_LABEL_MAX,
@@ -393,6 +393,26 @@ function RelayRow({
               }
             >
               Unhide
+            </button>
+          )}
+          {relay.status === "hidden" && (
+            // The owner's override: publishes without the grounding re-check.
+            // Unhide re-runs the check, which is right for a Relay nobody has
+            // read; this is for one the owner HAS read against the post and is
+            // overruling the check on.
+            <button
+              type="button"
+              className={btnClass}
+              disabled={pending || unhiding}
+              onClick={() =>
+                startUnhide(async () => {
+                  const res = await publishRelayAnyway(relay.id);
+                  announce(res, "Published over the grounding check.");
+                })
+              }
+            >
+              Publish anyway
+              <span className="sr-only">, skipping the grounding check because you have read the post</span>
             </button>
           )}
           <button
