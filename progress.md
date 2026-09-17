@@ -14966,8 +14966,11 @@ BD-T047 | completed | llms files updated: Relays and Briefs described as content
 
 Phase 6, the first edition and the run
 
-BD-T048 | pending | The week 1, 2026 edition written by hand with the owner (owner session)
-BD-T048b | pending | docs/beacon-brief/examples/week-1-2026-brief.json
+BD-T048 | in_progress | The week 1, 2026 edition written by hand and submitted through the desk doors; awaiting the owner's review and approval
+     | files: docs/beacon-brief/examples/week-1-2026-brief.json (the accepted payload)
+     | notes: 2026-09-17. Bundle built for 2026 week 1 (109 Relays, period Sep 8 to Sep 15 9 AM ET) through buildBundle; four web checks recorded in research_log (ESPN and NFL injury reports, ESPN transactions, the week 1 scoreboard); draft POSTed to /api/brief-desk/drafts from the owner's admin session and accepted (201) as edition 349c303c-1950-48df-840c-dc4394f53e41, status in_review. Validator warnings: uncited tier 3 Relays (the roster-depth and defensive-line reports) and the title over 60 characters. Two rejections on the way in, both honest: meta_description over 165 characters, and 4,449 words against the 4,000 cap (trimmed to 3,99x). The owner wants published_at back-dated to 2026-09-15 after approval; approveEdition stamps now(), so that is one SQL update afterwards. Approve with Post to Discord OFF per plan 14.3.
+BD-T048b | completed | docs/beacon-brief/examples/week-1-2026-brief.json (the bundle serves it as example from the next build)
+     | files: docs/beacon-brief/examples/week-1-2026-brief.json
 BD-T049 | completed | scripts/brief-desk/prompt.md
      | files: scripts/brief-desk/prompt.md
 BD-T049b | completed | scripts/brief-desk/draft.ps1 (local fallback)
@@ -14999,3 +15002,8 @@ BD-T094 | completed | Homepage order (guides above the Brief), calendar day link
      | depends on: BD-T093
      | notes: The "N more" link opened as "no reports" because the calendar spread the address's filters into every day link: reaching the calendar from the week view carried week=2, so a day from week 1 filtered to nothing while its cell counted eight. The calendar shows the whole month, so its month and day links now carry nothing but the month or the day, and the view switcher carries only what each view applies. The day number is the link to the day's reports; "N more" is a native details disclosure that opens the rest of the day in place; headlines are one line each with the full text as the link's title.
      | verified: yes. tsc clean; calendar, the expanded disclosure and the day view (16 reports on Sep 9) checked on the dev server; dev server stopped afterwards. The one console error is the pre-existing BookmarkBar hydration id mismatch recorded in handoff.md.
+BD-T095 | completed | Post-deploy backfill and archive, duplicate Relays linked into update chains, the label grounding check narrowed to team names
+     | files: lib/relays/grounding.ts, lib/relays/grounding.test.ts
+     | depends on: BD-T094
+     | notes: 2026-09-17. Backfill in apply mode over the 413 accepted posts without a Relay: 6 published, 12 hidden, 189 dropped by the gates, 206 folded, 0 failed, 0 Discord jobs. Archive: the 5 legacy articles published after the cut-over archived with redirects. Duplicates: 36 same-day reports whose primary player and kind matched an earlier report from a different chain were linked to the earliest report as updates (one Packers roundup left alone); the one Baker Mayfield report that repeated the $165M extension with nothing new was hidden with a reason. Grounding: the fact-label check from the first review pass hid 12 of the run's 18 Relays over title-case label words ("Event", "Outcome"), so labels are now checked for NFL team words only; --recheck-hidden then published 9 of 76 hidden Relays. The grounding change is code and needs a commit and deploy.
+     | verified: yes. 18 grounding tests passing; tsc clean.

@@ -177,7 +177,7 @@ describe("checkRelayGrounding", () => {
     expect(out.failures.map((f) => f.token)).toEqual(["49ers"]);
   });
 
-  it("checks fact labels as well as fact values", () => {
+  it("checks fact labels for a team name and for nothing else", () => {
     const out = checkRelayGrounding(POST, {
       headline: "Eagles place Saquon Barkley on injured reserve.",
       facts: [{ label: "Chiefs sent", value: "high ankle sprain" }],
@@ -185,6 +185,18 @@ describe("checkRelayGrounding", () => {
     });
     expect(out.ok).toBe(false);
     expect(out.failures.some((f) => f.check === "name" && f.token === "Chiefs")).toBe(true);
+
+    // Title-case framing words are the label's own vocabulary, not claims.
+    const generic = checkRelayGrounding(POST, {
+      headline: "Eagles place Saquon Barkley on injured reserve.",
+      facts: [
+        { label: "Event", value: "high ankle sprain" },
+        { label: "Practice Status", value: "injured reserve" },
+        { label: "Medical Assessment", value: "high ankle sprain" },
+      ],
+      timeline: null,
+    });
+    expect(generic.failures).toEqual([]);
   });
 
   it("requires a content word even when every number in the fact matched", () => {

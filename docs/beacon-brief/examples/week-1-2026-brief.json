@@ -1,0 +1,488 @@
+{
+  "edition": {
+    "season": "2026",
+    "week": 1,
+    "period_start": "2026-09-08T13:00:00.000Z",
+    "period_end": "2026-09-15T13:00:00.000Z"
+  },
+  "title": "Week 1 Fantasy Football News and Injuries (2026): Mahomes is back, Darnold is down, and the wire is open",
+  "slug": "week-1-fantasy-football-news-injuries-2026",
+  "meta_description": "Week 1 injuries, contracts and role changes checked against FF Beacon's numbers: Mahomes returns, Darnold and A.J. Brown go down, and the waiver bids worth making.",
+  "tl_dr": "Week 1 gave fantasy managers the two stories they feared and one they hoped for. Patrick Mahomes started nine months after tearing his ACL and scored 22.7 PPR points, Sam Darnold left Seattle's opener with a hip injury that now has him out for week 2, and A.J. Brown went to injured reserve with a high ankle sprain that the Patriots say will cost him at least four games. Behind those headlines, 109 reports crossed the desk in seven days: 56 injuries, 39 players ruled out or placed on reserve, and 30 transactions. This edition puts every one of them beside what FF Beacon's values, box scores and projections say, in both Dynasty PPR SF and Redraft 1QB PPR, and ends with the waiver claims, holds and sells the week actually justifies.",
+  "format_note": "Values and ranks below are shown for Dynasty PPR SF and Redraft 1QB PPR on FF Beacon.",
+  "sections": [
+    {
+      "id": "injuries-and-availability",
+      "heading": "Injuries and availability: Darnold, Brown, Bowers and Tua",
+      "icon": "injury",
+      "eyebrow": "Week 1, part 1 of 6",
+      "body_md": "The injury that matters most for the season is the quietest one on the box score. [Sam Darnold](/players/sam-darnold-4943) scored 0.5 PPR points against New England before leaving with a hip injury, and the Seahawks [ruled him out for the night](/brief/relay/seahawks-rule-out-sam-darnold-hip-injury) at 9:36 PM Eastern on September 9. The next morning brought [a CT scan that was inconclusive](/brief/relay/sam-darnold-hip-injury-mri-seahawks) and an MRI, and by Thursday afternoon coach Mike Macdonald was calling the result [really, really good news](/brief/relay/sam-darnold-hip-injury-seahawks-cards) while still saying Darnold would miss the week 2 game at Arizona. Our check of ESPN's injury page on September 17 shows him listed as out for that game, with the injury now described as a glute. His value on FF Beacon barely moved because the report was good: 3,044 in Dynasty PPR SF, down 136 on the week, rank 84 at the position. In redraft he sits at 2,421, rank 144, which is a bench quarterback you hold rather than a starter you replace. The dynasty read is the same: this is a one-week absence on current information, not a reason to sell.\n\nThe ripple is [Drew Lock](/players/drew-lock-5854), who [came in for Darnold](/brief/relay/drew-lock-starting-injured-sam-darnold) and finished with 12.8 PPR points on two carries and the rest through the air. Nobody moved more this week. His Dynasty PPR SF value rose 1,119 points to 1,138, the biggest seven-day rise on the site, although that still ranks him 213th at the position. The model projects 13.3 points at Arizona in week 2 with a 40 percent beat rate. In redraft superflex leagues he is a one-week start. In dynasty he is a speculative hold at the very end of a superflex bench and nothing more, because the number that jumped is the floor of a backup, not the ceiling of a starter.\n\n[A.J. Brown](/players/a-j-brown-5859) is the loss with a long tail. He was [limping to the locker room](/brief/relay/aj-brown-injury-locker-room) in the first half of the Patriots' opener in Seattle, [ruled out](/brief/relay/aj-brown-ruled-out-ankle-injury) soon after, and by Thursday night [an MRI confirmed a high ankle sprain](/brief/relay/aj-brown-high-ankle-sprain-four-weeks) with a timeline of at least four weeks. The Patriots [placed him on injured reserve](/brief/relay/patriots-aj-brown-injured-reserve-high-ankle-sprain) on Friday, which means a minimum of four missed games; ESPN's report as of September 17 puts the expected absence at about six weeks. The market reacted hard and in two different directions, which is the whole reason this edition carries two formats. His Redraft 1QB PPR value fell 2,257 points to 4,888, the sharpest redraft drop of the week, because six weeks is a third of a redraft season. His Dynasty PPR SF value fell 732 to 4,447 and he still ranks 49th among receivers in both formats. For a redraft manager with a shallow bench, Brown is a drop candidate only if the roster cannot carry an injured reserve slot; if the league has one, he goes there and the flex gets a waiver claim from the list at the end of this edition. For a dynasty manager, this is the buy window: a week 1 injury with a stated return puts the discount on the table at exactly the moment the seller is most frustrated. Our timeline block below places his expected return at week 5.\n\n[Brock Bowers](/players/brock-bowers-11604) is the story that changed under us during the week and is still changing. On Tuesday the report was [a meniscus trim with a game or two missed](/brief/relay/bowers-meniscus-surgery-game-or-two). By Saturday it was [a possible return as soon as week 2](/brief/relay/brock-bowers-meniscus-injury-week-2-return), and on Monday coach Klint Kubiak called him [day to day](/brief/relay/brock-bowers-day-to-day-meniscus-trim). As of September 17, ESPN lists him as questionable for week 2 and the NFL's own report has him not practising on Thursday. His values dropped, 314 to 6,990 in Dynasty PPR SF and 861 to 6,345 in Redraft 1QB PPR, and he is still the 23rd and 27th ranked asset at his position. The model projects 7.5 points against the Chargers with a 42 percent beat rate, which is a projection built on a player who might not play. Hold in every format. A one-game knee scope is not a value event, and the redraft dip is the kind that recovers the first week he plays.\n\nThe beneficiary is [Michael Mayer](/players/michael-mayer-9482), whose [role was expected to grow](/brief/relay/brock-bowers-meniscus-surgery-raiders) the moment Bowers went down. He scored 9.2 PPR points against Miami and his Redraft 1QB PPR value rose 883 points to 2,389. That figure is the whole case: he is a one-week streamer in redraft while Bowers sits and nothing in dynasty, where he ranks 211th. The model projects 1.8 points for him in week 2 precisely because it expects Bowers back.\n\nIn Atlanta, [Tua Tagovailoa](/players/tua-tagovailoa-6768) [sustained an oblique injury in Thursday's practice](/brief/relay/tua-tagovailoa-oblique-injury-limited), was [ruled out for the opener in Pittsburgh](/brief/relay/falcons-rule-out-tua-tagovailoa-sunday-steelers) on Friday, and as of September 17 is listed as questionable for week 2 after not practising Thursday. [Cooper Rush](/players/cooper-rush-4574) started and scored 7.7 PPR points in a 20 to 13 loss. Rush's Dynasty PPR SF value rose 766 to 784, the fourth biggest rise on the site, and the model gives him 10.6 points against Carolina with a 20 percent beat rate. Neither quarterback is a start in a one-quarterback redraft league. In superflex dynasty, Tua at 1,977 is a hold at 119th, and Rush is a free agent you only pick up if your second quarterback slot is empty this week.\n\nTwo more names for the timeline. [Kyler Murray](/players/kyler-murray-5849) [suffered a concussion early](/brief/relay/kyler-murray-concussion-vikings-green-bay) in Minnesota's 39 to 22 win over Green Bay and was limited in practice on September 17 per the NFL report; his values did not move because the season is one game old. [Ladd McConkey](/players/ladd-mcconkey-11635) is [day to day with a rib injury](/brief/relay/chargers-ladd-mcconkey-rib-injury-day-to-day) after 19.2 PPR points in a loss to Arizona, and did not practise Thursday per the NFL report. His values rose anyway, 261 in dynasty and 105 in redraft, because 19.2 is a WR1 line; he is a hold everywhere and a start if he is active. [Jalen Coker](/players/jalen-coker-11646) [rolled an ankle](/brief/relay/jalen-coker-ankle-precautionary) and called the boot precautionary; the NFL report lists him limited, which agrees.\n\nThe long-term injured reserve group rounds out the week: [Malik Davis](/players/malik-davis-8800) [to injured reserve after hip surgery](/brief/relay/malik-davis-hip-surgery-ir), rookie [De'Zhaun Stribling](/players/dezhaun-stribling-13417) [out at least a month with a deltoid sprain](/brief/relay/49ers-stribling-deltoid-sprain-out-month) and expected to land on reserve, Landon Dickerson [to injured reserve with a knee injury](/brief/relay/eagles-landon-dickerson-injured-reserve-knee) for at least four games, and Myles Garrett [to injured reserve after knee surgery](/brief/relay/myles-garrett-knee-surgery-injured-reserve).",
+      "relay_ids": [
+        "7d23776b-2260-4aef-bcef-90bab6280e39",
+        "93d81c4e-803a-4d00-987a-61f6901b84d1",
+        "975afe3f-d6b8-4758-bf3b-c870efa43030",
+        "b02a25ad-adc7-4230-af44-e27e18f3c1c9",
+        "1c0ad899-beb8-4508-8f7a-8cbe20b1904e",
+        "5329f01d-f293-44a1-a1db-053340b69a46",
+        "5d496237-da33-4dca-bb66-d52dd27f7f79",
+        "6d5bd781-ccb0-45ed-bdeb-8f140640b055",
+        "88012af2-5690-4297-94ef-681e42a50a41",
+        "5c8f5759-e469-4a8f-8ee9-9af8b1d7ca46",
+        "2a941b2a-0809-4a04-bf69-c52e4265a553",
+        "0930fa2a-a282-4a5d-9989-56e58638a2ef",
+        "196edf94-f929-4ef1-a6ec-8e862d4d5da1",
+        "ba71b7d4-480e-483e-96ac-a791c1a3e92a",
+        "5f7bdf4b-3c4d-4361-b90f-7e08994c276e",
+        "53f67c1b-a127-432f-9706-f4414d9e02dc",
+        "86d98061-85fb-4c5d-a03c-335c9e010ff8",
+        "ff3bdae2-524c-4d3a-b711-8f1f80feb2f3",
+        "7830407c-baaa-4977-b6d3-6a9605e9a690",
+        "ea81a591-cd0a-4075-8129-e2a8cb2e6e5a",
+        "0b6ce7d2-b552-4d3e-94d7-69234714df78",
+        "9d312a9f-ae93-43e1-b7e8-7174c351d810",
+        "68450ed6-6181-4e9d-ad13-c24c0331eb0c",
+        "f82432cb-7f6c-4256-9cff-f372a2b88a43",
+        "9bb11e96-76cc-44fe-8886-6089b7edc29a",
+        "ba0a6cd1-cddf-4fc3-972c-7af06f1f924e",
+        "e150dbcb-2b60-49df-8c6f-cdaaca51d09f",
+        "b6cabfba-adb3-4188-894b-053f04550954",
+        "75b2f10b-3099-4e7a-ab68-f2905a142830",
+        "a5fb52bf-ccd8-4148-8bcf-9bb950f6c1fe",
+        "c04964a6-d7bd-4066-8a32-63e7e0bc5e4e",
+        "8233e99f-b9a1-4e81-81d6-0901408c8184",
+        "13475e20-b285-4414-86c4-87052714c8c8",
+        "cba06788-0db6-4012-a0ad-cdfe1d8d8a61",
+        "b126b3b5-c1c7-4927-ba1a-868c5330ef44"
+      ],
+      "block_refs": [
+        "tiles",
+        "timeline",
+        "planner"
+      ],
+      "citations": [
+        {
+          "url": "https://www.espn.com/nfl/injuries",
+          "claim": "Darnold listed out for the week 2 game at Arizona, injury described as glute; Brown on injured reserve with about six weeks expected; Bowers, Tagovailoa, Murray, McConkey and Coker listed questionable for week 2; Stribling expected to be placed on injured reserve; Garrett on injured reserve for at least four games."
+        },
+        {
+          "url": "https://www.nfl.com/injuries/",
+          "claim": "Week 2 report: Darnold, Bowers, Tagovailoa, Stribling and McConkey did not participate in Thursday's practice; Murray and Coker were limited."
+        }
+      ]
+    },
+    {
+      "id": "contracts-signings-and-releases",
+      "heading": "Contracts, signings and releases: Mayfield, Swift, Kraft and Mayer get paid",
+      "icon": "contract",
+      "eyebrow": "Week 1, part 2 of 6",
+      "body_md": "Four extensions landed inside the week and every one of them tells a dynasty manager something the box score cannot. [Baker Mayfield](/players/baker-mayfield-4892) and the Buccaneers [reached agreement on a three-year extension](/brief/relay/baker-mayfield-three-year-extension-buccaneers) on September 8, later reported as [three years and 165 million dollars](/brief/relay/baker-mayfield-three-year-165-million-extension-buccaneers). He then scored 11.6 PPR points in a 33 to 27 loss at Cincinnati. His Dynasty PPR SF value rose 287 to 4,049, rank 59 at quarterback, while his Redraft 1QB PPR value fell 188 to 2,703 because the game was ordinary. That split is the correct reading: a contract through 2029 removes the one risk a dynasty superflex owner carried, which was a starter with no team, and it changes nothing about this Sunday. The model projects 17.4 points against Cleveland in week 2 with a 41 percent beat rate, a start in superflex and a streamer in one-quarterback leagues.\n\n[D'Andre Swift](/players/dandre-swift-6790) signed [a three-year, 33.75 million dollar extension with 27.5 million guaranteed](/brief/relay/dandre-swift-extension-bears) on Thursday and then ran 18 times for 124 yards in Chicago's 59 to 37 win at Carolina, 32.4 PPR points and the fifth best running back score of the week. The redraft market moved first: his Redraft 1QB PPR value rose 754 to 5,856, rank 33 at the position, while dynasty rose a more measured 276 to 2,969, rank 87. Read the guarantee, not the total. 27.5 million guaranteed on a three-year deal is a team committing to a back for two seasons, so a dynasty manager who was waiting for Chicago to move on can stop waiting. In redraft he is a weekly RB2 with the Bears' offence behind him; the model projects 9.7 points against Minnesota, which is a fair week 2 number against a defence that just held Green Bay to 22.\n\n[Tucker Kraft](/players/tucker-kraft-9484) and the Packers [agreed a four-year, 75 million dollar extension worth up to 92 million](/brief/relay/tucker-kraft-packers-extension) with a 26.5 million signing bonus. He scored 9.5 PPR points at Minnesota and his values barely moved: 3,772 in Dynasty PPR SF (up 17, rank 64) and 4,065 in Redraft 1QB PPR (up 86, rank 66). The model projects 8.5 points against the Jets with a 64 percent beat rate, the highest beat rate of any player in this edition, which is the model's way of saying the floor is real. He is a hold in both formats and a start in redraft leagues that need a tight end this week.\n\n[Michael Mayer](/players/michael-mayer-9482) signed [a three-year extension worth 45 million with 30 million guaranteed](/brief/relay/michael-mayer-3-year-extension-raiders) on Saturday, reported as the fourth largest tight end contract in the league at 15 million a year. Set beside his value it is the most interesting number of the week: 1,146 in Dynasty PPR SF, rank 211, for a player a franchise just paid like a top-four tight end. Either the market is wrong or the Raiders are, and with Bowers on the same roster the market's caution is easier to defend. Dynasty managers in deep leagues can hold him as the cheapest insured tight end in the game; nobody should pay for him.\n\nThe Lions [restructured Amon-Ra St. Brown and Penei Sewell](/brief/relay/lions-restructure-st-brown-sewell-contracts-30m-cap-space) to create over 30 million dollars in cap space, which is a procedural move with one fantasy consequence: [Amon-Ra St. Brown](/players/amon-ra-st-brown-7547) is not going anywhere, and after 28.7 PPR points on 10 catches and two scores against New Orleans his Dynasty PPR SF value sits at 8,553, the ninth ranked receiver, up 193 on the week.\n\nThree quarterbacks did not get paid, and the reports are worth keeping. [C.J. Stroud](/players/c-j-stroud-9758) and the Texans [agreed to wait until after the season](/brief/relay/texans-cj-stroud-extension-pause); his Dynasty PPR SF value rose 596 to 4,935 anyway after 16.5 PPR points against Buffalo, rank 46. [Lamar Jackson](/players/lamar-jackson-4881) and the Ravens [have not held substantive extension talks](/brief/relay/ravens-lamar-jackson-contract-extension-talks); he scored 25.0 PPR points in a 41 to 23 win at Indianapolis and is the fourth ranked dynasty superflex asset on the site at 9,521. The model projects 20.4 points against New Orleans. Neither changes a lineup this week; both set up dynasty trade conversations in November, when the contract questions return.\n\nOn the legal side, [Josh Jacobs](/players/josh-jacobs-5850) [pleaded no contest to misdemeanour battery and criminal damage charges](/brief/relay/josh-jacobs-pleads-no-contest-battery-charges) in Green Bay on Thursday, with the league monitoring and no timetable for discipline. He did not play in week 1. His Redraft 1QB PPR value rose 508 to 4,248, rank 62, which reads as the market pricing in a resolution rather than a suspension. We would not chase that until the league speaks.\n\nOur check of ESPN's transaction wire on September 17 showed only later moves, so the week's transactions above stand as reported.",
+      "relay_ids": [
+        "02e912e8-f1f9-436d-9433-9ca912d072cd",
+        "9104fb52-8589-4777-b32d-35dcd3272ae6",
+        "947c3249-046f-4997-b392-2cc1ee960768",
+        "a10ff545-573e-4710-8a19-6ee8ae0cfdf9",
+        "c3c2c912-181f-463c-9108-73a7391407e9",
+        "38460eb2-999d-4689-af92-bf376647b9fc",
+        "5bab0f9f-2613-43e0-a215-228846af0edc",
+        "fe51d9ad-be46-4b41-aad3-ce9ec441939c",
+        "211b500d-41be-41ea-9a95-8825cc86d1fe",
+        "3ce6f4a8-0456-4ab6-9d0b-b0412d7c1790",
+        "eff4e118-46cd-44f8-9f39-d7826ca1022b",
+        "949f25f9-bd8c-4ad8-acdd-af71d3645f64",
+        "dc18917a-27c0-408c-a704-0458f4a21d4f",
+        "2c1a2624-fae8-4f5c-a0b9-be809d67c81b",
+        "7a789de2-ec2e-4413-9487-76c9df9372c3",
+        "8904a7d6-8dee-401a-ba54-67870687d374",
+        "f0bb724c-7eb6-4647-b8c4-79a403fe80e0",
+        "b126b3b5-c1c7-4927-ba1a-868c5330ef44",
+        "cba06788-0db6-4012-a0ad-cdfe1d8d8a61",
+        "590dc53d-7401-46a7-ad2a-40a727ba91e2",
+        "4235f44c-7e5f-4312-9e27-3a546c3825f1",
+        "5150fb01-1f76-4776-8425-d51fdf91be55",
+        "8cbcdc20-afa4-470c-a284-8fd5c9654b96",
+        "76099681-8623-4d9a-aa28-3e1da9b1c792",
+        "4d42762a-4123-47e0-9c80-a513c71a2635",
+        "32a60663-e2ab-4963-bcaf-5198d75a2a4a",
+        "23b5a5ca-324b-4de3-bef9-ac8bdd5abf64"
+      ],
+      "block_refs": [
+        "movers",
+        "toggle"
+      ],
+      "citations": [
+        {
+          "url": "https://www.espn.com/nfl/transactions",
+          "claim": "The ESPN transaction wire on September 17 listed only moves from September 15 and 16 and none of the week 1 signings above, so those stand as reported."
+        }
+      ]
+    },
+    {
+      "id": "depth-chart-and-role-changes",
+      "heading": "Depth chart and role changes: Mahomes, Wentz, Rush and the Cardinals backfield",
+      "icon": "depth-chart",
+      "eyebrow": "Week 1, part 3 of 6",
+      "body_md": "[Patrick Mahomes](/players/patrick-mahomes-4046) [was set to start Monday night](/brief/relay/mahomes-start-broncos-acl-lcl-recovery) nine months after tearing his ACL and LCL, and he did, in a 31 to 10 win over Denver. He scored 22.7 PPR points with seven carries, and the model projects 17.9 against Indianapolis in week 2 with a beat rate of exactly 50 percent. The market had already moved before he threw a pass: his Dynasty PPR SF value fell 900 points over the week to 7,324, the second biggest fall on the site, while his Redraft 1QB PPR value rose 308 to 3,698. A fall on the day a franchise quarterback returns healthy looks like a mistake and is not one. Dynasty values on FF Beacon price the whole career, and a 30-year-old quarterback coming off a reconstructed knee is a different asset from the one drafted in August whatever Monday's line said. Redraft prices the next 16 games, and those got better. A dynasty contender should be buying Mahomes from a rebuilder this week at rank 19, because the redraft market has already told you the player is back.\n\n[Kenneth Walker](/players/kenneth-walker-8151) [ran for 173 yards in his Chiefs debut](/brief/relay/kenneth-walker-173-yards-chiefs-debut), the most by any Kansas City player since Mahomes became the starter, and finished with 34.1 PPR points on 23 carries and three catches, the second best running back score of the week. His Redraft 1QB PPR value rose 607 to 8,005, rank 11, and his Dynasty PPR SF value rose 246 to 5,465, rank 38. The model projects 13.2 points against the Colts.\n\nKevin O'Connell had named [Carson Wentz the backup and J.J. McCarthy third](/brief/relay/vikings-wentz-mccarthy-qb-depth-chart-packers), so when Kyler Murray was concussed early against Green Bay it was [Wentz who replaced him](/brief/relay/wentz-vikings-starter-murray-injury). Wentz scored 19.2 PPR points in the 39 to 22 win. His Dynasty PPR SF value rose 709 to 1,179, the fifth biggest rise of the week, and the model projects 16.2 against Chicago with a 27 percent beat rate. Murray was limited in practice on Thursday per the NFL report, so this is a Sunday decision. Superflex managers with Murray should pick up Wentz as insurance this week if he is available; one-quarterback redraft managers should not start either until Minnesota names a starter.\n\nAtlanta's decision was the opposite kind: made early and held. [Cooper Rush](/players/cooper-rush-4574) was named the starter on Friday once Tua was ruled out, [ending weeks of debate between Tagovailoa and Michael Penix Jr.](/brief/relay/falcons-cooper-rush-starting-qb-steelers), then [experienced back spasms on Saturday and started anyway](/brief/relay/cooper-rush-starts-sunday-back-spasms) with [Jack Strand as the backup and Olamide Zaccheaus as the emergency quarterback](/brief/relay/cooper-rush-starting-qb-falcons-steelers), both Tagovailoa and Penix inactive. He scored 7.7 PPR points. This is a depth chart, not a quarterback controversy, and the values agree: Tua at 1,977 and Penix off the movers list entirely.\n\nArizona listed [Tyler Allgeier as RB1 and Jeremiyah Love as RB2](/brief/relay/allgeier-rb1-love-rb2-cardinals) on Tuesday's depth chart and then beat the Chargers 26 to 14; a listed RB1 who wins keeps the job another week. [Malik Nabers](/players/malik-nabers-11632) went from [questionable](/brief/relay/malik-nabers-questionable-giants-cowboys-sunday) to [active](/brief/relay/malik-nabers-active) and scored 12.9 PPR points in the Giants' 28 to 20 win over Dallas, with his Redraft 1QB PPR value up 425 to 6,741, rank 22. [Jaylen Waddle](/players/jaylen-waddle-7526) made [his Denver debut](/brief/relay/jaylen-waddle-broncos-debut-chiefs) and scored 1.2 PPR points in the loss at Kansas City; his Redraft 1QB PPR value fell 853 to 4,627 and he is now the redraft sell of the week for anyone who drafted him as a WR2, because the model still projects 8.2 points against Jacksonville and the market has not finished repricing him.",
+      "relay_ids": [
+        "37db74f3-424b-4256-85ea-c78811040bad",
+        "25970da8-0f72-42c5-8d4d-21429b1e0926",
+        "f0a0ddb9-1b5f-49ee-bff3-f527517d3f2d",
+        "a9d33ecb-c92d-450b-a532-417bc030ad0d",
+        "2cbec27b-c7d8-45d4-a4d0-7613e786c20e",
+        "685d5017-6ace-4f11-86e1-f585121ff59b",
+        "73744bc8-f6a6-4056-83c4-75625c8cafb8",
+        "886eeb04-57c3-49c1-b44d-8a911567b181",
+        "c46b2ffb-9008-4dcb-99cc-8f6292c15302",
+        "e7c7d3ee-e33b-456f-b030-5ee7a34b20df",
+        "538e1020-8382-4d9b-b41a-d5bc3faf8fcf",
+        "5ca6e0b3-7315-4857-9df4-136efa9c588b",
+        "e1c421b1-96f9-47bc-9e36-59df09975aad",
+        "035b8b0a-5bdb-4e8f-befc-b6bf7c9efdf1",
+        "bf206421-8123-4afd-a429-dd2599745749",
+        "5a77f618-e47f-463b-85a1-f8e23437f8c9",
+        "986cc69b-b5e9-4ae0-a495-93f5fed8c6cb",
+        "e92cf773-cb30-419a-8c6e-a5c446eb6235",
+        "ecec9143-ad26-476a-80f3-3f8a0bbdd598",
+        "a8f62051-8c0e-454f-8bd3-6a8b2a0d3e39",
+        "16bdf5cc-da5d-4c56-9022-b1065da9684c",
+        "ef61eca3-d113-44bd-9c34-10f93677f90b",
+        "8148bcad-18f9-4fb1-9f22-7db2d6cccb28",
+        "8845c84f-ad0d-458e-a851-12109828beb2"
+      ],
+      "block_refs": [
+        "mahomes-quote",
+        "lines"
+      ],
+      "citations": [
+        {
+          "url": "https://www.espn.com/nfl/scoreboard/_/week/1/year/2026/seasontype/2",
+          "claim": "Week 1 finals: Broncos 10 at Chiefs 31; Packers 22 at Vikings 39; Falcons 13 at Steelers 20; Cardinals 26 at Chargers 14; Cowboys 20 at Giants 28; Bears 59 at Panthers 37."
+        }
+      ]
+    },
+    {
+      "id": "the-week-1-scoreboard",
+      "heading": "The week 1 scoreboard: who scored, and whose value moved",
+      "icon": "scoreboard",
+      "eyebrow": "Week 1, part 4 of 6",
+      "body_md": "The top scorer of the week was [Caleb Williams](/players/caleb-williams-11560) with 37.3 PPR points, 269 passing yards, two touchdowns and 65 rushing yards in Chicago's 59 to 37 win at Carolina, and the market followed him up 797 points to 8,321 in Dynasty PPR SF, rank 11 at quarterback. Josh Allen was second at 35.7 on 334 yards, Bryce Young third at 32.4 on 361 yards and three scores in the same Carolina game, and rookie [Jaxson Dart](/players/jaxson-dart-12508) fourth at 26.6 with three touchdowns and 54 rushing yards against Dallas. Dart's Dynasty PPR SF value rose 813 to 7,216, rank 20, the second biggest rise of the week behind Drew Lock and the only one on the top-five list that belongs to a starter who will keep his job.\n\nAt running back the week belonged to volume. Derrick Henry led with 35.3 PPR points on 24 carries for 144 yards against Indianapolis. Kenneth Walker's 34.1 on 23 carries came next, then Jahmyr Gibbs at 33.6 on 29 carries and five catches against New Orleans, [Ashton Jeanty](/players/ashton-jeanty-12527) at 32.7 on 23 carries and six catches in the Raiders' 27 to 13 win over Miami, and D'Andre Swift at 32.4. Jeanty's numbers are the ones to note for the trade market: his Redraft 1QB PPR value rose 867 to 7,935, rank 12, and his Dynasty PPR SF value rose 372 to 7,791, rank 14. Six catches for a rookie back in week 1 is the receiving role every dynasty owner was hoping for.\n\nAt receiver, Jalen Coker's 33.8 PPR points on eight catches from nine targets for 138 yards and two touchdowns led everyone, and his Redraft 1QB PPR value rose 811 to 3,493, rank 82. Christian Watson scored 32.7 on six catches for 147 yards and two scores in a losing effort at Minnesota, Justin Jefferson 31.2 on eight of nine targets and two scores in the same game, Amon-Ra St. Brown 28.7, and Chris Olave 28.2 on ten catches for 182 yards without a touchdown. At tight end, Isaiah Likely caught all eight targets for 78 yards and 27.8 PPR points for the Giants, ahead of Trey McBride at 24.5 and Dallas Goedert at 23.7. McBride's Dynasty PPR SF value rose 414 to 6,650, which makes him the 25th ranked asset at his position on the site.\n\nThe movers table tells the other half of the story. The five biggest Dynasty PPR SF fallers were Jaleel McLaughlin, who lost 1,366 points to sit at 41 after Cleveland's 34 to 10 loss at Jacksonville, Patrick Mahomes at minus 900, A.J. Brown at minus 732, Bijan Robinson at minus 669 to 9,331 even after 31.3 PPR points against Pittsburgh, and Jalen Hurts at minus 615 to 7,708 after Philadelphia's 24 to 22 escape against Washington. Robinson's fall alongside a 31-point game is the one to sit with: he remains the fifth ranked dynasty asset on the site, and a 669-point move on a good week is the market adjusting a very high price, not reacting to a bad one. The full up and down lists are in the chart below, and the toggle beside it shows the same names in redraft, where the order is different because a redraft manager only cares about the next sixteen weeks.",
+      "relay_ids": [
+        "f0a0ddb9-1b5f-49ee-bff3-f527517d3f2d",
+        "538e1020-8382-4d9b-b41a-d5bc3faf8fcf",
+        "f070bdb1-65f9-4fcb-9f9e-9881ac72475f"
+      ],
+      "block_refs": [
+        "scorers"
+      ],
+      "citations": [
+        {
+          "url": "https://www.espn.com/nfl/scoreboard/_/week/1/year/2026/seasontype/2",
+          "claim": "Week 1 finals: Ravens 41 at Colts 23; Saints 30 at Lions 31; Dolphins 13 at Raiders 27; Browns 10 at Jaguars 34; Commanders 22 at Eagles 24; Buccaneers 27 at Bengals 33."
+        }
+      ]
+    },
+    {
+      "id": "what-to-do-this-week",
+      "heading": "What to do this week: claims, holds and sells",
+      "icon": "waiver",
+      "eyebrow": "Week 1, part 5 of 6",
+      "body_md": "Every call here is tied to a report above and to a number on the site, and the action cards below carry the same names with a link to the tool that runs the decision.\n\nClaim [Drew Lock](/players/drew-lock-5854) in redraft superflex leagues for one week. The report is [Darnold ruled out](/brief/relay/seahawks-rule-out-sam-darnold-hip-injury) and Macdonald saying he [misses the Arizona game](/brief/relay/sam-darnold-hip-injury-seahawks-cards); the number is a 13.3-point projection with a 40 percent beat rate. Bid the minimum in a one-quarterback league or do not bid at all. Use the [FAAB calculator](/tools/faab) with your roster loaded rather than the bid range on the card, because the right bid in a twelve-team superflex league is nothing like the right bid in a ten-team one-quarterback league.\n\nClaim [Carson Wentz](/players/carson-wentz-3161) if you roster Kyler Murray in a superflex league. The report is [Murray's concussion](/brief/relay/kyler-murray-concussion-vikings-green-bay) and the NFL listing him limited on Thursday; the number is Wentz's 16.2-point projection against Chicago and 19.2 PPR points already on the board. If Murray clears, drop Wentz on Sunday morning and you have lost nothing.\n\nClaim [Michael Mayer](/players/michael-mayer-9482) only as a one-week tight end in redraft, and only if Bowers is out. The report is [Bowers day to day](/brief/relay/brock-bowers-day-to-day-meniscus-trim); the number is 9.2 PPR points last week against a 1.8-point projection this week, and that projection is the site telling you it expects Bowers to play. Check the Friday report before you set the lineup, and use [Who Should I Start](/tools/who-should-i-start) to compare him against your current tight end with the week 2 matchup applied.\n\nClaim [Jalen Coker](/players/jalen-coker-11646) in every redraft league where he is available. The report is [a precautionary boot and no missed time expected](/brief/relay/jalen-coker-ankle-precautionary), confirmed as limited practice on Thursday; the number is 33.8 PPR points on nine targets and a redraft value that rose 811 in a week. The projection of 8.5 against Atlanta with a 51 percent beat rate is a flex number, and a flex number with WR1 upside is what week 2 waivers are for.\n\nHold [Brock Bowers](/players/brock-bowers-11604) and [Sam Darnold](/players/sam-darnold-4943) in every format, hold [Tua Tagovailoa](/players/tua-tagovailoa-6768) in superflex dynasty, and hold [A.J. Brown](/players/a-j-brown-5859) in dynasty while moving him to an injured reserve slot in redraft. The Bowers and Darnold reports are one-week absences on the current wording. The Brown report is six weeks, and six weeks is exactly the window in which a dynasty buyer should be making offers, so if you are the seller, wait: the value that fell 732 recovers when he practises.\n\nBuy [Patrick Mahomes](/players/patrick-mahomes-4046) in dynasty if you are contending. The report is [a healthy start nine months after the ACL](/brief/relay/mahomes-returns-torn-acl-chiefs-broncos); the number is a 900-point dynasty fall against a 308-point redraft rise, and that gap is the discount. Run the deal through the [trade calculator](/tools/trade-calculator) with your league's format before you send it, because the calculator prices him in your scoring, not ours.\n\nSell [Jaylen Waddle](/players/jaylen-waddle-7526) in redraft if anyone in your league still values him as a WR2. The report is [his Denver debut](/brief/relay/jaylen-waddle-broncos-debut-chiefs); the number is 1.2 PPR points and a redraft value down 853. In dynasty, hold: his dynasty value moved only 126, which is the market saying the situation is the problem and the player is not.\n\nStart [D'Andre Swift](/players/dandre-swift-6790) and [Kenneth Walker](/players/kenneth-walker-8151) without hesitation, start [Baker Mayfield](/players/baker-mayfield-4892) in superflex, and do not start Cooper Rush anywhere; a 10.6-point projection with a 20 percent beat rate is a bench number with the word starter attached.",
+      "relay_ids": [
+        "7d23776b-2260-4aef-bcef-90bab6280e39",
+        "975afe3f-d6b8-4758-bf3b-c870efa43030",
+        "5f7bdf4b-3c4d-4361-b90f-7e08994c276e",
+        "2a941b2a-0809-4a04-bf69-c52e4265a553",
+        "86d98061-85fb-4c5d-a03c-335c9e010ff8",
+        "5d496237-da33-4dca-bb66-d52dd27f7f79",
+        "25970da8-0f72-42c5-8d4d-21429b1e0926",
+        "986cc69b-b5e9-4ae0-a495-93f5fed8c6cb",
+        "a10ff545-573e-4710-8a19-6ee8ae0cfdf9",
+        "f0a0ddb9-1b5f-49ee-bff3-f527517d3f2d",
+        "02e912e8-f1f9-436d-9433-9ca912d072cd"
+      ],
+      "block_refs": [
+        "actions",
+        "rule"
+      ],
+      "citations": [
+        {
+          "url": "https://www.nfl.com/injuries/",
+          "claim": "Week 2 report: Murray and Coker limited on Thursday; Bowers, Darnold and Tagovailoa did not participate."
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "tiles",
+      "kind": "stat_tiles",
+      "dataset_id": "week_stat_tiles",
+      "caption": "Week 1 in six numbers",
+      "conclusion": "A busy first week: 109 reports, 56 of them injuries, and 39 players ruled out or placed on reserve."
+    },
+    {
+      "id": "timeline",
+      "kind": "injury_timeline",
+      "dataset_id": "injury_timeline",
+      "caption": "Who is expected back when",
+      "conclusion": "Michael Mayer's Raiders teammate Brock Bowers and the rest of the one-game absences come first; A.J. Brown, Landon Dickerson, Myles Garrett and De'Zhaun Stribling are expected back around week 5."
+    },
+    {
+      "id": "planner",
+      "kind": "return_planner",
+      "dataset_id": "injury_timeline",
+      "caption": "Return planner: who is back for your playoff weeks",
+      "conclusion": "Every player on this week's injury list with a stated timeline is expected back before week 15, so none of them should cost you a playoff lineup on current information.",
+      "options": {
+        "default_weeks": [
+          15,
+          17
+        ]
+      }
+    },
+    {
+      "id": "movers",
+      "kind": "value_movers",
+      "dataset_id": "value_movers_up",
+      "caption": "Biggest Dynasty PPR SF value moves of the week",
+      "conclusion": "Backup quarterbacks who played rose the most, led by Drew Lock at plus 1,119, while Patrick Mahomes fell 900 on the day he returned.",
+      "options": {
+        "direction": "both",
+        "limit": 12
+      }
+    },
+    {
+      "id": "toggle",
+      "kind": "format_toggle",
+      "dataset_id": "value_movers_by_format",
+      "caption": "The same movers in dynasty and in redraft",
+      "conclusion": "Switch to Redraft 1QB PPR and Mahomes turns from a faller into a riser, which is the whole difference between pricing a career and pricing a season.",
+      "options": {
+        "default": "dynasty-ppr-sflex"
+      }
+    },
+    {
+      "id": "scorers",
+      "kind": "top_scorers",
+      "dataset_id": "top_scorers_qb",
+      "caption": "Week 1 top scorers by position",
+      "conclusion": "Caleb Williams led all players with 37.3 PPR points; Derrick Henry, Jalen Coker and Isaiah Likely led their positions.",
+      "options": {
+        "positions": [
+          "QB",
+          "RB",
+          "WR",
+          "TE"
+        ],
+        "limit": 10
+      }
+    },
+    {
+      "id": "lines",
+      "kind": "box_score_lines",
+      "dataset_id": "box_score_lines",
+      "caption": "Week 1 lines for the players in this section",
+      "conclusion": "Kenneth Walker's 173 rushing yards and Carson Wentz's relief line stand out; Jaylen Waddle's 1.2 points are the debut to worry about.",
+      "options": {
+        "player_ids": [
+          "3c6dcb06-89c2-422c-9543-a11f4b05d639",
+          "7a8e6120-34e5-4bbf-84e3-b3c1141d7fa0",
+          "46af2a87-a8a8-4292-8641-d19e4c7bb41c",
+          "402ebf95-9734-46fb-a33b-4e7e5e505a23",
+          "9b74b29d-8f66-4e87-947f-0b10df4115a4",
+          "f4ff9b90-b45a-4a66-9d30-4c23e709259e",
+          "90b916d8-8407-4d3f-a0a3-027b005e724e",
+          "852e943e-240c-43af-ba4a-dbaee0620e1a"
+        ]
+      }
+    },
+    {
+      "id": "mahomes-quote",
+      "kind": "relay_quote",
+      "dataset_id": null,
+      "caption": "The report",
+      "conclusion": "Mahomes returned nine months to the day after the tear.",
+      "options": {
+        "relay_id": "25970da8-0f72-42c5-8d4d-21429b1e0926"
+      }
+    },
+    {
+      "id": "actions",
+      "kind": "action_list",
+      "dataset_id": "waiver_targets",
+      "caption": "This week's calls, each with the tool that runs it",
+      "conclusion": "Two one-week quarterback claims, one receiver claim with upside, a dynasty buy and a redraft sell.",
+      "options": {
+        "items": [
+          {
+            "player_id": "852e943e-240c-43af-ba4a-dbaee0620e1a",
+            "action": "waiver",
+            "tool": "faab",
+            "note": "One-week superflex start while Darnold sits out the Arizona game. Minimum bid in one-quarterback leagues."
+          },
+          {
+            "player_id": "46af2a87-a8a8-4292-8641-d19e4c7bb41c",
+            "action": "waiver",
+            "tool": "faab",
+            "note": "Insurance for Kyler Murray owners in superflex while the concussion protocol runs. Drop him if Murray clears."
+          },
+          {
+            "player_id": "77356f58-008c-4009-b8ff-9c732b7b0284",
+            "action": "waiver",
+            "tool": "faab",
+            "note": "33.8 PPR points on nine targets and a precautionary boot. A flex claim with WR1 upside in every redraft league."
+          },
+          {
+            "player_id": "5786efdf-75e9-49ab-868b-bbe3834a4e03",
+            "action": "start",
+            "tool": "start-sit",
+            "note": "Only if Brock Bowers is out on Friday. The 1.8-point projection assumes Bowers plays."
+          },
+          {
+            "player_id": "cd249ea6-19a9-44ce-a370-23d2fb717801",
+            "action": "hold",
+            "tool": "start-sit",
+            "note": "A meniscus trim with a day-to-day tag is not a value event. Hold in every format."
+          },
+          {
+            "player_id": "3c6dcb06-89c2-422c-9543-a11f4b05d639",
+            "action": "sell",
+            "tool": "trade-calculator",
+            "note": "Reverse this if you are contending: a 900-point dynasty fall on a healthy return is the discount a buyer wants."
+          },
+          {
+            "player_id": "90b916d8-8407-4d3f-a0a3-027b005e724e",
+            "action": "sell",
+            "tool": "trade-calculator",
+            "note": "Redraft only. 1.2 points in the Denver debut and a value down 853 that has not finished falling."
+          },
+          {
+            "player_id": "3fde02ae-4c67-4513-9504-a27eeca2511f",
+            "action": "start",
+            "tool": "start-sit",
+            "note": "New contract, 124 yards on 18 carries, and 27.5 million guaranteed says the role is his."
+          }
+        ]
+      }
+    },
+    {
+      "id": "rule",
+      "kind": "callout",
+      "dataset_id": null,
+      "caption": "A rule for reading a value move",
+      "conclusion": "When dynasty falls and redraft rises on the same player in the same week, the dynasty market is pricing risk to the career and the redraft market is pricing the next sixteen games. Decide which one you are playing before you act on either.",
+      "options": {
+        "icon": "values",
+        "tone": "purple"
+      }
+    }
+  ],
+  "faq": [
+    {
+      "question": "Is Sam Darnold going to play in week 2?",
+      "answer_md": "No, on the current reports. Coach Mike Macdonald said on September 10 that Darnold would miss the game at Arizona despite good news on the hip, and ESPN's injury page on September 17 lists him as out for that game. Drew Lock is the Seahawks' starter for week 2, and the model projects him for 13.3 points."
+    },
+    {
+      "question": "How long is A.J. Brown out?",
+      "answer_md": "The Patriots placed him on injured reserve on September 11 with a high ankle sprain, which means a minimum of four missed games. ESPN's report as of September 17 says about six weeks. FF Beacon's injury timeline places his expected return at week 5, and his Redraft 1QB PPR value fell 2,257 points on the news while his dynasty value fell 732."
+    },
+    {
+      "question": "Should I drop Brock Bowers?",
+      "answer_md": "No. He had a meniscus trim on September 8 and was called day to day by his coach on September 14, and he is listed as questionable for week 2. His Dynasty PPR SF value is 6,990 and he is still the 23rd ranked asset at his position. Michael Mayer is a one-week streamer in redraft only while Bowers sits."
+    },
+    {
+      "question": "Why did Patrick Mahomes' dynasty value fall when he came back healthy?",
+      "answer_md": "Because dynasty prices the whole career and redraft prices the next sixteen games. His Dynasty PPR SF value fell 900 to 7,324 over the week while his Redraft 1QB PPR value rose 308 to 3,698 after 22.7 PPR points against Denver. A 30-year-old quarterback nine months off a reconstructed knee is a different long-term asset from the one drafted in August, and the redraft market is telling you the short-term player is fine."
+    },
+    {
+      "question": "Who are the best week 2 waiver claims from the week 1 news?",
+      "answer_md": "Jalen Coker in every redraft league after 33.8 PPR points on nine targets and a precautionary boot; Drew Lock as a one-week superflex quarterback while Darnold sits; Carson Wentz as insurance for Kyler Murray owners in superflex; and Michael Mayer as a one-week tight end only if Bowers is ruled out on Friday. Run each through the FAAB calculator with your own roster before bidding."
+    }
+  ],
+  "players": [
+    "3c6dcb06-89c2-422c-9543-a11f4b05d639",
+    "012c34e3-fcbd-4638-9a5f-9b0ef0662d8e",
+    "852e943e-240c-43af-ba4a-dbaee0620e1a",
+    "97dcd5e2-c7e8-43f0-9c8b-5261dcaa88f3",
+    "cd249ea6-19a9-44ce-a370-23d2fb717801",
+    "5786efdf-75e9-49ab-868b-bbe3834a4e03",
+    "f8afb4a0-ad4b-453c-b2e5-11e014e0f39c",
+    "402ebf95-9734-46fb-a33b-4e7e5e505a23",
+    "a97ec4f6-cca6-4071-b938-9add9d30ca7d",
+    "3fde02ae-4c67-4513-9504-a27eeca2511f",
+    "d0bffdf9-a8dd-4282-bae7-9a7473858144",
+    "cceae41a-172f-46c0-ab02-0175a16ce8a3",
+    "46af2a87-a8a8-4292-8641-d19e4c7bb41c",
+    "9b74b29d-8f66-4e87-947f-0b10df4115a4",
+    "7a8e6120-34e5-4bbf-84e3-b3c1141d7fa0",
+    "c17079b0-354b-4b5c-aeb3-ffee8366590b",
+    "77356f58-008c-4009-b8ff-9c732b7b0284",
+    "d2f87aa7-8e14-4b07-9adb-6c5be33fbbd1",
+    "90b916d8-8407-4d3f-a0a3-027b005e724e",
+    "c02b0805-8b48-4c9b-8f2b-30f3c33932ce",
+    "2fad8204-fb51-4f5e-ac4c-838dee3895a5",
+    "add36bdc-17c9-4b59-9969-41b2cba9b7e9",
+    "99e982f6-359a-4c47-9e42-4e069633480e",
+    "5bac2e29-55b1-4a87-99a1-33d89af7387b",
+    "f89fd45f-e5df-430c-b6a3-82d3eabc88a3",
+    "db2bd3f3-f3a5-4101-abfc-bf576e033234",
+    "f4ff9b90-b45a-4a66-9d30-4c23e709259e",
+    "f6105559-f811-4a8c-8b49-35513f0b2b89",
+    "e6879f33-0188-41e6-8a96-7d3d4d70f7a7"
+  ],
+  "teams": [
+    "SEA",
+    "NE",
+    "LV",
+    "ATL",
+    "KC",
+    "MIN",
+    "TB",
+    "CHI",
+    "GB",
+    "DET",
+    "ARI",
+    "DAL",
+    "NYG",
+    "PHI",
+    "LAR",
+    "SF",
+    "LAC",
+    "CAR",
+    "DEN",
+    "HOU",
+    "BAL",
+    "JAX",
+    "CLE"
+  ],
+  "research_log": [
+    {
+      "claim": "Current statuses for Darnold, Brown, Bowers, Tagovailoa, Murray, McConkey, Coker, Stribling, Dickerson and Garrett",
+      "url": "https://www.espn.com/nfl/injuries",
+      "fetched_at": "2026-09-17T21:30:00Z",
+      "note": "Darnold out for the Arizona game, injury now described as glute. Brown on injured reserve, about six weeks expected. Bowers, Tagovailoa, Murray, McConkey and Coker questionable for week 2. Stribling expected to be placed on injured reserve. Garrett on injured reserve, at least four games. Mahomes, Mayer and Henderson not listed."
+    },
+    {
+      "claim": "Week 2 practice participation for the players above",
+      "url": "https://www.nfl.com/injuries/",
+      "fetched_at": "2026-09-17T21:30:00Z",
+      "note": "Thursday report: Darnold, Bowers, Tagovailoa, Stribling and McConkey did not participate; Murray and Coker limited. Brown, Davis and Dickerson not on the week 2 report, consistent with injured reserve."
+    },
+    {
+      "claim": "Whether any of the week's signings and releases were reversed or amended",
+      "url": "https://www.espn.com/nfl/transactions",
+      "fetched_at": "2026-09-17T21:31:00Z",
+      "note": "The wire listed only September 15 and 16 moves involving other players; none of the week 1 contracts or roster moves above appear, so they stand as reported."
+    },
+    {
+      "claim": "Week 1 final scores for every game referenced",
+      "url": "https://www.espn.com/nfl/scoreboard/_/week/1/year/2026/seasontype/2",
+      "fetched_at": "2026-09-17T21:31:00Z",
+      "note": "All sixteen finals confirmed, including Chiefs 31 Broncos 10, Vikings 39 Packers 22, Steelers 20 Falcons 13, Bears 59 Panthers 37, Cardinals 26 Chargers 14, Giants 28 Cowboys 20, Seahawks 13 Patriots 10, Ravens 41 Colts 23 and Bengals 33 Buccaneers 27."
+    }
+  ],
+  "run": {
+    "source": "manual",
+    "run_id": "claude-code-session-2026-09-17",
+    "model": "claude-fable-5-1"
+  }
+}

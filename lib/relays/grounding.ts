@@ -86,23 +86,26 @@ const SKIP_CAPITALISED = new Set([
 ]);
 
 /**
- * The generic nouns a fact LABEL is built from. A label is the model's own
- * framing of a value ("Timeline", "Guaranteed"), not a claim about the world,
- * and the extraction prompt supplies this vocabulary, so these words are not
- * evidence of an invented name. Anything outside it is checked, which is what
- * catches a label like "Chiefs sent" on a post that never says Chiefs.
- *
- * Kept apart from SKIP_CAPITALISED so that nothing here is folded into
- * STOPWORDS, where it would weaken the fact value's content-word check.
+ * The one kind of word a fact LABEL is checked for: an NFL team's city or
+ * nickname. A label is the model's own framing of a value ("Timeline",
+ * "Practice status", "Outcome"), written in title case, so every capitalised
+ * word in it looks like a name to the general check and none of them is a
+ * claim about the world. Checking labels the way values are checked hid twelve
+ * of eighteen Relays in one backfill run over words like "Event" and
+ * "Assessment". What a label CAN smuggle in is a team ("Chiefs sent" on a post
+ * that never says Chiefs), so that is the one thing looked for.
  */
-const SKIP_LABEL_WORDS = new Set([
-  "timeline", "guaranteed", "traded", "salary", "cap", "term", "terms",
-  "length", "duration", "amount", "total", "value", "role", "snap", "snaps",
-  "target", "targets", "carries", "touches", "usage", "workload", "depth",
-  "chart", "note", "notes", "detail", "details", "context", "availability",
-  "designation", "diagnosis", "surgery", "recovery", "timetable", "window",
-  "replacement", "next", "since", "reason", "outlook", "update", "updates",
-  "fine", "games", "date", "when", "why", "what", "where", "who", "how",
+const NFL_TEAM_WORDS = new Set([
+  "cardinals", "falcons", "ravens", "bills", "panthers", "bears", "bengals", "browns",
+  "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars", "jags",
+  "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots", "pats",
+  "saints", "giants", "jets", "eagles", "steelers", "49ers", "niners", "seahawks",
+  "buccaneers", "bucs", "titans", "commanders",
+  "arizona", "atlanta", "baltimore", "buffalo", "carolina", "chicago", "cincinnati",
+  "cleveland", "dallas", "denver", "detroit", "houston", "indianapolis", "jacksonville",
+  "kansas", "vegas", "angeles", "miami", "minnesota", "england", "orleans", "york",
+  "philadelphia", "philly", "pittsburgh", "francisco", "seattle", "tampa", "tennessee",
+  "washington",
 ]);
 
 /** Words too common to count as content when checking a fact value. */
@@ -355,8 +358,15 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
     checkNumbers(fact.value, "fact");
     checkNames(fact.value, "fact");
     // The label renders in the card's <dt> and in the Discord text as
-    // "Label: value", so it is text a reader sees and it is checked too.
-    checkNames(fact.label, "fact", SKIP_LABEL_WORDS);
+    // "Label: value", so a team name in it is checked like one in the value.
+    // Nothing else in a label is (see NFL_TEAM_WORDS).
+    for (const raw of fact.label.split(/\s+/)) {
+      const token = raw.replace(/^[^A-Za-z0-9$]+|[^A-Za-z0-9]+$/g, "");
+      const key = stripPossessive(token.toLowerCase());
+      if (!NFL_TEAM_WORDS.has(key)) continue;
+      if (haystack.has(key) || haystackBare.has(key.replace(/[^a-z0-9]/g, ""))) continue;
+      failures.push({ check: "name", token, where: "fact" });
+    }
 
     const contentWords = wordTokens(fact.value).filter(
       (w) => w.length >= 3 && !STOPWORDS.has(w) && !/^\d/.test(w),

@@ -478,12 +478,17 @@ async function loadRelayForJob(
 }
 
 /**
- * The Discord message for a Relay: plain content from lib/relays/render.ts
- * (headline, facts one per line, the via line), the post's images as files,
- * NO embed, NO link and NO mention of any kind. allowedRoleIds is empty so
- * lib/discord.ts sends allowed_mentions with nothing parseable; this
- * supersedes the per-category role pings for Relay cards (plan section 4.5).
+ * The Discord message for a Relay: the card from lib/relays/render.ts as ONE
+ * EMBED (the headline as its title, the facts one per line as its body, the
+ * via line as its footer, the brand purple down the side), the post's images
+ * as files, NO link and NO mention of any kind. The embed is the visual card
+ * the channel had before the Relay pipeline; it carries no `url` field, so
+ * plan section 4.5 still holds: the via line is the whole credit.
+ * allowedRoleIds is empty so lib/discord.ts sends allowed_mentions with
+ * nothing parseable; this supersedes the per-category role pings for Relay
+ * cards.
  */
+const RELAY_EMBED_COLOR = 0xa855f7;
 async function buildRelayDiscordMessage(
   admin: Admin,
   relay: RelayRow,
@@ -499,7 +504,22 @@ async function buildRelayDiscordMessage(
       message: `relay card exceeded Discord's limit with its facts; posted as headline plus the via line only`,
     });
   }
-  return { content: card.discordText, embeds: [], allowedRoleIds: [], attachments };
+  // When the facts did not fit, discordText is already the headline plus the
+  // via line, so the embed body is left empty rather than partly filled.
+  const body = card.discordFitted ? card.facts.map((f) => `${f.label}: ${f.value}`).join("\n") : "";
+  return {
+    content: "",
+    embeds: [
+      {
+        title: card.headline,
+        ...(body ? { description: body } : {}),
+        footer: { text: card.viaLine },
+        color: RELAY_EMBED_COLOR,
+      },
+    ],
+    allowedRoleIds: [],
+    attachments,
+  };
 }
 
 async function activeWebhookUrl(
