@@ -97,7 +97,10 @@ export const FOLLOWUP_SCHEMA = {
 
 export interface FollowupCandidate {
   ingestion_id: string;
-  article_id: string;
+  /** Null for a Relay candidate (lib/relays/duplicates.ts), which has no article. */
+  article_id: string | null;
+  /** Set for a Relay candidate; null for a legacy article candidate. */
+  relay_id?: string | null;
   title: string;
   summary: string;
   /** Who the article is actually about, from article_players / article_teams. */
@@ -465,7 +468,7 @@ export async function findFollowupTarget(args: {
     userContent: JSON.stringify({
       post,
       candidates: candidates.map((c) => ({
-        id: c.article_id,
+        id: candidateId(c),
         title: c.title,
         summary: c.summary,
       })),
@@ -478,5 +481,14 @@ export async function findFollowupTarget(args: {
 
   const id = matched?.matched_article_id?.trim();
   if (!id) return null;
-  return candidates.find((c) => c.article_id === id) ?? null;
+  return candidates.find((c) => candidateId(c) === id) ?? null;
+}
+
+/**
+ * The id the model is shown for a candidate. An article candidate keeps its
+ * article id, so the stored prompt and its logs read as they always have; a
+ * Relay candidate is identified by its Relay id.
+ */
+export function candidateId(c: FollowupCandidate): string {
+  return c.article_id ?? c.relay_id ?? c.ingestion_id;
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { SITE } from "@/lib/site";
-import { serializeJsonLd } from "@/lib/json-ld";
+import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { formatEasternDate } from "@/lib/datetime";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
@@ -149,11 +149,7 @@ export default async function FantasyFootballTermsGuide() {
       isAccessibleForFree: true,
       datePublished: PUBLISHED_AT,
       dateModified: UPDATED_AT,
-      author: {
-        "@type": "Person",
-        name: SITE.author.name,
-        url: `${SITE.url}${SITE.author.bylineHref}`,
-      },
+      author: authorJsonLd(),
       publisher: {
         "@type": "Organization",
         name: SITE.name,

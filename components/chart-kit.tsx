@@ -94,7 +94,17 @@ export function ChartFigure({
         <summary className="inline-flex min-h-11 cursor-pointer items-center text-xs font-medium text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
           {tableLabel}
         </summary>
-        <div className="mt-2 overflow-x-auto">{table}</div>
+        {/* Focusable and named: Chrome does not make a scroll container
+            reachable by keyboard on its own, so without tabIndex the right-hand
+            columns of a wide table are unreachable without a pointer. */}
+        <div
+          className="mt-2 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
+          tabIndex={0}
+          role="region"
+          aria-label={`${title}, the numbers`}
+        >
+          {table}
+        </div>
       </details>
     </figure>
   );

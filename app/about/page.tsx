@@ -68,8 +68,16 @@ type SiteCounts = {
   formats: number | null;
   sources: number | null;
   sourceNames: string[];
-  articles: number | null;
+  /** Published Brief editions. Relays are reports, not stories, and are not counted. */
+  editions: number | null;
 };
+
+/**
+ * Below this many editions the Brief tile says nothing about a count. "1
+ * stories published so far" on the About page of a site asking for an AdSense
+ * re-review reads worse than no number at all.
+ */
+const MIN_EDITIONS_TO_COUNT = 5;
 
 async function loadSiteCounts(): Promise<SiteCounts> {
   try {
@@ -87,19 +95,20 @@ async function loadSiteCounts(): Promise<SiteCounts> {
       supabase
         .from("articles")
         .select("id", { count: "exact", head: true })
-        .eq("status", "published"),
+        .eq("status", "published")
+        .eq("article_type", "brief"),
     ]);
     const sourceNames = (sourcesRes.data ?? []).map((row) => row.display_name);
     return {
       formats: formatsRes.count ?? null,
       sources: sourceNames.length > 0 ? sourceNames.length : null,
       sourceNames,
-      articles: articlesRes.count ?? null,
+      editions: articlesRes.count ?? null,
     };
   } catch {
     // The page is about the product, not about the database. If a count cannot
     // be read, the stat is left out and every sentence around it still stands.
-    return { formats: null, sources: null, sourceNames: [], articles: null };
+    return { formats: null, sources: null, sourceNames: [], editions: null };
   }
 }
 
@@ -284,9 +293,9 @@ export default async function AboutPage() {
               icon={Newspaper}
               title="The Beacon Brief"
               body={
-                counts.articles
-                  ? `NFL news with the fantasy impact spelled out. ${counts.articles.toLocaleString()} stories published so far.`
-                  : "NFL news with the fantasy impact spelled out, written in plain English."
+                counts.editions !== null && counts.editions >= MIN_EDITIONS_TO_COUNT
+                  ? `NFL news with the fantasy impact spelled out, and a weekly Brief that checks it against the numbers. ${counts.editions.toLocaleString()} editions published so far.`
+                  : "NFL news with the fantasy impact spelled out, and a weekly Brief that checks it against the numbers."
               }
             />
             <LinkTile

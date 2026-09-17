@@ -1,10 +1,14 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { serializeJsonLd } from "@/lib/json-ld";
-import { FolderOpen, Newspaper, Shield, Tag, User } from "lucide-react";
+import { BookOpen, FolderOpen, Newspaper, Shield, Tag, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SITE } from "@/lib/site";
-import type { BriefSidebarData, FeedArticle } from "@/lib/beacon-brief-feed";
-import { ArticleCard } from "@/components/beacon-brief/article-card";
+import type { BriefSidebarData } from "@/lib/beacon-brief-feed";
+import type { LatestBrief, RelayCardData } from "@/lib/relays/load";
+import { RelayCard } from "@/components/relays/relay-card";
+import { RelayGrid } from "@/components/relays/relay-grid";
+import { LatestBriefPanel } from "@/components/relays/latest-brief-panel";
 import { BriefSidebar, type BriefActiveFilter } from "@/components/beacon-brief/brief-sidebar";
 import { BriefShell } from "@/components/beacon-brief/brief-shell";
 import { BriefRailSections } from "@/components/beacon-brief/brief-rail-sections";
@@ -19,6 +23,7 @@ import {
 } from "@/components/app-shell/page-masthead";
 import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 import { isDiscordMember } from "@/lib/discord-membership";
+import { hasPublishedEditions } from "@/lib/sitemap/sections";
 
 export type Breadcrumb = { label: string; href?: string };
 
@@ -32,10 +37,12 @@ const FILTER_ICONS: Record<BriefActiveFilter["type"], LucideIcon | undefined> = 
 };
 
 /**
- * Shared renderer for every Beacon Brief listing page (the index and the
- * category / tag / player / team filter views). Routes resolve their filter and
- * data, then hand it here so the masthead, sidebar, card grid, and pagination
- * stay identical across all of them.
+ * Shared renderer for every Beacon Brief listing page (the hub and the
+ * category / tag / player / team filter views). Since the Relay pipeline
+ * (docs/beacon-brief/relays-and-briefs-plan.md, section 6) the list is a feed
+ * of Relay cards, newest first, with the latest Brief pinned above it on the
+ * hub. Routes resolve their filter and data, then hand it here so the
+ * masthead, sidebar, list, and pagination stay identical across all of them.
  *
  * The visible breadcrumb comes from the app shell's shared bar, which derives it
  * from the pathname. The `breadcrumb` prop is still read here because these
@@ -49,11 +56,18 @@ export async function BriefFeed({
   breadcrumb,
   sidebarData,
   active,
-  articles,
+  relays,
   total,
   currentPage,
   pageSize,
   basePath,
+  latestBrief = null,
+  filters = null,
+  emptyMessage,
+  viewSwitcher = null,
+  content,
+  layout = "grid",
+  paginated = true,
 }: {
   eyebrow: string;
   heading: string;
@@ -61,17 +75,51 @@ export async function BriefFeed({
   breadcrumb: Breadcrumb[];
   sidebarData: BriefSidebarData;
   active: BriefActiveFilter;
-  articles: FeedArticle[];
+  relays: RelayCardData[];
   total: number;
   currentPage: number;
   pageSize: number;
+  /** The path the page links are built on. May already carry a query string. */
   basePath: string;
+  /** The newest edition, pinned above the feed on the hub only. */
+  latestBrief?: LatestBrief | null;
+  /** The kind and week filter form, rendered above the list. */
+  filters?: ReactNode;
+  /**
+   * Replaces the empty state's default sentence, for a view that is empty
+   * because the address named something that does not exist rather than
+   * because nothing has been reported yet.
+   */
+  emptyMessage?: string;
+  /** The hub's view links, rendered between the heading row and the filters. */
+  viewSwitcher?: ReactNode;
+  /**
+   * Replaces the default list or grid and its pagination, for the week and
+   * calendar views, which lay the reports out themselves.
+   */
+  content?: ReactNode;
+  /** The default rendering: three compact cards across, or one full card per row. */
+  layout?: "grid" | "list";
+  /** False for a view with no pages (the calendar), so the masthead shows no page count. */
+  paginated?: boolean;
 }) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // The calendar has no pages, so the masthead does not claim "page 1 of 6"
+  // over a month.
+  const totalPages = paginated ? Math.max(1, Math.ceil(total / pageSize)) : 1;
 
   // Confirmed Discord members already have the community; point the closing CTA
   // at the tools instead of the invite.
-  const isMember = await isDiscordMember();
+  //
+  // The editions listing is linked from the hub's masthead, and ONLY once an
+  // edition exists. It is the one permanent internal link into that page (the
+  // editions themselves are the only others), so without it the listing would
+  // sit outside the site's own link graph; with it while the listing is empty
+  // the hub would be advertising an under-construction screen. Same read as the
+  // page's robots tag and the core sitemap entry, so the three agree.
+  const [isMember, hasEditions] = await Promise.all([
+    isDiscordMember(),
+    active.type === "all" ? hasPublishedEditions() : Promise.resolve(false),
+  ]);
 
   // The masthead states which view you are in and how much is in it. On the
   // unfiltered index the eyebrow already says "The Beacon Brief", so the chip
@@ -82,7 +130,7 @@ export async function BriefFeed({
       : [{ label: eyebrow, icon: FILTER_ICONS[active.type], tone: "cyan" }];
 
   const stats: MastheadStat[] = [
-    { label: "Articles", value: String(total), accent: "cyan" },
+    { label: "Reports", value: String(total), accent: "cyan" },
   ];
   if (totalPages > 1) {
     stats.push({
@@ -122,7 +170,7 @@ export async function BriefFeed({
       />
       {currentCrumbLabel && <SetBreadcrumbLabel value={currentCrumbLabel} />}
       {/* The Brief's categories go into the site rail, under the Brief's own
-          row, rather than into the filter rail beside the articles. */}
+          row, rather than into the filter rail beside the reports. */}
       <BriefRailSections
         categories={sidebarData.categories}
         isIndex={active.type === "all"}
@@ -136,6 +184,17 @@ export async function BriefFeed({
           description={description}
           chips={chips}
           stats={stats}
+          actions={
+            hasEditions ? (
+              <Link
+                href="/brief/editions"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <BookOpen aria-hidden="true" className="h-4 w-4" />
+                Every edition of the Brief
+              </Link>
+            ) : undefined
+          }
         />
       </PageBody>
 
@@ -153,20 +212,33 @@ export async function BriefFeed({
             : null
         }
       >
+        <LatestBriefPanel brief={latestBrief} />
+
         <div className="mb-5 flex items-center justify-between gap-3">
-          {/* The masthead title is this page's h1 and the card titles are h3
-              (article-card.tsx), so this h2 keeps the outline from skipping a
-              level. Same text on every view: whichever filter is active, the
-              grid below it is still the latest matching articles. */}
-          <h2 className="text-lg font-semibold text-ink">Latest articles</h2>
-          <p className="text-sm text-ink-muted" role="status">
+          {/* The masthead title is this page's h1 and the card headlines are h3
+              (relay-card.tsx), so this h2 keeps the outline from skipping a
+              level. */}
+          <h2 className="text-lg font-semibold text-ink">Latest reports</h2>
+          {/* Plain text on purpose, with no live region. The filter form is a
+              full page load, and a live region never fires for content that is
+              in the initial HTML, so the attributes would be inert and a later
+              reviewer would read them as an announcement that happens. The
+              count sits directly under the h2 and in the masthead stat row, so
+              it is the next thing read after the heading either way. */}
+          <p className="text-sm text-ink-muted">
             {total === 0
-              ? "No articles yet"
-              : `${total} ${total === 1 ? "article" : "articles"}`}
+              ? "No reports yet"
+              : `${total} ${total === 1 ? "report" : "reports"}`}
           </p>
         </div>
 
-        {articles.length === 0 ? (
+        {viewSwitcher && <div className="mb-5">{viewSwitcher}</div>}
+
+        {filters}
+
+        {content !== undefined ? (
+          content
+        ) : relays.length === 0 ? (
           <div className="flex flex-col items-center rounded-modal border border-dashed border-line bg-base/40 px-6 py-16 text-center">
             <span
               aria-hidden="true"
@@ -176,25 +248,29 @@ export async function BriefFeed({
             </span>
             <p className="mt-4 text-base font-semibold text-ink">Nothing here yet</p>
             <p className="mt-1 max-w-md text-sm leading-relaxed text-ink-muted">
-              There are no published articles for this view yet. New coverage
-              lands here the moment it publishes.
+              {emptyMessage ??
+                "There are no reports for this view yet. New reports land here the moment the desk accepts them."}
             </p>
             <Link
               href="/brief"
               className="mt-6 inline-flex min-h-11 items-center rounded-card bg-beacon px-4 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
-              Back to all articles
+              Back to all reports
             </Link>
           </div>
         ) : (
           <>
-            <ul role="list" className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {articles.map((article) => (
-                <li key={article.slug}>
-                  <ArticleCard article={article} />
-                </li>
-              ))}
-            </ul>
+            {layout === "grid" ? (
+              <RelayGrid relays={relays} />
+            ) : (
+              <ul role="list" className="space-y-4">
+                {relays.map((relay) => (
+                  <li key={relay.id}>
+                    <RelayCard relay={relay} />
+                  </li>
+                ))}
+              </ul>
+            )}
             <BriefPagination
               basePath={basePath}
               currentPage={currentPage}

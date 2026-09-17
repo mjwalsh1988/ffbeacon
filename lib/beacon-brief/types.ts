@@ -154,5 +154,22 @@ export interface QueueJobPayload {
   ingestion_id: string;
   /** For article_write: 'create' (new) or 'rewrite' (critical revision merge). */
   mode?: "create" | "rewrite";
+  /**
+   * For discord_post and discord_patch: the Relay whose text the card carries.
+   * When set, the worker renders the card from lib/relays/render.ts (headline,
+   * facts, via line, no link, no mention) rather than from the ingestion.
+   */
+  relay_id?: string;
+  /**
+   * For discord_post only: "brief" marks the Brief's edition post, which
+   * carries article_id and no ingestion. Absent on every other job.
+   */
+  kind?: "brief";
+  article_id?: string;
   [key: string]: unknown;
+}
+
+/** The `relay` object the classify call now returns beside the legacy fields. */
+export interface CategorizeResultWithRelay extends CategorizeResult {
+  relay?: unknown;
 }

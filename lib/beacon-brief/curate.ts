@@ -35,9 +35,23 @@ import {
 import { buildEventKey, classifyEventKind } from "./event-key";
 import { sendBeaconBriefMatchDigestEmail } from "./email";
 import { beginXCall, recordXFailure, recordXSuccess } from "./health";
+import { postAddsNewInformation } from "./merge";
+import { loadBriefDeskSettings } from "@/lib/brief-desk/settings";
+import { RELAY_SCHEMA_FRAGMENT, withRelaySection } from "@/lib/relays/extract";
+import {
+  findExactRelayMatch,
+  loadRecentRelayCandidates,
+  loadRelayOverlapCandidates,
+} from "@/lib/relays/duplicates";
+import { parseRelayFacts } from "@/lib/relays/types";
+import { loadRelayForIngestion, updateRelayText, writeRelay } from "@/lib/relays/write";
+import { normalizeRelayExtraction } from "@/lib/relays/extract";
+import type { NflStateLike } from "@/lib/relays/week";
+import { getNflState } from "@/lib/sleeper";
 import type {
   BeaconBriefSourceItem,
   CategorizeResult,
+  CategorizeResultWithRelay,
   PendingReferenceMatch,
   QueueJobPayload,
   QueueJobType,
@@ -47,6 +61,11 @@ type NewsSource = Database["public"]["Tables"]["news_sources"]["Row"];
 type Ingestion = Database["public"]["Tables"]["news_ingestions"]["Row"];
 type Admin = SupabaseClient<Database>;
 
+/**
+ * The classify call's strict schema. `relay` (lib/relays/extract.ts) rides on
+ * the same call as the legacy fields rather than on a second one: one prompt,
+ * one charge, one log row per post.
+ */
 const CATEGORIZE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -61,6 +80,7 @@ const CATEGORIZE_SCHEMA = {
     "tags",
     "suggested_title",
     "suggested_slug",
+    "relay",
   ],
   properties: {
     non_football: { type: "integer" },
@@ -73,8 +93,36 @@ const CATEGORIZE_SCHEMA = {
     tags: { type: "array", items: { type: "string" } },
     suggested_title: { type: "string" },
     suggested_slug: { type: "string" },
+    relay: RELAY_SCHEMA_FRAGMENT,
   },
 } as const;
+
+/**
+ * The classify system prompt: the stored categorize prompt with the RELAY
+ * section appended when it is not already inside it. Migration 0285 appended
+ * the section to the stored prompt, so this is the belt to that migration's
+ * braces: an admin who edits the section out still gets the code's copy.
+ */
+async function classifySystemPrompt(
+  admin: Admin,
+  settings: Awaited<ReturnType<typeof loadBeaconBriefSettings>>,
+  categorySlugs: string,
+): Promise<string> {
+  const desk = await loadBriefDeskSettings(admin);
+  return withRelaySection(settings.prompts.categorize || "", desk.relayExtractPrompt).replace(
+    "{categories}",
+    categorySlugs,
+  );
+}
+
+/** Sleeper's live NFL state, or null when unreachable. Memoised inside getNflState. */
+async function nflStateOrNull(): Promise<NflStateLike | null> {
+  try {
+    return await getNflState();
+  } catch {
+    return null;
+  }
+}
 
 /** Compact, model-facing view of a post (keeps prompts small + stable). */
 function compactItem(item: BeaconBriefSourceItem) {
@@ -422,9 +470,15 @@ interface DuplicateMatch {
  *   2. Overlapping event key. Same kind, some of the same people, different set. One
  *      cheap triage call against a short list the model has a real chance of judging.
  *   3. No key at all (unresolved names, or an event kind we cannot read). Falls back
- *      to the original behaviour: recent articles filtered by the shared-subject gate.
+ *      to the original behaviour: recent stories filtered by the shared-subject gate.
  *
- * Returns the article to merge into, or null to write our own.
+ * Each pass asks the article table first (legacy stories) and then the Relay
+ * table (lib/relays/duplicates.ts). With the article path off, the Relay pass is
+ * the one that fires; the article pass stays so a post about a story that still
+ * has a live legacy article folds into it rather than beside it.
+ *
+ * Returns the story to merge into (an article, a Relay, or both), or null to
+ * write our own.
  */
 async function findDuplicateTarget(
   admin: Admin,
@@ -461,6 +515,18 @@ async function findDuplicateTarget(
         },
       };
     }
+    const exactRelay = await findExactRelayMatch(admin, {
+      eventKey: opts.eventKey,
+      windowHours: settings.eventKeyWindowHours,
+    });
+    if (exactRelay) {
+      await logBeaconBrief(admin, {
+        stage: "revision_link",
+        sourceId: source.id,
+        message: `same event as relay "${exactRelay.title}" (event key ${opts.eventKey}); folding in without asking the model`,
+      });
+      return { route: "event_key", target: exactRelay };
+    }
   }
 
   // The size floor still governs the two model-judged passes below, where a wrong
@@ -477,10 +543,17 @@ async function findDuplicateTarget(
 
   // 2. Overlapping event key.
   if (opts.eventKey) {
-    const overlaps = await loadOverlapCandidates(admin, {
-      eventKey: opts.eventKey,
-      windowHours: settings.eventKeyWindowHours,
-    });
+    const [articleOverlaps, relayOverlaps] = await Promise.all([
+      loadOverlapCandidates(admin, {
+        eventKey: opts.eventKey,
+        windowHours: settings.eventKeyWindowHours,
+      }),
+      loadRelayOverlapCandidates(admin, {
+        eventKey: opts.eventKey,
+        windowHours: settings.eventKeyWindowHours,
+      }),
+    ]);
+    const overlaps = [...articleOverlaps, ...relayOverlaps];
     if (overlaps.length > 0) {
       const matched = await findFollowupTarget({
         admin,
@@ -495,9 +568,11 @@ async function findDuplicateTarget(
   }
 
   // 3. No usable key: the original path, now across every source rather than one.
-  const candidates = await loadFollowupCandidates(admin, {
-    lookbackHours: opts.lookbackHours,
-  });
+  const [articleCandidates, relayCandidates] = await Promise.all([
+    loadFollowupCandidates(admin, { lookbackHours: opts.lookbackHours }),
+    loadRecentRelayCandidates(admin, { lookbackHours: opts.lookbackHours }),
+  ]);
+  const candidates = [...articleCandidates, ...relayCandidates];
   const eligible = eligibleMergeCandidates(opts.subject, candidates);
   if (eligible.length < candidates.length) {
     await logBeaconBrief(admin, {
@@ -554,6 +629,14 @@ async function processRevision(
     nativeEdit?: boolean;
     /** Discord role ids to mention, when this post gets its own card. */
     roleIds?: string[];
+    /** The Relay the matched story already has, when the matcher found one. */
+    targetRelayId?: string | null;
+    /** The classification, for writing this post's own Relay. Null for native edits. */
+    ai?: CategorizeResultWithRelay | null;
+    refs?: { categoryId: string | null; playerIds: string[]; teamIds: string[] } | null;
+    nflState?: NflStateLike | null;
+    /** The post as the pipeline received it, for the Relay write. */
+    item?: BeaconBriefSourceItem;
   },
 ): Promise<void> {
   // Revisions insert immediately: the patch job needs the row id, and there is
@@ -599,41 +682,83 @@ async function processRevision(
     message: `ingested ${item.source_external_id} (revision)`,
   });
 
-  // Discord and the website answer different questions, and as of migration 0177 they
-  // are decided separately.
-  //
-  // The website wants one page per event, because ten pages about one signing split
-  // the search ranking between them and give a reader ten versions of the same thing.
-  // The channel wants every beat: a follow-up that confirms a contract, or turns a
-  // feared injury into a confirmed one, is worth its own notification even though it
-  // is worth no second article. Folding a post into an existing article no longer
-  // costs it a Discord card.
-  //
-  // The one exception is a native source edit, where the reporter rewrote the post we
-  // already carded. There is no new post, so there is nothing to announce, and the
-  // existing card is edited in place.
+  // A native source edit: the reporter rewrote the post we already carded. There
+  // is no new post, so there is nothing to announce, and the existing card is
+  // edited in place. When the earlier post has a Relay, the edit is folded into
+  // it by refreshRelayForNativeEdit (called from processItem) before the patch
+  // job runs, so the card is re-rendered from the corrected Relay.
   if (opts.nativeEdit) {
+    const priorRelay = await loadRelayForIngestion(admin, opts.revisionOfIngestionId);
     await enqueue(admin, "discord_patch", {
       ingestion_id: ingestionId,
       target_ingestion_id: opts.revisionOfIngestionId,
+      ...(priorRelay ? { relay_id: priorRelay.id } : {}),
     });
-  } else {
-    await enqueue(admin, "discord_post", {
-      ingestion_id: ingestionId,
-      role_ids: opts.roleIds ?? [],
-    });
-  }
-  summary.discordQueued += 1;
+    summary.discordQueued += 1;
+  } else if (opts.ai && opts.refs && opts.item) {
+    // A separate post about a story we already have. The merge gate decides,
+    // against the earlier Relay's headline and facts, whether this post adds
+    // anything. No new information means the post is recorded as a revision and
+    // no Relay is written; new information means a new Relay with
+    // follows_relay_id pointing at the earlier one, and its own Discord card.
+    // Nothing is rewritten (plan section 4.4).
+    const target =
+      (opts.targetRelayId
+        ? (await admin.from("relays").select("*").eq("id", opts.targetRelayId).maybeSingle()).data
+        : null) ?? (await loadRelayForIngestion(admin, opts.revisionOfIngestionId));
 
-  // Queue the merge and let the worker decide whether it changes anything.
-  //
-  // This used to run its own triage call here ("is this change critical?") and only
-  // enqueue when the answer was yes. The worker now runs the merge gate in ./merge.ts
-  // immediately before the rewrite, asking the sharper question against the full
-  // article body rather than a three-column summary, so keeping the triage here would
-  // be a second paid call to reach the same decision slightly worse. One question, one
-  // place, one charge.
-  if (opts.revisionTargetArticleId) {
+    let addsNewInformation = true;
+    if (target) {
+      const gate = await postAddsNewInformation({
+        admin,
+        settings,
+        article: {
+          title: target.headline,
+          tl_dr: parseRelayFacts(target.facts)
+            .map((f) => `${f.label}: ${f.value}`)
+            .join(". "),
+          content_md: target.timeline,
+        },
+        post: compactItem(opts.item),
+        ingestionId,
+      });
+      addsNewInformation = gate.addsNewInformation;
+      if (!addsNewInformation) {
+        await logBeaconBrief(admin, {
+          stage: "revision_link",
+          sourceId: source.id,
+          ingestionId,
+          message: `folded into relay "${target.headline}" with no new relay: the post adds nothing the relay does not already say`,
+        });
+      }
+    }
+
+    if (addsNewInformation) {
+      const written = await writeRelay(admin, {
+        ingestion: {
+          id: ingestionId,
+          text: opts.item.text,
+          quoted: (opts.item.quoted as unknown as Json) ?? null,
+          retweeted: (opts.item.retweeted as unknown as Json) ?? null,
+          author_handle: opts.item.author_handle,
+          external_url: opts.item.external_url,
+          created_at: opts.item.created_at,
+          metadata: (opts.item.raw as Json) ?? {},
+        },
+        ai: opts.ai,
+        refs: opts.refs,
+        nflState: opts.nflState ?? null,
+        followsRelayId: target?.id ?? null,
+        discord: true,
+      });
+      if (written.discordQueued) summary.discordQueued += 1;
+    }
+  }
+
+  // The legacy article path. Off by default since migration 0285; kept so an
+  // admin can turn it back on without a deploy. The worker runs the merge gate
+  // against the full article body immediately before the rewrite.
+  if (opts.revisionTargetArticleId && settings.articleWriteEnabled) {
     await enqueue(admin, "article_write", {
       ingestion_id: ingestionId,
       mode: "rewrite",
@@ -645,6 +770,69 @@ async function processRevision(
     .from("news_ingestions")
     .update({ status: "revised", processed_at: new Date().toISOString() })
     .eq("id", ingestionId);
+}
+
+/**
+ * Fold a native edit into the earlier post's Relay.
+ *
+ * The reporter rewrote their own post, so the Relay extracted from the old text
+ * may now carry a figure the post no longer states. Re-classify the edited text
+ * and hand the new extraction to updateRelayText, which re-runs the grounding
+ * check against the EDITED post and patches the card. A failed classify call is
+ * logged and the old Relay stands; the edit is still recorded as a revision.
+ */
+async function refreshRelayForNativeEdit(
+  admin: Admin,
+  source: NewsSource,
+  item: BeaconBriefSourceItem,
+  settings: Awaited<ReturnType<typeof loadBeaconBriefSettings>>,
+  priorIngestionId: string,
+): Promise<void> {
+  const relay = await loadRelayForIngestion(admin, priorIngestionId);
+  if (!relay) return;
+  const categorySlugs = await activeCategorySlugs(admin);
+  const ai = await runStructuredCall<CategorizeResultWithRelay>({
+    admin,
+    stage: "categorize",
+    model: settings.modelTriage,
+    system: await classifySystemPrompt(admin, settings, categorySlugs),
+    userContent: JSON.stringify(compactItem(item)),
+    schema: CATEGORIZE_SCHEMA as unknown as Record<string, unknown>,
+    ingestionId: priorIngestionId,
+    sourceId: source.id,
+    maxTokens: 1024,
+  });
+  const extraction = ai ? normalizeRelayExtraction(ai.relay) : null;
+  if (!extraction) {
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      level: "warn",
+      sourceId: source.id,
+      ingestionId: priorIngestionId,
+      message: "native edit: re-classification returned no relay; the earlier relay stands",
+    });
+    return;
+  }
+  // The edited text is now the post of record for this Relay's grounding check.
+  await admin
+    .from("news_ingestions")
+    .update({ text: item.text })
+    .eq("id", priorIngestionId);
+  const result = await updateRelayText(
+    admin,
+    relay.id,
+    { headline: extraction.headline, facts: extraction.facts, timeline: extraction.timeline },
+    { publishIfGrounded: relay.status === "published" },
+  );
+  await logBeaconBrief(admin, {
+    stage: "revision_link",
+    level: result.ok ? "info" : "warn",
+    sourceId: source.id,
+    ingestionId: priorIngestionId,
+    message: result.ok
+      ? `native edit folded into relay (${result.status})`
+      : `native edit could not update the relay: ${result.error}`,
+  });
 }
 
 async function processItem(
@@ -717,6 +905,9 @@ async function processItem(
         sourceId: source.id,
         message: `native edit of ${item.edit_of_external_id}`,
       });
+      // The Relay is corrected first so the discord_patch job queued by
+      // processRevision renders the edited text rather than the old one.
+      await refreshRelayForNativeEdit(admin, source, item, settings, prior.id);
       await processRevision(admin, source, item, settings, summary, {
         revisionOfIngestionId: prior.id,
         revisionTargetArticleId: prior.article_id,
@@ -788,19 +979,17 @@ async function processItem(
   // re-runs classification cleanly (the dedup net only matches inserted rows). A
   // persistently failing item self-bounds: once it ages past the max-age cutoff it
   // takes the skipStale path above instead, so it cannot block the source forever.
-  const ai = await runStructuredCall<CategorizeResult>({
+  const ai = await runStructuredCall<CategorizeResultWithRelay>({
     admin,
     stage: "categorize",
     model: settings.modelTriage,
-    system: (settings.prompts.categorize || "").replace(
-      "{categories}",
-      categorySlugs,
-    ),
+    system: await classifySystemPrompt(admin, settings, categorySlugs),
     userContent: JSON.stringify(compactItem(item)),
     schema: CATEGORIZE_SCHEMA as unknown as Record<string, unknown>,
     ingestionId: null,
     sourceId: source.id,
-    maxTokens: 1024,
+    // The relay object adds roughly 150 output tokens per post.
+    maxTokens: 1536,
   });
   if (!ai) {
     throw new Error(
@@ -911,6 +1100,7 @@ async function processItem(
     relevanceTier: ai.relevance_tier ?? null,
   };
   const eventKey = eventKeyForPost(item, ai, refs.playerIds);
+  const nflState = await nflStateOrNull();
   const followup = await findDuplicateTarget(admin, source, item, settings, {
     subject,
     lookbackHours: settings.followupLookbackHours,
@@ -920,23 +1110,32 @@ async function processItem(
     await processRevision(admin, source, item, settings, summary, {
       revisionOfIngestionId: followup.target.ingestion_id,
       revisionTargetArticleId: followup.target.article_id,
+      targetRelayId: followup.target.relay_id ?? null,
       aiStored,
       contextScore: ai.context_score ?? 0,
       eventKey,
       provenSameEvent: followup.route === "event_key",
       roleIds: refs.roleIds,
+      ai,
+      refs: resolved,
+      nflState,
+      item,
     });
     return;
   }
 
   // A retweet whose original could not be resolved carries only the truncated
-  // "RT @user:" stub as its text, so it never becomes an article (F2): we still
-  // post it to Discord, but force Discord-only regardless of context score.
+  // "RT @user:" stub as its text, so it never becomes an article (F2). The
+  // legacy article path is also gated by bb_article_write_enabled, off since
+  // migration 0285; the Relay below is what every post becomes now.
   const meetsThreshold = (ai.context_score ?? 0) >= settings.contextThreshold;
-  const makeArticle = meetsThreshold && !item.retweet_unresolved;
+  const makeArticle =
+    settings.articleWriteEnabled && meetsThreshold && !item.retweet_unresolved;
 
   // New post insert, now carrying the AI result. Guarded by the unique constraint
-  // against a race; skip if a concurrent run beat us to it.
+  // against a race; skip if a concurrent run beat us to it. 'published' means the
+  // post is live as a Relay; 'processing' means the legacy article job still has
+  // to run and will stamp 'published' itself.
   const { data: inserted, error: insErr } = await admin
     .from("news_ingestions")
     .insert({
@@ -946,7 +1145,7 @@ async function processItem(
       ai_result: aiStored,
       context_score: ai.context_score ?? 0,
       event_key: eventKey,
-      status: makeArticle ? "processing" : "dropped_no_context",
+      status: makeArticle ? "processing" : "published",
       processed_at: makeArticle ? null : new Date().toISOString(),
     })
     .select("id")
@@ -969,23 +1168,58 @@ async function processItem(
     message: `ingested ${item.source_external_id}`,
   });
 
-  if (meetsThreshold && item.retweet_unresolved) {
+  // The Relay: the grounding check runs inside writeRelay, a passing Relay
+  // enqueues its own Discord card (no mentions, no links), and a failing one is
+  // written hidden with a moderation row. This replaces the unconditional
+  // discord_post enqueue: the card now reads the Relay, so the card and the site
+  // say the same thing.
+  // A throw here would leave the ingestion 'published' with no Relay at all:
+  // invisible on the site and in Discord, skipped by the dedupe check on every
+  // later run, and still spending deletion-sweep budget. So the failure is
+  // caught and recorded where a person will see it, rather than stopping the
+  // source's run and then vanishing.
+  try {
+    const written = await writeRelay(admin, {
+      ingestion: {
+        id: ingestionId,
+        text: item.text,
+        quoted: (item.quoted as unknown as Json) ?? null,
+        retweeted: (item.retweeted as unknown as Json) ?? null,
+        author_handle: item.author_handle,
+        external_url: item.external_url,
+        created_at: item.created_at,
+        metadata: (item.raw as Json) ?? {},
+      },
+      ai,
+      refs: resolved,
+      nflState,
+      followsRelayId: null,
+      discord: true,
+    });
+    if (written.discordQueued) summary.discordQueued += 1;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await admin
+      .from("news_ingestions")
+      .update({
+        status: "error",
+        filter_detail: { stage: "relay_write", error: message.slice(0, 400) } as unknown as Json,
+      })
+      .eq("id", ingestionId);
+    await admin.from("beacon_brief_moderation").insert({
+      ingestion_id: ingestionId,
+      article_id: null,
+      type: "failed_task",
+      status: "pending",
+      detail: { job_type: "relay_write", error: message.slice(0, 400), attempts: 0 } as unknown as Json,
+    });
     await logBeaconBrief(admin, {
-      stage: "categorize",
-      level: "warn",
-      sourceId: source.id,
+      stage: "error",
+      level: "error",
       ingestionId,
-      message:
-        "retweet original unresolved; posting to Discord only and skipping article to avoid stub text",
+      message: `relay write failed for ${ingestionId}: ${message}`,
     });
   }
-
-  // Always post the original content to Discord (with resolved role mentions).
-  await enqueue(admin, "discord_post", {
-    ingestion_id: ingestionId,
-    role_ids: refs.roleIds,
-  });
-  summary.discordQueued += 1;
 
   if (makeArticle) {
     await enqueue(admin, "article_write", {
@@ -993,11 +1227,12 @@ async function processItem(
       mode: "create",
     });
     summary.articlesQueued += 1;
-    // status stays 'processing' until the article_write job publishes it.
-    // Non-confident names open moderation rows (article_id backfilled by the
-    // worker once the article exists); confident refs auto-link via resolved.
-    await openMatchModeration(admin, ingestionId, refs.pending, reviews);
   }
+
+  // Non-confident names open moderation rows. Resolution links the chosen
+  // player or team to the Relay (and to the article too, when the legacy path
+  // later writes one); confident refs auto-linked inside writeRelay.
+  await openMatchModeration(admin, ingestionId, refs.pending, reviews);
 }
 
 /** Compact, model-facing view rebuilt from a stored ingestion row (force-push). */
@@ -1068,29 +1303,39 @@ export async function forcePushFilteredPost(
 
   const settings = await loadBeaconBriefSettings(admin);
 
-  // Reuse the stored classification when present (AI-filtered); otherwise classify
-  // now (keyword-filtered posts were never classified). Either way non_football is
-  // ignored here so the forced post is not re-filtered.
-  let ai: CategorizeResult | null = hasCategorizeFields(row.ai_result)
-    ? (row.ai_result as CategorizeResult)
+  // Reuse the stored classification when present (AI-filtered) AND it carries a
+  // relay object; otherwise classify now (keyword-filtered posts were never
+  // classified, and posts classified before migration 0285 have no relay).
+  // Either way non_football is ignored here so the forced post is not re-filtered.
+  const stored = hasCategorizeFields(row.ai_result)
+    ? (row.ai_result as CategorizeResultWithRelay)
     : null;
+  let ai: CategorizeResultWithRelay | null =
+    stored && normalizeRelayExtraction(stored.relay) ? stored : null;
   if (!ai) {
     const categorySlugs = await activeCategorySlugs(admin);
-    ai = await runStructuredCall<CategorizeResult>({
+    ai = await runStructuredCall<CategorizeResultWithRelay>({
       admin,
       stage: "categorize",
       model: settings.modelTriage,
-      system: (settings.prompts.categorize || "").replace(
-        "{categories}",
-        categorySlugs,
-      ),
+      system: await classifySystemPrompt(admin, settings, categorySlugs),
       userContent: JSON.stringify(compactFromRow(row)),
       schema: CATEGORIZE_SCHEMA as unknown as Record<string, unknown>,
       ingestionId,
       sourceId: row.source_id,
-      maxTokens: 1024,
+      maxTokens: 1536,
     });
     if (!ai) return { ok: false, error: "classification failed; try again" };
+    // A stored classification decided the tier the admin is overriding; a fresh
+    // one must not re-filter. Keep the stored relevance fields when present.
+    if (stored) {
+      ai = {
+        ...ai,
+        relevance_tier: stored.relevance_tier,
+        relevance_reason: stored.relevance_reason,
+        non_football: stored.non_football,
+      };
+    }
   }
 
   const refs = await matchReferences(admin, ai, settings);
@@ -1105,7 +1350,9 @@ export async function forcePushFilteredPost(
     pending: refs.pending,
   } as unknown as Json;
 
-  const makeArticle = (ai.context_score ?? 0) >= settings.contextThreshold;
+  const makeArticle =
+    settings.articleWriteEnabled &&
+    (ai.context_score ?? 0) >= settings.contextThreshold;
 
   // The key is recorded but NOT acted on here. A force-push is an explicit decision
   // that this post deserves to be in the pipeline, and the duplicate machinery is
@@ -1129,28 +1376,35 @@ export async function forcePushFilteredPost(
       ai_result: aiStored,
       context_score: ai.context_score ?? 0,
       event_key: forcedEventKey,
-      status: makeArticle ? "processing" : "dropped_no_context",
+      status: makeArticle ? "processing" : "published",
       filter_reason: null,
       filter_detail: null,
       processed_at: makeArticle ? null : new Date().toISOString(),
     })
     .eq("id", ingestionId);
 
-  // Always post the original content to Discord (with resolved role mentions).
-  await enqueue(admin, "discord_post", {
-    ingestion_id: ingestionId,
-    role_ids: refs.roleIds,
+  // The same write path as a live post: grounding first, then the card.
+  const forced = await writeRelay(admin, {
+    ingestion: row,
+    ai,
+    refs: {
+      categoryId: refs.categoryId,
+      playerIds: refs.playerIds,
+      teamIds: refs.teamIds,
+    },
+    nflState: await nflStateOrNull(),
+    followsRelayId: null,
+    discord: true,
   });
-
   if (makeArticle) {
     await enqueue(admin, "article_write", {
       ingestion_id: ingestionId,
       mode: "create",
     });
-    // Non-confident names open moderation rows once the article exists (no digest
-    // email for a manual force-push, so pass an empty review list).
-    await openMatchModeration(admin, ingestionId, refs.pending, []);
   }
+  // Non-confident names open moderation rows (no digest email for a manual
+  // force-push, so pass an empty review list).
+  await openMatchModeration(admin, ingestionId, refs.pending, []);
 
   await logBeaconBrief(admin, {
     stage: "ingest",
@@ -1159,6 +1413,17 @@ export async function forcePushFilteredPost(
     ingestionId,
     message: "force-pushed from the filtered review queue",
   });
+
+  // A force push whose Relay the grounding check held back put no card out and
+  // nothing on the site, so reporting success would be false. The check itself
+  // ran, which is what plan 15 requires; what changes here is only the answer
+  // the admin is given.
+  if (forced.status !== "published") {
+    return {
+      ok: false,
+      error: `The Relay was written ${forced.status} (${forced.statusReason ?? "no reason recorded"}) and no Discord card went out. It is in the Relays manager for editing.`,
+    };
+  }
 
   return { ok: true };
 }

@@ -4,7 +4,9 @@
  * Low-level and reusable beyond The Beacon Brief. Every send applies the
  * "Beacon Relay" identity (username + our logo avatar) and a locked-down
  * allowed_mentions so only explicitly listed role ids can be pinged (never
- * @everyone, never arbitrary users). postWebhookMessage uses ?wait=true so we
+ * arbitrary users). An everyone ping is off unless the caller sets
+ * allowEveryone, which exactly one caller does: the Brief's edition post
+ * (plan section 10.1). postWebhookMessage uses ?wait=true so we
  * get the created message id back for later patching. Results are returned (never
  * thrown) and carry the HTTP status + retry-after so the queue worker can back
  * off correctly on 429.
@@ -87,6 +89,13 @@ export interface DiscordMessageInput {
   /** Role ids permitted to be mentioned (others in content are not pinged). */
   allowedRoleIds?: string[];
   /**
+   * Let an "@everyone" in the content actually ping everyone. Off by default:
+   * allowed_mentions.parse is [] so a stray "@everyone" in a source post can
+   * never fire. The Brief's edition post is the one caller that sets this,
+   * and the channel must permit the webhook to mention everyone.
+   */
+  allowEveryone?: boolean;
+  /**
    * Files uploaded with the message. When present the request is sent as
    * multipart/form-data (payload_json + files[n]); otherwise it is plain JSON.
    */
@@ -134,8 +143,12 @@ function buildBody(
     content: input.content ?? "",
     embeds: input.embeds ?? [],
     // parse: [] disables @everyone/@here and broad user/role parsing; only the
-    // explicitly listed role ids may be mentioned.
-    allowed_mentions: { parse: [], roles: input.allowedRoleIds ?? [] },
+    // explicitly listed role ids may be mentioned. parse: ["everyone"] enables @everyone AND @here; it is the
+    // one opt-in, for the Brief's edition post.
+    allowed_mentions: {
+      parse: input.allowEveryone ? ["everyone"] : [],
+      roles: input.allowedRoleIds ?? [],
+    },
   };
   // Identity can only be set on create; Discord ignores it on edit.
   if (withIdentity) {

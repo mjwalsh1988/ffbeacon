@@ -1084,6 +1084,86 @@ export type Database = {
         };
         Relationships: [];
       };
+      brief_editions: {
+        Row: {
+          article_id: string;
+          cadence: string;
+          created_at: string;
+          discord_posted_at: string | null;
+          draft_model: string | null;
+          draft_payload: Json;
+          draft_run_id: string | null;
+          draft_source: string;
+          id: string;
+          period_end: string;
+          period_start: string;
+          relay_count: number;
+          relay_ids: string[];
+          research_log: Json;
+          review_notes: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          season: string;
+          title_choice: number | null;
+          validation_report: Json;
+          week: number | null;
+        };
+        Insert: {
+          article_id: string;
+          cadence: string;
+          created_at?: string;
+          discord_posted_at?: string | null;
+          draft_model?: string | null;
+          draft_payload: Json;
+          draft_run_id?: string | null;
+          draft_source: string;
+          id?: string;
+          period_end: string;
+          period_start: string;
+          relay_count?: number;
+          relay_ids?: string[];
+          research_log?: Json;
+          review_notes?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          season: string;
+          title_choice?: number | null;
+          validation_report?: Json;
+          week?: number | null;
+        };
+        Update: {
+          article_id?: string;
+          cadence?: string;
+          created_at?: string;
+          discord_posted_at?: string | null;
+          draft_model?: string | null;
+          draft_payload?: Json;
+          draft_run_id?: string | null;
+          draft_source?: string;
+          id?: string;
+          period_end?: string;
+          period_start?: string;
+          relay_count?: number;
+          relay_ids?: string[];
+          research_log?: Json;
+          review_notes?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          season?: string;
+          title_choice?: number | null;
+          validation_report?: Json;
+          week?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "brief_editions_article_id_fkey";
+            columns: ["article_id"];
+            isOneToOne: true;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       community_leagues: {
         Row: {
           added_by: string | null;
@@ -2936,6 +3016,24 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      legacy_article_redirects: {
+        Row: {
+          article_slug: string;
+          created_at: string;
+          relay_slug: string;
+        };
+        Insert: {
+          article_slug: string;
+          created_at?: string;
+          relay_slug: string;
+        };
+        Update: {
+          article_slug?: string;
+          created_at?: string;
+          relay_slug?: string;
+        };
+        Relationships: [];
       };
       manager_pulse_cache: {
         Row: {
@@ -5057,6 +5155,173 @@ export type Database = {
           window_started_at?: string;
         };
         Relationships: [];
+      };
+      relay_players: {
+        Row: {
+          is_primary: boolean;
+          player_id: string;
+          relay_id: string;
+        };
+        Insert: {
+          is_primary?: boolean;
+          player_id: string;
+          relay_id: string;
+        };
+        Update: {
+          is_primary?: boolean;
+          player_id?: string;
+          relay_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "relay_players_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "relay_players_relay_id_fkey";
+            columns: ["relay_id"];
+            isOneToOne: false;
+            referencedRelation: "relays";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      relay_teams: {
+        Row: {
+          relay_id: string;
+          team_id: string;
+        };
+        Insert: {
+          relay_id: string;
+          team_id: string;
+        };
+        Update: {
+          relay_id?: string;
+          team_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "relay_teams_relay_id_fkey";
+            columns: ["relay_id"];
+            isOneToOne: false;
+            referencedRelation: "relays";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "relay_teams_team_id_fkey";
+            columns: ["team_id"];
+            isOneToOne: false;
+            referencedRelation: "nfl_teams";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      relays: {
+        Row: {
+          availability: string | null;
+          brief_id: string | null;
+          category_id: string | null;
+          created_at: string;
+          facts: Json;
+          follows_relay_id: string | null;
+          headline: string;
+          id: string;
+          ingestion_id: string;
+          kind: string;
+          relevance_tier: number;
+          season: string;
+          slug: string;
+          source_handle: string;
+          source_posted_at: string;
+          source_url: string;
+          status: string;
+          status_reason: string | null;
+          tags: string[];
+          timeline: string | null;
+          updated_at: string;
+          week: number | null;
+        };
+        Insert: {
+          availability?: string | null;
+          brief_id?: string | null;
+          category_id?: string | null;
+          created_at?: string;
+          facts?: Json;
+          follows_relay_id?: string | null;
+          headline: string;
+          id?: string;
+          ingestion_id: string;
+          kind: string;
+          relevance_tier: number;
+          season: string;
+          slug: string;
+          source_handle: string;
+          source_posted_at: string;
+          source_url: string;
+          status?: string;
+          status_reason?: string | null;
+          tags?: string[];
+          timeline?: string | null;
+          updated_at?: string;
+          week?: number | null;
+        };
+        Update: {
+          availability?: string | null;
+          brief_id?: string | null;
+          category_id?: string | null;
+          created_at?: string;
+          facts?: Json;
+          follows_relay_id?: string | null;
+          headline?: string;
+          id?: string;
+          ingestion_id?: string;
+          kind?: string;
+          relevance_tier?: number;
+          season?: string;
+          slug?: string;
+          source_handle?: string;
+          source_posted_at?: string;
+          source_url?: string;
+          status?: string;
+          status_reason?: string | null;
+          tags?: string[];
+          timeline?: string | null;
+          updated_at?: string;
+          week?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "relays_brief_id_fkey";
+            columns: ["brief_id"];
+            isOneToOne: false;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "relays_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "news_categories";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "relays_follows_relay_id_fkey";
+            columns: ["follows_relay_id"];
+            isOneToOne: false;
+            referencedRelation: "relays";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "relays_ingestion_id_fkey";
+            columns: ["ingestion_id"];
+            isOneToOne: true;
+            referencedRelation: "news_ingestions";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       rosters: {
         Row: {
@@ -7305,12 +7570,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7332,13 +7597,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7357,13 +7621,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7382,13 +7645,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7401,11 +7663,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

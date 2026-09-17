@@ -61,12 +61,15 @@ function summarize(text: string, max = 400): string {
 export async function GET() {
   const supabase = createCachedReadClient();
 
+  // Briefs only (article_type = 'brief'). Every report goes out on
+  // /brief/relays.xml instead; this feed is the thing a reader subscribes to.
   const { data: articles } = await supabase
     .from("articles")
     .select(
       "slug, title, tl_dr, meta_description, published_at, news_categories(name)",
     )
     .eq("status", "published")
+    .eq("article_type", "brief")
     .order("published_at", { ascending: false })
     .limit(FEED_LIMIT);
 
@@ -107,10 +110,9 @@ export async function GET() {
   <channel>
     <title>${xml(`The Beacon Brief: ${SITE.name}`)}</title>
     <link>${xml(`${SITE.url}/brief`)}</link>
-    <description>${xml("Fantasy football news that tells you what it means. Injuries, transactions, depth chart shifts, suspensions, and rookie news, with the fantasy impact spelled out.")}</description>
+    <description>${xml("The weekly Brief: the period's injuries, transactions and role changes, each checked against the numbers, with what to do about them.")}</description>
     <language>en-us</language>
     <copyright>${xml(`${SITE.name}`)}</copyright>
-    <managingEditor>${xml(SITE.author.name)}</managingEditor>
 ${lastBuild ? `    <lastBuildDate>${lastBuild}</lastBuildDate>\n` : ""}    <atom:link href="${xml(feedUrl)}" rel="self" type="application/rss+xml" />
 ${items}
   </channel>

@@ -22,6 +22,7 @@ const ORDER = [
   "bb_research_max_searches",
   "bb_research_gate_enabled",
   "bb_research_gate_min_post_chars",
+  "bb_article_write_enabled",
   "bb_autopublish",
   "bb_context_threshold",
   "bb_followup_lookback_hours",

@@ -14804,3 +14804,198 @@ AD-T014 | completed | Shared: guide section eyebrow no longer aria-hidden; check
      | files: components/guides/guide-section-header.tsx, app/guides/fantasy-football-trade-guide/trade-classroom.tsx
      | notes: The eyebrow carries "Lesson N of M" on the course-style guides, so hiding it from a screen reader hid the one thing a reader wants before the heading. Visible text is not hidden. The trade guide's checklist counter gained aria-atomic like its three siblings.
      | verified: yes. tsc clean; full vitest run passing.
+
+## Relays and Briefs (2026-09-16). Plan: docs/beacon-brief/relays-and-briefs-plan.md
+
+Phase 1, Relays
+
+BD-T001 | completed | Migration 0284: relays, relay_players, relay_teams with RLS. Verify policies.
+     | files: supabase/migrations/0284_relays.sql
+     | verified: yes. Applied via MCP; pg_policies lists the six policies; anon select returns 0 rows without error; anon insert raises insufficient_privilege (checked inside begin/rollback).
+BD-T002 | completed | Regenerate types
+     | files: lib/database.types.ts
+     | verified: yes. relays, relay_players and relay_teams present; prettier-formatted.
+BD-T003 | completed | lib/relays/types.ts
+     | files: lib/relays/types.ts
+BD-T004 | completed | lib/relays/extract.ts: schema fragment and prompt section text
+     | files: lib/relays/extract.ts
+     | notes: normalizeRelayExtraction clamps lengths rather than rejecting; withRelaySection appends the section only when the marker is absent.
+BD-T005 | completed | Migration 0285: brief_desk settings rows, bb_article_write_enabled, the RELAY append to bb_categorize_prompt
+     | files: supabase/migrations/0285_brief_desk_settings.sql, scripts/gen-brief-desk-settings-sql.ts, lib/brief-desk/settings.ts, lib/brief-desk/instructions-seed.ts
+     | notes: The migration body is generated from the code seeds so the stored prompt text is byte-identical to the fallbacks.
+     | verified: yes. Applied via MCP; 10 brief_desk rows plus bb_article_write_enabled present; the RELAY marker appears exactly once in bb_categorize_prompt (position 6911 of 9346 chars).
+BD-T006 | completed | lib/relays/week.ts with tests
+     | files: lib/relays/week.ts, lib/relays/week.test.ts, lib/relays/eastern-time.ts
+     | notes: Deviation from plan 14.1 recorded in section 22: `week` is stored for regular and post season only; pre-season posts carry week null with phase and preSeasonWeek reported by the function, so week 2 cannot mean two things in one column. Boundaries are Tuesday 9 AM Eastern, the same instant the Brief cadence closes on.
+     | verified: yes. 15 tests passing, including both DST offsets.
+BD-T007 | completed | lib/relays/render.ts with tests
+     | files: lib/relays/render.ts, lib/relays/render.test.ts
+     | verified: yes. 7 tests; the Discord text carries no link and no mention whatever the input held, and a card that cannot fit falls back to headline plus via line.
+BD-T007b | completed | lib/relays/grounding.ts with tests
+     | files: lib/relays/grounding.ts, lib/relays/grounding.test.ts
+     | verified: yes. 9 tests: money suffixes, ranges, word numbers, resolved team names, quoted posts, invented names and fact values.
+BD-T008 | completed | lib/relays/write.ts, grounding first, hidden plus moderation row on failure
+     | files: lib/relays/write.ts, lib/relays/duplicates.ts
+     | notes: writeRelay is idempotent on ingestion_id; a hidden Relay opens a failed_task moderation row with job_type relay_grounding; updateRelayText and setRelayStatus are the admin edit paths and re-run the same check. duplicates.ts supplies the Relay side of the event-key, overlap and recent-story passes so dedupe keeps working with the article path off.
+BD-T009 | completed | curate.ts: extend CATEGORIZE_SCHEMA, call writeRelay, gate article_write
+     | files: lib/beacon-brief/curate.ts, lib/beacon-brief/followup.ts, lib/beacon-brief/types.ts, lib/beacon-brief/match-resolution.ts
+     | notes: The merge gate now runs at curation time against the earlier Relay (no new information means no Relay and no card); a native edit re-classifies and folds into the earlier Relay; reference-match resolution links to relay_players / relay_teams when there is no article.
+BD-T010 | completed | settings.ts: bb_article_write_enabled, admin settings ORDER
+     | files: lib/beacon-brief/settings.ts, app/admin/beacon-brief/settings/page.tsx
+BD-T011 | completed | worker.ts: discord_post reads the Relay through render.ts, no mentions, no links
+     | files: lib/beacon-brief/worker.ts
+     | notes: A hidden or retracted Relay never posts; a retraction patch is never too old to apply; the legacy embed remains for posts from before migration 0284.
+BD-T012 | completed | deletion.ts: retract the Relay and patch the Discord text
+     | files: lib/beacon-brief/deletion.ts
+     | notes: The sweep no longer filters on article_id, so Relay-only posts stay under the deletion watch.
+BD-T013 | completed | Force push produces a Relay through the same write path
+     | files: lib/beacon-brief/curate.ts
+     | verified: yes (T009 to T013 together). tsc clean; vitest lib/beacon-brief and lib/relays: 15 files, 172 tests passing.
+BD-T014 | pending | Run the pipeline for one day with article_write off; read the logs (owner)
+
+Phase 2, Relay reader
+
+BD-T015 | completed | lib/relays/load.ts
+     | files: lib/relays/load.ts
+     | notes: Anon reads only; the permalink's retracted check is the one admin read (two columns). Sidebar keeps the article-era shape so the rail and docking bar render unchanged.
+BD-T016 | completed | components/relays/relay-card.tsx
+     | files: components/relays/relay-card.tsx
+BD-T017 | completed | Relay feed: BriefFeed now renders Relay cards, with the filter form and the pinned Brief panel
+     | files: components/beacon-brief/brief-feed.tsx, components/relays/relay-filters.tsx, components/relays/latest-brief-panel.tsx, components/beacon-brief/brief-pagination.tsx
+     | notes: Plan named a separate relay-feed.tsx; the existing BriefFeed frame was converted instead so the four filter routes did not need a second frame. Pagination keeps a query string across pages.
+BD-T018 | completed | app/brief/(feed)/page.tsx becomes the Relay feed (filters preserved: kind, week, team, player, page)
+     | files: app/brief/(feed)/page.tsx, app/brief/(feed)/category/[slug]/page.tsx, app/brief/(feed)/team/[abbr]/page.tsx, app/brief/(feed)/player/[slug]/page.tsx, app/brief/(feed)/tag/[tag]/page.tsx
+     | notes: Filtered hub URLs are noindex, follow; the bare hub stays indexable.
+BD-T019 | completed | app/brief/relay/[slug]/page.tsx with noindex and the retracted path
+     | files: app/brief/relay/[slug]/page.tsx
+     | notes: DEVIATION recorded in section 22: a retracted Relay renders the one-line "retracted" page with noindex but a 200 status, because an App Router page cannot set a 410; a true 410 would need middleware with a database read per permalink request.
+BD-T020 | completed | components/relays/relay-chain.tsx
+     | files: components/relays/relay-chain.tsx
+BD-T021 | completed | app/brief/relays.xml/route.ts; rss.xml switches to Briefs
+     | files: app/brief/relays.xml/route.ts, app/brief/rss.xml/route.ts
+BD-T022 | completed | Homepage Brief block reads the latest Brief and the four newest Relays
+     | files: lib/home-content.ts, app/page.tsx
+BD-T023 | completed | Player profile news panel reads relay_players
+     | files: components/player-profile/beacon-brief-tab.tsx, lib/player-profile.ts, components/player-profile/quick-news.tsx
+BD-T024 | completed | scripts/backfill-relays.ts (one-time), dry run first, then applied
+     | files: scripts/backfill-relays.ts, lib/relays/write.ts (assessRelay), lib/relays/grounding.ts, lib/relays/grounding.test.ts, package.json
+     | notes: Applied 2026-09-17 over 1,131 candidate posts: 643 published, 82 hidden (grounding), 194 dropped by the gates, 212 folded into their root story, 0 failed; by week: 2026 week 1 108, week 2 35, off-season 582. No Discord job was queued (asserted). The hidden list showed three false-positive patterns (sentence-initial verbs, spelled-out positions, hyphenated forms), so the grounding check gained a sentence-start stem rule, position-word licensing and hyphen splitting, with tests; a --recheck-hidden mode then re-ran the check on the 80 hidden rows and published 16, cancelling the card each publish queued. 64 stay hidden for the owner in the Relays manager.
+     | verified: yes. Dry run on 12 rows read, full run log kept in the session scratchpad, tests passing.
+BD-T024b | completed | Migration 0286: legacy_article_redirects
+     | files: supabase/migrations/0286_legacy_article_redirects.sql, lib/database.types.ts
+     | verified: yes. Applied via MCP; one service_role policy; anon and authenticated grants revoked.
+BD-T024c | completed | scripts/archive-legacy-articles.ts, lib/relays/legacy-redirect.ts, the lookup in app/brief/[slug]/page.tsx
+     | files: scripts/archive-legacy-articles.ts, lib/relays/legacy-redirect.ts, app/brief/[slug]/page.tsx, package.json
+     | notes: Applied 2026-09-17: 492 published legacy articles archived, 463 redirects recorded; 29 articles whose post the gates dropped have no Relay and now 404 (listed in the dry-run output). Nothing deleted.
+     | verified: yes. Dry run read before apply.
+
+Phase 3, the desk doors and the edition model
+
+BD-T025 | completed | Migration 0287: brief_editions and the CHECK widenings
+     | files: supabase/migrations/0287_brief_editions.sql
+     | verified: yes. Applied via MCP; one service_role policy, grants revoked; articles.status and beacon_brief_moderation.type constraints show the new values.
+BD-T026 | completed | Regenerate types
+     | files: lib/database.types.ts
+BD-T027 | completed | lib/brief-desk/settings.ts (done with BD-T005)
+     | files: lib/brief-desk/settings.ts, lib/brief-desk/instructions-seed.ts
+BD-T028 | completed | lib/brief-desk/cadence.ts with tests
+     | files: lib/brief-desk/cadence.ts, lib/brief-desk/cadence.test.ts
+     | verified: yes. 9 tests: in-season closes on the configured weekday and hour, playoffs, pre-season weeks to kickoff, biweekly and monthly off-season, unreachable Sleeper, the two overrides.
+BD-T029 | completed | lib/brief-desk/slug.ts with tests
+     | files: lib/brief-desk/slug.ts, lib/brief-desk/slug.test.ts
+BD-T030 | completed | lib/brief-desk/bundle.ts (player figures through the shared read paths only)
+     | files: lib/brief-desk/bundle.ts, lib/brief-desk/override.ts, lib/brief-desk/override.test.ts
+     | notes: Values via resolveSourceForFormat per edition format; projections and beat rate via loadAdjustedProjections (both repo guards pass); positional_war_note always null (no league context); memoised ten minutes per period; bundle.example null until docs/beacon-brief/examples/week-1-2026-brief.json exists.
+BD-T030b | completed | lib/brief-desk/datasets.ts with tests (each dataset kind in 9.2)
+     | files: lib/brief-desk/datasets.ts, lib/brief-desk/datasets.test.ts
+     | notes: waiver_targets uses no add-rate data (none exists) and says so in its source note; the injury timeline parser classifies weeks, week, season_ending, day_to_day, week_to_week, indefinite.
+BD-T030c | completed | lib/brief-desk/blocks.ts: the kind registry and per-kind option schemas, with tests
+     | files: lib/brief-desk/blocks.ts, lib/brief-desk/blocks.test.ts
+BD-T031 | completed | lib/brief-desk/auth.ts; BRIEF_DESK_TOKEN in .env.local and .env.local.example
+     | files: lib/brief-desk/auth.ts, .env.local, .env.local.example
+     | notes: OWNER: add the same BRIEF_DESK_TOKEN value to the Vercel project environment and to the cloud routine environment.
+BD-T032 | completed | app/api/brief-desk/bundle/route.ts with rate limit, log stage, and the admin-only period override
+     | files: app/api/brief-desk/bundle/route.ts
+     | notes: 200 Bundle or BundleNotDue; 400 bad override; 401; 403 override without an admin session; 429 at 10 per hour; 500 when the token is unset. Every outcome logs stage brief_desk without headers.
+BD-T033 | completed | lib/brief-desk/draft-schema.ts
+     | files: lib/brief-desk/draft-schema.ts, lib/brief-desk/types.ts
+BD-T034 | completed | lib/brief-desk/validate-draft.ts with tests
+     | files: lib/brief-desk/validate-draft.ts, lib/brief-desk/validate-draft.test.ts
+     | verified: yes. 7 tests covering every rejection in plan 9.3 and the two warning classes.
+BD-T035 | completed | app/api/brief-desk/drafts/route.ts (in_review insert, moderation row, sendBriefReadyEmail)
+     | files: app/api/brief-desk/drafts/route.ts, lib/beacon-brief/email.ts, lib/beacon-brief/worker.ts (the Brief's Discord post), lib/discord.ts (allowEveryone), lib/beacon-brief/types.ts
+     | notes: 201, 400 shape, 409 not due or already in review, 422 validation with errors and warnings. Nothing publishes and nothing pings IndexNow. The Discord edition post stamps discord_posted_at before sending so a crash cannot double-ping.
+BD-T036 | completed | lib/brief-desk/publish.ts
+     | files: lib/brief-desk/publish.ts
+     | notes: approve is the only path to published; stamps relays.brief_id, resolves the review row, busts the home tag, submits IndexNow, enqueues the Discord post when asked. Edits land on draft_payload first and content_md is re-assembled.
+
+Phase 4, moderation
+
+BD-T037 | completed | lib/brief-desk-admin-nav.ts and the nav-tree entry
+     | files: lib/brief-desk-admin-nav.ts, components/admin/brief-desk-subnav.tsx, components/admin/brief-desk-page-shell.tsx, lib/nav-tree.ts
+BD-T038 | completed | app/admin/brief-desk/page.tsx and editions list
+     | files: app/admin/brief-desk/page.tsx, app/admin/brief-desk/editions/page.tsx, lib/brief-desk/desk-activity.ts
+BD-T039 | completed | Edition review page with the validation report, research checklist, rendered draft, edit, the Post to Discord checkbox, the off-season title picker, and the actions
+     | files: app/admin/brief-desk/editions/[id]/page.tsx, components/admin/brief-desk/edition-review.tsx, app/admin/brief-desk/actions.ts, lib/brief-desk/review-ticks.ts
+     | notes: Ticks are stored as text lines in review_notes; rejection notes in the same column are preserved.
+BD-T040 | completed | Relays manager page
+     | files: app/admin/brief-desk/relays/page.tsx, components/admin/brief-desk/relays-manager.tsx, components/admin/beacon-brief/moderation-manager.tsx, app/admin/beacon-brief/moderation/page.tsx, app/admin/beacon-brief/logs/page.tsx
+     | notes: A relay_grounding moderation row links to the Relays manager instead of offering Retry.
+BD-T041 | completed | Settings page with the token-present indicator
+     | files: app/admin/brief-desk/settings/page.tsx, app/admin/brief-desk/actions.ts (updateBriefDeskSetting)
+
+Phase 5, the public Brief page and SEO
+
+BD-T042 | completed | components/brief-desk/edition-page.tsx, edition-byline.tsx, relays-covered.tsx
+     | files: components/brief-desk/edition-page.tsx, components/brief-desk/edition-byline.tsx, components/brief-desk/relays-covered.tsx, components/brief-desk/section-icons.tsx, lib/brief-desk/edition-data.ts, lib/brief-desk/edition-metadata.ts, lib/brief-desk/dataset-read.ts, lib/brief-desk/period.ts, lib/brief-desk/edition-metadata.test.ts, components/guides/guide-section-header.tsx, lib/relays/load.ts (loadRelaysByIds)
+     | notes: The page reads ONLY draft_payload and the period columns from brief_editions; research_log, validation_report and review_notes never reach it.
+BD-T042b | completed | Block library, one file per kind, and render-block.tsx
+     | files: components/brief-desk/blocks/block-shell.tsx, stat-tiles.tsx, value-movers.tsx, top-scorers.tsx, box-score-lines.tsx, injury-timeline.tsx, action-list.tsx, format-toggle.tsx, return-planner.tsx, relay-quote.tsx, callout.tsx, render-block.tsx
+BD-T043 | completed | app/brief/[slug]/page.tsx edition branch with JSON-LD (author Person by @id, jobTitle Founder)
+     | files: app/brief/[slug]/page.tsx
+BD-T044 | completed | app/brief/editions/page.tsx
+     | files: app/brief/editions/page.tsx, lib/breadcrumbs.ts
+BD-T045 | completed | OG route edition branch with the three ratios
+     | files: app/api/og/brief/[slug]/route.tsx
+BD-T046 | completed | index-quality.ts edition clause and tests; sitemap sections
+     | files: lib/beacon-brief/index-quality.ts, lib/beacon-brief/index-quality.test.ts, lib/sitemap/sections.ts, app/sitemap.xml/route.ts
+BD-T046b | completed | lib/json-ld.ts AUTHOR_ID, ORG_ID, WEBSITE_ID and the shared Person on guides, editions and the author page
+     | files: lib/json-ld.ts, lib/json-ld.test.ts, app/author/michael/page.tsx, app/guides/*/page.tsx (author object only)
+BD-T047 | completed | llms files updated: Relays and Briefs described as content, the author named, every automated-desk sentence removed
+     | files: lib/llms/context.ts, lib/llms/llms-full-txt.ts, lib/llms/llms-txt.ts, lib/llms/data.ts
+
+Phase 6, the first edition and the run
+
+BD-T048 | pending | The week 1, 2026 edition written by hand with the owner (owner session)
+BD-T048b | pending | docs/beacon-brief/examples/week-1-2026-brief.json
+BD-T049 | completed | scripts/brief-desk/prompt.md
+     | files: scripts/brief-desk/prompt.md
+BD-T049b | completed | scripts/brief-desk/draft.ps1 (local fallback)
+     | files: scripts/brief-desk/draft.ps1
+BD-T050 | pending | Create the two cloud routines (owner)
+BD-T051 | pending | First routine-drafted edition reviewed and published (owner)
+BD-T052 | pending | Three editions live; AdSense re-review (owner)
+BD-T090 | completed | Five Opus reviews: implementation, security, accessibility, performance, SEO, and their fixes
+     | files: docs/beacon-brief/reviews/implementation.md, security.md, accessibility.md, performance.md, seo.md (each finding carries a Resolution line), supabase/migrations/0288_relays_perf_indexes.sql, and the files named in those resolutions
+     | notes: Findings: implementation 1 blocker, 17 major, 44 minor; security 0, 2, 4; accessibility 0, 5, 8; SEO 2 blockers, 6 major, 7 minor; performance 0, 8, 11. Every blocker and major fixed except three left on purpose: the Terms page sentence about language-model assistance (app/terms/page.tsx, an owner decision that must agree with the personal byline), performance M5 (caching the hub needs an invalidation design) and M8 (the chain walk needs a schema change). Migration 0288 (two indexes, plus explicit anon and authenticated revokes on the three Relay tables) applied via MCP and verified.
+     | verified: yes. tsc clean; vitest 348 files, 5,236 tests passing. npm run lint cannot run: the repo has no ESLint config and next lint drops into its interactive setup (pre-existing; earlier sessions used tsc and vitest only).
+BD-T091 | completed | Session pickup after the context cut-off: the review items marked "left" that were mechanical, and the build record
+     | files: lib/relays/feed-params.ts (new), app/brief/(feed)/page.tsx, app/brief/(feed)/category/[slug]/page.tsx, app/brief/(feed)/team/[abbr]/page.tsx, app/brief/(feed)/player/[slug]/page.tsx, app/brief/(feed)/tag/[tag]/page.tsx, components/beacon-brief/brief-feed.tsx, components/relays/latest-brief-panel.tsx, app/admin/brief-desk/relays/page.tsx, lib/brief-desk/bundle.ts, lib/brief-desk/validate-draft.ts, lib/brief-desk/validate-draft.test.ts, app/brief/editions/page.tsx, app/about/page.tsx, docs/beacon-brief/relays-and-briefs-plan.md (section 22), handoff.md
+     | depends on: BD-T090
+     | notes: Verified first that nothing was cut off: tsc clean and the full suite green on the tree as left. Then: the four filter routes carry the kind and week filters (a11y m13) through one shared parser; an unrecognised ?team= or ?player= on the hub renders the empty state instead of the whole feed (impl m28); the hub title is absolute and both hub descriptions are under 155 characters (SEO m1); the inert live regions on the two result counts are gone (a11y m7); the panel's second periodLabel export is renamed (impl m30); the bundle memo key carries the value and projection sources and source_display is null rather than "this source" (impl m10, m14); the validator warns on an FAQ outside three to six (impl m44); the About page counts editions only and says nothing under five (SEO m4). Section 22 now records the modules beyond section 17, the schema details, the block placement, the rate-limit key and the items left for their own pass.
+     | verified: yes. tsc clean; vitest passing (see handoff.md for the counts).
+BD-T092 | completed | Second review pass (security, accessibility, performance, SEO) and its fixes; the implementation reviewer produced no report
+     | files: docs/beacon-brief/reviews/security-pass-2.md, accessibility-pass-2.md, performance-pass-2.md, seo-pass-2.md (each with a Resolutions section), lib/relays/load.ts, lib/relays/feed-params.ts, lib/relays/legacy-redirect.ts, lib/memo-ttl.ts, lib/beacon-brief-feed.ts, lib/sitemap/sections.ts, lib/player-profile.ts, lib/brief-desk/bundle.ts, lib/brief-desk/publish.ts, lib/brief-desk/edition-data.ts, lib/brief-desk/slug.ts, lib/llms/llms-txt.ts, lib/llms/llms-full-txt.ts, app/admin/brief-desk/actions.ts, app/admin/brief-desk/relays/page.tsx, app/admin/brief-desk/page.tsx, app/admin/brief-desk/editions/page.tsx, app/api/brief-desk/bundle/route.ts, app/api/brief-desk/drafts/route.ts, app/brief/(feed)/page.tsx and the four filter routes, app/brief/editions/page.tsx, app/brief/[slug]/page.tsx, app/brief/rss.xml/route.ts, app/author/michael/page.tsx, components/relays/relay-card.tsx, components/brief-desk/blocks/{action-list,value-movers,injury-timeline,top-scorers}.tsx, components/chart-kit.tsx, components/beacon-brief/brief-pagination.tsx, components/admin/brief-desk/{edition-review,relays-manager}.tsx, tailwind.config.ts, next.config.ts
+     | depends on: BD-T091
+     | notes: Findings: security 0 blockers, 0 major, 5 minor; accessibility 0, 4, 5; performance 0, 2, 9; SEO 0, 3, 7 (report complete on disk, the agent was cut off before handing back). Every blocker and major fixed; the ones left are listed in each report's Resolutions section. The two pass-2 majors that matter most: the player and team feeds are driven from the join tables (verified against the live project) and archived article slugs no longer redirect to a hidden Relay. The implementation reviewer was cut off by the session limit before writing anything; tsc and vitest stand in for it on this pass.
+     | verified: yes. tsc clean; full vitest run passing.
+BD-T093 | completed | Relay grid on the homepage and the hub, and the hub's grid, feed, week and calendar views
+     | files: lib/relays/calendar.ts, lib/relays/calendar.test.ts, lib/relays/feed-params.ts (view, date, month), lib/relays/load.ts (postedFrom/postedTo, loadRelayWeekCounts, loadRelaysBetween), lib/home-content.ts (six Relays), components/relays/relay-card.tsx (compact variant), components/relays/relay-grid.tsx, components/relays/view-switcher.tsx, components/relays/week-rail.tsx, components/relays/relay-calendar.tsx, components/beacon-brief/brief-feed.tsx (viewSwitcher, content, layout, paginated), app/brief/(feed)/page.tsx, app/page.tsx
+     | depends on: BD-T092
+     | notes: Owner request 2026-09-17. Compact cards clamp the headline at three lines, show two facts and two pills, and link the rest ("2 more facts on the full report"); nothing is dropped silently. The hub keeps its view in the URL (?view=grid|feed|week|calendar, ?date=, ?month=) so every view is shareable and works without JavaScript; the default view writes no param so the bare hub keeps its bare canonical, and every other view or filter is noindex, follow as before. Days are Eastern calendar days. The calendar is a real table in a focusable scroll region so no day or headline is hidden on a phone. The four filter routes take the grid by default.
+     | verified: yes. tsc clean; lib/relays tests passing (47, including five new calendar cases); grid, week, calendar and homepage rendered on the dev server at 1440 px; dev server stopped afterwards.
+BD-T094 | completed | Homepage order (guides above the Brief), calendar day links carry no filter, one-line headlines with five per day and the rest expanding in place
+     | files: app/page.tsx, components/relays/relay-calendar.tsx, components/relays/view-switcher.tsx, app/brief/(feed)/page.tsx
+     | depends on: BD-T093
+     | notes: The "N more" link opened as "no reports" because the calendar spread the address's filters into every day link: reaching the calendar from the week view carried week=2, so a day from week 1 filtered to nothing while its cell counted eight. The calendar shows the whole month, so its month and day links now carry nothing but the month or the day, and the view switcher carries only what each view applies. The day number is the link to the day's reports; "N more" is a native details disclosure that opens the rest of the day in place; headlines are one line each with the full text as the link's title.
+     | verified: yes. tsc clean; calendar, the expanded disclosure and the day view (16 reports on Sep 9) checked on the dev server; dev server stopped afterwards. The one console error is the pre-existing BookmarkBar hydration id mismatch recorded in handoff.md.

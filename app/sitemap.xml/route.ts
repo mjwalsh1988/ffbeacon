@@ -1,6 +1,6 @@
 import { SITE } from "@/lib/site";
-import { BRIEF_SEARCH_INDEXING } from "@/lib/beacon-brief/index-quality";
 import {
+  hasPublishedEditions,
   SITEMAP_SECTIONS,
   renderSitemapIndex,
   sectionLastModified,
@@ -27,13 +27,15 @@ import {
 export const revalidate = 3600;
 
 export async function GET() {
-  // While the Brief is switched out of search the articles file is an empty
-  // urlset. The sitemap schema wants at least one url in a file, and Search
-  // Console reports an empty one as an error, so the index stops pointing at it.
-  // The file itself keeps resolving, because its URL is submitted in Search
+  // The articles file carries only Brief editions (lib/sitemap/sections.ts).
+  // Until one is published it is an empty urlset, and the sitemap schema wants
+  // at least one url in a file (Search Console reports an empty one as an
+  // error), so the index points at it only once an edition exists. The file
+  // itself keeps resolving either way, because its URL is submitted in Search
   // Console and a 404 there would be a different error.
+  const editions = await hasPublishedEditions();
   const sections = SITEMAP_SECTIONS.filter(
-    (section) => section !== "articles" || BRIEF_SEARCH_INDEXING,
+    (section) => section !== "articles" || editions,
   );
   const entries = await Promise.all(
     sections.map(async (section) => ({

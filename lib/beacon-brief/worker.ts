@@ -23,6 +23,7 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { submitIndexNow } from "@/lib/indexnow";
+import { SITE } from "@/lib/site";
 import {
   deleteWebhookMessage,
   patchWebhookMessage,
@@ -57,6 +58,9 @@ import {
   type ResearchGateVerdict,
 } from "./research-gate";
 import { checkArticleVolume } from "./volume-guard";
+import { renderRetractedDiscordText } from "@/lib/relays/render";
+import type { RelayRow } from "@/lib/relays/types";
+import { loadRelayForIngestion, relayDiscordText } from "@/lib/relays/write";
 import type {
   ArticleResult,
   BeaconBriefMedia,
@@ -453,6 +457,51 @@ async function loadIngestion(
   return data ?? null;
 }
 
+/**
+ * The Relay a Discord job renders from: the one named on the payload, else the
+ * one written for the ingestion. Null for a post that predates Relays.
+ */
+async function loadRelayForJob(
+  admin: Admin,
+  payload: QueueJobPayload,
+  ingestionId: string,
+): Promise<RelayRow | null> {
+  if (typeof payload.relay_id === "string" && payload.relay_id) {
+    const { data } = await admin
+      .from("relays")
+      .select("*")
+      .eq("id", payload.relay_id)
+      .maybeSingle();
+    if (data) return data;
+  }
+  return loadRelayForIngestion(admin, ingestionId);
+}
+
+/**
+ * The Discord message for a Relay: plain content from lib/relays/render.ts
+ * (headline, facts one per line, the via line), the post's images as files,
+ * NO embed, NO link and NO mention of any kind. allowedRoleIds is empty so
+ * lib/discord.ts sends allowed_mentions with nothing parseable; this
+ * supersedes the per-category role pings for Relay cards (plan section 4.5).
+ */
+async function buildRelayDiscordMessage(
+  admin: Admin,
+  relay: RelayRow,
+  ingestion: Ingestion,
+  attachments: DiscordAttachment[],
+): Promise<DiscordMessageInput> {
+  const card = relayDiscordText(relay);
+  if (!card.discordFitted) {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `relay card exceeded Discord's limit with its facts; posted as headline plus the via line only`,
+    });
+  }
+  return { content: card.discordText, embeds: [], allowedRoleIds: [], attachments };
+}
+
 async function activeWebhookUrl(
   admin: Admin,
   settings: BeaconBriefSettings,
@@ -634,31 +683,133 @@ async function recordDiscordMessageId(
   return false;
 }
 
+/**
+ * The Brief's Discord post (plan section 10.1): the one place in the feature
+ * that mentions anyone and the one place that carries a link. Content is
+ * "@everyone", the title, the tl;dr and the page URL, each separated by a
+ * blank line; no embed, no attachments. It goes to the same webhook the
+ * Relay cards use.
+ *
+ * Idempotent through brief_editions.discord_posted_at, stamped BEFORE the
+ * send with a conditional update (only the caller that flips null to a time
+ * proceeds) and cleared again on a clean send failure so a retry can post. A
+ * crash between the send and the log leaves the stamp in place, which is the
+ * safe side: one missed log line rather than a second ping.
+ */
+async function postBriefDiscord(
+  admin: Admin,
+  payload: QueueJobPayload,
+  settings: BeaconBriefSettings,
+): Promise<{ ok: boolean; retryAfterMs?: number | null; error?: string }> {
+  const articleId = typeof payload.article_id === "string" ? payload.article_id : null;
+  if (!articleId) return { ok: false, error: "brief discord_post job carries no article_id" };
+
+  const { data: article } = await admin
+    .from("articles")
+    .select("id, slug, title, tl_dr, status")
+    .eq("id", articleId)
+    .maybeSingle();
+  if (!article) return { ok: true }; // nothing to post; treat as done
+  if (article.status !== "published") {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      message: `brief ${article.slug} is ${article.status}; no post`,
+    });
+    return { ok: true };
+  }
+  const { data: edition } = await admin
+    .from("brief_editions")
+    .select("id, discord_posted_at")
+    .eq("article_id", article.id)
+    .maybeSingle();
+  if (!edition) return { ok: false, error: `no brief_editions row for article ${article.id}` };
+  if (edition.discord_posted_at) {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      message: `brief ${article.slug} already posted to Discord; skipping`,
+    });
+    return { ok: true };
+  }
+  if (!settings.discordEnabled) {
+    await logBeaconBrief(admin, { stage: "discord_post", message: `shadow mode: brief ${article.slug} not posted` });
+    return { ok: true };
+  }
+  const url = await activeWebhookUrl(admin, settings);
+  if (!url) return { ok: false, error: "no active Discord webhook configured" };
+
+  const now = new Date().toISOString();
+  const { data: won } = await admin
+    .from("brief_editions")
+    .update({ discord_posted_at: now })
+    .eq("id", edition.id)
+    .is("discord_posted_at", null)
+    .select("id");
+  if (!won || won.length === 0) return { ok: true }; // another run got there first
+
+  const pageUrl = `${SITE.url.replace(/\/$/, "")}/brief/${article.slug}`;
+  const content = ["@everyone", article.title, article.tl_dr ?? "", pageUrl].filter(Boolean).join("\n\n");
+  const res = await postWebhookMessage(url, {
+    content,
+    embeds: [],
+    allowedRoleIds: [],
+    allowEveryone: true,
+  });
+  await logBeaconBrief(admin, {
+    stage: "discord_post",
+    level: res.ok ? "info" : "error",
+    message: res.ok ? `brief ${article.slug} posted` : `brief ${article.slug}: ${res.error}`,
+    responsePayload: res as unknown as Json,
+  });
+  if (!res.ok) {
+    await admin.from("brief_editions").update({ discord_posted_at: null }).eq("id", edition.id);
+    return { ok: false, retryAfterMs: res.retryAfterMs, error: res.error };
+  }
+  return { ok: true };
+}
+
 async function handleDiscordPost(
   admin: Admin,
   job: QueueRow,
   settings: BeaconBriefSettings,
 ): Promise<{ ok: boolean; retryAfterMs?: number | null; error?: string }> {
   const payload = job.payload as unknown as QueueJobPayload;
+  // The Brief's edition post is its own shape; the ingestion-shaped payload
+  // below stays the default (plan section 10.1).
+  if (payload.kind === "brief") return postBriefDiscord(admin, payload, settings);
   const ingestion = await loadIngestion(admin, payload.ingestion_id);
   if (!ingestion) return { ok: true }; // nothing to post; treat as done
-  const roleIds = Array.isArray(payload.role_ids)
-    ? (payload.role_ids as string[])
-    : resolvedFrom(ingestion).roleIds;
-  return postDiscordCard(admin, ingestion, roleIds, settings);
+  const relay = await loadRelayForJob(admin, payload, ingestion.id);
+  if (relay && relay.status !== "published") {
+    // Hidden by the grounding check or an admin, or retracted: never a card.
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      ingestionId: ingestion.id,
+      message: `relay is ${relay.status}; no card posted`,
+    });
+    return { ok: true };
+  }
+  const roleIds = relay
+    ? []
+    : Array.isArray(payload.role_ids)
+      ? (payload.role_ids as string[])
+      : resolvedFrom(ingestion).roleIds;
+  return postDiscordCard(admin, ingestion, roleIds, settings, relay);
 }
 
 /**
  * Send one post to Discord as a new card, with every idempotency guard.
  *
  * Split out of handleDiscordPost so the patch handler can fall back to it when the
- * card it was asked to update is too old to be worth editing.
+ * card it was asked to update is too old to be worth editing. With a Relay the
+ * card is the Relay's text; without one (a post from before migration 0284) it
+ * is the legacy embed.
  */
 async function postDiscordCard(
   admin: Admin,
   ingestion: Ingestion,
   roleIds: string[],
   settings: BeaconBriefSettings,
+  relay: RelayRow | null = null,
 ): Promise<{ ok: boolean; retryAfterMs?: number | null; error?: string }> {
   if (!settings.discordEnabled) {
     await logBeaconBrief(admin, {
@@ -713,7 +864,9 @@ async function postDiscordCard(
   const attachments = await buildMediaAttachments(ingestion);
   const res = await postWebhookMessage(
     url,
-    buildDiscordMessage(ingestion, roleIds, attachments),
+    relay
+      ? await buildRelayDiscordMessage(admin, relay, ingestion, attachments)
+      : buildDiscordMessage(ingestion, roleIds, attachments),
   );
   await logBeaconBrief(admin, {
     stage: "discord_post",
@@ -806,41 +959,84 @@ async function handleDiscordPatch(
   // Bijan Robinson's contract was folded into a three-day-old card, eight straight
   // patches landed and no reader saw any of them. Past the age limit the follow-up
   // gets a card of its own instead of a silent edit nobody will read.
+  // The Relay behind the card being edited. A retraction or a native edit names
+  // the target's own Relay; a follow-up carding on its own names the new post's.
+  const targetRelay = await loadRelayForJob(admin, payload, target.id);
+
+  // A retraction is never too old to apply: a card that says something the
+  // reporter withdrew must be corrected however long ago it was posted.
   const cardAgeMs = Date.now() - new Date(target.created_at).getTime();
   const maxCardAgeMs = settings.patchMaxAgeMinutes * 60_000;
-  if (maxCardAgeMs > 0 && cardAgeMs > maxCardAgeMs) {
+  if (!payload.retract && maxCardAgeMs > 0 && cardAgeMs > maxCardAgeMs) {
     await logBeaconBrief(admin, {
       stage: "discord_patch",
       level: "info",
       ingestionId: newIngestion.id,
       message: `target card is ${Math.round(cardAgeMs / 60_000)} minutes old (limit ${settings.patchMaxAgeMinutes}); posting a new card instead of a silent edit`,
     });
+    // A native edit of a Relay-backed card has no post of its own to card;
+    // the Relay was already corrected, so a quiet re-render is the right move.
+    if (targetRelay && newIngestion.id === target.id) {
+      return { ok: true };
+    }
+    const newRelay = await loadRelayForIngestion(admin, newIngestion.id);
     return postDiscordCard(
       admin,
       newIngestion,
-      resolvedFrom(newIngestion).roleIds,
+      newRelay ? [] : resolvedFrom(newIngestion).roleIds,
       settings,
+      newRelay,
     );
+  }
+
+  // A Relay that is not published never reaches the channel, on this path as on
+  // the post path. A native source edit re-runs the grounding check through
+  // updateRelayText, and text that fails it leaves the Relay hidden; patching
+  // the card anyway would show Discord the exact words the check rejected while
+  // the site hid them. The card is left as it was and the reason is logged.
+  if (!payload.retract && targetRelay && targetRelay.status !== "published") {
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      level: "warn",
+      ingestionId: newIngestion.id,
+      message: `relay ${targetRelay.id} is ${targetRelay.status} (${targetRelay.status_reason ?? "no reason recorded"}); the Discord card is left as it was rather than patched with text the site is not showing`,
+    });
+    return { ok: true };
   }
 
   const url = await activeWebhookUrl(admin, settings);
   if (!url) return { ok: false, error: "no active Discord webhook configured" };
 
-  // A retract patch (approved deletion) overrides the content with a notice;
-  // otherwise patch the original message id with the NEW post content.
-  const message: DiscordMessageInput = payload.retract
-    ? {
-        content:
-          "This story has been retracted. The original source post was removed.",
-        embeds: [],
-        allowedRoleIds: [],
-        attachments: [],
-      }
-    : buildDiscordMessage(
-        newIngestion,
-        resolvedFrom(target).roleIds,
-        await buildMediaAttachments(newIngestion),
-      );
+  // A retract patch (approved deletion or an admin retraction) overrides the
+  // content with a notice; otherwise patch the original message id with the
+  // current Relay text, or, for a post from before Relays, the NEW post content.
+  let message: DiscordMessageInput;
+  if (payload.retract) {
+    message = {
+      content: targetRelay
+        ? renderRetractedDiscordText({
+            headline: targetRelay.headline,
+            sourceHandle: targetRelay.source_handle,
+          })
+        : "This story has been retracted. The original source post was removed.",
+      embeds: [],
+      allowedRoleIds: [],
+      attachments: [],
+    };
+  } else if (targetRelay) {
+    message = await buildRelayDiscordMessage(
+      admin,
+      targetRelay,
+      target,
+      await buildMediaAttachments(target),
+    );
+  } else {
+    message = buildDiscordMessage(
+      newIngestion,
+      resolvedFrom(target).roleIds,
+      await buildMediaAttachments(newIngestion),
+    );
+  }
   const res = await patchWebhookMessage(
     url,
     target.discord_message_id,
@@ -1329,7 +1525,9 @@ async function handleArticleWrite(
     ingestion,
     compact,
   );
-  if (lateTarget) {
+  // A Relay-only candidate (article_id null) has no article to fold into; the
+  // Relay side of duplicate detection already ran at curation time.
+  if (lateTarget && lateTarget.article_id) {
     const r = await applyRewriteToArticle(
       admin,
       settings,

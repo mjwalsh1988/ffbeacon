@@ -91,6 +91,22 @@ describe("clearsQualityFloor", () => {
  * indexable answer again.
  */
 describe("isArticleIndexable", () => {
+  it("indexes a published Brief edition whatever the master switch says", () => {
+    expect(isArticleIndexable({ contentMd: null, hasRankedPlayer: false, articleType: "brief" })).toBe(true);
+    expect(
+      isArticleIndexable({ contentMd: SHORT_ARTICLE, hasRankedPlayer: false, articleType: "brief", status: "published" }),
+    ).toBe(true);
+  });
+
+  it("does not index an edition that is not published, and treats other types as legacy", () => {
+    expect(isArticleIndexable({ contentMd: LONG_ARTICLE, hasRankedPlayer: true, articleType: "brief", status: "in_review" })).toBe(
+      BRIEF_SEARCH_INDEXING,
+    );
+    expect(isArticleIndexable({ contentMd: LONG_ARTICLE, hasRankedPlayer: true, articleType: "injury" })).toBe(
+      BRIEF_SEARCH_INDEXING,
+    );
+  });
+
   if (!BRIEF_SEARCH_INDEXING) {
     it("holds back every article while the Brief is switched out of search", () => {
       expect(

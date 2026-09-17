@@ -2,9 +2,10 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArrowLeft, Users, Shield, Sparkles } from "lucide-react";
-import { createCachedReadClient } from "@/lib/supabase/server";
+import { createAdminClient, createCachedReadClient } from "@/lib/supabase/server";
+import { lookupLegacyArticleRedirect } from "@/lib/relays/legacy-redirect";
 import { SITE } from "@/lib/site";
 import { formatEastern } from "@/lib/datetime";
 import {
@@ -29,8 +30,25 @@ import { BriefRailSections } from "@/components/beacon-brief/brief-rail-sections
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { PreferredSourceLink } from "@/components/beacon-brief/preferred-source-link";
 import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
+import { AUTHOR_NAME, authorJsonLd, publisherJsonLd } from "@/lib/json-ld";
+import { faqPageJsonLd } from "@/components/tool-explainer";
+import { loadPublishedEdition } from "@/lib/brief-desk/edition-data";
+import { EditionPage, editionFaqItems } from "@/components/brief-desk/edition-page";
 
 type PageProps = { params: Promise<{ slug: string }> };
+
+/** The edition behind a Brief slug, memoised like getArticle for the same reason. */
+const getEdition = cache(async (slug: string) => loadPublishedEdition(slug, await getArticle(slug)));
+
+/** The three image variants Google's Article guidance asks for (plan 11.5). */
+function editionImages(slug: string) {
+  const base = `${SITE.url}/api/og/brief/${slug}`;
+  return [
+    { url: base, width: 1200, height: 630 },
+    { url: `${base}?ratio=4x3`, width: 1200, height: 900 },
+    { url: `${base}?ratio=1x1`, width: 1200, height: 1200 },
+  ];
+}
 
 /**
  * Articles are statically rendered and revalidated on a timer.
@@ -112,6 +130,44 @@ export async function generateMetadata({
     article.tlDr?.trim() ||
     `${article.title} - fantasy football news from The Beacon Brief.`;
   const ogImage = `${SITE.url}/api/og/brief/${slug}`;
+
+  // A Brief edition (plan 11.6): indexable ahead of the master switch, the
+  // person byline, and the three image ratios.
+  if (article.articleType === "brief") {
+    const indexable = isArticleIndexable({
+      contentMd: article.contentMd,
+      hasRankedPlayer: false,
+      articleType: article.articleType,
+    });
+    return {
+      title: { absolute: article.title },
+      description,
+      alternates: {
+        canonical,
+        types: { "application/rss+xml": [{ url: "/brief/rss.xml", title: "The Beacon Brief" }] },
+      },
+      robots: {
+        index: indexable,
+        follow: true,
+        googleBot: { index: indexable, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
+      },
+      openGraph: {
+        title: article.title,
+        description,
+        url: canonical,
+        siteName: SITE.name,
+        locale: "en_US",
+        type: "article",
+        publishedTime: article.publishedAt ?? undefined,
+        modifiedTime: article.lastUpdated ?? undefined,
+        authors: [AUTHOR_NAME],
+        section: "The Beacon Brief",
+        images: editionImages(slug).map((img) => ({ ...img, alt: article.title })),
+      },
+      twitter: { card: "summary_large_image", title: article.title, description, images: [ogImage] },
+    };
+  }
+
   const indexable = await getIsIndexable(slug);
 
   return {
@@ -175,10 +231,94 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * The edition branch (plan 11.1 and 11.4): the page shell, the structured
+ * data and the EditionPage. NewsArticle whenever the period is part of a
+ * football season, Article only in the off-season; the
+ * author is the Person by @id, the publisher the Organization by @id; the
+ * subjects are the players; FAQPage from the draft's FAQ; BreadcrumbList
+ * Home, The Beacon Brief, the edition. No isBasedOn, citation or contributor.
+ */
+function BriefEditionView({ slug, edition }: { slug: string; edition: Awaited<ReturnType<typeof loadPublishedEdition>> & object }) {
+  const { article } = edition;
+  const canonical = article.canonicalUrl?.trim() || `${SITE.url}/brief/${slug}`;
+  const description = article.metaDescription?.trim() || article.tlDr?.trim() || article.title;
+  const schemaHeadline = article.title.length > 110 ? `${article.title.slice(0, 107).trimEnd()}...` : article.title;
+  const faq = editionFaqItems(edition);
+  const about = article.players.map((p) => ({ "@type": "Person", name: p.name, url: `${SITE.url}/players/${p.slug}` }));
+
+  // The phase decides the type, not the week column. Cadence stores a
+  // pre-season period with week null (plan section 22), so keying on the week
+  // alone marked up an August edition, in one of the year's biggest search
+  // windows, as an off-season Article. Rows written before the phase was
+  // stored carry none, and the week column is still the best answer for those.
+  const schemaType = edition.meta.phase
+    ? edition.meta.phase === "off"
+      ? "Article"
+      : "NewsArticle"
+    : edition.week !== null
+      ? "NewsArticle"
+      : "Article";
+
+  const jsonLd: unknown[] = [
+    {
+      "@context": "https://schema.org",
+      "@type": schemaType,
+      headline: schemaHeadline,
+      description,
+      inLanguage: "en-US",
+      isAccessibleForFree: true,
+      ...(article.publishedAt ? { datePublished: article.publishedAt } : {}),
+      ...(article.lastUpdated ? { dateModified: article.lastUpdated } : {}),
+      author: authorJsonLd(),
+      publisher: publisherJsonLd(),
+      image: editionImages(slug).map((img) => ({ "@type": "ImageObject", ...img })),
+      mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
+      articleSection: "The Beacon Brief",
+      ...(about.length ? { about } : {}),
+      url: canonical,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
+        { "@type": "ListItem", position: 2, name: "The Beacon Brief", item: `${SITE.url}/brief` },
+        { "@type": "ListItem", position: 3, name: article.title, item: canonical },
+      ],
+    },
+  ];
+  if (faq.length > 0) jsonLd.push(faqPageJsonLd(faq));
+
+  return (
+    <main id="main">
+      <script type="application/ld+json" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }} />
+      <EditionPage edition={edition} />
+    </main>
+  );
+}
+
 export default async function BriefArticlePage({ params }: PageProps) {
   const { slug } = await params;
   const article = await getArticle(slug);
-  if (!article) notFound();
+  if (!article) {
+    // An archived per-post article (plan section 14.2): its slug keeps
+    // resolving, permanently, to the Relay that carries the same report.
+    const relaySlug = await lookupLegacyArticleRedirect(createAdminClient(), slug);
+    if (relaySlug) permanentRedirect(`/brief/relay/${relaySlug}`);
+    notFound();
+  }
+
+  if (article.articleType === "brief") {
+    const edition = await getEdition(slug);
+    if (edition) return <BriefEditionView slug={slug} edition={edition} />;
+    // A Brief slug with no edition row behind it is a half-written edition,
+    // not a legacy story. generateMetadata has already returned index: true
+    // for it (editions are indexable ahead of the master switch), so falling
+    // through to the layout below would publish an indexable URL built from
+    // whatever the article row happened to hold. 404 instead.
+    notFound();
+  }
 
   const supabase = createCachedReadClient();
   // The filter rail and the categories in the site rail come from the same load
@@ -388,33 +528,15 @@ export default async function BriefArticlePage({ params }: PageProps) {
               {article.title}
             </h1>
 
-            {/* Byline, then a separate disclosure line (docs/seo-audit/
-                seo-audit-and-plan.md, finding C01; the owner chose this credit on
-                2026-09-11). Articles are drafted by software, so the byline names
-                the publisher exactly as the NewsArticle schema below does (the
-                Organization as author), and the next line says
-                in words how the story was made and who stands behind the desk.
+            {/* No byline and no disclosure line here.
 
-                Two lines rather than "By FF Beacon's automated news desk": Google's
-                guidance on AI-generated content prefers an accurate byline plus a
-                separate note on how the page was made over giving the automation a
-                byline of its own, and a personal byline on text no person wrote is
-                the claim it warns against. The link has no rel="author" because
-                Michael built the desk and oversees it but did not write these
-                stories, and the schema names only the Organization. Both lines
-                are plain text in reading order directly under the headline, never
-                a tooltip, so a screen reader hears them before the story starts. */}
-            <p className="mt-3 text-xs text-ink-muted">By {SITE.name}</p>
-            <p className="mt-1 text-xs text-ink-muted">
-              This story was written by {SITE.name}&apos;s automated news desk.{" "}
-              <Link
-                href={SITE.author.bylineHref}
-                className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                {SITE.author.name}
-              </Link>{" "}
-              built the desk and oversees it.
-            </p>
+                This layout renders legacy per-post articles, every one of which
+                is archived, and the two lines it used to carry described how the
+                desk prepares material. That description appears nowhere on the
+                site (plan section 11.3). The schema below still names the
+                Organization as author, which is the accurate credit for a story
+                no person wrote, and an edition takes the branch above with its
+                own person byline. */}
 
             {showUpdated && article.lastUpdated && (
               <p className="mt-2 text-xs text-ink-subtle">

@@ -186,8 +186,12 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h2("The Beacon Brief");
   source("/brief");
   p(...BRIEF_CONTEXT);
+  // The listing is named only once it lists something; until then it is
+  // noindex and unlinked, and a count of zero is not a fact worth stating.
   p(
-    `${data.articleCount} articles are published. The feed is at ${u("/brief/rss.xml")} and an individual article is at ${u("/brief/{article-slug}")}. Articles are deliberately kept out of the search sitemap and carry a noindex tag: they are short wire-service updates written for readers who are already here, and the site does not ask search engines to rank them.`,
+    data.articleCount > 0
+      ? `${data.articleCount} ${data.articleCount === 1 ? "edition is" : "editions are"} published. Every edition is listed at ${u("/brief/editions")}, an individual edition is at ${u("/brief/{edition-slug}")}, and the editions feed is at ${u("/brief/rss.xml")}. Relays are at ${u("/brief/relay/{relay-slug}")} and as a feed at ${u("/brief/relays.xml")}; they carry a noindex tag and are not in the sitemap, because a report is written for readers who are already here. Editions are indexable and are in the sitemap.`
+      : `An individual edition is at ${u("/brief/{edition-slug}")} and the editions feed is at ${u("/brief/rss.xml")}. Relays are at ${u("/brief/relay/{relay-slug}")} and as a feed at ${u("/brief/relays.xml")}; they carry a noindex tag and are not in the sitemap, because a report is written for readers who are already here. Editions are indexable and are in the sitemap.`,
   );
 
   h3("Categories");
@@ -199,9 +203,9 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   out.push("");
 
   if (data.articles.length > 0) {
-    h3("Recent coverage index");
+    h3("Editions index");
     p(
-      `The ${data.articles.length} most recent articles of ${data.articleCount} published, newest first. Article bodies are not reproduced here: fetch the URL for the full story. Coverage of a specific player is collected on that player's profile.`,
+      `The ${data.articles.length} most recent editions of ${data.articleCount} published, newest first. Edition bodies are not reproduced here: fetch the URL for the full edition. Coverage of a specific player is collected on that player's profile.`,
     );
     for (const a of data.articles) {
       out.push(
@@ -266,8 +270,8 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h2("Editorial and authorship");
   source(SITE.author.bylineHref);
   p(
-    `${SITE.name} is built by ${SITE.author.name}, who writes every guide and is the byline on each of them. There is no other editorial staff and no sponsored content.`,
-    `Beacon Brief articles are drafted by ${SITE.name}'s automated news desk from public reporting and published under the ${SITE.name} byline, with a note on every article saying so. ${SITE.author.name} built the desk and oversees it. ${SITE.name} adds the fantasy read on top of the reporting rather than claiming the reporting.`,
+    `${SITE.name} is built by ${SITE.author.legalName}, who writes every guide and every Beacon Brief edition and is the byline on each of them. There is no other editorial staff and no sponsored content.`,
+    `A Relay is a structured report of one source post and credits that post's reporter with a link. ${SITE.name} does not claim the reporting; an edition adds the fantasy read on top of it.`,
   );
 
   /* ---------------------------------------------------------------- */

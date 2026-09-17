@@ -28,6 +28,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { getXTweetsByIds } from "@/lib/x";
+import { loadRelayForIngestion, setRelayStatus } from "@/lib/relays/write";
 import { logBeaconBrief } from "./ai";
 import { beginXCall, recordXFailure, recordXSuccess } from "./health";
 import type { BeaconBriefSettings } from "./settings";
@@ -191,11 +192,18 @@ export async function runDeletionSweep(
   // in priority order and the per-run ceiling always spends itself on the most
   // overdue posts. The row cap is an explicit bound rather than a reliance on
   // PostgREST's silent 1000-row default.
+  // Every live post, whether it became a legacy article or a Relay (migration
+  // 0284): 'published' now means the post is live on the site in either form,
+  // so the old article_id filter would have dropped every Relay from the watch.
+  // 'revised' is here for the same reason. A follow-up post that the merge gate
+  // says adds new information gets a published Relay of its own while its
+  // ingestion row is stamped 'revised', so a status filter of 'published' alone
+  // leaves a live page and a live Discord card outside the deletion watch.
+  // Before Relays a revision had no page of its own and excluding it was right.
   const { data: rows, error } = await admin
     .from("news_ingestions")
     .select("id, source_external_id, article_id, created_at, deletion_checked_at")
-    .not("article_id", "is", null)
-    .eq("status", "published")
+    .in("status", ["published", "revised"])
     .gte("created_at", cutoff)
     .order("deletion_checked_at", { ascending: true, nullsFirst: true })
     .limit(maxIds * 4);
@@ -310,17 +318,26 @@ export async function approveDeletion(
       .from("news_ingestions")
       .update({ status: "deleted" })
       .eq("id", mod.ingestion_id);
-    // Patch the original Discord message to a retracted state.
-    await admin.from("beacon_brief_queue").insert({
-      job_type: "discord_patch",
-      payload: {
-        ingestion_id: mod.ingestion_id,
-        target_ingestion_id: mod.ingestion_id,
-        retract: true,
-      } as unknown as Json,
-      status: "pending",
-      run_after: new Date().toISOString(),
-    });
+    // The Relay for this post is retracted the same way an admin retraction
+    // works (lib/relays/write.ts): out of the feed, permalink 410, excluded
+    // from the Brief bundle, and a brief_correction row when a published
+    // Brief already cites it. setRelayStatus also queues the card patch.
+    const relay = await loadRelayForIngestion(admin, mod.ingestion_id);
+    if (relay) {
+      await setRelayStatus(admin, relay.id, "retracted", "source post deleted");
+    } else {
+      // A post from before Relays: patch the legacy card to a retracted state.
+      await admin.from("beacon_brief_queue").insert({
+        job_type: "discord_patch",
+        payload: {
+          ingestion_id: mod.ingestion_id,
+          target_ingestion_id: mod.ingestion_id,
+          retract: true,
+        } as unknown as Json,
+        status: "pending",
+        run_after: new Date().toISOString(),
+      });
+    }
   }
 
   await admin

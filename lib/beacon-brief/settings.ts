@@ -42,6 +42,13 @@ export interface BeaconBriefSettings {
    */
   researchDomains: string[];
   autopublish: boolean;
+  /**
+   * The legacy per-post article path. Off since the Relay pipeline landed
+   * (migration 0285): a post still becomes a Relay and a Discord card, but no
+   * article_write job is enqueued. The worker keeps the handler so an admin can
+   * turn it back on without a deploy.
+   */
+  articleWriteEnabled: boolean;
   contextThreshold: number;
   /**
    * How far back the follow-up matcher looks for a story a new post might
@@ -171,6 +178,7 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   researchGateMinPostChars: 180,
   researchDomains: [],
   autopublish: true,
+  articleWriteEnabled: false,
   contextThreshold: 1,
   followupLookbackHours: 12,
   mergeBlockRelevanceTier: 0,
@@ -327,6 +335,10 @@ export async function loadBeaconBriefSettings(
     ),
     researchDomains: parseDomainList(map.get("bb_research_domains")),
     autopublish: asBool(map.get("bb_autopublish"), d.autopublish),
+    articleWriteEnabled: asBool(
+      map.get("bb_article_write_enabled"),
+      d.articleWriteEnabled,
+    ),
     contextThreshold: asNum(
       map.get("bb_context_threshold"),
       d.contextThreshold,

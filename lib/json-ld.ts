@@ -51,15 +51,45 @@ export function serializeJsonLd(data: unknown): string {
  * invent an endpoint that does not exist.
  */
 
+/**
+ * The three site-wide entity ids. Every page that names the Organization,
+ * the WebSite or the author refers to them by these `@id`s, so a search
+ * engine resolves the byline on every guide and every Brief edition, the
+ * founder on the Organization and the Person on the author page to ONE
+ * entity rather than four look-alikes (plan C05; docs/beacon-brief/
+ * relays-and-briefs-plan.md section 11.4).
+ */
+export const ORG_ID = `${SITE.url}/#organization`;
+export const WEBSITE_ID = `${SITE.url}/#website`;
+export const AUTHOR_ID = `${SITE.url}/author/michael#person`;
+
+/** The author's full name as the entity carries it. The visible byline on a guide may use the first name. */
+export const AUTHOR_NAME = SITE.author.legalName;
+export const AUTHOR_JOB_TITLE = "Founder";
+export const AUTHOR_URL = `${SITE.url}${SITE.author.bylineHref}`;
+
+/**
+ * The author's own profiles, from SOCIAL_LINKS. The Discord entry is an
+ * invite path (/join), not a profile of a person, so it is left out; so is
+ * anything disabled or not an absolute URL.
+ */
+export function authorSameAs(): string[] {
+  return SOCIAL_LINKS.filter((link) => !link.disabled && link.href.startsWith("http") && link.href !== "/join").map(
+    (link) => link.href,
+  );
+}
+
 export type OrganizationJsonLd = {
   "@context": "https://schema.org";
   "@type": "Organization";
+  "@id": string;
   name: string;
   url: string;
   logo: string;
   sameAs: string[];
   founder: {
     "@type": "Person";
+    "@id": string;
     name: string;
     url: string;
   };
@@ -69,6 +99,7 @@ export function organizationJsonLd(): OrganizationJsonLd {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": ORG_ID,
     name: SITE.name,
     url: SITE.url,
     logo: `${SITE.url}/img/ff-beacon-logo.png`,
@@ -77,8 +108,9 @@ export function organizationJsonLd(): OrganizationJsonLd {
     ),
     founder: {
       "@type": "Person",
-      name: SITE.author.name,
-      url: `${SITE.url}${SITE.author.bylineHref}`,
+      "@id": AUTHOR_ID,
+      name: AUTHOR_NAME,
+      url: AUTHOR_URL,
     },
   };
 }
@@ -86,16 +118,75 @@ export function organizationJsonLd(): OrganizationJsonLd {
 export type WebSiteJsonLd = {
   "@context": "https://schema.org";
   "@type": "WebSite";
+  "@id": string;
   name: string;
   url: string;
+  publisher: { "@type": "Organization"; "@id": string };
 };
 
 export function websiteJsonLd(): WebSiteJsonLd {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": WEBSITE_ID,
     name: SITE.name,
     url: SITE.url,
+    publisher: { "@type": "Organization", "@id": ORG_ID },
+  };
+}
+
+/**
+ * The author as a full Person entity: the founder, by the shared @id, with
+ * the profiles the owner has said are his. The author page emits this (plus
+ * its own description and knowsAbout); a guide or a Brief edition embeds it
+ * as `author` through authorJsonLd(), which drops the @context an embedded
+ * node does not need.
+ */
+export type PersonAuthorJsonLd = {
+  "@context": "https://schema.org";
+  "@type": "Person";
+  "@id": string;
+  name: string;
+  jobTitle: string;
+  worksFor: { "@type": "Organization"; "@id": string; name: string };
+  url: string;
+  sameAs: string[];
+};
+
+export function personAuthorJsonLd(): PersonAuthorJsonLd {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": AUTHOR_ID,
+    name: AUTHOR_NAME,
+    jobTitle: AUTHOR_JOB_TITLE,
+    worksFor: { "@type": "Organization", "@id": ORG_ID, name: SITE.name },
+    url: AUTHOR_URL,
+    sameAs: authorSameAs(),
+  };
+}
+
+/** The same Person for an `author` field inside another node. */
+export function authorJsonLd(): Omit<PersonAuthorJsonLd, "@context"> {
+  const { "@context": _context, ...person } = personAuthorJsonLd();
+  void _context;
+  return person;
+}
+
+/** The Organization for a `publisher` field: by @id, with the name and logo Google reads off an article. */
+export function publisherJsonLd(): {
+  "@type": "Organization";
+  "@id": string;
+  name: string;
+  url: string;
+  logo: { "@type": "ImageObject"; url: string };
+} {
+  return {
+    "@type": "Organization",
+    "@id": ORG_ID,
+    name: SITE.name,
+    url: SITE.url,
+    logo: { "@type": "ImageObject", url: `${SITE.url}/img/ff-beacon-logo.png` },
   };
 }
 

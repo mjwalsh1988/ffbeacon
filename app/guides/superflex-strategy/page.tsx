@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE } from "@/lib/site";
-import { serializeJsonLd } from "@/lib/json-ld";
+import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { formatEasternDate } from "@/lib/datetime";
 import { findPublishedGuide } from "@/lib/guides/published";
 import { createClient } from "@/lib/supabase/server";
@@ -236,11 +236,7 @@ export default async function SuperflexGuide({
       isAccessibleForFree: true,
       datePublished: PUBLISHED_AT,
       dateModified: UPDATED_AT,
-      author: {
-        "@type": "Person",
-        name: SITE.author.name,
-        url: `${SITE.url}${SITE.author.bylineHref}`,
-      },
+      author: authorJsonLd(),
       publisher: {
         "@type": "Organization",
         name: SITE.name,

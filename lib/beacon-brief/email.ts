@@ -354,6 +354,70 @@ export async function sendBeaconBriefRecoveryEmail(
   });
 }
 
+export interface BriefReadyInput {
+  editionId: string;
+  title: string;
+  wordCount: number;
+  warningCount: number;
+  /** "2026, week 2" or "off-season period through Jul 16, 2026". */
+  periodLabel: string;
+}
+
+/**
+ * A Brief draft landed in review (plan section 9.3). Built the way the match
+ * digest below is and sent to the same recipient: the title, the word count,
+ * how many validator warnings the owner will find, and the review link. It
+ * says nothing about who or what drafted it.
+ */
+export async function sendBriefReadyEmail(input: BriefReadyInput): Promise<void> {
+  const reviewUrl = `${EMAIL_SITE_URL}/admin/brief-desk/editions/${input.editionId}`;
+  const warnings = input.warningCount;
+  const rows = [
+    { label: "Title", value: input.title },
+    { label: "Period", value: input.periodLabel },
+    { label: "Words", value: input.wordCount.toLocaleString("en-US") },
+    { label: "Validator warnings", value: String(warnings) },
+  ];
+
+  const innerHtml = [
+    emailHeading("A Brief is ready for review"),
+    emailParagraph(
+      `A draft edition of The Beacon Brief passed validation and is waiting in review. Nothing is published until you approve it on the review page.${
+        warnings > 0 ? ` The validator left ${warnings} warning${warnings === 1 ? "" : "s"} for you to clear first.` : ""
+      }`,
+    ),
+    emailQuoteCard(rows),
+    emailButton("Open the review page", reviewUrl),
+  ].join("");
+
+  const textBody = [
+    "A draft edition of The Beacon Brief is waiting in review.",
+    "",
+    `Title: ${input.title}`,
+    `Period: ${input.periodLabel}`,
+    `Words: ${input.wordCount}`,
+    `Validator warnings: ${warnings}`,
+    "",
+    "Nothing is published until you approve it.",
+    "",
+    `Review: ${reviewUrl}`,
+  ].join("\n");
+
+  const { html, text } = buildBrandedEmail({
+    title: "Brief ready for review",
+    preheader: `${input.title} (${input.wordCount} words) is waiting for your approval.`,
+    innerHtml,
+    textBody,
+  });
+
+  await sendEmail({
+    to: BEACON_BRIEF_ALERT_TO,
+    subject: "Brief ready for review",
+    html,
+    text,
+  });
+}
+
 /** One reference (player/team) name that did not confidently auto-match. */
 export interface BeaconBriefMatchReview {
   kind: "player" | "team";

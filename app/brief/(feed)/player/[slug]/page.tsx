@@ -1,92 +1,96 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { pageShareMetadata } from "@/lib/page-og";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
-import {
-  loadFeed,
-  loadSidebar,
-  resolvePlayer,
-  articleIdsForPlayer,
-  BRIEF_PAGE_SIZE,
-} from "@/lib/beacon-brief-feed";
+import { currentNflSeason } from "@/lib/nfl-season";
+import { resolvePlayer } from "@/lib/beacon-brief-feed";
+import { loadRelayFeed, loadRelaySidebar, loadRelayWeeks, RELAY_PAGE_SIZE } from "@/lib/relays/load";
+import { feedPath, feedQuery, parseKind, parsePage, parseWeek, type FeedSearch } from "@/lib/relays/feed-params";
 import { BriefFeed } from "@/components/beacon-brief/brief-feed";
+import { RelayFilters } from "@/components/relays/relay-filters";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<FeedSearch>;
 };
 
-function parsePage(raw: string | undefined): number {
-  const n = Number.parseInt(raw ?? "1", 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
+/** This route carries kind and week; the player is the route itself. */
+const FILTER_KEYS = ["kind", "week"] as const;
+
+/**
+ * generateMetadata and the page are two calls for one request, and
+ * resolvePlayer is not memoised the way the category and team lookups are,
+ * so without this the player was read twice per view. Keyed on the slug and
+ * the client built inside, so both callers share the entry.
+ */
+const getPlayer = cache(async (slug: string) => resolvePlayer(await createClient(), slug.slice(0, 80)));
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { page } = await searchParams;
-  const supabase = await createClient();
-  const player = await resolvePlayer(supabase, slug);
+  const search = await searchParams;
+  const player = await getPlayer(slug);
   if (!player) return { title: "Player not found" };
 
-  const currentPage = parsePage(page);
-  const base = `${SITE.url}/brief/player/${slug}`;
-  const canonical = currentPage > 1 ? `${base}?page=${currentPage}` : base;
+  const base = `/brief/player/${slug}`;
   const title = `${player.name} News - The Beacon Brief`;
-  const description = `The latest fantasy football news and analysis on ${player.name} from The Beacon Brief.`;
+  const description = `Every report about ${player.name} from The Beacon Brief, newest first.`;
   return {
     title,
     description,
-    alternates: { canonical },
+    alternates: { canonical: `${SITE.url}${feedPath(base, search, FILTER_KEYS)}` },
     // The player profile (/players/[slug]) is the canonical home for this
-    // player's coverage: it carries the same articles on its Beacon Brief tab
-    // alongside value data this archive never had. follow stays true so a
-    // crawler that lands here still walks out to it.
+    // player's coverage. follow stays true so a crawler that lands here still
+    // walks out to it.
     robots: {
       index: false,
       follow: true,
       googleBot: { index: false, follow: true },
     },
-    // Filtered views of the Brief share the Brief's own card. The headline
-    // and the description below still name the filter, so the preview reads
-    // correctly even though the artwork is the section's.
-    ...pageShareMetadata({ key: "brief", title, description, path: "/brief" }),
+    // og:url is this page, not the hub.
+    ...pageShareMetadata({ key: "brief", title, description, path: base }),
   };
 }
 
 export default async function BriefPlayerPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const { page } = await searchParams;
-  const currentPage = parsePage(page);
+  const search = await searchParams;
+  const currentPage = parsePage(search.page);
+  const kind = parseKind(search.kind);
+  const week = parseWeek(search.week);
+  const season = currentNflSeason();
   const supabase = await createClient();
 
-  const player = await resolvePlayer(supabase, slug);
+  const player = await getPlayer(slug);
   if (!player) notFound();
 
-  const ids = await articleIdsForPlayer(supabase, player.id);
-  const [sidebarData, feed] = await Promise.all([
-    loadSidebar(supabase),
-    loadFeed(supabase, { kind: "ids", articleIds: ids }, currentPage),
+  const [sidebarData, feed, weeks] = await Promise.all([
+    loadRelaySidebar(supabase),
+    loadRelayFeed(supabase, { playerId: player.id, kind, week, season: week !== null ? season : null }, currentPage),
+    loadRelayWeeks(supabase, season),
   ]);
 
   const posTeam = [player.position, player.team].filter(Boolean).join(", ");
+  const base = `/brief/player/${slug}`;
 
   return (
     <BriefFeed
       eyebrow="Player coverage"
       heading={player.name}
-      description={`Every Beacon Brief article that mentions ${player.name}${posTeam ? ` (${posTeam})` : ""}, newest first.`}
+      description={`Every report that mentions ${player.name}${posTeam ? ` (${posTeam})` : ""}, newest first.`}
       breadcrumb={[
         { label: "The Beacon Brief", href: "/brief" },
         { label: player.name },
       ]}
       sidebarData={sidebarData}
       active={{ type: "player", value: slug }}
-      articles={feed.articles}
+      relays={feed.relays}
       total={feed.total}
       currentPage={currentPage}
-      pageSize={BRIEF_PAGE_SIZE}
-      basePath={`/brief/player/${slug}`}
+      pageSize={RELAY_PAGE_SIZE}
+      basePath={`${base}${feedQuery(search, FILTER_KEYS)}`}
+      filters={<RelayFilters action={base} kind={kind} week={week} weeks={weeks} />}
     />
   );
 }

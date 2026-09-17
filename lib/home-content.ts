@@ -1,31 +1,32 @@
 import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
+import {
+  loadLatestBrief,
+  loadRecentRelays,
+  type LatestBrief,
+  type RelayCardData,
+} from "@/lib/relays/load";
 
 /**
- * Cached read of the home page's three public content reads (#1 performance).
+ * Cached read of the home page's public content reads (#1 performance).
  *
  * The home page stays dynamic (the member-aware hero reads auth and a live
- * Discord call), but these three reads are public and change at most every
- * few minutes, so there is no reason to run them on every visit. unstable_cache
+ * Discord call), but these reads are public and change at most every few
+ * minutes, so there is no reason to run them on every visit. unstable_cache
  * forbids cookies()/headers(), so this reads through the cookie-less anon
- * client (createCachedReadClient); all three tables are RLS-public.
+ * client (createCachedReadClient); every table is RLS-public.
  *
- * Invalidation: the Beacon Brief worker calls revalidateTag("home") on the
- * success path when it publishes an article (see lib/beacon-brief/worker.ts),
- * so a fresh headline shows up immediately rather than waiting out the TTL.
- * The five minute revalidate is the time-based backstop for everything else
- * (format_configs, source_registry, and a missed or disabled worker run).
+ * The Brief block reads the latest published edition and the four newest
+ * Relays (docs/beacon-brief/relays-and-briefs-plan.md, section 6.5).
+ *
+ * Invalidation: approving an edition calls revalidateTag("home") (see
+ * lib/brief-desk/publish.ts), so a fresh Brief shows up immediately rather
+ * than waiting out the TTL. The five minute revalidate is the time-based
+ * backstop for the Relays, format_configs and source_registry.
  */
 
-const HOMEPAGE_ARTICLE_COUNT = 25;
-
-export type HomeArticleRow = {
-  slug: string;
-  title: string;
-  tl_dr: string | null;
-  article_type: string;
-  published_at: string | null;
-};
+/** Two rows of three on a wide screen. */
+const HOMEPAGE_RELAY_COUNT = 6;
 
 export type HomeFormatRow = {
   slug: string;
@@ -47,7 +48,8 @@ export type HomeSourceRow = {
 };
 
 export type HomeContent = {
-  articles: HomeArticleRow[];
+  latestBrief: LatestBrief | null;
+  relays: RelayCardData[];
   formats: HomeFormatRow[];
   sources: HomeSourceRow[];
 };
@@ -55,19 +57,10 @@ export type HomeContent = {
 async function fetchHomeContent(): Promise<HomeContent> {
   const supabase = createCachedReadClient();
 
-  const [{ data: articles }, { data: formats }, { data: sources }] =
+  const [latestBrief, relays, { data: formats }, { data: sources }] =
     await Promise.all([
-      // 25, not 4. The homepage is the strongest internal link source on the site,
-      // and it used to pass link equity to only 4 articles while the other ~106 sat
-      // behind pagination. The section below features the newest 4 as cards and lists
-      // the rest as headlines, so ~25 articles are one click from the homepage
-      // without the section turning into a wall.
-      supabase
-        .from("articles")
-        .select("slug, title, tl_dr, article_type, published_at")
-        .eq("status", "published")
-        .order("published_at", { ascending: false })
-        .limit(HOMEPAGE_ARTICLE_COUNT),
+      loadLatestBrief(supabase),
+      loadRecentRelays(supabase, HOMEPAGE_RELAY_COUNT),
       supabase
         .from("format_configs")
         .select("slug, display_name, league_type, scoring_type, is_superflex, te_premium_bonus")
@@ -83,7 +76,8 @@ async function fetchHomeContent(): Promise<HomeContent> {
     ]);
 
   return {
-    articles: articles ?? [],
+    latestBrief,
+    relays,
     formats: formats ?? [],
     sources: sources ?? [],
   };
@@ -94,7 +88,7 @@ async function fetchHomeContent(): Promise<HomeContent> {
  *  not on the wrapper's identity, so this is cheap and correct to call from
  *  every render. */
 export function loadHomeContent(): Promise<HomeContent> {
-  return unstable_cache(fetchHomeContent, ["home-content"], {
+  return unstable_cache(fetchHomeContent, ["home-content-v2"], {
     revalidate: 300,
     tags: ["home"],
   })();

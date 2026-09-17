@@ -15,6 +15,8 @@
  * Presentational server component.
  */
 
+import type { LucideIcon } from "lucide-react";
+
 const TONES = {
   cyan: "#22D3EE",
   purple: "#A855F7",
@@ -25,12 +27,15 @@ export function GuideSectionHeader({
   eyebrow,
   heading,
   tone = "cyan",
+  icon: Icon,
 }: {
   id: string;
   /** Optional: a section that needs no label above it simply has none. */
   eyebrow?: string;
   heading: string;
   tone?: keyof typeof TONES;
+  /** Decorative. Sits beside the eyebrow; the heading carries the meaning. */
+  icon?: LucideIcon;
 }) {
   const color = TONES[tone];
   return (
@@ -48,9 +53,10 @@ export function GuideSectionHeader({
           heading. Visible text is not hidden from a screen reader. */}
       {eyebrow && (
         <p
-          className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em]"
+          className="mt-4 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]"
           style={{ color }}
         >
+          {Icon && <Icon aria-hidden="true" className="h-3.5 w-3.5" />}
           {eyebrow}
         </p>
       )}

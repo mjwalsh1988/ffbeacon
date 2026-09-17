@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
-import { serializeJsonLd } from "@/lib/json-ld";
+import { personAuthorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import {
   BarChart3,
@@ -53,31 +53,23 @@ export const metadata: Metadata = {
 /**
  * /author/michael
  *
- * The byline page every guide on the site points at, and the page every Beacon
- * Brief article's disclosure line links to (Brief articles are credited to FF
- * Beacon, and that line names Michael as the person who built the automated news
- * desk and oversees it). That makes it the page Google
- * reads to decide whether the person behind them is a real person with real
- * standing. It carries the Person schema, the visible
- * biography that schema claims, and links to the work itself.
+ * The byline page every guide and every Brief edition points at: each carries
+ * "By Michael Walsh, founder of FF Beacon" and links here. That makes it the
+ * page Google reads to decide whether the person behind them is a real person
+ * with real standing. It carries the Person schema, the visible biography that
+ * schema claims, and links to the work itself.
  *
  * Laid out as a dashboard rather than a marketing page: a masthead, panels down
  * the main column, and a rail holding a message form and the ways to reach him.
  */
 
+// The same Person every guide and every Brief edition names as author, by the
+// shared @id (lib/json-ld.ts AUTHOR_ID), with this page's own description
+// and knowsAbout on top.
 const personSchema = {
-  "@context": "https://schema.org",
-  "@type": "Person",
-  name: "Michael",
-  jobTitle: "Founder, FF Beacon",
+  ...personAuthorJsonLd(),
   description:
     "Twenty-year fantasy football player and blind dynasty manager who plays the game stats-first.",
-  url: `${SITE.url}/author/michael`,
-  worksFor: {
-    "@type": "Organization",
-    name: SITE.name,
-    url: SITE.url,
-  },
   knowsAbout: [
     "Fantasy Football",
     "Dynasty Fantasy Football",

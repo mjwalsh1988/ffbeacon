@@ -24,7 +24,7 @@ import { SITE } from "@/lib/site";
 
 /** The blockquote directly under the H1 of /llms.txt. One dense sentence set. */
 export const SITE_SUMMARY =
-  "FF Beacon is a free fantasy football site: player values and rankings across redraft, dynasty and best ball formats, tools for trades, drafts, waivers and Sleeper league analysis, an NFL news desk called The Beacon Brief, plain-English guides, and a Discord community. Every page is built to work with a screen reader.";
+  "FF Beacon is a free fantasy football site: player values and rankings across redraft, dynasty and best ball formats, tools for trades, drafts, waivers and Sleeper league analysis, The Beacon Brief (structured NFL news reports called Relays, and a weekly written Brief by Michael Walsh), plain-English guides, and a Discord community. Every page is built to work with a screen reader.";
 
 /** The paragraphs that follow the blockquote. Short, and each says one thing. */
 export const SITE_CONTEXT: string[] = [
@@ -117,7 +117,17 @@ export const BEACON_TERMS: Array<{ term: string; definition: string }> = [
   {
     term: "The Beacon Brief",
     definition:
-      `FF Beacon's NFL news desk, written for fantasy managers. Every story leads with what the news does to a roster rather than only what happened. Stories are drafted by FF Beacon's automated news desk from public reporting and published under the FF Beacon byline, with a note on every article saying so. ${SITE.author.name} built the desk and oversees it.`,
+      "FF Beacon's fantasy football news section, in two parts: Relays, the running feed of structured reports, and Briefs, the written editions that cover each period. The hub is /brief.",
+  },
+  {
+    term: "Relay",
+    definition:
+      "One short structured report of one accepted source post: a headline, the facts as reported, the availability and timeline where the report gave them, the players and teams involved, and a credit to the original reporter with a link to the post. Relays are never rewritten into prose, are not indexed by search engines, and are published as a feed at /brief/relays.xml.",
+  },
+  {
+    term: "Brief",
+    definition:
+      `A written edition of The Beacon Brief covering one stated period (a week in season, longer in the off-season), by ${SITE.author.legalName}, founder of FF Beacon. It gathers the period's Relays, checks each against the site's own values, scores and projections, states the consequence for dynasty and for redraft, and says what to do. Every edition is listed at /brief/editions and the feed is at /brief/rss.xml.`,
   },
   {
     term: "BEAM",
@@ -131,18 +141,18 @@ export const BEACON_TERMS: Array<{ term: string; definition: string }> = [
   },
 ];
 
-/** What the news desk is for. The per-category descriptions come from the database. */
+/** What The Beacon Brief is. The per-category descriptions come from the database. */
 export const BRIEF_CONTEXT: string[] = [
-  "The Beacon Brief publishes NFL news selected for fantasy relevance. A story is written when it changes what a manager should do: an injury, a transaction, a depth chart or usage shift, a suspension, a coaching or scheme change, a notable performance, or rookie and draft news.",
-  "News with no fantasy bearing is deliberately not covered, and articles that turn out to have none are removed rather than kept for traffic.",
-  `Articles are drafted by FF Beacon's automated news desk from public reporting and published under the FF Beacon byline, with a note on every article saying so. ${SITE.author.name} built the desk and oversees it.`,
+  "The Beacon Brief covers NFL news selected for fantasy relevance: an injury, a transaction, a depth chart or usage shift, a suspension, a coaching or scheme change, a notable performance, or rookie and draft news. News with no fantasy bearing is deliberately not covered.",
+  "Relays are the running feed: one structured report per accepted source post, with the facts as reported, the players and teams, and a credit and link to the original reporter. A Relay is a report, not an article; it is never indexed by search engines and is available as a feed at /brief/relays.xml.",
+  `Briefs are the written editions, by ${SITE.author.legalName}, founder of FF Beacon. Each edition covers a stated period, checks that period's reports against the site's own values, scores and projections, states every consequence for dynasty and for redraft, and says what to do. Editions are listed at /brief/editions and published as a feed at /brief/rss.xml.`,
 ];
 
 /** Guidance for a model quoting the site. Practical, not legal. */
 export const CITATION_NOTES: string[] = [
   "Attribution is welcome. Please cite FF Beacon and link the specific page the answer came from.",
   "Player values change daily. Quote the date, the league format and the value source shown on the page rather than presenting a value as permanent.",
-  "Beacon Brief articles are drafted from public reporting. Where an article names the original reporter, credit that reporter as well as FF Beacon.",
+  `A Relay credits the reporter of the post it carries: quote it as that reporter's report, relayed by FF Beacon. Quote a Brief edition as written by ${SITE.author.legalName} for FF Beacon, with the period it covers.`,
   "Do not present a third-party value source's numbers as FF Beacon's own model, or the other way round. The site keeps them apart and so should any answer drawn from it.",
   "Anything under /leagues/, /tools/manager-pulse/<handle> or a reader's own account is generated from one person's league or Sleeper history. Those pages are not part of this corpus and should not be crawled or quoted as site content.",
 ];

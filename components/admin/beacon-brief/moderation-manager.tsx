@@ -55,6 +55,8 @@ export interface FailedTaskItem {
   articleTitle: string | null;
   articleSlug: string | null;
   post: IngestedPost | null;
+  /** For a relay_grounding row: the hidden Relay's headline, for the manager link. */
+  relayHeadline: string | null;
 }
 
 export type ModerationItem = DeletionItem | MatchItem | FailedTaskItem;
@@ -408,6 +410,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   article_write: "Write the article",
   deletion_sweep: "Re-check whether source posts were deleted",
   deletion_check: "Check whether the source post was deleted",
+  relay_grounding: "Relay failed the grounding check",
 };
 
 function jobTypeLabel(jobType: string): string {
@@ -423,11 +426,17 @@ function FailedTaskRow({
   pending: boolean;
   run: RunFn;
 }) {
+  // A Relay that failed grounding is not retried: the words are the problem,
+  // and the fix is an edit in the Relays manager, which re-runs the check.
+  const isRelayGrounding = item.jobType === "relay_grounding";
   return (
     <>
       <p className="font-medium text-ink">
         Failed task: {jobTypeLabel(item.jobType)}
       </p>
+      {isRelayGrounding && item.relayHeadline ? (
+        <p className="mt-1 text-sm text-ink">Relay: {item.relayHeadline}</p>
+      ) : null}
       {item.articleTitle && (
         <p className="mt-1 text-xs text-ink-subtle">
           Article: {item.articleTitle}
@@ -445,14 +454,23 @@ function FailedTaskRow({
           </a>
         </p>
       )}
-      <p className="mt-1 text-sm text-ink-muted">
-        This task failed on every retry attempt
-        {item.attempts !== null ? ` (${item.attempts} attempts)` : ""}. Retry
-        sends only this task back to the queue; it does not repeat any part of
-        the pipeline that already succeeded (for example, a Discord post that
-        already went out will not be posted again). Skip leaves it failed and
-        removes it from this list.
-      </p>
+      {isRelayGrounding ? (
+        <p className="mt-1 text-sm text-ink-muted">
+          The Relay was written hidden because a number or a name in it does
+          not appear in the source post. Edit its words in the Relays manager;
+          saving re-runs the check and publishes it on a pass. Skip leaves it
+          hidden and removes it from this list.
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-ink-muted">
+          This task failed on every retry attempt
+          {item.attempts !== null ? ` (${item.attempts} attempts)` : ""}. Retry
+          sends only this task back to the queue; it does not repeat any part of
+          the pipeline that already succeeded (for example, a Discord post that
+          already went out will not be posted again). Skip leaves it failed and
+          removes it from this list.
+        </p>
+      )}
       {item.error && (
         <p className="mt-1 whitespace-pre-wrap text-xs text-signal-danger">
           {item.error}
@@ -462,16 +480,25 @@ function FailedTaskRow({
         Failed {formatEastern(item.created_at)}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={pending}
-          className={btnClass}
-          onClick={() =>
-            run(() => retryModerationTask(item.id), "Task re-queued.")
-          }
-        >
-          Retry
-        </button>
+        {isRelayGrounding ? (
+          <a
+            href={`/admin/brief-desk/relays?q=${encodeURIComponent(item.relayHeadline ?? "")}&status=hidden`}
+            className={`${btnClass} inline-flex items-center`}
+          >
+            Edit and publish in the Relays manager
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled={pending}
+            className={btnClass}
+            onClick={() =>
+              run(() => retryModerationTask(item.id), "Task re-queued.")
+            }
+          >
+            Retry
+          </button>
+        )}
         <button
           type="button"
           disabled={pending}

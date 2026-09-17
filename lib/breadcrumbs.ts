@@ -34,6 +34,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/author/michael": "Michael",
   "/brief": "The Beacon Brief",
   "/brief/category": "Categories",
+  "/brief/editions": "Editions",
   "/brief/player": "Players",
   "/brief/tag": "Tags",
   "/brief/team": "Teams",

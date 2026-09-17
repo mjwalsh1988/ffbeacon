@@ -3,88 +3,99 @@ import { pageShareMetadata } from "@/lib/page-og";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
-import {
-  loadFeed,
-  loadSidebar,
-  resolveTeam,
-  articleIdsForTeam,
-  BRIEF_PAGE_SIZE,
-} from "@/lib/beacon-brief-feed";
+import { currentNflSeason } from "@/lib/nfl-season";
+import { resolveTeam } from "@/lib/beacon-brief-feed";
+import { loadRelayFeed, loadRelaySidebar, loadRelayWeeks, RELAY_PAGE_SIZE } from "@/lib/relays/load";
+import { feedPath, feedQuery, parseKind, parsePage, parseWeek, type FeedSearch } from "@/lib/relays/feed-params";
 import { BriefFeed } from "@/components/beacon-brief/brief-feed";
-import { BRIEF_SEARCH_INDEXING } from "@/lib/beacon-brief/index-quality";
+import { RelayFilters } from "@/components/relays/relay-filters";
 
 type PageProps = {
   params: Promise<{ abbr: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<FeedSearch>;
 };
 
-function parsePage(raw: string | undefined): number {
-  const n = Number.parseInt(raw ?? "1", 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
+/** This route carries kind and week; the team is the route itself. */
+const FILTER_KEYS = ["kind", "week"] as const;
+
+/**
+ * The route segment, bounded before it reaches resolveTeam, which memoises on
+ * it. Two to four letters is every NFL code; anything else is not a team and
+ * costs no read.
+ */
+function teamCode(raw: string): string | null {
+  const code = raw.slice(0, 4).toUpperCase();
+  return /^[A-Z]{2,4}$/.test(code) ? code : null;
 }
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { abbr } = await params;
-  const { page } = await searchParams;
+  const search = await searchParams;
+  const code = teamCode(abbr);
   const supabase = await createClient();
-  const team = await resolveTeam(supabase, abbr);
+  const team = code ? await resolveTeam(supabase, code) : null;
   if (!team) return { title: "Team not found" };
 
-  const currentPage = parsePage(page);
-  const base = `${SITE.url}/brief/team/${team.abbreviation}`;
-  const canonical = currentPage > 1 ? `${base}?page=${currentPage}` : base;
+  const base = `/brief/team/${team.abbreviation}`;
   const title = `${team.name} News - The Beacon Brief`;
-  const description = `The latest ${team.name} fantasy football news and analysis from The Beacon Brief.`;
+  const description = `The latest ${team.name} fantasy football reports from The Beacon Brief.`;
   return {
     title,
     description,
-    alternates: { canonical },
-    // An archive of noindexed articles is a page of links to nothing, so it follows
-    // the Brief's master switch (lib/beacon-brief/index-quality.ts). follow stays
-    // true so a crawler still walks out to the player profiles the articles link.
+    alternates: { canonical: `${SITE.url}${feedPath(base, search, FILTER_KEYS)}` },
+    // Never indexed, on this route's own terms rather than through the Brief's
+    // master switch, for the reason spelled out in the category route: this
+    // page lists Relays, and a Relay is noindex by design. follow stays true so
+    // a crawler still walks out to the player profiles the reports link.
     robots: {
-      index: BRIEF_SEARCH_INDEXING,
+      index: false,
       follow: true,
-      googleBot: { index: BRIEF_SEARCH_INDEXING, follow: true },
+      googleBot: { index: false, follow: true },
     },
-    // Filtered views of the Brief share the Brief's own card. The headline
-    // and the description below still name the filter, so the preview reads
-    // correctly even though the artwork is the section's.
-    ...pageShareMetadata({ key: "brief", title, description, path: "/brief" }),
+    // og:url is this page, not the hub.
+    ...pageShareMetadata({ key: "brief", title, description, path: base }),
   };
 }
 
 export default async function BriefTeamPage({ params, searchParams }: PageProps) {
   const { abbr } = await params;
-  const { page } = await searchParams;
-  const currentPage = parsePage(page);
+  const search = await searchParams;
+  const currentPage = parsePage(search.page);
+  const kind = parseKind(search.kind);
+  const week = parseWeek(search.week);
+  const season = currentNflSeason();
+  const code = teamCode(abbr);
+  if (!code) notFound();
   const supabase = await createClient();
 
-  const team = await resolveTeam(supabase, abbr);
+  const team = await resolveTeam(supabase, code);
   if (!team) notFound();
 
-  const ids = await articleIdsForTeam(supabase, team.id);
-  const [sidebarData, feed] = await Promise.all([
-    loadSidebar(supabase),
-    loadFeed(supabase, { kind: "ids", articleIds: ids }, currentPage),
+  const [sidebarData, feed, weeks] = await Promise.all([
+    loadRelaySidebar(supabase),
+    loadRelayFeed(supabase, { teamId: team.id, kind, week, season: week !== null ? season : null }, currentPage),
+    loadRelayWeeks(supabase, season),
   ]);
+
+  const base = `/brief/team/${team.abbreviation}`;
 
   return (
     <BriefFeed
       eyebrow="Team coverage"
       heading={team.name}
-      description={`Every Beacon Brief article about the ${team.name}, newest first.`}
+      description={`Every report about the ${team.name}, newest first.`}
       breadcrumb={[
         { label: "The Beacon Brief", href: "/brief" },
         { label: team.name },
       ]}
       sidebarData={sidebarData}
       active={{ type: "team", value: team.abbreviation }}
-      articles={feed.articles}
+      relays={feed.relays}
       total={feed.total}
       currentPage={currentPage}
-      pageSize={BRIEF_PAGE_SIZE}
-      basePath={`/brief/team/${team.abbreviation}`}
+      pageSize={RELAY_PAGE_SIZE}
+      basePath={`${base}${feedQuery(search, FILTER_KEYS)}`}
+      filters={<RelayFilters action={base} kind={kind} week={week} weeks={weeks} />}
     />
   );
 }

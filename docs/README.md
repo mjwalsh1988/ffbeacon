@@ -14,6 +14,7 @@ columns.
 
 | Folder | File | What it is | Status | Cited as |
 | --- | --- | --- | --- | --- |
+| beacon-brief | relays-and-briefs-plan.md | 2026-09-16 plan: stop rewriting every post into an article, keep posts as structured Relays, write one indexed Brief per period from them | Built 2026-09-16 (phases 1 to 5 and the run scripts); the week 1 edition, the cloud routines and the AdSense re-review wait on the owner | new |
 | seo-audit | seo-audit-and-plan.md | 2026-09-11 full SEO and answer-engine audit, with Search Console data and the implementation plan to grow organic traffic | Step 1 (Quick fixes) and the five owner decisions built 2026-09-11, not yet committed; continue at step 2 | new |
 | beacon-link | beacon-link-plan.md | 2026-09-05 plan (revised 2026-09-07) to link a reader's Sleeper account and act on it across the tools and inside League Pulse | Not started | docs/beacon-link/beacon-link-plan.md |
 | league-providers | league-providers-and-yahoo-plan.md | Yahoo beside Sleeper, through a provider layer | Not started | docs/league-providers/league-providers-and-yahoo-plan.md |

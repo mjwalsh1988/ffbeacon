@@ -19,6 +19,7 @@ const STAGES = [
   "discord_post",
   "discord_patch",
   "deletion_check",
+  "brief_desk",
   "error",
 ];
 const LEVELS = ["info", "warn", "error"];

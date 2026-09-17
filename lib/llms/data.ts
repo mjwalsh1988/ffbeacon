@@ -99,13 +99,15 @@ export async function loadLlmsData(articleLimit: number): Promise<LlmsData> {
             .from("articles")
             .select("slug, title, tl_dr, meta_description, published_at")
             .eq("status", "published")
+            .eq("article_type", "brief")
             .order("published_at", { ascending: false })
             .limit(articleLimit)
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from("articles")
         .select("id", { count: "exact", head: true })
-        .eq("status", "published"),
+        .eq("status", "published")
+        .eq("article_type", "brief"),
     ]);
 
   // A FAILED READ IS NEVER EVIDENCE ABOUT THE SITE.

@@ -110,7 +110,20 @@ type ArticleQualityInput = {
   contentMd: string | null | undefined;
   /** True when at least one player on the article is ranked inside the window. */
   hasRankedPlayer: boolean;
+  /**
+   * articles.article_type. A published Brief edition ('brief') is indexable
+   * ahead of the master switch: it is a long, person-written, reviewed page,
+   * the case the switch was never about (plan section 11.6).
+   */
+  articleType?: string | null;
+  /** articles.status. Defaults to published, which is all the callers pass. */
+  status?: string | null;
 };
+
+/** A published Brief edition, which the master switch does not govern. */
+export function isPublishedEdition(input: Pick<ArticleQualityInput, "articleType" | "status">): boolean {
+  return input.articleType === "brief" && (input.status ?? "published") === "published";
+}
 
 /**
  * The quality floor on its own: would this article be worth indexing if the Brief
@@ -131,6 +144,7 @@ export function clearsQualityFloor(input: ArticleQualityInput): boolean {
  * always no.
  */
 export function isArticleIndexable(input: ArticleQualityInput): boolean {
+  if (isPublishedEdition(input)) return true;
   if (!BRIEF_SEARCH_INDEXING) return false;
   return clearsQualityFloor(input);
 }

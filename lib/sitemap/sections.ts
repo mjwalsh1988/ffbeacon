@@ -53,22 +53,23 @@
  *   /brief/tag/[tag]                  Hundreds of thin filter pages. They stay
  *                       crawlable through in-page links, but advertising them would
  *                       spend crawl budget that belongs to articles and profiles.
- *   Thin Brief articles See rule 1 above.
- *   ALL Brief articles, and the category and team archives, while
- *                       BRIEF_SEARCH_INDEXING is false (lib/beacon-brief/
- *                       index-quality.ts, "THE MASTER SWITCH"). The articles file
- *                       is then an empty urlset rather than a missing one.
+ *   /brief/category/[slug] and /brief/team/[abbr]   Both render Relays, which are
+ *                       noindex by design, and both routes now set noindex on
+ *                       their own terms rather than following the Brief's master
+ *                       switch. Listing a thin archive of pages nobody may index
+ *                       would break rule 1 twice over.
+ *   Legacy Brief articles and Relays. The articles file carries Brief EDITIONS
+ *                       only (article_type 'brief'), which are indexable by type
+ *                       ahead of the master switch. Relays are never indexed.
+ *   /brief/editions     While no edition is published. The page sets noindex for
+ *                       the same reason, from the same read (hasPublishedEditions).
  */
 
 import { createAdminClient } from "@/lib/supabase/server";
+import { memoTtl } from "@/lib/memo-ttl";
 import { SITE } from "@/lib/site";
 import { PUBLISHED_GUIDES } from "@/lib/guides/published";
 import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
-import {
-  BRIEF_SEARCH_INDEXING,
-  countArticleWords,
-  THIN_ARTICLE_WORDS,
-} from "@/lib/beacon-brief/index-quality";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -103,15 +104,6 @@ export function sectionPath(section: SitemapSection): string {
  * 11k rows across the relevance window).
  */
 const DB_PAGE_SIZE = 1000;
-
-/**
- * How many ids to put in one `.in()` filter.
- *
- * PostgREST puts the whole list in the query string, and a few hundred UUIDs builds a
- * URL long enough to be rejected outright with "Bad Request". That failure is silent
- * in the worst way: the query returns nothing and the caller reads it as "no rows".
- */
-const ID_BATCH_SIZE = 50;
 
 /** Core public pages that are not data-driven. */
 const STATIC_PATHS: Array<{ path: string; priority: number }> = [
@@ -148,13 +140,6 @@ function newest(values: Array<string | null | undefined>): Date | undefined {
   return best === null ? undefined : new Date(best);
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size)
-    out.push(items.slice(i, i + size));
-  return out;
-}
-
 /* ------------------------------------------------------------------ */
 /* Shared reads                                                        */
 /* ------------------------------------------------------------------ */
@@ -162,21 +147,11 @@ function chunk<T>(items: T[], size: number): T[][] {
 type ArticleRow = {
   id: string;
   slug: string;
-  content_md: string | null;
+  article_type: string;
   last_updated: string | null;
   published_at: string | null;
   category_id: string | null;
 };
-
-async function publishedArticles(supabase: Admin): Promise<ArticleRow[]> {
-  const { data } = await supabase
-    .from("articles")
-    .select("id, slug, content_md, last_updated, published_at, category_id")
-    .eq("status", "published")
-    .order("published_at", { ascending: false })
-    .limit(5000);
-  return (data ?? []) as ArticleRow[];
-}
 
 const articleChangedAt = (a: {
   last_updated: string | null;
@@ -184,48 +159,50 @@ const articleChangedAt = (a: {
 }) => newest([a.last_updated, a.published_at]);
 
 /**
- * Which of these articles cover at least one currently ranked player.
- *
- * Only ever asked about the thin ones, because that is the only case where the answer
- * changes anything, which keeps both the article_players read and the rankings read
- * small enough to batch.
+ * Published Brief editions (article_type 'brief'), newest first. The one kind
+ * of article the sitemap advertises: person-written, reviewed and indexable
+ * ahead of the master switch (lib/beacon-brief/index-quality.ts).
  */
-async function articlesWithRankedPlayer(
-  supabase: Admin,
-  articleIds: string[],
-): Promise<Set<string>> {
-  const withRanked = new Set<string>();
-  if (articleIds.length === 0) return withRanked;
-
-  const links: Array<{ article_id: string; player_id: string }> = [];
-  for (const batch of chunk(articleIds, ID_BATCH_SIZE)) {
-    const { data } = await supabase
-      .from("article_players")
-      .select("article_id, player_id")
-      .in("article_id", batch);
-    links.push(...((data ?? []) as typeof links));
-  }
-  if (links.length === 0) return withRanked;
-
-  const cutoff = new Date(
-    Date.now() - RELEVANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-  ).toISOString();
-  const playerIds = [...new Set(links.map((l) => l.player_id))];
-  const ranked = new Set<string>();
-  for (const batch of chunk(playerIds, ID_BATCH_SIZE)) {
-    const { data } = await supabase
-      .from("rankings")
-      .select("player_id")
-      .in("player_id", batch)
-      .gte("generated_at", cutoff);
-    for (const row of data ?? []) ranked.add(row.player_id);
-  }
-
-  for (const link of links) {
-    if (ranked.has(link.player_id)) withRanked.add(link.article_id);
-  }
-  return withRanked;
+async function publishedEditions(supabase: Admin): Promise<ArticleRow[]> {
+  const { data } = await supabase
+    .from("articles")
+    .select("id, slug, article_type, last_updated, published_at, category_id")
+    .eq("status", "published")
+    .eq("article_type", "brief")
+    .order("published_at", { ascending: false })
+    .limit(5000);
+  return (data ?? []) as ArticleRow[];
 }
+
+/**
+ * Whether a single Brief edition is published yet.
+ *
+ * Three decisions read this one question and have to give the same answer:
+ * whether the index points at the articles file, whether the core file lists
+ * /brief/editions, and whether that page is indexable at all (its
+ * generateMetadata calls this directly). A sitemap entry pointing at a noindex
+ * page is what teaches Google to stop trusting the file, so this is the only
+ * place the question is asked.
+ */
+export async function hasPublishedEditions(
+  supabase: Admin = createAdminClient(),
+): Promise<boolean> {
+  // Memoised for a minute: the hub asks this on every request, and the answer
+  // changes only when an edition is approved, which busts it below. The count
+  // is public data (the anon policy shows published rows), so the shared
+  // entry is the same answer for every reader.
+  return memoTtl(HAS_EDITIONS_MEMO_KEY, 60_000, async () => {
+    const { count } = await supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .eq("article_type", "brief");
+    return (count ?? 0) > 0;
+  });
+}
+
+/** Busted by lib/brief-desk/publish.ts when an edition is published. */
+export const HAS_EDITIONS_MEMO_KEY = "ref:brief:has-editions";
 
 /**
  * Slugs of every player appearing in `rankings` inside the relevance window.
@@ -269,57 +246,80 @@ async function rankedPlayerSlugs(supabase: Admin): Promise<string[]> {
 /* ------------------------------------------------------------------ */
 
 /**
- * Home, rankings, tools, guides, and the Brief's own index and filter pages.
+ * Home, rankings, tools, guides, the Brief hub and its editions listing.
  *
  * Small, slow-moving, and the pages that should be crawled first. Keeping them in
  * their own file means a crawl budget spent on 800 player profiles cannot bury them.
  */
 async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
-  const [
-    { data: categories },
-    { data: articleTeams },
-    { data: teams },
-    { data: rankingFormats },
-    { data: latestRanking },
-  ] = await Promise.all([
-    supabase.from("news_categories").select("id, slug").eq("is_active", true),
-    supabase.from("article_teams").select("article_id, team_id"),
-    supabase.from("nfl_teams").select("id, abbreviation"),
-    supabase
-      .from("format_configs")
-      .select("slug")
-      .eq("is_active", true)
-      .order("display_order"),
-    // One timestamp for the whole ranked set. Values are regenerated in batches, so
-    // the newest generated_at is when a player profile's numbers last moved.
-    supabase
-      .from("rankings")
-      .select("generated_at")
-      .order("generated_at", { ascending: false })
-      .limit(1),
-  ]);
+  const [{ data: rankingFormats }, { data: latestRanking }, { data: newestRelay }] =
+    await Promise.all([
+      supabase
+        .from("format_configs")
+        .select("slug")
+        .eq("is_active", true)
+        .order("display_order"),
+      // One timestamp for the whole ranked set. Values are regenerated in batches, so
+      // the newest generated_at is when a player profile's numbers last moved.
+      supabase
+        .from("rankings")
+        .select("generated_at")
+        .order("generated_at", { ascending: false })
+        .limit(1),
+      // The hub renders Relays, so the newest Relay is when the hub last changed.
+      supabase
+        .from("relays")
+        .select("source_posted_at")
+        .eq("status", "published")
+        .order("source_posted_at", { ascending: false })
+        .limit(1),
+    ]);
 
-  const articles = await publishedArticles(supabase);
-  const newestArticleAt = newest(
-    articles.flatMap((a) => [a.last_updated, a.published_at]),
-  );
+  // The same filter hasPublishedEditions() counts, so the file and the page
+  // cannot disagree about whether /brief/editions is a page worth listing.
+  const editions = await publishedEditions(supabase);
+  const editionStamps = editions.flatMap((a) => [a.last_updated, a.published_at]);
+  const relayStamp = newestRelay?.[0]?.source_posted_at ?? null;
+  const newestEditionAt = newest(editionStamps);
+  const newestRelayAt = newest([relayStamp]);
   const rankingsUpdatedAt = newest([latestRanking?.[0]?.generated_at]);
 
   const urls: SitemapUrl[] = [
-    // The homepage surfaces the latest Beacon Brief coverage, so the newest article's
-    // timestamp is a real answer for when it last changed.
-    { loc: `${SITE.url}/`, lastModified: newestArticleAt, priority: 1 },
-    // The hub. No lastmod: since 2026-09-11 it is a directory of the format boards
-    // (owner decision, plan finding D04), and its content no longer changes when
-    // the nightly rankings rebuild does. A date that moved every night without the
-    // page changing would teach Google to ignore this file's dates.
+    // The homepage carries both the Relay feed and the latest edition, so it
+    // takes whichever of the two moved last.
+    {
+      loc: `${SITE.url}/`,
+      lastModified: newest([relayStamp, ...editionStamps]),
+      priority: 1,
+    },
+    // The rankings hub. No lastmod: since 2026-09-11 it is a directory of the format
+    // boards (owner decision, plan finding D04), and its content no longer changes
+    // when the nightly rankings rebuild does. A date that moved every night without
+    // the page changing would teach Google to ignore this file's dates.
     { loc: `${SITE.url}/rankings`, priority: 0.9 },
-    { loc: `${SITE.url}/brief`, lastModified: newestArticleAt, priority: 0.7 },
+    // The Brief hub, dated from Relays rather than from articles. It has rendered
+    // the Relay feed since BD-T018 and changes several times a day, while the
+    // article-derived date it used to carry was absent entirely (no published
+    // articles) and would later have frozen on the day an edition was approved.
+    // Rule 2: a lastmod is true or it is absent.
+    { loc: `${SITE.url}/brief`, lastModified: newestRelayAt, priority: 0.7 },
     ...STATIC_PATHS.map(({ path, priority }) => ({
       loc: `${SITE.url}${path}`,
       priority,
     })),
   ];
+
+  // Every published Brief edition by season and week (plan 11.1), dated from
+  // the newest edition, which is the only thing that moves it. Listed only once
+  // there is an edition to list: until then the page itself sets noindex, from
+  // this same predicate, and rule 1 forbids advertising a noindex URL.
+  if (editions.length > 0) {
+    urls.push({
+      loc: `${SITE.url}/brief/editions`,
+      lastModified: newestEditionAt,
+      priority: 0.7,
+    });
+  }
 
   // Guides. Both the index and each guide carry a genuine lastModified, taken from the
   // hand-maintained dates in lib/guides/published.ts rather than the build clock.
@@ -349,96 +349,37 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
     });
   }
 
-  // While the Brief is switched out of search (lib/beacon-brief/index-quality.ts,
-  // "THE MASTER SWITCH") the category and team archives set noindex, so listing them
-  // here would break rule 1. The /brief hub above stays: it is the one Brief page
-  // that remains indexable.
-  if (!BRIEF_SEARCH_INDEXING) return urls;
-
-  // Category filter pages, but only the ones that lead somewhere. A category with no
-  // published articles renders "Nothing here yet".
-  const byCategory = new Map<string, ArticleRow[]>();
-  for (const a of articles) {
-    if (!a.category_id) continue;
-    const list = byCategory.get(a.category_id) ?? [];
-    list.push(a);
-    byCategory.set(a.category_id, list);
-  }
-  for (const category of categories ?? []) {
-    const inCategory = byCategory.get(category.id);
-    if (!inCategory || inCategory.length === 0) continue;
-    urls.push({
-      loc: `${SITE.url}/brief/category/${category.slug}`,
-      lastModified: newest(
-        inCategory.flatMap((a) => [a.last_updated, a.published_at]),
-      ),
-      priority: 0.5,
-    });
-  }
-
-  // Team filter pages, same rule: only teams we have actually covered. These are real
-  // editorial collections ("everything on the Bills") and they are bounded at 32.
-  const publishedIds = new Set(articles.map((a) => a.id));
-  const articleById = new Map(articles.map((a) => [a.id, a]));
-  const byTeam = new Map<string, ArticleRow[]>();
-  for (const row of articleTeams ?? []) {
-    if (!publishedIds.has(row.article_id)) continue;
-    const article = articleById.get(row.article_id);
-    if (!article) continue;
-    const list = byTeam.get(row.team_id) ?? [];
-    list.push(article);
-    byTeam.set(row.team_id, list);
-  }
-  for (const team of teams ?? []) {
-    const covered = byTeam.get(team.id);
-    if (!covered || covered.length === 0) continue;
-    urls.push({
-      loc: `${SITE.url}/brief/team/${team.abbreviation}`,
-      lastModified: newest(
-        covered.flatMap((a) => [a.last_updated, a.published_at]),
-      ),
-      priority: 0.4,
-    });
-  }
-
+  // The category and team archives are deliberately absent, and the blocks that
+  // used to build them are gone rather than switched off.
+  //
+  // They were listed whenever BRIEF_SEARCH_INDEXING was true, and their URLs and
+  // their dates were both computed from PUBLISHED ARTICLES. Those routes have
+  // rendered Relays since BD-T018 and every legacy article is archived, so the
+  // blocks would have published about 40 thin archive pages carrying lastmod
+  // values describing content nobody can reach, on one boolean nobody would
+  // connect to this file. Both routes now set noindex on their own terms.
+  // Making them indexable again is a separate decision that needs its own
+  // Relay-count rule and its own lastmod source.
   return urls;
 }
 
 /**
- * Beacon Brief articles that clear the quality floor.
+ * Beacon Brief editions, and only editions.
  *
- * The filter is the reason this section exists separately: it is the bucket whose
- * indexed rate is in question, and it is the bucket where a bad page costs the most.
+ * Legacy per-post articles and Relays are never listed, whatever the master
+ * switch says: an edition is the one Brief page that is indexable by its
+ * type (lib/beacon-brief/index-quality.ts isPublishedEdition), and the page
+ * applies the same rule to itself, so the file and the page cannot disagree.
+ * Until the first edition is published the file is an empty urlset and the
+ * index does not point at it (app/sitemap.xml/route.ts).
  */
 async function articlesSection(supabase: Admin): Promise<SitemapUrl[]> {
-  // Every article page answers noindex while the switch is off, so the file is
-  // empty rather than removed: the URL is submitted in Search Console and must keep
-  // resolving, and an empty urlset is the truthful description of the section.
-  if (!BRIEF_SEARCH_INDEXING) return [];
-
-  const articles = await publishedArticles(supabase);
-
-  const thinIds = new Set(
-    articles
-      .filter((a) => countArticleWords(a.content_md) < THIN_ARTICLE_WORDS)
-      .map((a) => a.id),
-  );
-  const rescued = await articlesWithRankedPlayer(supabase, [...thinIds]);
-
-  const dropped = [...thinIds].filter((id) => !rescued.has(id)).length;
-  if (dropped > 0) {
-    console.log(
-      `[sitemap] ${dropped} thin article(s) held back from the index of ${articles.length}`,
-    );
-  }
-
-  return articles
-    .filter((a) => !thinIds.has(a.id) || rescued.has(a.id))
-    .map((a) => ({
-      loc: `${SITE.url}/brief/${a.slug}`,
-      lastModified: articleChangedAt(a),
-      priority: 0.6,
-    }));
+  const editions = await publishedEditions(supabase);
+  return editions.map((a) => ({
+    loc: `${SITE.url}/brief/${a.slug}`,
+    lastModified: articleChangedAt(a),
+    priority: 0.7,
+  }));
 }
 
 /**
@@ -508,12 +449,18 @@ export async function loadSitemapSection(
 export async function sectionLastModified(
   section: SitemapSection,
 ): Promise<Date | undefined> {
-  // An empty articles file never changes, so it carries no date. A lastmod that
-  // moved with every article on a file whose contents stayed the same is the
-  // unreliable-lastmod failure rule 2 at the top of this file describes.
-  if (section === "articles" && !BRIEF_SEARCH_INDEXING) return undefined;
-
   const supabase = createAdminClient();
+  // The articles file holds only editions, so its date is the newest edition's.
+  if (section === "articles") {
+    const { data } = await supabase
+      .from("articles")
+      .select("last_updated, published_at")
+      .eq("status", "published")
+      .eq("article_type", "brief")
+      .order("published_at", { ascending: false })
+      .limit(1);
+    return newest([data?.[0]?.last_updated, data?.[0]?.published_at]);
+  }
   if (section === "players") {
     const { data } = await supabase
       .from("rankings")
@@ -533,26 +480,34 @@ export async function sectionLastModified(
       .limit(1);
     return newest([data?.[0]?.updated_at]);
   }
-  // Core and articles both move when an article does. Core also moves when the
-  // rankings batch lands, so it takes the newer of the two.
-  const [{ data: article }, { data: ranking }] = await Promise.all([
+  // Core moves when a Relay lands (the /brief hub and the homepage both render
+  // the feed), when an edition is published or revised, and when the rankings
+  // batch lands. It takes the newest of the three. The Relay read is the one
+  // that matters day to day, and it is the one this used to be missing.
+  const [{ data: relay }, { data: edition }, { data: ranking }] = await Promise.all([
+    supabase
+      .from("relays")
+      .select("source_posted_at")
+      .eq("status", "published")
+      .order("source_posted_at", { ascending: false })
+      .limit(1),
     supabase
       .from("articles")
       .select("last_updated, published_at")
       .eq("status", "published")
+      .eq("article_type", "brief")
       .order("published_at", { ascending: false })
       .limit(1),
-    section === "core"
-      ? supabase
-          .from("rankings")
-          .select("generated_at")
-          .order("generated_at", { ascending: false })
-          .limit(1)
-      : Promise.resolve({ data: null }),
+    supabase
+      .from("rankings")
+      .select("generated_at")
+      .order("generated_at", { ascending: false })
+      .limit(1),
   ]);
   return newest([
-    article?.[0]?.last_updated,
-    article?.[0]?.published_at,
+    relay?.[0]?.source_posted_at,
+    edition?.[0]?.last_updated,
+    edition?.[0]?.published_at,
     (ranking as { generated_at: string | null }[] | null)?.[0]?.generated_at,
   ]);
 }

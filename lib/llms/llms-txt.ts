@@ -128,7 +128,7 @@ export function buildLlmsTxt(data: LlmsData): string {
     link(
       "Full machine-readable context",
       u("/llms-full.txt"),
-      "The comprehensive FF Beacon corpus in markdown: product detail, the value and format model, the full fantasy football glossary, and an index of the news desk",
+      "The comprehensive FF Beacon corpus in markdown: product detail, the value and format model, the full fantasy football glossary, and an index of Beacon Brief editions",
     ),
   ]);
 
@@ -175,8 +175,20 @@ export function buildLlmsTxt(data: LlmsData): string {
     link(
       "The Beacon Brief",
       u("/brief"),
-      `NFL news written for fantasy managers, with the roster impact stated plainly. ${data.articleCount} articles published so far`,
+      "The running feed of Relays, structured reports of each accepted source post with the original reporter credited, and the latest written Brief",
     ),
+    // Only once an edition exists: the listing is noindex and unlinked until
+    // then, and "0 published so far" is the under-construction line the
+    // sitemap and the hub already refuse to carry.
+    ...(data.articleCount > 0
+      ? [
+          link(
+            "Every Brief edition",
+            u("/brief/editions"),
+            `Every written edition by season and week, by ${SITE.author.legalName}, each checking a period's reports against the numbers. ${data.articleCount} published so far`,
+          ),
+        ]
+      : []),
     ...data.categories.map((c) =>
       link(
         `${c.name} coverage`,
@@ -185,9 +197,14 @@ export function buildLlmsTxt(data: LlmsData): string {
       ),
     ),
     link(
-      "Beacon Brief RSS feed",
+      "Beacon Brief editions feed",
       u("/brief/rss.xml"),
-      "The news desk as a machine-readable feed, newest first",
+      "The written editions as a machine-readable feed, newest first",
+    ),
+    link(
+      "Relay feed",
+      u("/brief/relays.xml"),
+      "Every Relay as a machine-readable feed, newest first, each crediting its original reporter",
     ),
   ]);
 
@@ -205,9 +222,9 @@ export function buildLlmsTxt(data: LlmsData): string {
       "The mission, the product, the accessibility rules, where the data comes from, and how the site is funded",
     ),
     link(
-      SITE.author.name,
+      SITE.author.legalName,
       u(SITE.author.bylineHref),
-      "The person who builds FF Beacon, writes its guides, and oversees the automated news desk that drafts the Beacon Brief",
+      "The founder, who builds FF Beacon and writes its guides and every Beacon Brief edition",
     ),
     link(
       "Support FF Beacon",
@@ -230,7 +247,7 @@ export function buildLlmsTxt(data: LlmsData): string {
     link(
       "Sitemap index",
       u("/sitemap.xml"),
-      "Every indexable URL, split into core pages, player profiles and public profiles; Beacon Brief articles are deliberately kept out of it",
+      "Every indexable URL, split into core pages, Beacon Brief editions, player profiles and public profiles; Relays are deliberately kept out of it",
     ),
     link(
       "robots.txt",

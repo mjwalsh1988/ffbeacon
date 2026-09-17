@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { SITE, SOCIAL_LINKS } from "@/lib/site";
 import {
+  AUTHOR_ID,
+  ORG_ID,
+  authorJsonLd,
   itemListJsonLd,
   organizationJsonLd,
+  personAuthorJsonLd,
   personJsonLd,
   serializeJsonLd,
   websiteJsonLd,
@@ -43,6 +47,34 @@ describe("organizationJsonLd", () => {
     const org = organizationJsonLd();
     const expectedCount = SOCIAL_LINKS.filter((link) => !link.disabled).length;
     expect(org.sameAs).toHaveLength(expectedCount);
+  });
+});
+
+describe("personAuthorJsonLd", () => {
+  it("is the founder by the shared @id, with the profiles and without the Discord invite", () => {
+    const person = personAuthorJsonLd();
+    expect(person["@id"]).toBe(AUTHOR_ID);
+    expect(person.name).toBe("Michael Walsh");
+    expect(person.jobTitle).toBe("Founder");
+    expect(person.worksFor["@id"]).toBe(ORG_ID);
+    expect(person.url).toBe(`${SITE.url}${SITE.author.bylineHref}`);
+    expect(person.sameAs.length).toBeGreaterThan(0);
+    for (const url of person.sameAs) {
+      expect(url.startsWith("http")).toBe(true);
+      expect(url).not.toContain("/join");
+    }
+  });
+
+  it("shares its @id with the Organization's founder", () => {
+    expect(organizationJsonLd().founder["@id"]).toBe(personAuthorJsonLd()["@id"]);
+    expect(organizationJsonLd()["@id"]).toBe(ORG_ID);
+  });
+
+  it("drops only the @context when embedded as an author", () => {
+    const embedded = authorJsonLd();
+    expect(embedded).not.toHaveProperty("@context");
+    expect(embedded["@id"]).toBe(AUTHOR_ID);
+    expect(embedded.sameAs).toEqual(personAuthorJsonLd().sameAs);
   });
 });
 

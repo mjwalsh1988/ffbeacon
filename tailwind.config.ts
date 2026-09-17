@@ -56,6 +56,10 @@ const config: Config = {
         },
         brand: {
           purple: "#A855F7",
+          // For small text on the elevated card surfaces. brand.purple on
+          // surface.elevated is 4.49:1, which an 11 px chip fails by a hair;
+          // this reads 6.7:1 there and stays the same hue.
+          "purple-light": "#C084FC",
           "purple-deep": "#7C3AED",
           cyan: "#22D3EE",
           "cyan-deep": "#06B6D4",

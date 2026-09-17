@@ -73,6 +73,21 @@ export default async function BeaconBriefModerationPage() {
     admin.from("nfl_teams").select("id, abbreviation, name").order("name"),
   ]);
 
+  // A relay_grounding row names its hidden Relay by id; the manager link
+  // searches by headline, so look those up in one read.
+  const relayIds = (data ?? [])
+    .map((m) => (m.detail as { job_type?: string; relay_id?: string } | null))
+    .filter((d) => d?.job_type === "relay_grounding" && typeof d.relay_id === "string")
+    .map((d) => d!.relay_id as string);
+  const relayHeadlineById = new Map<string, string>();
+  if (relayIds.length > 0) {
+    const { data: relayRows } = await admin
+      .from("relays")
+      .select("id, headline")
+      .in("id", relayIds.slice(0, 300));
+    for (const r of relayRows ?? []) relayHeadlineById.set(r.id, r.headline);
+  }
+
   const items: ModerationItem[] = (data ?? []).map((m) => {
     const art = (m as { articles?: { title?: string; slug?: string } | null })
       .articles;
@@ -106,6 +121,7 @@ export default async function BeaconBriefModerationPage() {
         job_type?: string;
         error?: string;
         attempts?: number;
+        relay_id?: string;
       } | null;
       return {
         type: "failed_task",
@@ -117,6 +133,10 @@ export default async function BeaconBriefModerationPage() {
         articleTitle,
         articleSlug,
         post,
+        relayHeadline:
+          typeof detail?.relay_id === "string"
+            ? (relayHeadlineById.get(detail.relay_id) ?? null)
+            : null,
       };
     }
 

@@ -261,6 +261,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "newspaper",
       },
       {
+        id: "/admin/brief-desk",
+        label: "Brief desk",
+        href: "/admin/brief-desk",
+        hint: "Editions, relays, and the desk settings",
+        icon: "newspaper",
+      },
+      {
         id: "/admin/signal-check",
         label: "Signal Check",
         href: "/admin/signal-check",

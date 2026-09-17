@@ -906,12 +906,20 @@ export type LatestArticle = {
   title: string;
   tl_dr: string | null;
   published_at: string | null;
+  /** The report's permalink, so the teaser can link out. */
+  href?: string;
 };
 
 /**
- * The single most recent published article that mentions this player, for the
- * overview's news teaser. Two hops because article_players is a join table:
- * collect the article ids, then read the newest published one.
+ * The single most recent published Relay that mentions this player, for the
+ * overview's news teaser. One query, driven from relay_players with the Relay
+ * embedded, for the reason lib/relays/load.ts loadFeedThroughJoin gives: the
+ * read starts at the player's index and takes one row, rather than collecting
+ * every id the player has ever appeared under and shipping them back in the
+ * URL. The shape keeps the article-era field names so
+ * components/player-profile/quick-news.tsx and lib/player-profile-cache.ts
+ * render it unchanged: `title` is the headline, `tl_dr` is the facts in one
+ * line, `published_at` is the post's own timestamp.
  *
  * Lives here rather than beside the component so lib/player-profile-cache.ts can
  * wrap it, which is what keeps it off the hot path of every profile view.
@@ -921,19 +929,28 @@ export async function loadLatestArticle(
   playerId: string,
 ): Promise<LatestArticle | null> {
   const db = supabase as SupabaseClient<Database>;
-  const { data: links } = await db
-    .from("article_players")
-    .select("article_id")
-    .eq("player_id", playerId);
-  const ids = (links ?? []).map((l) => l.article_id);
-  if (ids.length === 0) return null;
-  const { data } = await db
-    .from("articles")
-    .select("title, tl_dr, published_at")
-    .in("id", ids)
-    .eq("status", "published")
-    .order("published_at", { ascending: false, nullsFirst: false })
+  const { data: link } = await db
+    .from("relay_players")
+    .select("relays!inner(headline, facts, source_posted_at, slug)")
+    .eq("player_id", playerId)
+    .eq("relays.status", "published")
+    .order("relays(source_posted_at)", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as LatestArticle | null) ?? null;
+  type Row = { headline: string; facts: unknown; source_posted_at: string; slug: string };
+  const embedded = (link as unknown as { relays: Row | Row[] | null } | null)?.relays ?? null;
+  const data = Array.isArray(embedded) ? (embedded[0] ?? null) : embedded;
+  if (!data) return null;
+  const facts = Array.isArray(data.facts)
+    ? (data.facts as Array<{ label?: unknown; value?: unknown }>)
+        .filter((f) => typeof f?.label === "string" && typeof f?.value === "string")
+        .map((f) => `${f.label}: ${f.value}`)
+        .join(". ")
+    : "";
+  return {
+    title: data.headline,
+    tl_dr: facts || null,
+    published_at: data.source_posted_at,
+    href: `/brief/relay/${data.slug}`,
+  };
 }

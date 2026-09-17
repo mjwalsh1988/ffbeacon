@@ -2,9 +2,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ScrollTopLink } from "@/components/scroll-top-link";
 
 /** Build the href for a given page. Page 1 drops the ?page param so the base
- * URL stays canonical. */
+ * URL stays canonical. A base that already carries a query (the hub's kind and
+ * week filters) gets `&page=` so the filters survive paging. */
 function pageHref(basePath: string, page: number): string {
-  return page <= 1 ? basePath : `${basePath}?page=${page}`;
+  if (page <= 1) return basePath;
+  return `${basePath}${basePath.includes("?") ? "&" : "?"}page=${page}`;
 }
 
 /** Every page is linked directly at or below this count, no gaps. */
@@ -111,8 +113,8 @@ export function BriefPagination({
             Previous
           </ScrollTopLink>
         ) : (
-          <span className={arrowDisabled} aria-hidden="true">
-            <ChevronLeft className="h-4 w-4" />
+          <span className={arrowDisabled} aria-disabled="true">
+            <ChevronLeft aria-hidden="true" className="h-4 w-4" />
             Previous
           </span>
         )}
@@ -155,9 +157,9 @@ export function BriefPagination({
             <ChevronRight aria-hidden="true" className="h-4 w-4" />
           </ScrollTopLink>
         ) : (
-          <span className={arrowDisabled} aria-hidden="true">
+          <span className={arrowDisabled} aria-disabled="true">
             Next
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
           </span>
         )}
       </div>

@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { linkRelayReference } from "@/lib/relays/write";
 
 type Admin = SupabaseClient<Database>;
 
@@ -32,6 +33,32 @@ export async function resolveReferenceMatch(
   if (mod.type !== "player_match" && mod.type !== "team_match")
     throw new Error("This item is not a reference match.");
   if (!mod.article_id) {
+    // Since the Relay pipeline (migration 0284) a post has a Relay whether or
+    // not it ever has an article, and the Relay is what the player profiles and
+    // the /brief hub read. Link the chosen reference there first; the legacy
+    // article branches below only matter for a post that predates Relays.
+    if (mod.ingestion_id) {
+      const linked = await linkRelayReference(
+        admin,
+        mod.ingestion_id,
+        mod.type === "player_match"
+          ? { kind: "player", playerId: chosenId }
+          : { kind: "team", teamId: chosenId },
+      );
+      if (linked) {
+        await admin
+          .from("beacon_brief_moderation")
+          .update({
+            status: "approved",
+            resolved_at: new Date().toISOString(),
+            resolved_by: resolvedBy,
+            detail: { resolved_ref_id: chosenId, linked_to: "relay" } as unknown as Json,
+          })
+          .eq("id", moderationId)
+          .eq("status", "pending");
+        return;
+      }
+    }
     // "Still being written" is only true while the article_write job is queued or
     // running. When that job decided NOT to write (the research stage found no
     // fantasy impact), article_id stays null forever, and telling the admin to try

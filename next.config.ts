@@ -103,6 +103,12 @@ const nextConfig: NextConfig = {
   // file that module opens.
   outputFileTracingIncludes: {
     "/api/og/**": ["./assets/og-fonts/**", "./public/img/ff-beacon-mark-96.png"],
+    // The Brief desk bundle reads the reference edition off disk
+    // (lib/brief-desk/bundle.ts readExample, docs/beacon-brief/examples/), a
+    // runtime readFileSync the tracer cannot follow, same as the fonts above.
+    // Without this the run gets example: null in production and matches
+    // nothing.
+    "/api/brief-desk/bundle": ["./docs/beacon-brief/examples/*.json"],
   },
   // Global security response headers (FFB-SEC-005). Applied to every route.
   // CSP ships in Report-Only mode; see lib/security-headers.ts for the path to
@@ -371,8 +377,11 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        // The survivor slug was archived with no Relay behind it (the replayed
+        // gates dropped the post), so the old target is a 404; the hub is the
+        // nearest page that exists.
         source: "/brief/aaron-donald-rams-workout",
-        destination: "/brief/aaron-donald-rams-workout-comeback",
+        destination: "/brief",
         permanent: true,
       },
       {
@@ -410,8 +419,9 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        // Same as aaron-donald above: the survivor is archived with no Relay.
         source: "/brief/jak-bi-lane-michael-thomas-comparison-ravens",
-        destination: "/brief/jakobi-lane-michael-thomas-comparison-ravens",
+        destination: "/brief",
         permanent: true,
       },
       // Signal Scout's leaderboards moved off their own route and into a

@@ -10,10 +10,12 @@ import {
 } from "@/lib/discord-stats";
 import {
   loadHomeContent,
-  type HomeArticleRow,
   type HomeFormatRow,
   type HomeSourceRow,
 } from "@/lib/home-content";
+import type { LatestBrief, RelayCardData } from "@/lib/relays/load";
+import { RelayGrid } from "@/components/relays/relay-grid";
+import { LatestBriefPanel } from "@/components/relays/latest-brief-panel";
 import { HeroLavaField } from "@/components/hero-lava-field";
 import { DiscordGlyph } from "@/components/discord-glyph";
 import { AuthorPortrait } from "@/components/author-portrait";
@@ -47,7 +49,7 @@ import {
   Cog,
   type LucideIcon,
 } from "lucide-react";
-import { SITE_TIME_ZONE, formatEasternShortDate } from "@/lib/datetime";
+import { formatEasternShortDate } from "@/lib/datetime";
 import { SITE } from "@/lib/site";
 import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
 import { PUBLISHED_GUIDES, newestPublishedGuide } from "@/lib/guides/published";
@@ -153,15 +155,6 @@ const TOOL_CARD_CONTENT: Record<ToolHref, ToolCardContent> = {
   },
 };
 
-/**
- * How many of the homepage's linked articles get a full card.
- *
- * The remainder render as a headline list beside the cards (see ArticlesSection).
- * How many articles are linked in total is decided by lib/home-content.ts, which
- * owns the query; this only decides the card/headline split of whatever comes back.
- */
-const HOMEPAGE_FEATURED_COUNT = 4;
-
 /** What the member-aware hero and CTA need: auth state plus a live Discord read.
  *  Kept separate from loadHomeContent() because neither can run inside
  *  unstable_cache (it forbids cookies()) and neither is safe to share across
@@ -183,7 +176,7 @@ async function loadMemberContext(): Promise<MemberContext> {
 }
 
 export default async function HomePage() {
-  const [{ articles, formats, sources }, layout] = await Promise.all([
+  const [{ latestBrief, relays, formats, sources }, layout] = await Promise.all([
     loadHomeContent(),
     loadSiteLayout(),
   ]);
@@ -198,8 +191,8 @@ export default async function HomePage() {
       <Hero memberContext={memberContext} />
       <ToolsSection cards={layout.homepage.cards} />
       <GamesSection />
-      <ArticlesSection articles={articles} />
       <GuidesSection />
+      <ArticlesSection latestBrief={latestBrief} relays={relays} />
       <SourcesFormatsSection formats={formats} sources={sources} />
       <FounderSection />
       <CtaSection memberContext={memberContext} />
@@ -1067,37 +1060,33 @@ function SourceCard({
 
 /* ---------- Latest from the Beacon Brief ---------- */
 
-// Row shape is owned by lib/home-content.ts, which is what actually queries it.
-type ArticleRow = HomeArticleRow;
-
-function formatArticleDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: SITE_TIME_ZONE,
-  });
-}
-
 /**
- * Latest from the Beacon Brief: 4 featured cards beside a headline list.
+ * The Beacon Brief block: the latest published Brief beside the four newest
+ * Relays (docs/beacon-brief/relays-and-briefs-plan.md, section 6.5).
  *
- * Two jobs at once. For a reader, the cards give the newest stories room to sell
- * themselves while the list makes the rest scannable at a glance. For crawlers, the
- * homepage now links ~25 articles instead of 4, which is the cheapest available fix
- * for the crawl depth problem: with prev/next-only pagination at 9 per page, the
- * oldest article sat 13 hops from /brief and Google left most of the library
- * unindexed as "Discovered - currently not indexed".
+ * The Brief card is the thing worth a reader's click and the one page here that
+ * search engines are asked to index; the Relays are the running feed and each
+ * links to its own permalink and to the hub. Both columns render at every
+ * breakpoint (stacked on a phone, side by side from lg), so nothing is hidden
+ * from a small screen.
  *
- * The list is deliberately plain anchors carrying the full article title as their
- * visible text. Anchor text is a relevance signal, and "Read more" would waste it.
- * Both columns render at every breakpoint (stacked on mobile, side by side from lg),
- * so no headline is hidden from a phone.
+ * When no edition exists yet the Brief column is not rendered at all and the
+ * Relay column takes the full width. There is no placeholder sentence: a
+ * promise that an edition is coming is thin content on the page search engines
+ * read first, and the empty column it sat in was an empty grid cell.
+ *
+ * Heading levels: the section is an h2, the panel's edition title and the
+ * "Newest reports" label are h3s under it, and each Relay card is an h4 under
+ * its own group heading. The panel prints its own "Latest Brief" eyebrow, so
+ * this block does not repeat those words above it.
  */
-function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
-  const featured = articles.slice(0, HOMEPAGE_FEATURED_COUNT);
-  const headlines = articles.slice(HOMEPAGE_FEATURED_COUNT);
-
+function ArticlesSection({
+  latestBrief,
+  relays,
+}: {
+  latestBrief: LatestBrief | null;
+  relays: RelayCardData[];
+}) {
   return (
     <section
       aria-labelledby="articles-heading"
@@ -1110,18 +1099,18 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
             id="articles-heading"
             className="text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            The latest fantasy news, explained in plain English.
+            What changed this week, and what to do about it.
           </h2>
           <Link
             href="/brief"
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            Check out the Beacon Brief
+            Open the Beacon Brief
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </div>
 
-        {articles.length === 0 ? (
+        {relays.length === 0 && !latestBrief ? (
           <div className="mt-10 flex flex-col items-center rounded-modal border border-dashed border-line bg-base/40 px-6 py-12 text-center">
             <span
               aria-hidden="true"
@@ -1130,94 +1119,32 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
               <BookOpen className="h-6 w-6" />
             </span>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
-              Fresh Beacon Brief stories are on the way. In the meantime the
-              rankings, the FAAB calculator, and league sync are live and
-              updating daily.
+              The desk has not accepted a report yet. The rankings, the FAAB
+              calculator, and league sync are live and updating daily.
             </p>
           </div>
         ) : (
-          <div className="mt-10 grid items-start gap-8 lg:grid-cols-2 lg:gap-10">
-            <div>
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                Latest coverage
-              </h3>
-              <ul className="grid gap-5 sm:grid-cols-2" role="list">
-                {featured.map((article) => (
-                  <li key={article.slug}>
-                    <ArticleCard article={article} />
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className="mt-10 space-y-10">
+            {latestBrief && <LatestBriefPanel brief={latestBrief} headingLevel={3} />}
 
-            {headlines.length > 0 && (
+            {relays.length > 0 && (
               <div>
                 <h3
-                  id="more-headlines-heading"
+                  id="latest-relays-heading"
                   className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
                 >
-                  More headlines
+                  Newest reports
                 </h3>
-                <ul
-                  aria-labelledby="more-headlines-heading"
-                  role="list"
-                  className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface"
-                >
-                  {headlines.map((article) => (
-                    <li key={article.slug}>
-                      <Link
-                        href={`/brief/${article.slug}`}
-                        className="flex min-h-11 items-baseline justify-between gap-4 px-4 py-3 text-sm text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                      >
-                        <span className="font-medium">{article.title}</span>
-                        {article.published_at && (
-                          <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-ink-subtle">
-                            {formatArticleDate(article.published_at)}
-                          </span>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                {/* Three compact cards across on a wide screen, one per row on
+                    a phone; each headline clamps at three lines and the full
+                    report is one link away. */}
+                <RelayGrid relays={relays} headingLevel={4} labelledBy="latest-relays-heading" />
               </div>
             )}
           </div>
         )}
       </div>
     </section>
-  );
-}
-
-function ArticleCard({ article }: { article: ArticleRow }) {
-  return (
-    <Link
-      href={`/brief/${article.slug}`}
-      className="group flex h-full flex-col rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
-          {article.article_type.replace(/_/g, " ")}
-        </span>
-        {article.published_at && (
-          <span className="text-xs text-ink-subtle">
-            {formatArticleDate(article.published_at)}
-          </span>
-        )}
-      </div>
-      <h3 className="mt-3 text-lg font-semibold text-ink">{article.title}</h3>
-      {article.tl_dr && (
-        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          {article.tl_dr}
-        </p>
-      )}
-      <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-semibold text-brand-cyan transition-colors group-hover:text-brand-purple">
-        Read the breakdown
-        <ArrowRight
-          aria-hidden="true"
-          className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
-        />
-      </span>
-    </Link>
   );
 }
 

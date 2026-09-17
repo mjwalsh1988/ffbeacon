@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { resolveFormatSlug } from "@/lib/preferences";
 import { SITE } from "@/lib/site";
-import { serializeJsonLd } from "@/lib/json-ld";
+import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { formatEastern, formatEasternDate } from "@/lib/datetime";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
@@ -188,11 +188,7 @@ export default async function DraftGuidePage({
       isAccessibleForFree: true,
       datePublished: PUBLISHED_AT,
       dateModified: board.computedAt ?? UPDATED_AT,
-      author: {
-        "@type": "Person",
-        name: SITE.author.name,
-        url: `${SITE.url}${SITE.author.bylineHref}`,
-      },
+      author: authorJsonLd(),
       publisher: {
         "@type": "Organization",
         name: SITE.name,

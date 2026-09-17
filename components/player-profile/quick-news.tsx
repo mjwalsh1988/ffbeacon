@@ -1,10 +1,11 @@
 /**
  * Quick news feature at the top of the overview: the single latest published
- * article that mentions this player, shown as a headline with an optional
- * summary. Articles do not link out yet (no public reader route), so this is a
- * read-only teaser. Falls back to a friendly empty state. Server component.
+ * Relay that mentions this player, shown as a headline linking to its
+ * permalink, with the facts as a one-line summary. Falls back to a friendly
+ * empty state. Server component.
  */
 
+import Link from "next/link";
 import { Newspaper } from "lucide-react";
 import { formatEastern } from "@/lib/datetime";
 import type { LatestArticle } from "@/lib/player-profile";
@@ -50,7 +51,16 @@ export function QuickNews({
           {article ? (
             <>
               <h2 className="mt-1 text-lg font-semibold leading-snug tracking-tight text-ink">
-                {article.title}
+                {article.href ? (
+                  <Link
+                    href={article.href}
+                    className="hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    {article.title}
+                  </Link>
+                ) : (
+                  article.title
+                )}
               </h2>
               {article.tl_dr && (
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{article.tl_dr}</p>

@@ -257,6 +257,10 @@ export async function resolveCategory(
   name: string;
   description: string | null;
 } | null> {
+  // The slug is part of a memo key, and the address bar chooses it, so it is
+  // bounded and shaped before it can become an entry. A value that cannot be
+  // a category slug is no category, with no read and no entry.
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
   return memoTtl(`ref:brief:category:${slug}`, 60_000, async () => {
     const { data } = await supabase
       .from("news_categories")
@@ -305,6 +309,10 @@ export async function resolveTeam(
   abbreviation: string,
 ): Promise<{ id: string; abbreviation: string; name: string } | null> {
   const key = abbreviation.toUpperCase();
+  // Same reason as resolveCategory: the code is part of a memo key the
+  // address bar chooses. An NFL code is two to four letters; anything else is
+  // no team, with no read and no entry.
+  if (!/^[A-Z]{2,4}$/.test(key)) return null;
   return memoTtl(`ref:brief:team:${key}`, 60_000, async () => {
     const { data } = await supabase
       .from("nfl_teams")

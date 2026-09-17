@@ -36,6 +36,9 @@ export type BeaconLogStage =
   | "discord_post"
   | "discord_patch"
   | "deletion_check"
+  // The two Brief desk routes and the approve, reject and edit actions
+  // (docs/beacon-brief/relays-and-briefs-plan.md, section 10.3).
+  | "brief_desk"
   | "error";
 
 export interface BeaconLogEntry {
