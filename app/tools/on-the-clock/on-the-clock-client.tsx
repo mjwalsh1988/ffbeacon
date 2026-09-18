@@ -56,6 +56,7 @@ import type {
   RankedPlayer,
 } from "@/lib/on-the-clock/board-types";
 import type { SimulatedPick } from "@/lib/on-the-clock/adp-sim";
+import { trackEvent } from "@/lib/analytics";
 import type { TeamRollup } from "@/lib/on-the-clock/rosters";
 import type { Award } from "@/lib/on-the-clock/awards";
 import type { DraftGrade } from "@/lib/on-the-clock/draft-grade";
@@ -1715,6 +1716,8 @@ export function OnTheClockClient({
   );
 
   const selectLeague = (l: LeagueCard) => {
+    // Opening a draft room is the moment the tool is actually in use.
+    trackEvent("tool_use", { tool: "on_the_clock" });
     activeDraftIdRef.current = l.draftId;
     setLeague(l);
     setView("pick");

@@ -44,6 +44,7 @@ import {
 } from "@/lib/start-sit/types";
 import { clampStartCount } from "@/lib/start-sit/rank";
 import { buildStartSitHref } from "./picker-url";
+import { trackEvent } from "@/lib/analytics";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
 const MIN_QUERY_LENGTH = 2;
@@ -142,6 +143,7 @@ export function StartSitPicker({
       start,
       preserve: searchParams,
     });
+    trackEvent("tool_use", { tool: "who_should_i_start" });
     startTransition(() => {
       router.push(href);
     });

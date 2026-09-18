@@ -8,6 +8,7 @@ import type { FaabPlayer } from "./player-combobox";
 import { computeManualMarginal } from "@/lib/faab/manual";
 import { buildLadder } from "@/lib/faab/ladder";
 import { buildMarket } from "@/lib/faab/market";
+import { trackEvent } from "@/lib/analytics";
 import type { PlayerOutlook } from "@/lib/faab/outlook";
 import type { FaabResult, FaabSettings, NeedLevel } from "@/lib/faab/types";
 
@@ -67,6 +68,7 @@ export function ManualResult({
         setError(result.error);
         return;
       }
+      trackEvent("tool_use", { tool: "faab" });
       setOutlook(result.outlook);
     });
   }, [playerId, formatSlug]);

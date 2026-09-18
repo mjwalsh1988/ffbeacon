@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Heart } from "lucide-react";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
 import { DonateForm } from "@/components/donate/donate-form";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * The Donate control in the site header, and the panel it opens.
@@ -53,7 +54,10 @@ export function DonateLauncher({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          trackEvent("donate_open", { surface: "header_modal" });
+        }}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Donate to FF Beacon"

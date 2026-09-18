@@ -13,6 +13,7 @@ import {
   parseDonationAmount,
 } from "@/lib/donate/amounts";
 import { PAY_HANDLE_DISPLAY, paypalUrl, venmoUrl } from "@/lib/donate/links";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * The donation picker: an amount, then three ways to send it.
@@ -159,6 +160,12 @@ export function DonateForm({
         | null;
 
       if (res.ok && data && data.ok && typeof data.url === "string") {
+        // GA sends on page hide, so the navigation below does not drop this.
+        trackEvent("donate_checkout_start", {
+          surface,
+          value: cents / 100,
+          currency: "USD",
+        });
         // Deliberately no second status message here. The navigation begins in
         // the same tick, so a reader would hear at most a clipped fragment of it
         // on top of the one they were already given.
@@ -391,12 +398,30 @@ export function DonateForm({
             label={`Donate${amountWord(cents)} with PayPal`}
             href={cents === null ? null : paypalUrl(cents)}
             onBlocked={reportMissingAmount}
+            onFollow={() =>
+              cents !== null &&
+              trackEvent("donate_external_click", {
+                surface,
+                method: "paypal",
+                value: cents / 100,
+                currency: "USD",
+              })
+            }
             blockedHintId={needAmountId}
           />
           <ExternalPayOption
             label={`Donate${amountWord(cents)} with Venmo`}
             href={cents === null ? null : venmoUrl(cents)}
             onBlocked={reportMissingAmount}
+            onFollow={() =>
+              cents !== null &&
+              trackEvent("donate_external_click", {
+                surface,
+                method: "venmo",
+                value: cents / 100,
+                currency: "USD",
+              })
+            }
             blockedHintId={needAmountId}
           />
         </div>
@@ -434,11 +459,14 @@ function ExternalPayOption({
   label,
   href,
   onBlocked,
+  onFollow,
   blockedHintId,
 }: {
   label: string;
   href: string | null;
   onBlocked: () => void;
+  /** Called when the real link is followed. It opens in a new tab, so this page stays put. */
+  onFollow: () => void;
   /** Names why this is a button rather than a link, while it is one. */
   blockedHintId: string;
 }) {
@@ -463,6 +491,7 @@ function ExternalPayOption({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={onFollow}
       className={shared}
     >
       {label}

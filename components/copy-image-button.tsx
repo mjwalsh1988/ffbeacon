@@ -48,6 +48,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { currentSection, trackEvent } from "@/lib/analytics";
 
 /**
  * How long to wait for the card before giving up on the image and offering the
@@ -127,6 +128,14 @@ export function CopyImageButton({
   };
 
   const settle = (next: Status) => {
+    // Counted as what was actually copied, so a Firefox fallback to the link
+    // is not reported as an image share.
+    if (next === "copied-image" || next === "copied-link") {
+      trackEvent("share", {
+        method: next === "copied-image" ? "copy_image" : "copy_link",
+        content_type: currentSection(),
+      });
+    }
     setStatus(next);
     if (timerRef.current) clearTimeout(timerRef.current);
     if (next !== "manual") {

@@ -40,6 +40,7 @@ import {
   type SleeperViewer,
 } from "@/lib/sleeper-handle/types";
 import { useStepScroll } from "@/lib/use-step-scroll";
+import { trackEvent } from "@/lib/analytics";
 import { BidResult, viewFromLeagueReport } from "./bid-result";
 import { PlayerCombobox, type FaabPlayer } from "./player-combobox";
 import type {
@@ -489,6 +490,7 @@ export function LeaguePanel({
         setReport(null);
         return;
       }
+      trackEvent("tool_use", { tool: "faab" });
       setReport(result.report);
     });
   }, [player, selected, needLevel, fallbackBudget]);
@@ -509,6 +511,7 @@ export function LeaguePanel({
         setAllRows(null);
         return;
       }
+      trackEvent("tool_use", { tool: "faab" });
       setAllRows(result.rows);
       setAllNotChecked(result.notChecked);
     });

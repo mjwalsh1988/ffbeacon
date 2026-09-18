@@ -67,8 +67,12 @@ export const baselineSecurityHeaders: Header[] = [
  *   - style-src 'unsafe-inline' covers Next/Tailwind injected styles.
  *   - img-src allows data:/blob: (previews, inlined icons), Sleeper CDN, and Supabase
  *     Storage. GIPHY is server-proxied through our origin, so 'self' covers it.
- *   - connect-src allows the Supabase REST/Realtime origins (https + wss). Analytics
- *     hosts are included so enabling Plausible/GA later does not require a CSP change.
+ *   - connect-src allows the Supabase REST/Realtime origins (https + wss), plus
+ *     Plausible and Google Analytics. GA4 sends hits to regional hosts such as
+ *     region1.google-analytics.com and to analytics.google.com, so those are
+ *     wildcards; img-src carries the same hosts because gtag falls back to an
+ *     image request when a beacon cannot be sent. This is Google's documented
+ *     GA4 CSP.
  *   - frame-ancestors 'none' mirrors X-Frame-Options: DENY.
  */
 export function buildContentSecurityPolicy(): string {
@@ -82,11 +86,11 @@ export function buildContentSecurityPolicy(): string {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    "script-src 'self' 'unsafe-inline' https://plausible.io https://www.googletagmanager.com https://www.google-analytics.com",
+    "script-src 'self' 'unsafe-inline' https://plausible.io https://www.googletagmanager.com",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    `img-src 'self' data: blob: https://sleepercdn.com${sbHttps}`,
-    `connect-src 'self'${sbHttps}${sbWss} https://plausible.io https://www.google-analytics.com https://www.googletagmanager.com`,
+    `img-src 'self' data: blob: https://sleepercdn.com${sbHttps} https://*.google-analytics.com https://*.googletagmanager.com`,
+    `connect-src 'self'${sbHttps}${sbWss} https://plausible.io https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com`,
     "frame-src 'self'",
     "worker-src 'self' blob:",
     "media-src 'self'",

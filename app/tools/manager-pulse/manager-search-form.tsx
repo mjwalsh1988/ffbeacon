@@ -20,6 +20,7 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { isValidSleeperHandle } from "@/lib/manager-pulse/handle";
+import { trackEvent } from "@/lib/analytics";
 
 export function ManagerSearchForm({ defaultHandle = "" }: { defaultHandle?: string }) {
   const router = useRouter();
@@ -45,6 +46,7 @@ export function ManagerSearchForm({ defaultHandle = "" }: { defaultHandle?: stri
     }
 
     setError(null);
+    trackEvent("tool_use", { tool: "manager_pulse" });
     startTransition(() => {
       router.push(`/tools/manager-pulse/${encodeURIComponent(handle)}`);
     });

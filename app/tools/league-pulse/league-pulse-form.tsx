@@ -9,6 +9,7 @@ import {
   INVALID_HANDLE_MESSAGE,
   normalizeSleeperHandle,
 } from "@/lib/sleeper-handle/validate";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * The League Pulse lookup form.
@@ -66,6 +67,7 @@ export function LeaguePulseForm({
     }
     setError(null);
     setSaveError(null);
+    trackEvent("tool_use", { tool: "league_pulse" });
 
     const params = new URLSearchParams({ username: normalized, season });
     // scroll: false stops the App Router from snapping back to the top after the

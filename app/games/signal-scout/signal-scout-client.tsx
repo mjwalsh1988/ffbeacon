@@ -37,6 +37,7 @@ import {
 } from "@/lib/signal-scout/client";
 import { applyRoundOutcomeToStreaks, currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { useStepScroll } from "@/lib/use-step-scroll";
+import { trackEvent } from "@/lib/analytics";
 import { SignalScoutStatusBar } from "./status-bar";
 import { MysteryProfileCard } from "./mystery-profile-card";
 import { MissionHeader } from "./mission-header";
@@ -182,6 +183,7 @@ export function SignalScoutClient({
 
     const result = await requestStartRound();
     if (result.ok) {
+      trackEvent("tool_use", { tool: "signal_scout" });
       setRound(result.data.round);
       setPhase("active");
       setStartLoading(false);

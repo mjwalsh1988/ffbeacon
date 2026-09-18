@@ -12,8 +12,8 @@ export const metadata: Metadata = {
     "What FF Beacon collects, why, who we share it with, what happens when you donate, and how to delete it.",
 };
 
-const EFFECTIVE_DATE = "September 14, 2026";
-const EFFECTIVE_DATE_ISO = "2026-09-14";
+const EFFECTIVE_DATE = "September 18, 2026";
+const EFFECTIVE_DATE_ISO = "2026-09-18";
 const OPERATOR = SITE.author.legalName;
 const CONTACT = SITE.legalContactEmail;
 
@@ -40,6 +40,14 @@ const CONTACT = SITE.legalContactEmail;
  * involves before the first one renders. The earlier "we do not use advertising
  * cookies" line was removed at the same time because it stopped being true the
  * moment the application went in.
+ *
+ * GOOGLE ANALYTICS (2026-09-18). GA4 now runs beside Vercel Analytics, so the
+ * Analytics block no longer says the site's analytics are cookie-free: Vercel's
+ * are, Google's are not. The block names the cookies, the events, what never
+ * goes into an event, the 14-month retention set on the property, that Google
+ * signals is off, and Google's opt-out add-on. Everything it states matches
+ * lib/analytics.ts and the property's admin settings; change one and change the
+ * other.
  */
 
 const LINK_CLASS =
@@ -190,15 +198,17 @@ export default function PrivacyPage() {
               We use first-party cookies and similar browser storage to keep you signed
               in (Supabase auth cookies), to remember your format and source preferences
               across visits, to hold a guest identifier so a game can tell whether you
-              have already voted, and to cache transient interface state.
+              have already voted, to cache transient interface state, and, for five
+              minutes after you sign in, to tell the next page to report that sign-in
+              to Google Analytics.
             </p>
             <p className="mt-2">
               We do not build cross-site profiles of you ourselves. The one third party
-              that may set cookies in your browser here is Google, when it serves an
-              ad, and the Advertising block just below explains what those cookies do
-              and how to opt out of personalized ads. You can clear our cookies at any
-              time from your browser settings; clearing them signs you out and resets
-              your preferences.
+              that sets cookies in your browser here is Google, for two separate
+              reasons: Google Analytics, described in the Analytics block below, and
+              advertising, when an ad is served, described in the Advertising block
+              just below. You can clear our cookies at any time from your browser
+              settings; clearing them signs you out and resets your preferences.
             </p>
 
             <h3 id="advertising" className="mt-4 text-base font-semibold text-ink">
@@ -262,9 +272,50 @@ export default function PrivacyPage() {
               Analytics
             </h3>
             <p className="mt-2">
-              We use Vercel Analytics to count page views and see which pages are
-              used. It sets no cookie and builds no profile of you across sites or
-              visits.
+              We use two analytics services. Vercel Analytics counts page views and
+              shows which pages are used. It sets no cookie and builds no profile of
+              you across sites or visits.
+            </p>
+            <p className="mt-2">
+              We also use Google Analytics, which does set cookies. Two of them, one
+              named <code className="font-mono text-ink">_ga</code> and one whose name
+              starts with <code className="font-mono text-ink">_ga_</code> followed by
+              our property code, hold a random identifier for your browser, so Google
+              Analytics can tell a returning visitor from a new one, and they expire
+              two years after your last visit unless you clear them. With them, Google
+              Analytics records the pages you view, including each page&apos;s address
+              and title. Some of those contain identifiers: a league&apos;s name and
+              number on league pages, a public Sleeper username you looked up in
+              Manager Pulse, or the handle of a public profile you visited. It also records the page you arrived from, your
+              device type, browser and operating system, and an approximate location
+              worked out from your IP address. Google Analytics does not store the IP
+              address itself.
+            </p>
+            <p className="mt-2">
+              We also send it a short list of actions so we can tell whether the site
+              is working: opening the donation panel, starting a card donation,
+              following a PayPal or Venmo link, a completed donation and its amount,
+              clicking a link to our Discord, starting or completing a sign-in and
+              which provider you used, running one of the tools, and copying a share
+              link or image. None of these actions carries your name, email address,
+              account identifier, Sleeper username, or league; they name only which
+              part of the site you were on. Donation amounts are sent without anything
+              that says who gave them. Payment session identifiers, sign-in codes,
+              Sleeper usernames typed into a search and league names passed in a link
+              are stripped out of page addresses before Google Analytics records them.
+            </p>
+            <p className="mt-2">
+              Google Analytics keeps the visit-level and event-level detail for 14
+              months; after that only aggregate totals remain. We have Google signals
+              turned off, so it is not combined with anything Google knows about you
+              from a signed-in Google account, and it is not linked to advertising.
+              You can stop Google Analytics from collecting anything about you on
+              this site, and every other site, with{" "}
+              <ExternalLink href="https://tools.google.com/dlpage/gaoptout">
+                Google&apos;s opt-out browser add-on
+              </ExternalLink>
+              , or by blocking or clearing its cookies. The site works the same
+              either way.
             </p>
 
             <h3 className="mt-4 text-base font-semibold text-ink">
@@ -307,8 +358,11 @@ export default function PrivacyPage() {
                 available. Basis: our legitimate interest in a service that stays up.
               </li>
               <li>
-                To understand which pages are used, in aggregate. Basis: our legitimate
-                interest in improving the product.
+                To understand which pages and tools are used, where visitors come
+                from, and whether sign-ins and donations complete, in aggregate. Basis:
+                our legitimate interest in improving the product. We do not show a
+                cookie consent banner; you can block Google Analytics at any time
+                with the opt-out described in the Analytics block in section 1.
               </li>
               <li>
                 To send email digests, if and only if you explicitly opted in. Basis:
@@ -344,7 +398,13 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong className="text-ink">Vercel</strong>, hosting, edge network, and
-                the cookie-free analytics described above.
+                the cookie-free Vercel Analytics described above.
+              </li>
+              <li>
+                <strong className="text-ink">Google Analytics</strong>, the
+                cookie-based analytics described above. Processes on our instructions
+                under Google&apos;s data processing terms, and receives the page views
+                and actions listed in the Analytics block in section 1.
               </li>
               <li>
                 <strong className="text-ink">Stripe</strong>, card and digital wallet
@@ -475,6 +535,11 @@ export default function PrivacyPage() {
                 Advertising cookies: set and expired by Google under its own policy.
                 We hold none of them, and clearing your browser&apos;s cookies removes
                 them.
+              </li>
+              <li>
+                Google Analytics: visit-level and event-level detail for 14 months,
+                aggregate totals after that. Its cookies in your browser expire two
+                years after your last visit unless you clear them.
               </li>
               <li>
                 Hosting request logs: retained by our hosting provider on a rolling

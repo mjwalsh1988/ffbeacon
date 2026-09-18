@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useId, useState, useTransition } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 type Mode = "signin" | "signup";
 
@@ -66,6 +67,9 @@ export function LoginForm({
 
   const signInWith = (provider: "google" | "discord") => {
     setStatus({ kind: "idle" });
+    // The finished sign-in is reported by /auth/callback; this counts the
+    // attempts, so the two together show how many get lost on the way.
+    trackEvent("login_start", { method: provider });
     startTransition(async () => {
       // The browser Supabase client (242 kB of GoTrue + WebSocket code) is
       // loaded only now, on the click that actually needs it, rather than in
@@ -94,6 +98,9 @@ export function LoginForm({
       if (error) {
         setStatus({ kind: "error", message: error.message });
       } else {
+        // "email", the same word /auth/callback reports when the link is
+        // followed, so the start and the finish line up in one funnel.
+        trackEvent("login_start", { method: "email" });
         setStatus({ kind: "sent_magic", email });
       }
     });
@@ -114,6 +121,9 @@ export function LoginForm({
         if (error) {
           setStatus({ kind: "error", message: error.message });
         } else {
+          // Password sign-in never passes through /auth/callback, so it is
+          // reported here.
+          trackEvent("login", { method: "password" });
           setStatus({ kind: "signed_in" });
           // Hard-navigate so the server-rendered shell picks up the new
           // session cookie immediately instead of a stale auth state.
@@ -132,8 +142,10 @@ export function LoginForm({
           // confirmation link, no session yet.
           setStatus({ kind: "sent_confirm", email });
         } else {
-          // Auto-confirm path (rare in production) → respect the next
-          // round-trip just like password sign-in.
+          // Auto-confirm path (rare in production): respect the next
+          // round-trip just like password sign-in. The confirm-by-email path
+          // is reported by /auth/callback instead, when the link is followed.
+          trackEvent("sign_up", { method: "password" });
           setStatus({ kind: "signed_in" });
           window.location.assign(safeNext);
         }

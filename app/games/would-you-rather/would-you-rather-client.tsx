@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
 import { fetchNextRound, submitVote } from "@/lib/would-you-rather/client";
+import { trackEvent } from "@/lib/analytics";
 import type {
   WyrErrorCode,
   WyrReview,
@@ -211,7 +212,10 @@ export function WouldYouRatherClient({
         if (result.ok) {
           setReview(result.review);
           setRemaining(result.guestVotesRemaining);
-          if (!result.review.alreadyVoted) setUsed((n) => n + 1);
+          if (!result.review.alreadyVoted) {
+            setUsed((n) => n + 1);
+            trackEvent("tool_use", { tool: "would_you_rather" });
+          }
           setPhase("revealed");
           setAnnouncement(outcomeSentence(result.review));
           focusPanel.current = firstRevealPanel(result.review);

@@ -9,6 +9,7 @@ import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
 import { runSignalCheck } from "./actions";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
+import { currentSection, trackEvent } from "@/lib/analytics";
 
 /**
  * Per-side colour. Side A is purple and Side B is cyan, matching the value
@@ -237,6 +238,9 @@ export function SignalCheckBuilder({
     startTransition(async () => {
       const res = await runSignalCheck(buildInput(), save ? { save: true, makePublic: true } : undefined);
       if (res.ok) {
+        // A share-link request re-runs the check the reader already ran, so
+        // only the first run counts as a use.
+        if (!save) trackEvent("tool_use", { tool: "signal_check" });
         setResult(res.view);
         setResultMeta(snapshot);
         if (save) {
@@ -258,6 +262,7 @@ export function SignalCheckBuilder({
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
+      trackEvent("share", { method: "copy_link", content_type: currentSection() });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

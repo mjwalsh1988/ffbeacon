@@ -9,6 +9,7 @@ import { formatUsd } from "@/lib/donate/amounts";
 import { isCheckoutSessionId, retrieveCheckoutSession } from "@/lib/donate/stripe";
 import { donationOutcome, type DonationOutcome } from "@/lib/donate/outcome";
 import { SITE } from "@/lib/site";
+import { DonationCompleteTracker } from "@/components/donate/donation-complete-tracker";
 
 export const metadata: Metadata = {
   title: "Thank you",
@@ -51,6 +52,7 @@ export default async function DonateThanksPage({
 
   let outcome: DonationOutcome = "unknown";
   let amountLabel: string | null = null;
+  let amountCents: number | null = null;
 
   if (isCheckoutSessionId(sessionId)) {
     // METERED, because this is an unauthenticated GET that makes an outbound
@@ -82,6 +84,7 @@ export default async function DonateThanksPage({
         // its way.
         outcome = donationOutcome(result.data);
         if (typeof result.data.amount_total === "number") {
+          amountCents = result.data.amount_total;
           amountLabel = formatUsd(result.data.amount_total);
         }
       }
@@ -114,6 +117,9 @@ export default async function DonateThanksPage({
 
   return (
     <main id="main">
+      {outcome === "paid" && amountCents !== null && isCheckoutSessionId(sessionId) && (
+        <DonationCompleteTracker sessionId={sessionId} amountUsd={amountCents / 100} />
+      )}
       <PageBody width="reading">
         <PageMasthead eyebrow="Donation" title={title} description={description} />
 

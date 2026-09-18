@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { currentSection, trackEvent } from "@/lib/analytics";
 
 type CopyLinkButtonProps = {
   /** Path or fully-qualified URL to copy. Relative paths are resolved
@@ -112,6 +113,9 @@ export function CopyLinkButton({
     if (!resolvedUrl) return;
     try {
       await navigator.clipboard.writeText(resolvedUrl);
+      // Counted only when the copy actually worked. The manual fallback below
+      // is not counted: nobody can tell whether the reader pressed Ctrl+C.
+      trackEvent("share", { method: "copy_link", content_type: currentSection() });
       setStatus("copied");
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setStatus("idle"), 2500);

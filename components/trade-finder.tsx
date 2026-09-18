@@ -22,6 +22,7 @@ import { TradeFinderCard } from "@/components/trade-finder-card";
 import { type PlayerOption } from "@/components/player-picker";
 import { PlayerPackagePicker } from "@/components/trade-ideas/player-package-picker";
 import { formatEastern } from "@/lib/datetime";
+import { trackEvent } from "@/lib/analytics";
 import {
   declineSuggestion,
   findLeagueTrade,
@@ -327,6 +328,7 @@ export function TradeFinder(props: {
             setStatus(res.error);
             return;
           }
+          trackEvent("tool_use", { tool: "trade_finder" });
           setSuggestions(res.suggestions);
           setGrades(res.grades);
           setSavedKeys(res.savedKeys);
@@ -358,6 +360,7 @@ export function TradeFinder(props: {
             setStatus(res.error);
             return;
           }
+          trackEvent("tool_use", { tool: "trade_finder" });
           setSuggestions(res.suggestions);
           setGrades(res.grades);
           setSavedKeys(res.savedKeys);

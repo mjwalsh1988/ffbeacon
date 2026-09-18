@@ -19,6 +19,7 @@ import { LeagueChoiceList } from "@/components/league-choice-list";
 import type { SavedSleeperHandle } from "@/lib/sleeper-handle/types";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { SideKey } from "@/lib/signal-check/types";
+import { currentSection, trackEvent } from "@/lib/analytics";
 import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
 import {
   listImportLeagues,
@@ -227,6 +228,8 @@ export function SleeperImportPanel({
         makePublic,
       });
       if (res.ok) {
+        // The share-link request re-runs the same trade; count the first run only.
+        if (!makePublic) trackEvent("tool_use", { tool: "signal_check" });
         setView(res.view);
         setAssetMeta(res.assetMeta);
         setEvidence(res.evidence);
@@ -248,6 +251,7 @@ export function SleeperImportPanel({
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
+      trackEvent("share", { method: "copy_link", content_type: currentSection() });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

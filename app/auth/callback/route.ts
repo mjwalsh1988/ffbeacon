@@ -6,6 +6,15 @@ import {
   PREFERENCE_COOKIE_OPTIONS,
   VALID_PREFERENCE_SLUG as VALID_SLUG,
 } from "@/lib/preferences";
+import { AUTH_EVENT_COOKIE, isGoogleAnalyticsEnabled } from "@/lib/analytics";
+
+/**
+ * An account created within this window of the callback is reported as a
+ * sign-up rather than a sign-in. An hour covers a magic link or a confirmation
+ * email read a while after it was sent, and no real returning user signs up
+ * and signs back in inside the same hour often enough to matter.
+ */
+const NEW_ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -60,6 +69,32 @@ export async function GET(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    // Tell the next page what just happened, for Google Analytics. See
+    // components/analytics-events.tsx. Skipped for the account-linking flow
+    // (the return cookie), which is not a sign-in at all. The value names the
+    // event and the provider and nothing else.
+    if (user && !cookieReturn && isGoogleAnalyticsEnabled()) {
+      const createdAt = Date.parse(user.created_at);
+      const isNew =
+        Number.isFinite(createdAt) && Date.now() - createdAt < NEW_ACCOUNT_WINDOW_MS;
+      const provider = String(user.app_metadata?.provider ?? "email")
+        .toLowerCase()
+        .replace(/[^a-z_]/g, "")
+        .slice(0, 32);
+      response.cookies.set(
+        AUTH_EVENT_COOKIE,
+        `${isNew ? "sign_up" : "login"}.${provider || "email"}`,
+        {
+          path: "/",
+          maxAge: 300,
+          sameSite: "lax",
+          secure: true,
+          httpOnly: false,
+        },
+      );
+    }
+
     if (user) {
       const { data: prefs } = await supabase
         .from("user_preferences")

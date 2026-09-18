@@ -5,6 +5,12 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SITE } from "@/lib/site";
+import { GA_MEASUREMENT_ID, isGoogleAnalyticsEnabled } from "@/lib/analytics";
+import {
+  GoogleAnalyticsHead,
+  GoogleAnalyticsLibrary,
+} from "@/components/google-analytics";
+import { AnalyticsEvents } from "@/components/analytics-events";
 import {
   organizationJsonLd,
   serializeJsonLd,
@@ -124,6 +130,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Production only; see lib/analytics.ts.
+  const googleAnalytics = isGoogleAnalyticsEnabled();
   return (
     <html
       lang="en"
@@ -168,6 +176,7 @@ export default function RootLayout({
             __html: serializeJsonLd([organizationJsonLd(), websiteJsonLd()]),
           }}
         />
+        {googleAnalytics && <GoogleAnalyticsHead measurementId={GA_MEASUREMENT_ID} />}
       </head>
       <body className="font-sans antialiased">
         <a
@@ -224,6 +233,15 @@ export default function RootLayout({
         {/* Real-user Web Vitals. Page views alone cannot say whether a change
             made the site faster for anyone who is not on the office wifi. */}
         <SpeedInsights />
+        {/* Google Analytics runs beside Vercel's, not instead of it. Vercel
+            counts page views without cookies; GA adds returning visitors,
+            traffic sources and the conversion events in lib/analytics.ts. */}
+        {googleAnalytics && (
+          <>
+            <GoogleAnalyticsLibrary measurementId={GA_MEASUREMENT_ID} />
+            <AnalyticsEvents />
+          </>
+        )}
       </body>
     </html>
   );
