@@ -109,6 +109,17 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     updatedAt: "2026-09-16T09:00:00-04:00",
     priority: 0.8,
   },
+  {
+    slug: "dynasty-strategy",
+    title: "Dynasty fantasy football strategy: when to contend, when to rebuild",
+    summary:
+      "How to tell whether a dynasty roster should contend or rebuild, why the middle is the worst place to be, age curves against market price, rookie pick hit rates, the dynasty calendar, startups and taxi squads",
+    // No year in the slug, for the same reason as the other strategy guides:
+    // the method does not expire. The one live figure refreshes itself.
+    publishedAt: "2026-09-18T09:00:00-04:00",
+    updatedAt: "2026-09-18T09:00:00-04:00",
+    priority: 0.8,
+  },
 ];
 
 /** The most recently published guide, for surfaces that spotlight the newest one. */

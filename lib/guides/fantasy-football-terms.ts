@@ -321,6 +321,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A taxi squad is dynasty roster space reserved for young developmental players, usually rookies and second-year players, who do not count against your active roster limit.",
           "Players on the taxi squad cannot be started until you promote them. Eligibility rules and whether rivals can poach an unprotected player vary a lot by league, so read yours before you stash anyone.",
         ],
+        link: {
+          href: "/guides/dynasty-strategy#roster-heading",
+          label: "How Sleeper runs taxi squads",
+        },
       },
       {
         id: "handcuff",
@@ -423,6 +427,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A startup draft is the one-time draft that seeds a new dynasty league, covering every available NFL player.",
           "After it, the league only runs rookie drafts. It is the biggest event in a dynasty league's life, and the rosters built there tend to shape it for years.",
         ],
+        link: {
+          href: "/guides/dynasty-strategy#roster-heading",
+          label: "How to plan a startup draft",
+        },
       },
       {
         id: "rookie-draft",
@@ -431,6 +439,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A rookie draft is the annual dynasty draft covering only incoming NFL rookies, usually three to five rounds long.",
           "Pick order normally runs in reverse standings order. Because it is the only way new talent enters a dynasty league, rookie picks trade like currency all year.",
         ],
+        link: {
+          href: "/guides/dynasty-strategy#picks-heading",
+          label: "How often rookie picks hit, by slot",
+        },
       },
       {
         id: "draft-capital",
@@ -700,6 +712,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A win-now move trades future value, meaning young players and rookie picks, for production this season.",
           "It is right for a roster already in contention and wrong for one that is a year away. Telling those two apart on your own team is the hardest honest read in dynasty.",
         ],
+        link: {
+          href: "/guides/dynasty-strategy#contend-heading",
+          label: "The win-now playbook",
+        },
       },
       {
         id: "rebuild",
@@ -708,6 +724,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A rebuild is deliberately trading productive veterans for youth and picks, accepting a bad season or two to be strong later.",
           "A real rebuild has an end date. Collecting picks forever and never cashing them in is not a rebuild, it is a hobby.",
         ],
+        link: {
+          href: "/guides/dynasty-strategy#rebuild-heading",
+          label: "How to rebuild, with an end date",
+        },
       },
       {
         id: "contending",
@@ -716,6 +736,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A contending team is one good enough to win the title this season, which is the roster that should be buying.",
           "Most managers overrate where they sit. The check is blunt: count how many of your starters would start on the best team in your league.",
         ],
+        link: {
+          href: "/guides/dynasty-strategy#lane-heading",
+          label: "Find out which lane your team is in",
+        },
       },
       {
         id: "draft-pick-value",

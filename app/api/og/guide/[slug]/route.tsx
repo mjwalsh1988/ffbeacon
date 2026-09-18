@@ -81,6 +81,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "What the slot changes, how many quarterbacks to roster in redraft, dynasty and best ball, when to draft them, how to trade the spare, and how TE premium stacks on top.",
     badge: "8 lessons",
   },
+  "dynasty-strategy": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "Dynasty strategy:",
+    headlineBottom: "contend or rebuild",
+    subhead:
+      "Find your lane, why the middle is the worst place to be, age against market price, rookie pick hit rates, the dynasty calendar, startups and taxi squads.",
+    badge: "8 lessons",
+  },
 };
 
 /**

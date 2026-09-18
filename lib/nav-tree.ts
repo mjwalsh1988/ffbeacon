@@ -166,6 +166,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         hint: "Quarterbacks when everyone needs two",
         icon: "layers",
       },
+      {
+        id: "/guides/dynasty-strategy",
+        label: "Dynasty Strategy",
+        href: "/guides/dynasty-strategy",
+        hint: "When to contend, when to rebuild",
+        icon: "hourglass",
+      },
     ],
   },
   {

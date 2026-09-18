@@ -341,6 +341,24 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "superflex draft",
     ],
   },
+  {
+    label: "Dynasty Strategy",
+    href: "/guides/dynasty-strategy",
+    description: "When to contend and when to rebuild in a dynasty league",
+    keywords: [
+      "dynasty",
+      "dynasty strategy",
+      "rebuild",
+      "contend",
+      "contender",
+      "win now",
+      "age curve",
+      "rookie picks",
+      "rookie draft",
+      "startup",
+      "taxi squad",
+    ],
+  },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
@@ -396,6 +414,7 @@ export const FOOTER_COLUMNS: Array<{
       { label: "FAAB Strategy", href: "/guides/faab-strategy" },
       { label: "Trade Guide", href: "/guides/fantasy-football-trade-guide" },
       { label: "Superflex Strategy", href: "/guides/superflex-strategy" },
+      { label: "Dynasty Strategy", href: "/guides/dynasty-strategy" },
       { label: "How FF Beacon Works", href: "/guides/how-ff-beacon-works" },
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.

@@ -11,6 +11,7 @@ import {
   Headphones,
   Info,
   Layers,
+  Hourglass,
   ListOrdered,
   Mic,
   Newspaper,
@@ -399,17 +400,23 @@ export default async function AuthorMichaelPage() {
               accent="purple"
             />
             <LinkTile
+              href="/guides/dynasty-strategy"
+              icon={Hourglass}
+              title="Dynasty strategy"
+              body="When to contend and when to rebuild, why the middle is the worst place to be, and what age and rookie picks are really worth."
+            />
+            <LinkTile
               href="/guides/how-ff-beacon-works"
               icon={Cog}
               title="How FF Beacon works"
               body="The projection engine, the matchup model and the confidence figure, and what none of it knows."
+              accent="purple"
             />
             <LinkTile
               href="/guides"
               icon={Layers}
               title="The guides shelf"
               body="Everything above in one place, with whatever ships next added as it lands."
-              accent="purple"
             />
           </div>
         </Panel>

@@ -876,7 +876,12 @@ function RecordSection() {
         contending whether your record says so or not. If it is two, you are
         not, whatever last week looked like. And in a redraft league you are
         always contending, because there is no next season to hold an asset for,
-        so I grade every trade there on wins alone.
+        so I grade every trade there on wins alone. In dynasty, the{" "}
+        <Link href="/guides/dynasty-strategy" className={LINK_CLASS}>
+          dynasty strategy guide
+        </Link>{" "}
+        goes further: how to tell which lane you are in, and what each one
+        should buy and sell across the whole year.
       </Para>
       <KeyIdea>
         Decide which season you are playing for before you look at any offer. A

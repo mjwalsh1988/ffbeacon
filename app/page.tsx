@@ -31,6 +31,7 @@ import {
   Vote,
   Clock,
   Layers,
+  Hourglass,
   BookOpen,
   Unlock,
   Users,
@@ -1235,6 +1236,16 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
       "How many quarterbacks to roster in redraft, dynasty and best ball",
       "One pillar, then let the run tell you, from any draft slot",
       "Your third quarterback is value, not wins",
+    ],
+  },
+  "dynasty-strategy": {
+    icon: Hourglass,
+    hint: "When to contend, when to rebuild",
+    lessons: [
+      "Find your lane with the same code League Pulse uses to tag your team",
+      "Why the middle is the worst place in dynasty",
+      "Who the dynasty market pays for by age, live from tonight's values",
+      "Rookie pick hit rates by slot, and when picks are cheapest",
     ],
   },
 };

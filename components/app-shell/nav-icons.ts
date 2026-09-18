@@ -55,6 +55,7 @@ import {
   Bookmark,
   User,
   Shield,
+  Hourglass,
   type LucideIcon,
 } from "lucide-react";
 
@@ -107,6 +108,8 @@ export const NAV_ICONS = {
   // for a league with no logo of its own. Distinct from `shield` above, which is
   // a ShieldCheck and reads as "verified".
   league: Shield,
+  // The dynasty strategy guide: a roster measured in seasons.
+  hourglass: Hourglass,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

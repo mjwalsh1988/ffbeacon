@@ -305,6 +305,7 @@ export async function RankingsView({
             <GlossaryTermsNote
               links={glossaryLinks}
               superflex={format.is_superflex}
+              dynasty={format.league_type === "dynasty"}
             />
           </div>
 
@@ -454,12 +455,17 @@ function glossaryLinksForFormat(format: {
 function GlossaryTermsNote({
   links,
   superflex = false,
+  dynasty = false,
 }: {
   links: FormatGlossaryLink[];
   /** A superflex board also points at the guide on how to play the format,
    *  since the definition alone does not tell a reader when to take a
    *  quarterback. */
   superflex?: boolean;
+  /** A dynasty board points at the dynasty strategy guide for the same
+   *  reason: a value says what a player costs, not which lane should buy him.
+   *  These boards are where most of the site's dynasty searches land. */
+  dynasty?: boolean;
 }) {
   if (links.length === 0) return null;
 
@@ -470,7 +476,7 @@ function GlossaryTermsNote({
         <span key={link.id}>
           <Link
             href={`/guides/fantasy-football-terms#${link.id}`}
-            className="text-brand-cyan underline-offset-4 hover:underline"
+            className="text-brand-cyan underline underline-offset-4 hover:text-brand-cyan/80"
           >
             {link.anchorText}
           </Link>
@@ -490,11 +496,25 @@ function GlossaryTermsNote({
           Then read{" "}
           <Link
             href="/guides/superflex-strategy"
-            className="text-brand-cyan underline-offset-4 hover:underline"
+            className="text-brand-cyan underline underline-offset-4 hover:text-brand-cyan/80"
           >
             the superflex strategy guide
           </Link>{" "}
           for how many quarterbacks to roster and when to draft them.
+        </>
+      ) : null}
+      {dynasty ? (
+        <>
+          {" "}
+          The{" "}
+          <Link
+            href="/guides/dynasty-strategy"
+            className="text-brand-cyan underline underline-offset-4 hover:text-brand-cyan/80"
+          >
+            dynasty strategy guide
+          </Link>{" "}
+          covers when to contend, when to rebuild, and what age does to these
+          values.
         </>
       ) : null}
     </p>

@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Scale,
   Layers,
+  Hourglass,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -216,6 +217,19 @@ const GUIDES: Guide[] = [
     ],
   },
   {
+    icon: Hourglass,
+    title: "Dynasty strategy",
+    href: "/guides/dynasty-strategy",
+    description:
+      "When to contend and when to rebuild in a dynasty league, why the middle is the worst place to be, and how age, rookie picks and the calendar decide which moves are right for your roster.",
+    bullets: [
+      "Eight lessons, with a live look at who the dynasty market pays for by age",
+      "Put in your league and see your lane: Contender, Loaded, Bubble or Rebuilder",
+      "Rookie pick hit rates by slot, and when picks are cheapest",
+      "An age clock for your starters, and a pre-deadline checklist",
+    ],
+  },
+  {
     icon: Cog,
     title: "How FF Beacon works",
     href: "/guides/how-ff-beacon-works",
@@ -244,8 +258,8 @@ function GuidesSection() {
       </h2>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
         The glossary, the draft guide, a beginner&apos;s read on Positional WAR,
-        the FAAB playbook, the trade guide, the superflex guide, and the
-        methodology page are all free to read right now. Each one defines a
+        the FAAB playbook, the trade guide, the superflex guide, the dynasty
+        guide, and the methodology page are all free to read right now. Each one defines a
         term the first time it uses it, so you can start anywhere and never hit
         a word the page assumes you know. The strategy guides are built as
         short courses: numbered lessons, a diagram for each idea, and boxes you
