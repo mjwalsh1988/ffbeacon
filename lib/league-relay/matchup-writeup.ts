@@ -28,7 +28,7 @@
  */
 
 import type { MatchupSide, MatchupView } from "@/lib/league-schedule/types";
-import type { RelayLeague, Writeup, WriteupField } from "./types";
+import type { RelayLeague, RelayTeam, Writeup, WriteupField } from "./types";
 import { fitPollAnswer } from "./limits";
 import {
   PREVIEW_CLOSERS,
@@ -39,6 +39,9 @@ import {
   listOf,
   ordinal,
   pct,
+  pulseFieldSize,
+  pulsePhrase,
+  standingClause,
   type Line,
 } from "./voice";
 import type { MatchupSlot } from "./select-matchup";
@@ -46,6 +49,16 @@ import type { MatchupSlot } from "./select-matchup";
 export interface MatchupWriteupInput {
   league: RelayLeague;
   view: MatchupView;
+  /**
+   * Every roster in the league, keyed by Sleeper roster id.
+   *
+   * Here for ONE fact: `RelayTeam.standingsRank`, the position in the table. A
+   * MatchupSide carries the Power Pulse rank and not that one, and printing the
+   * Power Pulse rank beside a record without the table position is what made
+   * these writeups read as though they had the standings wrong. See the rank
+   * rule at the top of ./voice.ts.
+   */
+  teams: Map<number, RelayTeam>;
   /** Headline or undercard. Only set on a preview; a recap covers every game. */
   slot: MatchupSlot | null;
   snark: number;
@@ -56,29 +69,48 @@ export interface MatchupWriteupInput {
 
 const PREVIEW_OPENERS: Line[] = [
   { heat: 0, text: "This week's headline game." },
+  { heat: 0, text: "The best game on the board this week." },
+  { heat: 0.2, text: "The one worth watching." },
   { heat: 0.3, text: "Circle this one." },
+  { heat: 0.3, text: "Here is the game that decides how this week feels." },
+  { heat: 0.4, text: "The board gave us a good one." },
   { heat: 0.5, text: "Two managers who will both tell you they are underdogs." },
+  { heat: 0.6, text: "Clear your Sunday, or at least your notifications." },
+  { heat: 0.7, text: "Two teams, one of whom is about to learn something." },
 ];
 
 const UNDERCARD_OPENERS: Line[] = [
   { heat: 0.2, text: "And now, the other end of the table." },
+  { heat: 0.3, text: "Elsewhere on the slate." },
+  { heat: 0.4, text: "The other game worth a look, for different reasons." },
   { heat: 0.5, text: "Somebody has to win this. Regrettably." },
+  { heat: 0.6, text: "Down at the quieter end of the league." },
   { heat: 0.7, text: "The game nobody asked for, previewed anyway, because you are all watching." },
+  { heat: 0.8, text: "A game being played, technically, for points." },
   { heat: 0.9, text: "Two teams enter. One team wins. Both teams should feel bad." },
 ];
 
 const BLOWOUT_LINES: Line[] = [
   { heat: 0.3, text: "This was over early." },
+  { heat: 0.3, text: "Nobody needed to watch the late games for this one." },
+  { heat: 0.4, text: "The result was decided before the afternoon window." },
+  { heat: 0.5, text: "This one stopped being a contest at some point on Sunday morning." },
   { heat: 0.6, text: "This was not a fantasy matchup, it was a wellness check." },
+  { heat: 0.7, text: "One of these managers spent the afternoon watching for fun." },
+  { heat: 0.8, text: "The scoreboard has been asked to stop." },
   { heat: 0.9, text: "There is video of this. There should not be." },
 ];
 
 const NAILBITER_LINES: Line[] = [
   { heat: 0.2, text: "That went to the wire." },
+  { heat: 0.2, text: "Nobody involved enjoyed the last hour of this." },
   { heat: 0.3, text: "Decided by less than a single carry." },
+  { heat: 0.4, text: "That is the sort of margin that gets remembered in December." },
   { heat: 0.5, text: "Somebody's Monday night kicker earned a Christmas card." },
   { heat: 0.5, text: "Two managers watched the same Monday night game for entirely different reasons." },
+  { heat: 0.6, text: "One catch. That is the whole story of this game." },
   { heat: 0.7, text: "One roster move in either direction and this flips. Sleep well." },
+  { heat: 0.7, text: "Somebody is going to recount this by hand." },
   { heat: 0.8, text: "A rounding error decided somebody's playoff seeding. Enjoy your week." },
 ];
 
@@ -104,9 +136,21 @@ function record(side: MatchupSide): string {
   return `${r.wins}-${r.losses}${r.ties > 0 ? `-${r.ties}` : ""}`;
 }
 
-/** "Team Name (4-2, 3rd)". The way every team is introduced. */
-function nameWithContext(side: MatchupSide, totalRosters: number): string {
-  const rank = side.pulseRank !== null ? `, ${ordinal(side.pulseRank)} of ${totalRosters}` : "";
+/**
+ * "kendawg9 (1-0, 3rd in the table)". The way every team is introduced.
+ *
+ * THE TABLE POSITION, NOT THE POWER PULSE RANK. This sits immediately after the
+ * record, and a rank in that position is read as the standings whatever it
+ * actually measures. The Power Pulse figure is named in full further down,
+ * where there is room to say what it is.
+ */
+function nameWithContext(
+  side: MatchupSide,
+  league: RelayLeague,
+  teams: Map<number, RelayTeam>,
+): string {
+  const standing = teams.get(side.sleeperRosterId)?.standingsRank ?? null;
+  const rank = standing !== null ? `, ${ordinal(standing)} of ${league.totalRosters}` : "";
   return `**${sideName(side)}** (${record(side)}${rank})`;
 }
 
@@ -167,9 +211,10 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
     voice.pick(isUndercard ? UNDERCARD_OPENERS : PREVIEW_OPENERS) ??
     (isUndercard ? "The other end of the table." : "This week's headline game.");
 
-  const hook = `${opener} ${nameWithContext(away, league.totalRosters)} at ${nameWithContext(
+  const hook = `${opener} ${nameWithContext(away, league, input.teams)} at ${nameWithContext(
     home,
-    league.totalRosters,
+    league,
+    input.teams,
   )}, week ${view.week}.`;
 
   /* ------------------------------------------------------------ the odds */
@@ -200,14 +245,20 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
     if (edge < 0.06) {
       return voice.pick([
         { heat: 0.2, text: "A genuine coin flip, which nobody involved will accept as an excuse afterwards." },
+        { heat: 0.3, text: "The model has no idea, and says so at length." },
+        { heat: 0.4, text: "There is nothing between these two on paper, so it comes down to the parts nobody projects." },
         { heat: 0.6, text: "Fifty-fifty, so both managers get to spend the week convinced they are being robbed." },
+        { heat: 0.7, text: "A coin flip, which means one of you gets to be very annoying about it on Tuesday." },
       ]);
     }
     if (edge > 0.28) {
       const dog = winProb >= 0.5 ? away : home;
       return voice.pick([
         { heat: 0.3, text: `${sideName(dog)} needs help. Quite a lot of it.` },
+        { heat: 0.4, text: `${sideName(dog)} needs a ceiling week from somebody, and soon.` },
+        { heat: 0.5, text: `${sideName(dog)} is where the upsets come from, historically, and rarely.` },
         { heat: 0.6, text: `${sideName(dog)} is not favoured, and the projections are being polite about it.` },
+        { heat: 0.8, text: `${sideName(dog)} is going to need two of these players to have career days.` },
         { heat: 0.9, text: `${sideName(dog)} could start every player twice and still be behind.` },
       ]);
     }
@@ -234,8 +285,12 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
       const jab =
         side.pointsLeftOnBench >= 12
           ? voice.pick([
+              { heat: 0.3, text: "There are three days to do something about that." },
               { heat: 0.4, text: "That is a whole starter's worth of nothing." },
+              { heat: 0.5, text: "That gap is larger than most of this week's projected margins." },
+              { heat: 0.6, text: "Nobody has to lose this way. And yet." },
               { heat: 0.7, text: "Fix it, or do not, and let the channel enjoy itself." },
+              { heat: 0.8, text: "This is the number that gets quoted back on Tuesday." },
             ])
           : null;
       benchLines.push(
@@ -256,8 +311,13 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
     const clauses: string[] = [];
     for (const side of [away, home]) {
       if (side.pulseRank === null) continue;
-      const band = bandFromRank(side.pulseRank, league.totalRosters);
-      clauses.push(`${sideName(side)} are ${describeBand(voice, band)}`);
+      // The denominator is the number of teams Power Pulse scored, not the
+      // league's roster count. See the rank rule in ./voice.ts.
+      const band = bandFromRank(side.pulseRank, pulseFieldSize(league));
+      const pulse = pulsePhrase(side.pulseRank, league);
+      clauses.push(
+        `${sideName(side)} are ${pulse ? `${pulse}, ` : ""}${describeBand(voice, band)}`,
+      );
     }
     if (clauses.length === 0) return "";
     // One sentence: the whole value of naming both bands is the contrast
@@ -340,7 +400,10 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
   const verdict = tied
     ? voice.pick([
         { heat: 0.2, text: "A tie. Nobody wanted this." },
+        { heat: 0.3, text: "A tie, which is the one result nobody prepares a speech for." },
+        { heat: 0.5, text: "A tie. Half a win each, and two managers who would rather have lost." },
         { heat: 0.6, text: "A tie, which is fantasy football's way of wasting everybody's Sunday." },
+        { heat: 0.8, text: "A tie. Three hours of football for half a point in the standings." },
       ]) ?? "A tie."
     : margin < 5
       ? voice.pick(NAILBITER_LINES) ?? "That went to the wire."
@@ -379,7 +442,11 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
     if (enough) {
       const jab = voice.pick([
         { heat: 0.3, text: "The right lineup wins this game." },
+        { heat: 0.4, text: "The roster was good enough. The Sunday morning was not." },
+        { heat: 0.5, text: "This one was lost before kickoff." },
         { heat: 0.6, text: "That is not a loss to the opponent. That is a loss to the lineup screen." },
+        { heat: 0.7, text: "The opponent did not beat them. The bench did." },
+        { heat: 0.8, text: "There is no variance excuse available here, which is the cruel part." },
         { heat: 0.9, text: "Print this out. Frame it. Live with it." },
       ]);
       wrongLines.push(
@@ -404,7 +471,10 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
   ) {
     const jab = voice.pick([
       { heat: 0.3, text: "Winning is winning." },
+      { heat: 0.4, text: "Nobody checks the bench of the team that won." },
+      { heat: 0.5, text: "The result will be remembered. This number will not." },
       { heat: 0.6, text: "Setting the worse lineup and winning anyway is its own kind of talent." },
+      { heat: 0.7, text: "Two mistakes were made on Sunday and only one of them cost anything." },
       { heat: 0.9, text: "Two managers set two bad lineups and only one of them has to answer for it." },
     ]);
     wrongLines.push(
@@ -432,15 +502,24 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
     const clauses: string[] = [];
     for (const side of [winner, loser]) {
       if (side.pulseRank === null) continue;
-      const band = bandFromRank(side.pulseRank, league.totalRosters);
+      const band = bandFromRank(side.pulseRank, pulseFieldSize(league));
+      // Both ranks, both named. The record and the table position are what a
+      // manager can check in Sleeper; the Power Pulse rank is the model's
+      // opinion about the rest of the season and says so.
+      const where = standingClause(
+        input.teams.get(side.sleeperRosterId)?.standingsRank ?? null,
+        side.pulseRank,
+        league,
+      );
       clauses.push(
-        `${sideName(side)} are ${record(side)} and ${ordinal(side.pulseRank)} of ${
-          league.totalRosters
-        }, which is to say ${describeBand(voice, band)}`,
+        `${sideName(side)} are ${record(side)}${where ? `, ${where}` : ""}, which is to say ${describeBand(
+          voice,
+          band,
+        )}`,
       );
     }
     if (clauses.length === 0) return "";
-    return `That leaves the table where it was: ${clauses.join("; ")}.`;
+    return `Where that leaves them: ${clauses.join("; ")}.`;
   })();
 
   const closer = voice.pick(RECAP_CLOSERS) ?? "On to next week.";

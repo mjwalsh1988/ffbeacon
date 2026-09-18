@@ -189,6 +189,12 @@ export async function gatherLeagueFacts(
     resolveRelayContext(admin, league),
   ]);
 
+  // THE DENOMINATOR FOR EVERY PULSE RANK A WRITEUP PRINTS, and the only place
+  // that has both halves in hand. A rank out of `total_rosters` is wrong the
+  // moment Power Pulse skips a roster, and wrong quietly: it reads as a
+  // standings position and the numbers are plausible. See RelayLeague.
+  league.pulseRankedTeams = pulseRanks.size > 0 ? pulseRanks.size : null;
+
   const nflState = await getNflState();
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
   // Sleeper's own setting, defaulted to 15 only when the league object has not
@@ -300,6 +306,7 @@ async function relayOneLeague(
         ...(await relayPreviews(admin, {
           settings,
           league,
+          teams,
           board,
           currentWeek,
           playoffWeekStart,
@@ -313,6 +320,7 @@ async function relayOneLeague(
         ...(await relayRecaps(admin, {
           settings,
           league,
+          teams,
           board,
           currentWeek,
           playoffWeekStart,
@@ -812,6 +820,8 @@ export function buildWaiverFor(
 interface MatchupParams {
   settings: LeagueRelaySettings;
   league: RelayLeague;
+  /** Every roster, for the table position each writeup prints beside a record. */
+  teams: Map<number, RelayTeam>;
   board: Awaited<ReturnType<typeof loadScheduleBoard>>;
   currentWeek: number;
   playoffWeekStart: number;
@@ -865,6 +875,7 @@ async function relayPreviews(admin: Admin, p: MatchupParams): Promise<SendOutcom
           if (!detail.ok) return null;
           return buildMatchupPreview({
             league: p.league,
+            teams: p.teams,
             view: detail.view,
             slot: pick.slot,
             snark: p.settings.voice.snark,
@@ -955,6 +966,7 @@ async function relayRecaps(
         if (!detail.ok) return null;
         return buildMatchupRecap({
           league: p.league,
+          teams: p.teams,
           view: detail.view,
           slot: null,
           snark: p.settings.voice.snark,

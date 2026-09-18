@@ -58,6 +58,21 @@ export interface RelayLeague {
   name: string;
   season: number;
   totalRosters: number;
+  /**
+   * How many teams POWER PULSE ACTUALLY SCORED, which is the denominator every
+   * "9th of 12" in a writeup belongs over.
+   *
+   * Not `totalRosters`. A Power Pulse rank is a position among the rows in
+   * `league_power_pulse_cache`, and a league where the model skipped two
+   * rosters ranks only to ten. Saying "10th of 12" about a ranking that ran to
+   * ten is wrong by two places and reads as a standings position, which is the
+   * defect this field exists to close. `lib/league-power-pulse-data.ts` makes
+   * exactly the same choice for the same reason.
+   *
+   * Null when Power Pulse has no rows for the league, in which case no writeup
+   * has a rank to print anyway.
+   */
+  pulseRankedTeams: number | null;
   rosterPositions: string[];
   /** The raw Sleeper league object, as synced. Null when never captured. */
   metadata: unknown;
@@ -88,6 +103,20 @@ export interface RelayTeam {
   /** Their team name, when they set one. Kept, but not what messages use. */
   teamName: string | null;
   record: { wins: number; losses: number; ties: number };
+  /** Points scored so far. Sleeper's own first tiebreak, and the one used here. */
+  pointsFor: number;
+  /**
+   * WHERE THEY ACTUALLY SIT IN THE TABLE: wins first, then points scored.
+   *
+   * A separate fact from the Power Pulse rank and routinely a different number,
+   * because Power Pulse ranks a team on what it should win FROM HERE and the
+   * table ranks it on what it has already won. A 1-0 team can be last by Power
+   * Pulse, and a writeup that prints only the second one beside a record has
+   * told the reader something that looks false and is not checkable.
+   *
+   * Null only when the roster row carries no record at all.
+   */
+  standingsRank: number | null;
 }
 
 export type { RelayMessageType, RelayHeader };

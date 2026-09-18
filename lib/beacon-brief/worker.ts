@@ -26,6 +26,7 @@ import { submitIndexNow } from "@/lib/indexnow";
 import { SITE } from "@/lib/site";
 import {
   deleteWebhookMessage,
+  discordAssetOrigin,
   patchWebhookMessage,
   postWebhookMessage,
   type DiscordAttachment,
@@ -58,6 +59,10 @@ import {
   type ResearchGateVerdict,
 } from "./research-gate";
 import { checkArticleVolume } from "./volume-guard";
+import { buildBriefCard } from "./brief-card";
+import { draftSchema } from "@/lib/brief-desk/draft-schema";
+import { parseEditionMetadata } from "@/lib/brief-desk/edition-metadata";
+import { formatPeriod, formatsPhrase, periodChipLabel } from "@/lib/brief-desk/period";
 import { renderRetractedDiscordText } from "@/lib/relays/render";
 import type { RelayRow } from "@/lib/relays/types";
 import { loadRelayForIngestion, relayDiscordText } from "@/lib/relays/write";
@@ -705,10 +710,14 @@ async function recordDiscordMessageId(
 
 /**
  * The Brief's Discord post (plan section 10.1): the one place in the feature
- * that mentions anyone and the one place that carries a link. Content is
- * "@everyone", the title, the tl;dr and the page URL, each separated by a
- * blank line; no embed, no attachments. It goes to the same webhook the
- * Relay cards use.
+ * that mentions anyone and the one place that carries a link. Content is the
+ * "@everyone" ping plus one line saying what has landed; everything else is an
+ * embed built by ./brief-card.ts, which is where the shape and the size limits
+ * are decided. It goes to the same webhook the Relay cards use.
+ *
+ * THE URL IS ON THE EMBED, NOT IN THE CONTENT. A bare link in content makes
+ * Discord attach its own preview underneath ours, so the post carries the same
+ * edition twice, once badly.
  *
  * Idempotent through brief_editions.discord_posted_at, stamped BEFORE the
  * send with a conditional update (only the caller that flips null to a time
@@ -726,7 +735,7 @@ async function postBriefDiscord(
 
   const { data: article } = await admin
     .from("articles")
-    .select("id, slug, title, tl_dr, status")
+    .select("id, slug, title, tl_dr, status, season, week, metadata")
     .eq("id", articleId)
     .maybeSingle();
   if (!article) return { ok: true }; // nothing to post; treat as done
@@ -739,7 +748,7 @@ async function postBriefDiscord(
   }
   const { data: edition } = await admin
     .from("brief_editions")
-    .select("id, discord_posted_at")
+    .select("id, discord_posted_at, draft_payload")
     .eq("article_id", article.id)
     .maybeSingle();
   if (!edition) return { ok: false, error: `no brief_editions row for article ${article.id}` };
@@ -766,18 +775,48 @@ async function postBriefDiscord(
     .select("id");
   if (!won || won.length === 0) return { ok: true }; // another run got there first
 
-  const pageUrl = `${SITE.url.replace(/\/$/, "")}/brief/${article.slug}`;
-  const content = ["@everyone", article.title, article.tl_dr ?? "", pageUrl].filter(Boolean).join("\n\n");
+  const origin = SITE.url.replace(/\/$/, "");
+  const pageUrl = `${origin}/brief/${article.slug}`;
+  const meta = parseEditionMetadata(article.metadata);
+  // The draft is the only place the section headings live. A payload that no
+  // longer parses is not a reason to refuse the post: the card simply goes out
+  // without its contents list, which is the part a reader can get by clicking.
+  const parsedDraft = draftSchema.safeParse(edition.draft_payload);
+  const sectionHeadings = parsedDraft.success
+    ? parsedDraft.data.sections.map((s) => s.heading)
+    : [];
+
+  const card = buildBriefCard({
+    title: article.title,
+    url: pageUrl,
+    tlDr: article.tl_dr,
+    periodChip: periodChipLabel(article.season, article.week, meta.phase),
+    periodCovered: (() => {
+      const period = formatPeriod(meta.periodStart, meta.periodEnd);
+      return period ? `Covers ${period}` : null;
+    })(),
+    statTiles: meta.statTiles,
+    sectionHeadings,
+    // The same 1200x630 the page's social unfurl uses, so the Discord card and
+    // a link pasted anywhere else cannot show different art for one edition.
+    // Built on the PUBLIC origin: Discord fetches this itself, so a localhost
+    // URL from a dev run is a broken image in the channel rather than no image.
+    imageUrl: `${discordAssetOrigin()}/api/og/brief/${article.slug}`,
+    formatsPhrase: formatsPhrase(meta.formats),
+  });
+
   const res = await postWebhookMessage(url, {
-    content,
-    embeds: [],
+    content: card.content,
+    embeds: card.embeds,
     allowedRoleIds: [],
     allowEveryone: true,
   });
   await logBeaconBrief(admin, {
     stage: "discord_post",
     level: res.ok ? "info" : "error",
-    message: res.ok ? `brief ${article.slug} posted` : `brief ${article.slug}: ${res.error}`,
+    message: res.ok
+      ? `brief ${article.slug} posted${card.dropped.length > 0 ? ` (dropped to fit: ${card.dropped.join(", ")})` : ""}`
+      : `brief ${article.slug}: ${res.error}`,
     responsePayload: res as unknown as Json,
   });
   if (!res.ok) {

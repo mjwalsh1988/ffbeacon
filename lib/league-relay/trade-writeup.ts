@@ -49,7 +49,10 @@ import {
   ordinal,
   pct,
   ppChange,
+  pulseFieldSize,
+  pulsePhrase,
   signed,
+  standingClause,
 } from "./voice";
 
 export interface TradeWriteupInput {
@@ -218,10 +221,16 @@ function seasonParagraph(
     ? voice.pickPlain([
         "The other side of it is much the same story.",
         "It reads similarly from the other bench.",
+        "The view from the other roster is not far off.",
+        "The same thing happened at the other end of the deal.",
+        "Curiously, the other side moves the same way.",
       ])
     : voice.pickPlain([
         "The other side of it goes the other way.",
         "From the other bench it looks like the opposite trade, because it is.",
+        "It points the other way across the table.",
+        "The other roster was handed the mirror image.",
+        "What one side gained here, the other put down.",
       ]);
 
   return `${a} ${connective} ${b}`;
@@ -235,7 +244,7 @@ function dynastyRead(
   voice: Voice,
   team: ExecutedTeamImpact,
   teamName: string,
-  totalRosters: number,
+  league: RelayLeague,
 ): string | null {
   const bits: string[] = [];
 
@@ -259,7 +268,10 @@ function dynastyRead(
   }
   if (bits.length === 0) return null;
 
-  const band = bandFromRank(team.pulseRank, totalRosters);
+  // The denominator is the number of teams Power Pulse scored, and the rank is
+  // NAMED wherever it is printed. See the rank rule at the top of ./voice.ts.
+  const band = bandFromRank(team.pulseRank, pulseFieldSize(league));
+  const pulse = pulsePhrase(team.pulseRank, league);
   const sentence = `${listOf(bits)}.`;
 
   // The fit read. A contender shipping value for wins is doing its job; a
@@ -268,25 +280,25 @@ function dynastyRead(
   const sellingOff = (team.lineupDelta ?? 0) < -0.5 && team.valueDelta > 0;
 
   if (buyingNow && (band === "elite" || band === "good")) {
-    return `${sentence} That is a contender paying the going rate, which is exactly what ${ordinal(
-      team.pulseRank ?? 0,
-    )} in the league buys you the right to do.`;
+    return `${sentence} That is a contender paying the going rate, which is exactly what ${
+      pulse ?? "a top finish"
+    } buys you the right to do.`;
   }
   if (buyingNow && (band === "poor" || band === "dire")) {
     const jab = describeBand(voice, band);
-    return `${sentence} Buying win-now help while ${ordinal(
-      team.pulseRank ?? 0,
-    )} of ${totalRosters} is a choice. This is ${jab}, and the calendar is not going to fix that.`;
+    return `${sentence} Buying win-now help while ${
+      pulse ?? "down the table"
+    } is a choice. This is ${jab}, and the calendar is not going to fix that.`;
   }
   if (sellingOff && (band === "poor" || band === "dire")) {
-    return `${sentence} A team ${ordinal(
-      team.pulseRank ?? 0,
-    )} of ${totalRosters} selling the present for the future is the one textbook move available to it, so credit where it is due.`;
+    return `${sentence} A team ${
+      pulse ?? "this far down"
+    } selling the present for the future is the one textbook move available to it, so credit where it is due.`;
   }
   if (sellingOff && (band === "elite" || band === "good")) {
-    return `${sentence} Selling from ${ordinal(
-      team.pulseRank ?? 0,
-    )} is either a long game or an act of self-sabotage, and we will know by December.`;
+    return `${sentence} Selling from ${
+      pulse ?? "near the top"
+    } is either a long game or an act of self-sabotage, and we will know by December.`;
   }
   return sentence;
 }
@@ -296,11 +308,12 @@ function redraftRead(
   voice: Voice,
   team: ExecutedTeamImpact,
   teamName: string,
-  totalRosters: number,
+  league: RelayLeague,
   weeksLeft: number,
 ): string | null {
   if (team.lineupDelta === null) return null;
-  const band = bandFromRank(team.pulseRank, totalRosters);
+  const band = bandFromRank(team.pulseRank, pulseFieldSize(league));
+  const pulse = pulsePhrase(team.pulseRank, league);
   const delta = team.lineupDelta;
 
   if (Math.abs(delta) < 0.3) {
@@ -326,23 +339,29 @@ function redraftRead(
     `That is roughly ${total.toFixed(0)} points ${
       gained ? "to the good" : "out of the door"
     } for ${teamName} across the ${weekLabel} that remain`,
+    `Across the ${weekLabel} still to play it comes to about ${total.toFixed(0)} points ${
+      gained ? "in favour of" : "off the total of"
+    } ${teamName}`,
+    `${teamName} are looking at something like ${total.toFixed(0)} points ${
+      gained ? "more" : "fewer"
+    } over the ${weekLabel} that are left`,
   ]);
 
   if (gained && (band === "poor" || band === "dire")) {
     const jab = describeBand(voice, band);
-    return `${base}. They are ${ordinal(
-      team.pulseRank ?? 0,
-    )} of ${totalRosters} and ${jab}, so this is rearranging furniture, but it is better furniture.`;
+    return `${base}. They are ${
+      pulse ?? "well down the table"
+    } and ${jab}, so this is rearranging furniture, but it is better furniture.`;
   }
   if (gained) {
-    return `${base}, which for a team already ${ordinal(
-      team.pulseRank ?? 0,
-    )} in the league is the kind of margin that decides a bye.`;
+    return `${base}, which for a team already ${
+      pulse ?? "in the mix"
+    } is the kind of margin that decides a bye.`;
   }
   if (!gained && (band === "elite" || band === "good")) {
-    return `${base}. Giving that up from ${ordinal(
-      team.pulseRank ?? 0,
-    )} in a league with no next year is a bold read on how much cushion they have.`;
+    return `${base}. Giving that up from ${
+      pulse ?? "near the top"
+    } in a league with no next year is a bold read on how much cushion they have.`;
   }
   return `${base}, and they did not have points to spare.`;
 }
@@ -411,7 +430,7 @@ function buildFields(
   ].filter((b): b is string => Boolean(b));
   fields.push({
     name: "Signal Check",
-    value: verdictBits.join(" · ").replace(/ · /g, " | "),
+    value: verdictBits.join(" | "),
     priority: 0,
   });
 
@@ -537,8 +556,8 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
       [impact.b, teamB.name],
     ] as const) {
       const read = isDynasty
-        ? dynastyRead(voice, team, name, league.totalRosters)
-        : redraftRead(voice, team, name, league.totalRosters, weeksLeft);
+        ? dynastyRead(voice, team, name, league)
+        : redraftRead(voice, team, name, league, weeksLeft);
       if (read) readParts.push(read);
     }
     // The more striking of the two, not a random one. A player who would have
@@ -566,18 +585,17 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
       [impact.b, teamB],
     ] as const) {
       if (team.pulseRank === null) continue;
-      const phrase = describeBand(voice, bandFromRank(team.pulseRank, league.totalRosters));
+      const phrase = describeBand(voice, bandFromRank(team.pulseRank, pulseFieldSize(league)));
       // A 0-0 record is not a record, it is a season that has not started, and
       // "sit 5th of 12 at 0-0" reads as though five teams had already beaten
-      // them. Before a game is played the rank is a projection and says so.
+      // them. Before a game is played there is no table, so only the Power
+      // Pulse projection is quoted and it says it is a projection.
       const played = t.record.wins + t.record.losses + t.record.ties > 0;
       const where = played
-        ? `sit ${ordinal(team.pulseRank)} of ${league.totalRosters} at ${t.record.wins}-${
-            t.record.losses
-          }${t.record.ties > 0 ? `-${t.record.ties}` : ""}`
-        : `are projected ${ordinal(team.pulseRank)} of ${
-            league.totalRosters
-          } before a game has been played`;
+        ? `are ${t.record.wins}-${t.record.losses}${
+            t.record.ties > 0 ? `-${t.record.ties}` : ""
+          }, ${standingClause(t.standingsRank, team.pulseRank, league)}`
+        : `are ${pulsePhrase(team.pulseRank, league)} before a game has been played`;
       clauses.push(`${t.name} ${where}, which is to say ${phrase}`);
     }
     if (clauses.length === 0) return "";

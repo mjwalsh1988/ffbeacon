@@ -47,6 +47,11 @@ export async function loadRelayLeague(
     // A league whose roster count never synced is still a league. One is the
     // safe floor: every band calculation divides by (total - 1) and guards it.
     totalRosters: Number(data.total_rosters ?? 0) || rosterPositions.length || 12,
+    // Filled by gatherLeagueFacts, which is the only place that has the Power
+    // Pulse rows in hand. Null here rather than defaulted to the roster count:
+    // a wrong denominator is the exact defect this field exists to fix, so it
+    // says "unknown" until something actually knows.
+    pulseRankedTeams: null,
     rosterPositions,
     metadata: data.metadata,
     watermarkAt,
@@ -85,7 +90,7 @@ export async function loadRelayTeams(
   const [{ data: rosters }, { data: users }] = await Promise.all([
     admin
       .from("rosters")
-      .select("sleeper_roster_id, owner_user_id, wins, losses, ties")
+      .select("sleeper_roster_id, owner_user_id, wins, losses, ties, points_for")
       .eq("league_id", leagueRowId),
     admin
       .from("league_users")
@@ -116,9 +121,38 @@ export async function loadRelayTeams(
         losses: Number(r.losses ?? 0),
         ties: Number(r.ties ?? 0),
       },
+      pointsFor: Number(r.points_for ?? 0),
+      // Filled immediately below, once every roster is in hand.
+      standingsRank: null,
     });
   }
-  return out;
+  return rankStandings(out);
+}
+
+/**
+ * The league table, exactly as Sleeper orders it: wins first, then points
+ * scored.
+ *
+ * A tie counts as half a win, which is what every fantasy platform does and
+ * what a manager expects to see. Points scored is the tiebreak because it is
+ * Sleeper's own default and because it is the one number both managers in a
+ * disputed seeding can look up themselves. Roster id last, so two teams with
+ * identical records and identical points do not swap places between two renders
+ * of the same message.
+ *
+ * Exported for the test. Mutates and returns the map it is given.
+ */
+export function rankStandings(teams: Map<number, RelayTeam>): Map<number, RelayTeam> {
+  const ordered = [...teams.values()].sort(
+    (a, b) =>
+      b.record.wins + b.record.ties / 2 - (a.record.wins + a.record.ties / 2) ||
+      b.pointsFor - a.pointsFor ||
+      a.sleeperRosterId - b.sleeperRosterId,
+  );
+  ordered.forEach((team, i) => {
+    team.standingsRank = i + 1;
+  });
+  return teams;
 }
 
 /** Power Pulse rank per roster, for the standings colour in every writeup. */

@@ -29,7 +29,16 @@
  */
 
 import type { RelayLeague, RelayTeam, Writeup, WriteupField } from "./types";
-import { Voice, bandFromRank, describeBand, listOf, ordinal, type Line } from "./voice";
+import {
+  Voice,
+  bandFromRank,
+  describeBand,
+  listOf,
+  ordinal,
+  pulseFieldSize,
+  standingClause,
+  type Line,
+} from "./voice";
 
 /** One player in a waiver move, with everything cheap we know about him. */
 export interface WaiverPlayer {
@@ -78,28 +87,49 @@ export interface WaiverWriteupInput extends WaiverMove {
 
 const ADD_OPENERS: Line[] = [
   { heat: 0, text: "A move on the wire." },
+  { heat: 0, text: "A roster has changed." },
+  { heat: 0.2, text: "Somebody saw something they liked." },
   { heat: 0.3, text: "Somebody was up early." },
+  { heat: 0.3, text: "A claim has gone through." },
+  { heat: 0.4, text: "This week's wire activity, for the record." },
   { heat: 0.5, text: "The waiver wire has claimed another victim, possibly the person who used it." },
+  { heat: 0.5, text: "Somebody has done their homework, or has done something." },
   { heat: 0.6, text: "A decision was made. We are here to examine it." },
+  { heat: 0.7, text: "Alert the group chat." },
+  { heat: 0.8, text: "Somebody has decided this is the week it turns around." },
 ];
 
 const CUT_OPENERS: Line[] = [
   { heat: 0, text: "A roster spot has been freed up." },
+  { heat: 0.2, text: "A drop, with nothing coming the other way." },
+  { heat: 0.3, text: "Somebody has cleared a seat." },
   { heat: 0.4, text: "Somebody has decided they have seen enough." },
+  { heat: 0.5, text: "The patience ran out this week." },
+  { heat: 0.6, text: "A quiet cut, made without ceremony." },
   { heat: 0.7, text: "A player has been released into the wild, unloved and unclaimed." },
+  { heat: 0.8, text: "Somebody finally admitted it was not going to happen." },
 ];
 
 /** Lines about a bid that is large relative to the budget. */
 const OVERPAY_LINES: Line[] = [
   { heat: 0.3, text: "That is a lot of budget for a bench spot." },
+  { heat: 0.3, text: "That is real money, in a season with a lot of weeks left." },
+  { heat: 0.4, text: "The bid says more than the player does." },
+  { heat: 0.5, text: "Somebody wanted to be certain, and paid for certainty." },
   { heat: 0.6, text: "That is the kind of bid you make and then do not mention in the group chat." },
+  { heat: 0.7, text: "Nobody was bidding against them. Probably." },
   { heat: 0.8, text: "Somewhere, an accountant felt a disturbance." },
+  { heat: 0.9, text: "That budget is gone and November is a long way off." },
 ];
 
 /** Lines about a bid of nothing that won anyway. */
 const FREEBIE_LINES: Line[] = [
   { heat: 0.2, text: "Free, which is exactly the right price if this does not work out." },
+  { heat: 0.2, text: "No budget spent, so the downside here is a roster spot." },
+  { heat: 0.4, text: "Costless, and therefore hard to criticise, which is annoying." },
   { heat: 0.5, text: "Nobody else wanted him, which is either an edge or a warning." },
+  { heat: 0.6, text: "Unclaimed by eleven other managers, which is data of a sort." },
+  { heat: 0.7, text: "The price was nothing, which happens to be the going rate." },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -184,8 +214,12 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
   if (pts < 4) {
     const jab =
       voice.pick([
+        { heat: 0.3, text: "That is a stash rather than a starter." },
         { heat: 0.4, text: "That is a roster spot with a name attached." },
+        { heat: 0.5, text: "There is an idea behind this. It has not been shared." },
+        { heat: 0.6, text: "Somebody is betting on a role change nobody has announced." },
         { heat: 0.7, text: "You could start a traffic cone and lose by less." },
+        { heat: 0.8, text: "The projection is a rounding error with a jersey." },
         { heat: 0.9, text: "This is not a fantasy football decision, it is a cry for help." },
       ]) ?? "";
     return `${proj}${tail}.${jab ? ` ${jab}` : ""}`;
@@ -207,10 +241,20 @@ function dropClause(voice: Voice, input: WaiverWriteupInput): string | null {
   if (worstOut?.value != null && bestIn?.value != null && worstOut.value > bestIn.value) {
     const jab =
       voice.pick([
+        { heat: 0.3, text: "The market disagrees with this one." },
         { heat: 0.4, text: "That is a downgrade on paper." },
+        { heat: 0.5, text: "There may be a reason for this. It is not a price reason." },
+        {
+          heat: 0.6,
+          text: "Somebody has information the market does not, or somebody has a hunch.",
+        },
         {
           heat: 0.7,
           text: "Cutting the better player to make room for the worse one is a bold genre of move.",
+        },
+        {
+          heat: 0.8,
+          text: "Eleven other managers are now refreshing the wire.",
         },
         {
           heat: 0.9,
@@ -224,13 +268,19 @@ function dropClause(voice: Voice, input: WaiverWriteupInput): string | null {
   return `Out went ${names}.`;
 }
 
-/** Where this leaves them, and whether it addressed the actual problem. */
-function standingClause(voice: Voice, input: WaiverWriteupInput): string | null {
+/**
+ * Where this leaves them, and whether it addressed the actual problem.
+ *
+ * BOTH RANKS, BOTH NAMED. "sit 11th of 12" beside a claim about a 1-0 team read
+ * as the standings and was the Power Pulse projection, so a manager who checked
+ * Sleeper found a different number and stopped trusting the paragraph. See the
+ * rank rule at the top of ./voice.ts.
+ */
+function teamStandingClause(voice: Voice, input: WaiverWriteupInput): string | null {
   if (input.pulseRank === null) return null;
-  const phrase = describeBand(voice, bandFromRank(input.pulseRank, input.league.totalRosters));
-  const standing = `${input.team.name} sit ${ordinal(input.pulseRank)} of ${
-    input.league.totalRosters
-  }, which is to say ${phrase}`;
+  const phrase = describeBand(voice, bandFromRank(input.pulseRank, pulseFieldSize(input.league)));
+  const where = standingClause(input.team.standingsRank, input.pulseRank, input.league);
+  const standing = `${input.team.name} are ${where}, which is to say ${phrase}`;
 
   if (!input.weakestPosition) return `${standing}.`;
   const addedPositions = new Set(input.added.map((p) => p.position.toUpperCase()));
@@ -335,7 +385,7 @@ export function buildWaiverWriteup(input: WaiverWriteupInput): Writeup | null {
   })();
 
   /* -------------------------------------------------- the drop, the stakes */
-  const closing = [dropClause(voice, input), standingClause(voice, input)]
+  const closing = [dropClause(voice, input), teamStandingClause(voice, input)]
     .filter((s): s is string => Boolean(s))
     .join(" ");
 
@@ -391,15 +441,24 @@ export interface WaiverDigestInput {
 
 const BUSY_OPENERS: Line[] = [
   { heat: 0, text: "Busy morning on the wire." },
+  { heat: 0, text: "Waivers processed, and there was plenty to process." },
+  { heat: 0.2, text: "A full morning's worth of claims." },
   { heat: 0.3, text: "Everybody woke up at once." },
+  { heat: 0.4, text: "This league set an alarm." },
   { heat: 0.5, text: "The wire has been picked clean, and then picked over again." },
+  { heat: 0.6, text: "Somebody's injury news turned into everybody's Wednesday." },
   { heat: 0.7, text: "Somewhere between ambition and panic, this league went shopping." },
+  { heat: 0.8, text: "Eleven managers read the same article and acted on it." },
 ];
 
 const BUSY_FA_OPENERS: Line[] = [
   { heat: 0, text: "A flurry of moves on the free agent list." },
+  { heat: 0.2, text: "The free agent pool saw some traffic." },
+  { heat: 0.3, text: "A run of pickups, none of them costing anything." },
   { heat: 0.4, text: "Several managers had the same idea within about ten minutes of each other." },
+  { heat: 0.5, text: "Somebody hit refresh at the right moment, repeatedly." },
   { heat: 0.7, text: "The free agent pool is now noticeably shallower, and no better." },
+  { heat: 0.8, text: "A morning of speculative adds, most of which will be cut by Friday." },
 ];
 
 /**
@@ -478,11 +537,14 @@ export function buildWaiverDigest(input: WaiverDigestInput): Writeup | null {
     const jab =
       gap >= 3
         ? voice.pick([
+            { heat: 0.3, text: "The rest of the league was nowhere near that." },
             { heat: 0.4, text: "Nobody else came close, which tells you something." },
+            { heat: 0.5, text: "That bid was not competing with anything." },
             {
               heat: 0.7,
               text: "Nobody else got within a third of it, so either somebody knows something or somebody panicked.",
             },
+            { heat: 0.8, text: "Bidding against yourself is a strategy, apparently." },
           ])
         : null;
     notes.push(
@@ -517,11 +579,14 @@ export function buildWaiverDigest(input: WaiverDigestInput): Writeup | null {
     .reduce((max, p) => Math.max(max, p.value ?? 0), 0);
   if (bestDrop && (bestDrop.player.value ?? 0) > bestAddValue) {
     const jab = voice.pick([
+      { heat: 0.3, text: "He is available, for anyone who reads this far." },
       { heat: 0.4, text: "Somebody should probably have claimed him." },
+      { heat: 0.5, text: "Eleven managers had the chance and eleven managers passed." },
       {
         heat: 0.7,
         text: "He is the most valuable thing that moved today, and he moved to nowhere.",
       },
+      { heat: 0.8, text: "The wire is now holding the best asset of the morning." },
     ]);
     notes.push(
       `The most valuable player involved was let go rather than won: ${

@@ -2,13 +2,22 @@ import { describe, it, expect } from "vitest";
 import {
   BAND_LINES,
   BAND_PLAIN,
+  EVEN_LINES,
+  LOPSIDED_LINES,
+  PREVIEW_CLOSERS,
+  RECAP_CLOSERS,
+  TRADE_OPENERS,
   Voice,
   bandFromRank,
   describeBand,
   listOf,
   ordinal,
   ppChange,
+  pulseFieldSize,
+  pulsePhrase,
   seedFrom,
+  standingClause,
+  tablePhrase,
 } from "./voice";
 
 /**
@@ -141,5 +150,87 @@ describe("sentence helpers", () => {
     // would be a number a reader believes.
     expect(ppChange(null, 0.5)).toBeNull();
     expect(ppChange(0.5, null)).toBeNull();
+  });
+});
+
+/**
+ * THE RANK RULE. A Power Pulse rank and a table position are different numbers
+ * and a writeup that prints one without naming it has told a reader something
+ * they will check and find wrong. See the block comment above these helpers.
+ */
+describe("ranks", () => {
+  const league = { pulseRankedTeams: 10, totalRosters: 12 };
+
+  it("counts a pulse rank out of the teams Power Pulse actually scored", () => {
+    expect(pulseFieldSize(league)).toBe(10);
+    expect(pulsePhrase(3, league)).toBe("3rd of 10 by Power Pulse");
+  });
+
+  it("falls back to the roster count only when nothing was scored", () => {
+    expect(pulseFieldSize({ pulseRankedTeams: null, totalRosters: 12 })).toBe(12);
+  });
+
+  it("counts a table position out of every roster in the league", () => {
+    expect(tablePhrase(3, league)).toBe("3rd of 12 in the table");
+  });
+
+  it("always names which rank it is quoting", () => {
+    expect(pulsePhrase(11, league)).toContain("Power Pulse");
+    expect(tablePhrase(11, league)).toContain("the table");
+  });
+
+  it("says both when both are known, because they disagree on purpose", () => {
+    expect(standingClause(3, 11, league)).toBe(
+      "3rd of 12 in the table and 11th of 10 by Power Pulse",
+    );
+  });
+
+  it("gives the one it has, still named, when the other is missing", () => {
+    expect(standingClause(null, 11, league)).toBe("11th of 10 by Power Pulse");
+    expect(standingClause(3, null, league)).toBe("3rd of 12 in the table");
+    expect(standingClause(null, null, league)).toBeNull();
+  });
+});
+
+/**
+ * VARIETY IS THE FEATURE. A channel gets these messages several times a week
+ * from the same league, and a bank of three lines is a bank a regular reader
+ * has memorised by October. The seeded draw cannot manufacture variety it does
+ * not have; the only supply is the size of the bank.
+ *
+ * The floor is deliberately checked at MID snark rather than at full, because
+ * that is where most channels run and a bank that is only varied at 1.0 is a
+ * bank that repeats itself for everybody sensible.
+ */
+describe("variety", () => {
+  const banks: Array<[string, { heat: number; text: string }[]]> = [
+    ["trade openers", TRADE_OPENERS],
+    ["lopsided", LOPSIDED_LINES],
+    ["even", EVEN_LINES],
+    ["preview closers", PREVIEW_CLOSERS],
+    ["recap closers", RECAP_CLOSERS],
+    ...Object.entries(BAND_LINES),
+  ];
+
+  it.each(banks)("%s has real choice at mid snark", (_name, bank) => {
+    expect(bank.filter((l) => l.heat <= 0.5).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(banks)("%s has real choice at full snark", (_name, bank) => {
+    expect(bank.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it.each(banks)("%s says each thing once", (_name, bank) => {
+    expect(new Set(bank.map((l) => l.text)).size).toBe(bank.length);
+  });
+
+  it("draws widely across a bank over many messages", () => {
+    // One writeup cannot repeat itself; this is about the CHANNEL. Fifty
+    // different trades should not keep landing on the same three openers.
+    const seen = new Set<string>();
+    for (let i = 0; i < 50; i += 1) {
+      seen.add(new Voice(`trade:league:${i}`, 0.8).pick(TRADE_OPENERS)!);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(6);
   });
 });

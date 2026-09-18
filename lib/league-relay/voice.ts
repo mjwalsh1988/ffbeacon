@@ -162,6 +162,76 @@ export function num(value: number | null | undefined, digits = 1): string | null
   return value.toFixed(digits);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Ranks, and the two different ones                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE RULE FOR EVERY RANK IN EVERY WRITEUP.
+ *
+ * This feature has two ranks and they routinely disagree, which is the whole
+ * reason both exist:
+ *
+ *   THE TABLE          wins, then points scored. What the reader can see in
+ *                      Sleeper. `RelayTeam.standingsRank`.
+ *   POWER PULSE        what a team should win FROM HERE, ranked within its own
+ *                      league. `league_power_pulse_cache.pulse_rank`.
+ *
+ * A 1-0 team can be twelfth by Power Pulse, and that is not a bug. But a
+ * writeup that printed "sit 11th of 12 at 1-0" said the second number in the
+ * grammar of the first, so a manager who checked Sleeper found themselves in
+ * third and stopped believing the rest of the message. Every pulse rank
+ * therefore NAMES ITSELF, through these helpers, and no writeup composes one by
+ * hand.
+ *
+ * The denominator is the number of teams POWER PULSE ACTUALLY SCORED, never the
+ * league's roster count. See RelayLeague.pulseRankedTeams.
+ */
+
+/** How many teams a Power Pulse rank is out of. */
+export function pulseFieldSize(league: {
+  pulseRankedTeams: number | null;
+  totalRosters: number;
+}): number {
+  return league.pulseRankedTeams ?? league.totalRosters;
+}
+
+/** "9th of 12 by Power Pulse". Never returns a bare ordinal. */
+export function pulsePhrase(
+  rank: number | null | undefined,
+  league: { pulseRankedTeams: number | null; totalRosters: number },
+): string | null {
+  if (rank === null || rank === undefined || !Number.isFinite(rank)) return null;
+  return `${ordinal(rank)} of ${pulseFieldSize(league)} by Power Pulse`;
+}
+
+/** "3rd in the table". The position a reader can check in Sleeper. */
+export function tablePhrase(
+  rank: number | null | undefined,
+  league: { totalRosters: number },
+): string | null {
+  if (rank === null || rank === undefined || !Number.isFinite(rank)) return null;
+  return `${ordinal(rank)} of ${league.totalRosters} in the table`;
+}
+
+/**
+ * Both ranks in one clause, when both are known.
+ *
+ * "3rd in the table and 11th of 12 by Power Pulse" is the sentence that made
+ * the second number make sense. When only one is known it is returned alone,
+ * still named, because an unnamed rank is the defect.
+ */
+export function standingClause(
+  standingsRank: number | null | undefined,
+  pulseRank: number | null | undefined,
+  league: { pulseRankedTeams: number | null; totalRosters: number },
+): string | null {
+  const table = tablePhrase(standingsRank, league);
+  const pulse = pulsePhrase(pulseRank, league);
+  if (table && pulse) return `${table} and ${pulse}`;
+  return table ?? pulse;
+}
+
 /** "1st", "2nd", "11th". Used for every rank in every writeup. */
 export function ordinal(n: number): string {
   const abs = Math.abs(Math.round(n));
@@ -232,30 +302,59 @@ export const BAND_PLAIN: Record<Band, string> = {
 export const BAND_LINES: Record<Band, Line[]> = {
   elite: [
     { heat: 0.3, text: "genuinely frightening" },
+    { heat: 0.3, text: "the team everybody else is quietly measuring themselves against" },
+    { heat: 0.4, text: "the problem the rest of this league has not solved yet" },
+    { heat: 0.5, text: "running out of people to beat" },
     { heat: 0.6, text: "an unfair roster assembled by an unwell person" },
     { heat: 0.6, text: "the reason three managers have stopped opening the app" },
+    { heat: 0.6, text: "playing a different sport in the same spreadsheet" },
+    { heat: 0.7, text: "the kind of roster that gets a league's trade rules rewritten" },
+    { heat: 0.7, text: "winning so comfortably it has stopped being a story" },
     { heat: 0.9, text: "so far ahead it has become a moral problem" },
+    { heat: 0.9, text: "the reason this league has a group chat nobody posts in any more" },
   ],
   good: [
     { heat: 0.3, text: "quietly excellent" },
+    { heat: 0.3, text: "better than anyone has bothered to say out loud" },
+    { heat: 0.4, text: "dangerous in the way nobody puts in a preview" },
     { heat: 0.5, text: "good in the boring way that wins titles" },
+    { heat: 0.5, text: "very much still here, thanks for asking" },
+    { heat: 0.6, text: "the team that ruins somebody's December" },
     { heat: 0.7, text: "one injury away from being insufferable about it" },
+    { heat: 0.7, text: "good enough to be smug and not quite good enough to earn it" },
   ],
   middle: [
     { heat: 0.3, text: "aggressively fine" },
+    { heat: 0.3, text: "exactly as good as it looks, which is somewhat" },
+    { heat: 0.4, text: "stuck in the part of the table nobody writes about" },
     { heat: 0.5, text: "a team with no discernible plan and no obvious flaw" },
+    { heat: 0.5, text: "one good week from contending and one bad one from selling" },
+    { heat: 0.6, text: "the roster equivalent of a shrug" },
     { heat: 0.7, text: "the fantasy equivalent of a beige rental car" },
+    { heat: 0.7, text: "neither buying nor selling, which is a decision, technically" },
   ],
   poor: [
     { heat: 0.4, text: "not good, and the numbers agree" },
+    { heat: 0.4, text: "in more trouble than the record admits" },
+    { heat: 0.5, text: "closer to the bottom than to anything worth having" },
     { heat: 0.6, text: "a roster held together by optimism and one good tight end" },
+    { heat: 0.6, text: "running out of weeks to explain this away" },
+    { heat: 0.7, text: "still telling people it is a slow start" },
     { heat: 0.8, text: "actively bad in a way that is starting to look deliberate" },
+    { heat: 0.8, text: "a lineup that gets set on a Sunday morning out of obligation" },
   ],
   dire: [
+    { heat: 0.2, text: "bottom of the pile on this model" },
+    { heat: 0.3, text: "the team with the most work to do" },
     { heat: 0.4, text: "the worst team here, by some distance" },
+    { heat: 0.5, text: "last, and not close to being second last" },
+    { heat: 0.6, text: "the reason the other eleven managers feel good about themselves" },
     { heat: 0.7, text: "a catastrophe with a logo" },
+    { heat: 0.7, text: "playing for draft position and not admitting it" },
+    { heat: 0.8, text: "the team the schedule looks forward to" },
     { heat: 0.9, text: "so bad it is arguably a rebuilding strategy" },
     { heat: 0.9, text: "an argument for contraction" },
+    { heat: 0.9, text: "the control group" },
   ],
 };
 
@@ -275,40 +374,70 @@ export function describeBand(voice: Voice, band: Band): string {
 /** How a trade writeup can open. The subject follows, so these all trail off. */
 export const TRADE_OPENERS: Line[] = [
   { heat: 0, text: "A trade has landed." },
+  { heat: 0, text: "Two rosters have changed shape." },
+  { heat: 0.2, text: "The wire is quiet. This is not." },
   { heat: 0.3, text: "Somebody pressed accept." },
+  { heat: 0.3, text: "A deal is through, and it is worth a look." },
   { heat: 0.4, text: "Well. That happened." },
+  { heat: 0.4, text: "Somebody spent their morning on this." },
   { heat: 0.5, text: "Against all advice, a trade has been agreed." },
+  { heat: 0.5, text: "One of these two is about to be very quiet in the chat." },
   { heat: 0.6, text: "Two managers looked at the same numbers and reached opposite conclusions." },
+  { heat: 0.6, text: "A trade was proposed, considered, and then, remarkably, accepted." },
   { heat: 0.7, text: "The league chat is about to get busy." },
+  { heat: 0.7, text: "Somewhere a commissioner is rereading the collusion rule." },
+  { heat: 0.8, text: "Everybody stop what you are doing." },
 ];
 
 /** How a lopsided verdict can be introduced. */
 export const LOPSIDED_LINES: Line[] = [
   { heat: 0.2, text: "This one is not close." },
+  { heat: 0.3, text: "One side of this got considerably more than the other." },
+  { heat: 0.4, text: "The numbers do not leave much room for debate here." },
   { heat: 0.5, text: "Calling this a negotiation is generous." },
+  { heat: 0.5, text: "Somebody asked, and somebody said yes far too quickly." },
+  { heat: 0.6, text: "One of these managers is going to reread this in March." },
   { heat: 0.7, text: "Somebody has been robbed in broad daylight." },
+  { heat: 0.7, text: "This will be brought up at every draft for the next three years." },
   { heat: 0.8, text: "This is less a trade than a donation with extra steps." },
+  { heat: 0.9, text: "Somebody's league-mates should check in on them." },
 ];
 
 /** How an even verdict can be introduced. */
 export const EVEN_LINES: Line[] = [
   { heat: 0.2, text: "For once, both sides have a case." },
+  { heat: 0.2, text: "This one is close enough to argue about all week." },
+  { heat: 0.3, text: "Nobody got fleeced, which makes this harder to write." },
   { heat: 0.4, text: "Disappointingly reasonable from everyone involved." },
+  { heat: 0.5, text: "A fair trade. In this league. Genuinely." },
   { heat: 0.6, text: "Two adults negotiated in good faith, which is frankly out of character." },
+  { heat: 0.7, text: "Both of these managers are going to claim they won, and both have a case, which is the worst outcome for everybody watching." },
 ];
 
 /** Closers for a matchup preview. */
 export const PREVIEW_CLOSERS: Line[] = [
   { heat: 0, text: "Lineups lock Sunday. Set them." },
+  { heat: 0, text: "Check your byes before Sunday." },
+  { heat: 0.2, text: "There is still time to fix this. There will not be on Sunday." },
   { heat: 0.3, text: "Set your lineup. Or do not, and provide content." },
+  { heat: 0.4, text: "The waiver wire is still open, for whatever that is worth here." },
   { heat: 0.5, text: "Somebody is going to start a player on bye. It is always somebody." },
+  { heat: 0.5, text: "Predictions in the chat, so we can all check them Tuesday." },
   { heat: 0.6, text: "One of these managers will blame the projections by Monday." },
+  { heat: 0.7, text: "Whatever happens here, somebody is going to call it variance." },
+  { heat: 0.8, text: "Good luck to one of you." },
 ];
 
 /** Closers for a matchup recap. */
 export const RECAP_CLOSERS: Line[] = [
   { heat: 0, text: "On to next week." },
+  { heat: 0, text: "The table has been updated." },
+  { heat: 0.2, text: "That one is in the books." },
   { heat: 0.3, text: "That result is now permanent. Sorry." },
+  { heat: 0.4, text: "Nothing about this can be undone, which is the appeal." },
   { heat: 0.5, text: "The standings do not care how it felt." },
+  { heat: 0.5, text: "The waiver wire opens shortly. Somebody has already been on it." },
+  { heat: 0.6, text: "Explanations are welcome in the chat and will not be believed." },
   { heat: 0.7, text: "Screenshot it, frame it, never speak of it again." },
+  { heat: 0.8, text: "Someone is going to blame their kicker for this all week." },
 ];

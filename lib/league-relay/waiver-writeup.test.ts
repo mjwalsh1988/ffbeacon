@@ -9,6 +9,7 @@ const league: RelayLeague = {
   name: "The Test League",
   season: 2026,
   totalRosters: 12,
+  pulseRankedTeams: 12,
   rosterPositions: ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "BN"],
   metadata: {},
   watermarkAt: new Date(0).toISOString(),
@@ -28,6 +29,8 @@ function team(id: number, name: string): RelayTeam {
     handle: name,
     teamName: null,
     record: { wins: 3, losses: 2, ties: 0 },
+    pointsFor: 1100,
+    standingsRank: 4,
   };
 }
 

@@ -17,14 +17,38 @@ import { SITE } from "@/lib/site";
 export const BEACON_RELAY_USERNAME = "Beacon Relay";
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-/** Absolute URL to our logo for the bot avatar (never a relative URL). */
-export function beaconRelayAvatarUrl(): string {
+/**
+ * The origin any URL we hand to Discord must be built on.
+ *
+ * Discord fetches an avatar or an embed image from ITS OWN servers, so a
+ * localhost URL is not merely useless to it, it renders as a broken image in
+ * the channel. A dev run therefore points at production for assets; everything
+ * else about the message is still whatever the dev environment produced.
+ */
+export function discordAssetOrigin(): string {
   const raw =
     process.env.NEXT_PUBLIC_SITE_URL ?? SITE.url ?? "https://ffbeacon.com";
-  const origin = /localhost|127\.0\.0\.1/.test(raw)
+  return /localhost|127\.0\.0\.1/.test(raw)
     ? "https://ffbeacon.com"
     : raw.replace(/\/$/, "");
-  return `${origin}/img/ff-beacon-logo-email.png`;
+}
+
+/** Absolute URL to our logo for the bot avatar (never a relative URL). */
+export function beaconRelayAvatarUrl(): string {
+  return `${discordAssetOrigin()}/img/ff-beacon-logo-email.png`;
+}
+
+/**
+ * One name/value pair under an embed's description.
+ *
+ * Three `inline: true` fields sit side by side on a desktop client and stack on
+ * a phone, which is what makes a row of figures read as a row of figures rather
+ * than as four more lines of prose.
+ */
+export interface DiscordEmbedField {
+  name: string;
+  value: string;
+  inline?: boolean;
 }
 
 export interface DiscordEmbed {
@@ -34,8 +58,17 @@ export interface DiscordEmbed {
   /** Left-bar accent color (decimal). Use the FF Beacon purple for post cards. */
   color?: number;
   image?: { url: string };
-  author?: { name: string };
-  footer?: { text: string };
+  /** The small square at the top right. An avatar or a logo, never a wide card. */
+  thumbnail?: { url: string };
+  author?: { name: string; url?: string; icon_url?: string };
+  footer?: { text: string; icon_url?: string };
+  /**
+   * Deliberately absent: Discord's own `timestamp` renders in each reader's
+   * device zone, and every time this product shows is Eastern (CLAUDE.md, Time
+   * Display). A date belongs in the footer text, formatted through
+   * lib/datetime.ts.
+   */
+  fields?: DiscordEmbedField[];
 }
 
 /**

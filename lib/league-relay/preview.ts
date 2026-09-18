@@ -332,6 +332,7 @@ export async function previewRelayMessages(
             }
             const writeup = buildMatchupPreview({
               league,
+              teams,
               view: detail.view,
               slot: pick.slot,
               snark: settings.voice.snark,
@@ -372,6 +373,7 @@ export async function previewRelayMessages(
             if (!detail.ok) continue;
             const writeup = buildMatchupRecap({
               league,
+              teams,
               view: detail.view,
               slot: null,
               snark: settings.voice.snark,
