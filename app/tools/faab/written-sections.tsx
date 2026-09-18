@@ -10,8 +10,10 @@
  * No numbers here are admin-editable, so nothing is passed in from settings.
  */
 
+import Link from "next/link";
 import {
   BarChart3,
+  BookOpen,
   Calculator,
   Layers,
   Scale,
@@ -54,6 +56,17 @@ export const FAAB_FAQ: FaqAccordionItem[] = [
   },
 ];
 
+const LINK_CLASS =
+  "font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+
+/**
+ * The calculator and /guides/faab-strategy link to each other on purpose. The
+ * calculator answers one claim; the guide is the season-long reasoning behind
+ * its answers. The guide already linked here from four places and nothing
+ * linked back, so a reader (or a crawler) who arrived on the tool had no path
+ * to the explanation. Three links now close that loop: the intro, the ladder
+ * step, and a tile under "Where to go next".
+ */
 export function WrittenSections() {
   return (
     <ToolExplainer
@@ -61,7 +74,18 @@ export function WrittenSections() {
       icon={Calculator}
       eyebrow="The method"
       title="How the FAAB calculator decides what to bid"
-      intro="FAAB stands for free agent acquisition budget: the fake money your league gives every team to bid on waiver pickups. This tool turns the question of how much to bid into three numbers, and it prices the player against your roster rather than against a rumor."
+      intro={
+        <>
+          FAAB stands for free agent acquisition budget: the fake money your league gives every
+          team to bid on waiver pickups. This tool turns the question of how much to bid into three
+          numbers, and it prices the player against your roster rather than against a rumor. The
+          reasoning behind every number is written out step by step in our{" "}
+          <Link href="/guides/faab-strategy" className={LINK_CLASS}>
+            FAAB strategy guide
+          </Link>
+          .
+        </>
+      }
       steps={[
         {
           icon: Search,
@@ -81,7 +105,17 @@ export function WrittenSections() {
         {
           icon: Layers,
           title: "Get a ladder, not a number",
-          body: "You get three rungs. Bid this is the number that usually wins. To be sure is what it takes when you cannot afford to lose him. Walk away above is the price at which winning the claim becomes the mistake.",
+          body: (
+            <>
+              You get three rungs. Bid this is the number that usually wins. To be sure is what it
+              takes when you cannot afford to lose him. Walk away above is the price at which
+              winning the claim becomes the mistake.{" "}
+              <Link href="/guides/faab-strategy#room-heading" className={LINK_CLASS}>
+                How the bid ladder is built
+              </Link>
+              .
+            </>
+          ),
         },
       ]}
       notes={[
@@ -106,6 +140,13 @@ export function WrittenSections() {
       faq={FAAB_FAQ}
       faqTitle="FAAB questions, answered"
       next={[
+        {
+          href: "/guides/faab-strategy",
+          icon: BookOpen,
+          title: "FAAB strategy guide",
+          body: "How much to bid on each kind of pickup, when to spend it all, and who to drop.",
+          accent: "purple",
+        },
         {
           href: "/tools/league-pulse",
           icon: Workflow,

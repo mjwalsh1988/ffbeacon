@@ -18,7 +18,7 @@
  * describe at length.
  */
 
-import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
+import { ABBREVIATION_COUNT, TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
 
 export type PublishedGuide = {
   /** URL slug under /guides/. Permanent once shipped. */
@@ -38,10 +38,13 @@ export type PublishedGuide = {
 export const PUBLISHED_GUIDES: PublishedGuide[] = [
   {
     slug: "fantasy-football-terms",
-    title: "Fantasy football terms: a plain-English glossary",
-    summary: `Definitions for ${TERM_COUNT} fantasy football terms across scoring, league formats, rosters, drafting, in-season management, trades, and analytics`,
+    title: "Fantasy football terms and abbreviations, explained",
+    summary: `Definitions for ${TERM_COUNT} fantasy football terms and ${ABBREVIATION_COUNT} abbreviations across scoring, league formats, lineup slots, injury tags, drafting, in-season management, trades, and analytics`,
     publishedAt: "2026-08-01T09:00:00-04:00",
-    updatedAt: "2026-08-01T09:00:00-04:00",
+    // 2026-09-18: an abbreviations section (status tags, lineup slots, column
+    // headers, chat shorthand), eight new questions, a term finder, a scoring
+    // switcher and five diagrams. The wording changed, so the date moves.
+    updatedAt: "2026-09-18T09:00:00-04:00",
     priority: 0.8,
   },
   {

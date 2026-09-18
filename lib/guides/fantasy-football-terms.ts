@@ -22,6 +22,8 @@
  * Anything that describes FF Beacon behavior must be true of the current build.
  */
 
+import type { GlossarySearchEntry } from "@/lib/guides/glossary-search";
+
 export type GlossaryLink = {
   href: string;
   label: string;
@@ -1100,6 +1102,572 @@ export const ALL_TERMS: GlossaryTerm[] = GLOSSARY_SECTIONS.flatMap(
 
 export const TERM_COUNT = ALL_TERMS.length;
 
+/* ---------- Abbreviations ---------- */
+
+/**
+ * The letters on a league app's screens, decoded.
+ *
+ * WHY THIS LIST EXISTS. Search Console (28 days to 2026-09-18) showed this page
+ * collecting impressions for "what does X mean in fantasy football" across
+ * dozens of abbreviations it never defined: BN, BE, Q, FA, OPRK, CEL, PF, PA,
+ * W/R/T, FPTS and more. A reader who searched "cel meaning fantasy football" and
+ * landed on a page without CEL on it had every reason not to click. These
+ * entries answer those questions directly.
+ *
+ * SOURCES. The status tags and column headers follow ESPN's own published list
+ * (support.espn.com, "Fantasy Football Acronyms"): IR, O, Q, D, SSPD, PRK, PTS,
+ * AVG, LAST, PROJ, OPRK, %ST, %ROST and +/-. CEL is the NFL's Commissioner
+ * Exempt List, as reported by Yahoo Sports. Nothing here names which app uses
+ * which label unless that is documented, because the apps change their screens
+ * and a wrong claim about one would be the first thing a reader noticed.
+ *
+ * WRITING RULE, same as the terms above: `meaning` opens with a standalone
+ * sentence of the form "X means ..." or "X stands for ...", because that is the
+ * sentence a search snippet lifts.
+ *
+ * `termId` points at the full glossary entry when one exists. An abbreviation
+ * with a `termId` is a pointer, not a second definition, so it is left out of
+ * the DefinedTermSet to keep the structured data from defining one word twice.
+ */
+
+export type AbbreviationTone = "cyan" | "purple" | "amber" | "orange" | "rose" | "muted";
+
+export type GlossaryAbbreviation = {
+  /** Anchor id. Permanent once shipped. Always prefixed `abbr-`. */
+  id: string;
+  /** The letters exactly as a screen shows them. */
+  abbr: string;
+  /** What the letters stand for. */
+  stands: string;
+  /** Opens with a standalone definition sentence. */
+  meaning: string;
+  /** Optional second sentence or two: the practical read. */
+  more?: string;
+  /** The full glossary entry, when there is one. */
+  termId?: string;
+  /** Badge colour. Decorative: the letters and the words carry the meaning. */
+  tone?: AbbreviationTone;
+};
+
+export type AbbreviationGroup = {
+  id: string;
+  title: string;
+  intro: string;
+  items: GlossaryAbbreviation[];
+};
+
+export const ABBREVIATION_GROUPS: AbbreviationGroup[] = [
+  {
+    id: "abbr-status",
+    title: "Injury and status tags",
+    intro:
+      "These are the letters next to a player's name. They come from the NFL's own injury and roster rules, and apps shorten them to fit. Colors vary from app to app. The letter is what counts.",
+    items: [
+      {
+        id: "abbr-q",
+        abbr: "Q",
+        stands: "Questionable",
+        meaning:
+          "Q means questionable: the player's chance of playing this week is uncertain.",
+        more: "The label on its own tells you little. The Friday practice report and the beat reporters tell you more.",
+        termId: "injury-designations",
+        tone: "amber",
+      },
+      {
+        id: "abbr-d",
+        abbr: "D",
+        stands: "Doubtful",
+        meaning: "D means doubtful: the player is unlikely to play this week.",
+        more: "Treat him as out and have a replacement lined up before kickoff.",
+        termId: "injury-designations",
+        tone: "orange",
+      },
+      {
+        id: "abbr-o",
+        abbr: "O",
+        stands: "Out",
+        meaning: "O means out: the player will not play this week.",
+        more: "He scores zero wherever he sits, so bench him, or move him to an IR slot if your league allows it.",
+        termId: "injury-designations",
+        tone: "rose",
+      },
+      {
+        id: "abbr-ir",
+        abbr: "IR",
+        stands: "Injured reserve",
+        meaning:
+          "IR means injured reserve: the player is on the NFL's list for long-term injuries and misses at least four games.",
+        more: "Most leagues give you an IR roster slot that holds him without using a bench spot.",
+        termId: "injured-reserve",
+        tone: "rose",
+      },
+      {
+        id: "abbr-pup",
+        abbr: "PUP",
+        stands: "Physically unable to perform",
+        meaning:
+          "PUP means physically unable to perform: the player is still recovering from an injury from a previous season.",
+        termId: "pup",
+        tone: "purple",
+      },
+      {
+        id: "abbr-nfi",
+        abbr: "NFI",
+        stands: "Non-football injury",
+        meaning:
+          "NFI stands for non-football injury: the player was hurt or became ill away from team activities.",
+        more: "For fantasy, treat it the way you would treat PUP. He is not playing until the team activates him.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-sspd",
+        abbr: "SSPD",
+        stands: "Suspended",
+        meaning:
+          "SSPD means suspended: the league has banned the player for a set number of games.",
+        termId: "suspension",
+        tone: "rose",
+      },
+      {
+        id: "abbr-cel",
+        abbr: "CEL",
+        stands: "Commissioner Exempt List",
+        meaning:
+          "CEL stands for the Commissioner Exempt List: the NFL has barred the player from all team activities, games included.",
+        more: "Unlike a suspended player, he is still paid. For fantasy the effect is the same: he scores nothing until he comes off the list, and there is no set date for that.",
+        tone: "rose",
+      },
+      {
+        id: "abbr-dtd",
+        abbr: "DTD",
+        stands: "Day-to-day",
+        meaning:
+          "DTD means day-to-day: a minor injury the team is checking on daily.",
+        more: "It says less than Q, D or O. Wait for the official game status before you decide.",
+        tone: "amber",
+      },
+      {
+        id: "abbr-na",
+        abbr: "NA",
+        stands: "Not active",
+        meaning:
+          "NA most often means not active: the player cannot be started right now, for a reason other than an ordinary injury.",
+        more: "On a rankings or projections list the same two letters can mean not available: a player who has no number yet.",
+        tone: "muted",
+      },
+      {
+        id: "abbr-practice",
+        abbr: "DNP, LP, FP",
+        stands: "Did not practice, limited, full",
+        meaning:
+          "DNP, LP and FP are the three lines on an NFL practice report: did not practice, limited participation and full participation.",
+        more: "Read the whole week, not one day. A player back to full practice by Friday is in a very different spot from one who never practiced.",
+        tone: "muted",
+      },
+    ],
+  },
+  {
+    id: "abbr-slots",
+    title: "Lineup slots",
+    intro:
+      "These are the labels down the left side of your lineup. Each one tells you which positions the slot accepts.",
+    items: [
+      {
+        id: "abbr-positions",
+        abbr: "QB, RB, WR, TE",
+        stands: "Quarterback, running back, wide receiver, tight end",
+        meaning:
+          "QB, RB, WR and TE are the four offensive positions that score in almost every league: quarterback, running back, wide receiver and tight end.",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-k",
+        abbr: "K",
+        stands: "Kicker",
+        meaning:
+          "K means kicker: the player who scores on field goals and extra points.",
+        termId: "kicker",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-def",
+        abbr: "DEF, D/ST",
+        stands: "Team defense and special teams",
+        meaning:
+          "DEF, D/ST and DST all mean team defense: one roster spot for a whole NFL team's defense and special teams.",
+        termId: "dst",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-flex",
+        abbr: "FLEX",
+        stands: "Flexible slot",
+        meaning:
+          "FLEX is a lineup slot that accepts more than one position, most often a running back, wide receiver or tight end.",
+        termId: "flex",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-wrt",
+        abbr: "W/R/T",
+        stands: "Wide receiver, running back or tight end",
+        meaning:
+          "W/R/T is a flex slot that takes a wide receiver, running back or tight end.",
+        more: "The letters list the positions that fit, so a W/T slot takes receivers and tight ends only, and a W/R slot takes receivers and running backs.",
+        termId: "flex",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-sf",
+        abbr: "SF, Q/W/R/T",
+        stands: "Superflex",
+        meaning:
+          "SF means superflex: a flex slot that also accepts a quarterback, sometimes labeled Q/W/R/T.",
+        termId: "superflex",
+        tone: "purple",
+      },
+      {
+        id: "abbr-op",
+        abbr: "OP",
+        stands: "Offensive player",
+        meaning:
+          "OP stands for offensive player: a utility slot that takes any quarterback, running back, wide receiver or tight end.",
+        more: "It is superflex under another name, so most managers put a second quarterback there.",
+        termId: "superflex",
+        tone: "purple",
+      },
+      {
+        id: "abbr-bn",
+        abbr: "BN, BE",
+        stands: "Bench",
+        meaning:
+          "BN and BE both mean bench: players on your roster who are not in your starting lineup and score nothing for you that week.",
+        more: "Which one you see depends on the app. They mean the same thing.",
+        termId: "bench",
+        tone: "muted",
+      },
+      {
+        id: "abbr-taxi",
+        abbr: "TAXI",
+        stands: "Taxi squad",
+        meaning:
+          "TAXI is the taxi squad: dynasty roster space for young players that does not count against your roster limit.",
+        termId: "taxi-squad",
+        tone: "muted",
+      },
+      {
+        id: "abbr-idp-slots",
+        abbr: "DL, LB, DB",
+        stands: "Defensive line, linebacker, defensive back",
+        meaning:
+          "DL, LB and DB are the defensive positions in IDP leagues: defensive line, linebacker and defensive back.",
+        termId: "idp",
+        tone: "muted",
+      },
+    ],
+  },
+  {
+    id: "abbr-columns",
+    title: "Columns on a player list",
+    intro:
+      "These are the headers across the top of a player or rankings table. The labels below are ESPN's, and other apps use close variations of them.",
+    items: [
+      {
+        id: "abbr-fpts",
+        abbr: "FPTS, PTS",
+        stands: "Fantasy points",
+        meaning:
+          "FPTS and PTS mean fantasy points: what a player has scored under your league's scoring, usually as a season total.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-avg",
+        abbr: "AVG, FPPG",
+        stands: "Fantasy points per game",
+        meaning:
+          "AVG and FPPG mean fantasy points per game: a player's average score across the games he played.",
+        termId: "points-per-game",
+        tone: "purple",
+      },
+      {
+        id: "abbr-proj",
+        abbr: "PROJ",
+        stands: "Projected points",
+        meaning:
+          "PROJ is the app's projected fantasy points for the player this week.",
+        more: "A projection is an average outcome. It is not a floor.",
+        termId: "floor-ceiling",
+        tone: "purple",
+      },
+      {
+        id: "abbr-last",
+        abbr: "LAST",
+        stands: "Last game",
+        meaning:
+          "LAST is how many fantasy points the player scored in his most recent game.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-prk",
+        abbr: "PRK",
+        stands: "Position rank",
+        meaning:
+          "PRK means position rank: where a player ranks among players at his own position.",
+        termId: "overall-positional-rank",
+        tone: "purple",
+      },
+      {
+        id: "abbr-oprk",
+        abbr: "OPRK",
+        stands: "Opponent rank",
+        meaning:
+          "OPRK means opponent rank: how the defense a player faces this week ranks against his position.",
+        more: "It is a quick matchup read, the same idea as defense versus position.",
+        termId: "defense-vs-position",
+        tone: "purple",
+      },
+      {
+        id: "abbr-st",
+        abbr: "%ST",
+        stands: "Percent started",
+        meaning:
+          "%ST means percent started: the share of leagues on that app where the player is in a starting lineup.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-rost",
+        abbr: "%ROST",
+        stands: "Percent rostered",
+        meaning:
+          "%ROST means percent rostered: the share of leagues on that app where someone has the player on a roster.",
+        more: "A low number on a player who is getting real snaps is how you find a waiver target before your league does.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-plus-minus",
+        abbr: "+/-",
+        stands: "Change in percent rostered",
+        meaning:
+          "+/- is the change in percent rostered, which shows who managers across the app are adding and dropping right now.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-bye",
+        abbr: "BYE",
+        stands: "Bye week",
+        meaning: "BYE is the week the player's NFL team does not play.",
+        termId: "bye-week",
+        tone: "purple",
+      },
+      {
+        id: "abbr-pf-pa",
+        abbr: "PF, PA",
+        stands: "Points for, points against",
+        meaning:
+          "PF means points for and PA means points against: the fantasy points your team has scored, and the points your opponents have scored on you.",
+        termId: "points-for-against",
+        tone: "purple",
+      },
+      {
+        id: "abbr-gb",
+        abbr: "GB",
+        stands: "Games back",
+        meaning:
+          "GB means games back: how many games a team trails the leader by in the standings.",
+        tone: "purple",
+      },
+      {
+        id: "abbr-box-score",
+        abbr: "REC, TGT, YDS, TD",
+        stands: "Receptions, targets, yards, touchdowns",
+        meaning:
+          "REC, TGT, YDS and TD are receptions, targets, yards and touchdowns, the raw box score behind a fantasy total.",
+        termId: "target-share",
+        tone: "muted",
+      },
+      {
+        id: "abbr-tot-td",
+        abbr: "TOT TD",
+        stands: "Total touchdowns",
+        meaning:
+          "TOT TD means total touchdowns: every touchdown a player scored, however he scored it.",
+        tone: "muted",
+      },
+      {
+        id: "abbr-defense-stats",
+        abbr: "FR, INT, SACK",
+        stands: "Fumble recoveries, interceptions, sacks",
+        meaning:
+          "FR, INT and SACK are defensive stats: fumbles recovered, interceptions and sacks.",
+        termId: "dst",
+        tone: "muted",
+      },
+      {
+        id: "abbr-rz",
+        abbr: "RZ",
+        stands: "Red zone",
+        meaning:
+          "RZ means red zone: the part of the field inside the opponent's 20-yard line.",
+        termId: "red-zone-share",
+        tone: "muted",
+      },
+    ],
+  },
+  {
+    id: "abbr-slang",
+    title: "Chat and draft shorthand",
+    intro:
+      "This is the shorthand you hear in league chats, on podcasts and in draft rooms.",
+    items: [
+      {
+        id: "abbr-ros",
+        abbr: "ROS",
+        stands: "Rest of season",
+        meaning:
+          "ROS means rest of season: a ranking or projection covering the weeks that remain rather than one game.",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-ecr",
+        abbr: "ECR",
+        stands: "Expert consensus rankings",
+        meaning:
+          "ECR stands for expert consensus rankings: many analysts' rankings averaged into one list.",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-bpa",
+        abbr: "BPA",
+        stands: "Best player available",
+        meaning:
+          "BPA means best player available: taking the highest-ranked player left on the board, whatever his position.",
+        termId: "tier",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-vorp",
+        abbr: "VORP",
+        stands: "Value over replacement player",
+        meaning:
+          "VORP stands for value over replacement player: how many more points a player scores than a freely available player at the same position.",
+        termId: "vbd",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-ww",
+        abbr: "WW",
+        stands: "Waiver wire",
+        meaning: "WW is short for the waiver wire.",
+        termId: "waiver-wire",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-rbbc",
+        abbr: "RBBC",
+        stands: "Running back by committee",
+        meaning:
+          "RBBC means running back by committee: a team splitting carries between two or more backs instead of giving one of them the job.",
+        more: "A committee caps every back in it, which is why opportunity share matters more than talent at the position.",
+        termId: "opportunity-share",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-pick-notation",
+        abbr: "1.01",
+        stands: "Round one, pick one",
+        meaning:
+          "1.01 is draft pick notation: round one, pick one. 2.10 is the tenth pick of round two.",
+        termId: "snake-draft",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-1qb",
+        abbr: "1QB",
+        stands: "One quarterback",
+        meaning:
+          "1QB means a league that starts one quarterback, as opposed to a superflex or 2QB league.",
+        termId: "2qb",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-tep",
+        abbr: "TEP",
+        stands: "TE premium",
+        meaning:
+          "TEP means TE premium: tight ends get extra points per catch, commonly 1.5 instead of 1.",
+        termId: "te-premium",
+        tone: "cyan",
+      },
+      {
+        id: "abbr-otb",
+        abbr: "OTB",
+        stands: "On the block",
+        meaning:
+          "OTB means on the block: a player his manager is openly shopping in trade talks.",
+        tone: "muted",
+      },
+      {
+        id: "abbr-taco",
+        abbr: "Taco",
+        stands: "Last place",
+        meaning:
+          "The taco is league slang for the worst manager in a league, or the team that finished last.",
+        tone: "muted",
+      },
+    ],
+  },
+];
+
+export const ALL_ABBREVIATIONS: GlossaryAbbreviation[] = ABBREVIATION_GROUPS.flatMap(
+  (g) => g.items,
+);
+
+export const ABBREVIATION_COUNT = ALL_ABBREVIATIONS.length;
+
+/**
+ * The "Most looked up" shortcuts under the find box. Chosen from the Search
+ * Console queries this page was already appearing for. Kept here rather than
+ * in the component so the anchor test can check every id exists.
+ */
+export const GLOSSARY_QUICK_LINKS: { id: string; label: string }[] = [
+  { id: "abbr-bn", label: "BN / BE" },
+  { id: "abbr-q", label: "Q, D, O" },
+  { id: "free-agent", label: "FA" },
+  { id: "abbr-flex", label: "FLEX" },
+  { id: "ppr", label: "PPR" },
+  { id: "te-premium", label: "TEP" },
+  { id: "faab", label: "FAAB" },
+  { id: "abbr-oprk", label: "OPRK" },
+  { id: "abbr-pf-pa", label: "PF / PA" },
+  { id: "superflex", label: "Superflex" },
+];
+
+/**
+ * Everything the "Find a term" box can land on: every abbreviation first
+ * (they are the short, exact-match searches), then every term in page order.
+ */
+export function buildGlossarySearchIndex(): GlossarySearchEntry[] {
+  const abbreviations = ABBREVIATION_GROUPS.flatMap((group) =>
+    group.items.map((item) => ({
+      id: item.id,
+      label: item.abbr,
+      aka: item.stands,
+      gist: item.meaning,
+      group: `Abbreviations, ${group.title.toLowerCase()}`,
+    })),
+  );
+  const terms = GLOSSARY_SECTIONS.flatMap((section) =>
+    section.terms.map((term) => ({
+      id: term.id,
+      label: term.term,
+      aka: term.aka,
+      gist: term.body[0],
+      group: section.title,
+    })),
+  );
+  return [...abbreviations, ...terms];
+}
+
 /**
  * Questions asked in the exact words people type them, answered in full.
  *
@@ -1151,6 +1719,46 @@ export const GLOSSARY_FAQS: GlossaryFaq[] = [
     question: "What is target share and why does it matter?",
     answer:
       "Target share is the percentage of a team's passing targets that go to one player. It matters because it measures opportunity rather than results, and opportunity is far more stable week to week than efficiency is. A receiver holding roughly 25 percent of his team's targets is a clear number one option, and a target share above 30 percent marks a genuine focal point of the offense.",
+  },
+  {
+    question: "What does BN or BE mean in fantasy football?",
+    answer:
+      "BN and BE both mean bench. A player in a bench slot is on your roster but not in your starting lineup, so whatever he scores that week does not count for your team. Apps use one abbreviation or the other, and they mean the same thing.",
+  },
+  {
+    question: "What do Q, D and O mean next to a player's name?",
+    answer:
+      "They are NFL injury designations. Q means questionable, a player whose chance of playing is uncertain. D means doubtful, a player who is unlikely to play. O means out, a player who will not play that week. Inactives post about 90 minutes before kickoff, so have a replacement rostered before you start a questionable player.",
+  },
+  {
+    question: "What does FA mean in fantasy football?",
+    answer:
+      "FA means free agent: a player nobody in your league has on a roster, so any manager can add him, usually once waivers clear. On some player lists FA instead means the player has no NFL team right now, so read the context around the label.",
+  },
+  {
+    question: "What does OPRK mean in fantasy football?",
+    answer:
+      "OPRK stands for opponent rank. It ranks the defense a player faces this week by how that defense performs against the player's position, which makes it a quick read on whether the matchup is friendly or tough.",
+  },
+  {
+    question: "What does TEP mean in fantasy football?",
+    answer:
+      "TEP stands for TE premium, a scoring setting that gives tight ends extra points per catch, commonly 1.5 points per reception instead of 1. It makes the best tight ends worth several rounds more in a draft than they are in a normal PPR league.",
+  },
+  {
+    question: "What does CEL mean in fantasy football?",
+    answer:
+      "CEL stands for the Commissioner Exempt List. A player on it has been barred by the NFL from all team activities, games included. Unlike a suspended player he is still paid, but for fantasy the result is the same: he scores nothing until he comes off the list, and there is no set date for that.",
+  },
+  {
+    question: "What does FLEX or W/R/T mean in fantasy football?",
+    answer:
+      "FLEX is a lineup slot that accepts more than one position. The most common version, often labeled W/R/T, takes a wide receiver, running back or tight end. A superflex slot, sometimes labeled OP or Q/W/R/T, also accepts a quarterback.",
+  },
+  {
+    question: "What do PF and PA mean in fantasy football?",
+    answer:
+      "PF means points for, the total fantasy points your team has scored this season. PA means points against, the total your weekly opponents have scored on you. A team with a high PF and a poor record has usually been unlucky with its schedule.",
   },
   {
     question: "Do I need to know all of these terms to play fantasy football?",

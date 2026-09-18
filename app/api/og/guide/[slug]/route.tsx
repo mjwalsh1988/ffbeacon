@@ -35,10 +35,10 @@ type GuideCard = {
 const GUIDE_CARDS: Record<string, GuideCard> = {
   "fantasy-football-terms": {
     eyebrow: "Fantasy Football Guide",
-    headlineTop: "Fantasy football terms,",
-    headlineBottom: "in plain English",
+    headlineTop: "Fantasy football terms",
+    headlineBottom: "and abbreviations, explained",
     subhead:
-      "PPR, superflex, FAAB, ADP, target share, and every other word your league chat assumes you already know.",
+      "PPR, FAAB, BN, OPRK, TEP, and every other word and abbreviation your league app assumes you already know.",
     badge: "Glossary",
   },
   "fantasy-football-draft-guide": {

@@ -20,7 +20,7 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { SITE } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
-import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
+import { ABBREVIATION_COUNT, TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/guides" },
@@ -147,6 +147,7 @@ const GUIDES: Guide[] = [
       "Every word your league chat assumes you already know. PPR, superflex, FAAB, aDOT, and the rest, each defined in one sentence and then explained properly.",
     bullets: [
       `${TERM_COUNT} terms grouped by where you actually run into them`,
+      `${ABBREVIATION_COUNT} abbreviations decoded, from BN and Q to OPRK and W/R/T`,
       "What the analytics measure: target share, snap share, yards per route run",
       "Straight answers to what PPR, superflex, and dynasty really change",
     ],

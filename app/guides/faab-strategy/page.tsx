@@ -397,6 +397,17 @@ function TheShortVersion() {
           Your money is worth more in September than December, so do not sit on it. And the most
           expensive mistake on the waiver wire is winning an auction you should have lost.
         </p>
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: "#F4F4F8" }}>
+          Bidding on someone tonight? The free{" "}
+          <Link
+            href="/tools/faab"
+            className="font-semibold text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            FAAB calculator
+          </Link>{" "}
+          prices one claim against your roster in a few seconds. This guide is the reasoning behind
+          it.
+        </p>
       </div>
     </section>
   );
@@ -778,8 +789,11 @@ function DropSection() {
         something instead, even a late pick. A dropped asset is a gift to whoever claims him.
       </Para>
       <Para>
-        When a league is connected, the calculator lists up to four drop candidates, cheapest to
-        lose first. It decides who may be named on healthy projections, so a starter who is
+        When a league is connected, the{" "}
+        <Link href="/tools/faab" className={LINK_CLASS}>
+          FAAB calculator
+        </Link>{" "}
+        lists up to four drop candidates, cheapest to lose first. It decides who may be named on healthy projections, so a starter who is
         hurt this week cannot look disposable for that reason alone, then orders them by what
         your lineup actually loses. It also refuses to name a player worth more than the one
         you are adding, and in a dynasty or keeper league it only names players from the bottom
@@ -791,6 +805,10 @@ function DropSection() {
         Drop the player your lineup would miss least, which is rarely the one with the fewest
         points. A handcuff or a dynasty asset is never the price of a streamer.
       </KeyIdea>
+      <TryIt href="/tools/faab" label="See your drop candidates">
+        Connect your Sleeper league and the calculator names the players your lineup would miss
+        least, and says so when it would rather you kept everyone.
+      </TryIt>
     </section>
   );
 }
