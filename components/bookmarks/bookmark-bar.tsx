@@ -40,7 +40,7 @@
  * `inert`, and React cannot act before it has hydrated.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
@@ -54,8 +54,20 @@ import { useBookmarkBarCollapsed } from "./collapsed-state";
 import { BookmarkRowMenu, type BookmarkMenuAction } from "./bookmark-row-menu";
 import { RenameBookmarkDialog } from "./rename-bookmark-dialog";
 
+/**
+ * A fixed id, NOT useId. useId is derived from the component's position in the
+ * tree, and this component is reached through next/dynamic (./lazy.tsx), whose
+ * wrapper renders a different tree on the server than in the browser. The two
+ * ids disagreed ("_R_4elb_" against "_R_14elb_") and React logged a hydration
+ * mismatch on every signed-in desktop page. The served id and the served
+ * aria-controls happened to agree with each other, so the tab still worked,
+ * but the warning buried any real mismatch under the same message. There is
+ * exactly one bookmark bar per page, so a constant is both safe and stable.
+ */
+const TRACK_ID = "bookmark-bar-track";
+
 export function BookmarkBar({ initial }: { initial: BookmarkInitial }) {
-  const trackId = useId();
+  const trackId = TRACK_ID;
   const pathname = usePathname() ?? "/";
   const searchParams = useSearchParams();
   const { bookmarks, barEnabled } = useBookmarks(initial);
