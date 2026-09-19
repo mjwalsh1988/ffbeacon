@@ -413,10 +413,17 @@ export default async function AuthorMichaelPage() {
               accent="purple"
             />
             <LinkTile
+              href="/guides/fantasy-football-playoffs"
+              icon={Trophy}
+              title="Fantasy football playoffs"
+              body="What your playoff odds mean, luck against points for, and whether to buy or sell at the trade deadline."
+            />
+            <LinkTile
               href="/guides"
               icon={Layers}
               title="The guides shelf"
               body="Everything above in one place, with whatever ships next added as it lands."
+              accent="purple"
             />
           </div>
         </Panel>

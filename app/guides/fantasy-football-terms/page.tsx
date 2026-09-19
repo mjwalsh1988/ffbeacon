@@ -700,6 +700,11 @@ function Closing() {
           label="Dynasty strategy"
           detail="When to contend and when to rebuild"
         />
+        <ClosingLink
+          href="/guides/fantasy-football-playoffs"
+          label="Fantasy football playoffs"
+          detail="What your playoff odds mean, and whether to buy or sell"
+        />
       </ul>
       <p className="my-4 leading-relaxed text-ink-muted">
         Spotted a term we missed, or a definition that reads wrong to you? The

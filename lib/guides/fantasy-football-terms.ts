@@ -594,6 +594,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "The trade deadline is the last date your league allows trades, typically somewhere between week 10 and week 13.",
           "It concentrates activity. Contenders pay up in the final week before it, and rebuilding teams hold their maximum leverage right until it passes.",
         ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#deadline-heading",
+          label: "Buy, hold or sell at the deadline, by playoff odds",
+        },
       },
       {
         id: "veto",
@@ -618,6 +622,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "Tanking is deliberately losing games to improve your draft position.",
           "In dynasty it is a legitimate, openly discussed strategy, because a rebuilding team wants the 1.01. In redraft, where everyone starts fresh anyway, it reads as quitting and most leagues treat it that way.",
         ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#out-heading",
+          label: "What to do when you are out of the playoff race",
+        },
       },
       {
         id: "points-for-against",
@@ -627,6 +635,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "Points for is how many fantasy points your team has scored. Points against is how many your weekly opponents have scored on you.",
           "The pair explains most records that feel unfair. A team can lead the league in points for and sit at 4-6 because its opponents kept posting their best week of the season against it.",
         ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#luck-heading",
+          label: "How to tell luck from quality in the standings",
+        },
       },
       {
         id: "roster-lock",
@@ -643,6 +655,59 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A consolation bracket is the side playoff for teams that missed the real one.",
           "It exists to keep eliminated managers setting lineups. In dynasty leagues it often carries a genuine prize: rookie draft position.",
         ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#out-heading",
+          label: "Consolation brackets, Toilet Bowls and the pick you are playing for",
+        },
+      },
+      {
+        id: "playoff-odds",
+        term: "Playoff odds",
+        body: [
+          "Playoff odds are the share of simulated seasons in which a team finishes inside its league's playoff line, given its record and how good it is from here.",
+          "They are a count, not a verdict. Sixty percent means the team missed in four seasons out of ten, which is a bubble team with an edge rather than a safe one. Record matters, but so does strength: a strong 3-3 team can have better odds than a weak 4-2 team.",
+        ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#odds-heading",
+          label: "What playoff odds mean, with a worksheet",
+        },
+      },
+      {
+        id: "first-round-bye",
+        term: "First-round bye",
+        body: [
+          "A first-round bye is a free pass through the opening round of the fantasy playoffs, given to the top seeds.",
+          "In a six-team playoff the top two seeds usually get one while seeds three to six play. It is one fewer one-game round to survive, which is why the race for second place can matter as much as the race for sixth.",
+        ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#rules-heading",
+          label: "How seeds, byes and tiebreakers work",
+        },
+      },
+      {
+        id: "all-play-record",
+        term: "All-play record",
+        body: [
+          "An all-play record is what a team's record would be if it played every other team in the league every week, instead of one opponent.",
+          "It takes the luck of the schedule out. A team that goes 4-1 by facing opponents on their quiet weeks and a team that goes 1-4 by facing them on their best weeks can have a much closer all-play record, and that record is the better guide to which one is good.",
+        ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#luck-heading",
+          label: "Luck against quality, with a worked league",
+        },
+      },
+      {
+        id: "league-median",
+        term: "League median",
+        aka: "median scoring",
+        body: [
+          "League median is an optional setting that gives every team a second result each week: a win for scoring above the league's median score that week and a loss for scoring below it.",
+          "On Sleeper the median is the average of the two middle scores, and it counts in the regular season only, not in the playoffs or the consolation bracket. It doubles the games in each record and takes much of the schedule luck out of the standings.",
+        ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#rules-heading",
+          label: "The settings that change how playoffs work",
+        },
       },
     ],
   },
@@ -884,6 +949,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "Strength of schedule measures how difficult a player's or team's upcoming opponents are.",
           "It is worth more at some positions than others, and it matters most across the fantasy playoff weeks. A season-long SOS number averages away the three weeks you actually needed to know about.",
         ],
+        link: {
+          href: "/guides/fantasy-football-playoffs#schedule-heading",
+          label: "How much weight playoff schedules deserve",
+        },
       },
       {
         id: "defense-vs-position",

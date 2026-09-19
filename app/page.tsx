@@ -1248,6 +1248,16 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
       "Rookie pick hit rates by slot, and when picks are cheapest",
     ],
   },
+  "fantasy-football-playoffs": {
+    icon: Trophy,
+    hint: "Your odds, the trade deadline and the title run",
+    lessons: [
+      "What playoff odds mean, with a worksheet for your own record",
+      "Luck against points for, and the all-play record",
+      "Buy, hold or sell at the deadline, by odds rather than record",
+      "Floor when favored, ceiling when you are the underdog",
+    ],
+  },
 };
 
 const FALLBACK_GUIDE_DETAIL: HomeGuideDetail = { icon: BookOpen, hint: "" };

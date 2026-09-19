@@ -89,6 +89,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "Find your lane, why the middle is the worst place to be, age against market price, rookie pick hit rates, the dynasty calendar, startups and taxi squads.",
     badge: "8 lessons",
   },
+  "fantasy-football-playoffs": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "The playoff guide:",
+    headlineBottom: "your odds and the title run",
+    subhead:
+      "What your playoff odds mean, luck against points for, buy or sell at the deadline, how much playoff schedules matter, and win-or-go-home lineups.",
+    badge: "8 lessons",
+  },
 };
 
 /**

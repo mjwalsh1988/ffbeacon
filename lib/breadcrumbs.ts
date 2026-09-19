@@ -50,6 +50,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/guides/fantasy-football-trade-guide": "Trade Guide",
   "/guides/superflex-strategy": "Superflex Strategy",
   "/guides/dynasty-strategy": "Dynasty Strategy",
+  "/guides/fantasy-football-playoffs": "Playoff Guide",
   "/join": "Join the Discord",
   "/login": "Sign in",
   "/my-beacon": "My Beacon",

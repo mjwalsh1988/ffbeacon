@@ -359,6 +359,31 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "taxi squad",
     ],
   },
+  {
+    label: "Playoff Guide",
+    href: "/guides/fantasy-football-playoffs",
+    description:
+      "Playoff odds, the trade deadline, playoff schedules and lineups",
+    keywords: [
+      "playoffs",
+      "playoff",
+      "playoff odds",
+      "fantasy playoffs",
+      "playoff schedule",
+      "tiebreaker",
+      "points for",
+      "all-play",
+      "all play",
+      "luck",
+      "league median",
+      "bye",
+      "seeding",
+      "trade deadline",
+      "buy or sell",
+      "toilet bowl",
+      "consolation",
+    ],
+  },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
@@ -375,6 +400,8 @@ export const FOOTER_COLUMNS: Array<{
   links: FooterLink[];
   /** Reordered to the main menu's tool order from /admin/site-layout. */
   followsMenuToolOrder?: true;
+  /** Where the footer inserts the published guide links, as an index into `links`. */
+  guidesAt?: number;
 }> = [
   {
     heading: "Tools",
@@ -396,30 +423,21 @@ export const FOOTER_COLUMNS: Array<{
   },
   {
     heading: "Learn",
+    // The guides are NOT listed here. components/site-footer.tsx splices in
+    // footerGuideLinks() from lib/guides/published.ts at `guidesAt`: the
+    // glossary, the newest few guides and an "All N guides" link, so a new
+    // guide reaches the footer by being registered and never needs an edit
+    // here. It is read in the footer rather than imported into this file
+    // because this module ships to the client and the register pulls in the
+    // whole glossary for its term count.
     links: [
       { label: "The Beacon Brief", href: "/brief" },
-      { label: "Guides", href: "/guides" },
-      {
-        label: "Fantasy Football Terms",
-        href: "/guides/fantasy-football-terms",
-      },
-      // Was pointed at /guides/2026-fantasy-football-draft-guide, which does not
-      // exist, and was disabled to hide that. The guide is real and lives at the
-      // year-free path, so the link now goes to it.
-      { label: "Draft Guide", href: "/guides/fantasy-football-draft-guide" },
-      {
-        label: "Positional WAR Explained",
-        href: "/guides/positional-war-explained",
-      },
-      { label: "FAAB Strategy", href: "/guides/faab-strategy" },
-      { label: "Trade Guide", href: "/guides/fantasy-football-trade-guide" },
-      { label: "Superflex Strategy", href: "/guides/superflex-strategy" },
-      { label: "Dynasty Strategy", href: "/guides/dynasty-strategy" },
       { label: "How FF Beacon Works", href: "/guides/how-ff-beacon-works" },
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.
       { label: "Rankings Board", href: "/rankings" },
     ],
+    guidesAt: 1,
   },
   {
     heading: "Site",

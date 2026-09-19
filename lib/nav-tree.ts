@@ -173,6 +173,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         hint: "When to contend, when to rebuild",
         icon: "hourglass",
       },
+      {
+        id: "/guides/fantasy-football-playoffs",
+        label: "Playoff Guide",
+        href: "/guides/fantasy-football-playoffs",
+        hint: "Your odds, the deadline, the title run",
+        icon: "trophy",
+      },
     ],
   },
   {

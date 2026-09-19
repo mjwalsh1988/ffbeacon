@@ -622,8 +622,14 @@ function LaneSection() {
       </Para>
       <Para>
         So the first job is to be honest about which team you are. Your record
-        is the worst guide to it, because four games of results carry a lot of
-        luck. The better guide is where your roster ranks on projected wins for
+        is the worst guide to it, because four games of results carry{" "}
+        <Link
+          href="/guides/fantasy-football-playoffs#luck-heading"
+          className={LINK_CLASS}
+        >
+          a lot of luck
+        </Link>
+        . The better guide is where your roster ranks on projected wins for
         the rest of the season, set against where it ranks on value, meaning
         what the market would pay for everything you own, picks included.
         League Pulse puts those two ranks side by side for every team in a

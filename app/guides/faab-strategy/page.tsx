@@ -842,8 +842,12 @@ function AllInSection() {
       <Para>
         When even one of the three is false, do not. The saddest bid on the wire is a last-place
         team spending its whole budget on a player who will win it two meaningless games in
-        December. With a Sleeper league connected, if your playoff odds are already under about
-        5 percent, the calculator will not tell you to empty the budget, and neither will I.
+        December. With a Sleeper league connected, if your{" "}
+        <Link href="/guides/fantasy-football-playoffs#odds-heading" className={LINK_CLASS}>
+          playoff odds
+        </Link>{" "}
+        are already 5 percent or lower, the calculator will not tell you to empty the budget,
+        and neither will I.
         Save it, or better, trade the player you would have cut to a contender for a pick.
       </Para>
       <KeyIdea>

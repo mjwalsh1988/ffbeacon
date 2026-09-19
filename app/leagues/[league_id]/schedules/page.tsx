@@ -6,6 +6,11 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { ownerLine } from "@/lib/team-label";
+import { currentProjectionSourceCached } from "@/lib/projections/current-source";
+import {
+  SLEEPER_SOURCE,
+  projectionSourceDisplay,
+} from "@/lib/projections/source-constants";
 import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -537,7 +542,7 @@ async function ScheduleBody({
             sleeperLeagueId={sleeperLeagueId}
             linkUsername={linkUsername}
           />
-          <SourcesPanel />
+          <SourcesPanel season={board.season} fromWeek={board.currentWeek} />
         </aside>
       </div>
     </div>
@@ -762,6 +767,17 @@ function LuckPanel({
           })}
         </ul>
       )}
+      <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
+        A record running ahead of its all-play record is thinner than it looks
+        in the standings.{" "}
+        <Link
+          href="/guides/fantasy-football-playoffs#luck-heading"
+          className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
+        >
+          How luck and points for decide a playoff race
+        </Link>
+        .
+      </p>
     </Panel>
   );
 }
@@ -893,7 +909,15 @@ function SpotlightItem({
  * reader who flips it and sees identical numbers should find that written down
  * rather than assume the page is stuck.
  */
-function SourcesPanel() {
+async function SourcesPanel({ season, fromWeek }: { season: number; fromWeek: number }) {
+  // The engine is resolved, never typed: CLAUDE.md's projection-source rule.
+  // The window is the board's rest of season, because that is what the
+  // projections on this page cover. No coverage probe runs while our own
+  // engine is switched off. A failure names the baseline rather than taking
+  // the schedule down with the provenance card.
+  const engine = projectionSourceDisplay(
+    await currentProjectionSourceCached({ season, fromWeek }).catch(() => SLEEPER_SOURCE),
+  );
   return (
     <Panel
       eyebrow="Provenance"
@@ -911,7 +935,7 @@ function SourcesPanel() {
         <div>
           <dt className="font-semibold text-ink">Projections</dt>
           <dd className="mt-0.5 text-ink-muted">
-            Sleeper&apos;s weekly player projections, rescored under this
+            {engine}&apos;s weekly player projections, rescored under this
             league&apos;s literal scoring settings rather than generic PPR.
           </dd>
         </div>

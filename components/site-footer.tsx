@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { FOOTER_COLUMNS, SOCIAL_LINKS, SITE } from "@/lib/site";
+import { FOOTER_COLUMNS, SOCIAL_LINKS, SITE, type FooterLink } from "@/lib/site";
+import { footerGuideLinks } from "@/lib/guides/published";
 import { BeaconMark } from "@/components/beacon-mark";
 import { applyOrder } from "@/lib/site-layout/order";
 import { loadSiteLayout } from "@/lib/site-layout/settings";
@@ -26,6 +27,28 @@ export function SiteFooterFallback() {
   return <div aria-hidden="true" className="mt-24 min-h-[20rem] border-t border-line bg-surface/50" />;
 }
 
+/**
+ * A column's links, with the published guides spliced in where the column asks
+ * for them (the Learn column). The guide links come from the guides register,
+ * so publishing a guide is enough to put it here and nothing in lib/site.ts
+ * has to change.
+ */
+function columnLinks(
+  column: (typeof FOOTER_COLUMNS)[number],
+  toolOrder?: readonly string[],
+): FooterLink[] {
+  const base =
+    column.followsMenuToolOrder && toolOrder
+      ? applyOrder(column.links, toolOrder, (link) => link.href)
+      : column.links;
+  if (column.guidesAt === undefined) return base;
+  return [
+    ...base.slice(0, column.guidesAt),
+    ...footerGuideLinks(),
+    ...base.slice(column.guidesAt),
+  ];
+}
+
 export function SiteFooter({ toolOrder }: { toolOrder?: readonly string[] } = {}) {
   const year = new Date().getFullYear();
   return (
@@ -47,11 +70,10 @@ export function SiteFooter({ toolOrder }: { toolOrder?: readonly string[] } = {}
               >
                 {column.heading}
               </h2>
-              <ul className="space-y-2 text-sm">
-                {(column.followsMenuToolOrder && toolOrder
-                  ? applyOrder(column.links, toolOrder, (link) => link.href)
-                  : column.links
-                ).map((link) => (
+              {/* Each link is a 44px target on a phone, per the mobile rule,
+                  and compact again from sm up where a pointer is the norm. */}
+              <ul className="text-sm sm:space-y-2">
+                {columnLinks(column, toolOrder).map((link) => (
                   <li key={`${column.heading}-${link.label}`}>
                     {link.disabled ? (
                       <span
@@ -62,7 +84,10 @@ export function SiteFooter({ toolOrder }: { toolOrder?: readonly string[] } = {}
                         {link.label}
                       </span>
                     ) : (
-                      <Link href={link.href} className="text-ink-muted hover:text-ink">
+                      <Link
+                        href={link.href}
+                        className="inline-flex min-h-11 items-center text-ink-muted hover:text-ink sm:min-h-0"
+                      >
                         {link.label}
                       </Link>
                     )}

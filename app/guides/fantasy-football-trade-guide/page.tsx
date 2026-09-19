@@ -992,7 +992,15 @@ function TimingSection() {
         who has already had his, and you gain a usable week for nothing. Second,
         look at weeks 15 through 17 before every in-season trade, because those
         are the weeks that decide the title, and a player with a soft playoff
-        schedule is worth more to you than his value shows.
+        schedule is worth more to you than his value shows. Use it to choose
+        between two similar players rather than to pick a worse one: the{" "}
+        <Link
+          href="/guides/fantasy-football-playoffs#schedule-heading"
+          className={LINK_CLASS}
+        >
+          playoff guide&apos;s lesson on playoff schedules
+        </Link>{" "}
+        explains how far a matchup can actually move a projection.
       </Para>
       <Para>
         And know your deadline. Most leagues put it somewhere between week 10
@@ -1003,7 +1011,14 @@ function TimingSection() {
         </Link>
         . The week before the deadline is the most active trading week of the
         year, and the prices in it are set by whoever is most desperate. Decide
-        which side of that you are on before it arrives.
+        which side of that you are on before it arrives, and decide it from{" "}
+        <Link
+          href="/guides/fantasy-football-playoffs#deadline-heading"
+          className={LINK_CLASS}
+        >
+          your playoff odds rather than your record
+        </Link>
+        .
       </Para>
       <KeyIdea>
         Sell in the overreaction, buy in the evidence window, consolidate before

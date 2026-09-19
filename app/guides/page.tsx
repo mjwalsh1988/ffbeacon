@@ -12,6 +12,7 @@ import {
   Scale,
   Layers,
   Hourglass,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -228,6 +229,19 @@ const GUIDES: Guide[] = [
       "Put in your league and see your lane: Contender, Loaded, Bubble or Rebuilder",
       "Rookie pick hit rates by slot, and when picks are cheapest",
       "An age clock for your starters, and a pre-deadline checklist",
+    ],
+  },
+  {
+    icon: Trophy,
+    title: "Fantasy football playoffs",
+    href: "/guides/fantasy-football-playoffs",
+    description:
+      "How fantasy playoffs work and how to play for them. What your playoff odds really mean, how much of your record is luck, whether to buy or sell at the trade deadline, and how to set a lineup when one loss ends your season.",
+    bullets: [
+      "Eight lessons, with a playoff odds worksheet you can put your record into",
+      "Seeds, byes, tiebreakers and the league median, checked against Sleeper, ESPN and Yahoo",
+      "A buy, hold or sell grid by playoff odds and by kind of roster",
+      "Why playoff schedules are a tiebreaker, and a pre-deadline checklist",
     ],
   },
   {

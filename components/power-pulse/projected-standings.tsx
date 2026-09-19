@@ -8,6 +8,7 @@
  * a four-team or eight-team league gets the right line.
  */
 
+import Link from "next/link";
 import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
@@ -118,6 +119,19 @@ export function ProjectedStandings({
                   {team.projectedWins !== null
                     ? `${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)}`
                     : "--"}
+                  {/* Points per week has its own column from sm up. Below that
+                      it rides under the record, so a phone keeps every figure
+                      the desktop table shows. */}
+                  <span className="mt-0.5 block text-[10px] text-ink-subtle sm:hidden">
+                    <span className="sr-only">, </span>
+                    {team.expectedPointsPerWeek !== null && team.expectedPointsPerWeek !== undefined ? (
+                      <>{team.expectedPointsPerWeek.toFixed(1)} pts a week</>
+                    ) : (
+                      <>
+                        --<span className="sr-only"> no points per week projected</span>
+                      </>
+                    )}
+                  </span>
                 </td>
                 <td className="px-3 py-2 text-center font-mono text-xs font-semibold tabular-nums text-ink">
                   {team.playoffOdds === null ? "--" : `${Math.round(team.playoffOdds * 100)}%`}
@@ -132,7 +146,14 @@ export function ProjectedStandings({
       </table>
       <p className="border-t border-line px-4 py-2.5 text-[11px] text-ink-subtle">
         Top {playoffTeams} make the playoffs. Records average every simulated
-        season, so they land on fractions.
+        season, so they land on fractions.{" "}
+        <Link
+          href="/guides/fantasy-football-playoffs#odds-heading"
+          className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
+        >
+          What playoff odds mean, and why 60 percent is not safe
+        </Link>
+        .
       </p>
     </div>
   );
