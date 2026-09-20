@@ -58,6 +58,18 @@ export type SignalInput = {
   positionalFinishes: PositionalFinish[];
   currentSeason: number;
   settings: SignalSettings;
+  /**
+   * The man in front of him on his own NFL team, when that man is hurt.
+   *
+   * The single most common reason a waiver claim is worth real money, and the
+   * one the model could not see: a backup running back is a bench body on
+   * Tuesday and a starter on Wednesday, and the projection published on
+   * Tuesday does not always know yet.
+   */
+  teammate?: { name: string; status: string; depthOrder: number | null } | null;
+  /** Where the candidate sits on his own depth chart. 1 is the starter. */
+  depthOrder?: number | null;
+  teammateSettings?: { enabled: boolean; maxAdjustPct: number };
 };
 
 function clamp(n: number, min: number, max: number): number {
@@ -274,8 +286,35 @@ function ceilingSignal(input: SignalInput): FaabSignal | null {
 }
 
 /** Every signal we can read for this player, strongest effect first. */
+/**
+ * His starter is out.
+ *
+ * Only fires for a player who is actually behind someone: a starter whose
+ * backup is hurt gains nothing. The direct backup gets the full adjustment
+ * and anyone further down gets half, because the third man on a depth chart
+ * is a guess about a coaching decision rather than a promotion.
+ */
+function teammateSignal(input: SignalInput): FaabSignal | null {
+  const cfg = input.teammateSettings;
+  if (!cfg?.enabled || !input.teammate) return null;
+  const depth = input.depthOrder ?? null;
+  if (depth === null || depth < 2) return null;
+
+  const strength = depth === 2 ? 1 : 0.5;
+  const status = input.teammate.status.toUpperCase();
+  return {
+    id: "teammate-out",
+    label: "His starter is out",
+    detail: `${input.teammate.name} is ${status.toLowerCase()}, and this is the man behind him on the depth chart.`,
+    tone: "good",
+    multiplier: toMultiplier(strength, cfg.maxAdjustPct),
+    spread: 0,
+  };
+}
+
 export function buildSignals(input: SignalInput): FaabSignal[] {
   const signals = [
+    teammateSignal(input),
     opportunitySignal(input),
     beatRateSignal(input),
     availabilitySignal(input),

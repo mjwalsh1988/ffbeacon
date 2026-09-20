@@ -1,92 +1,85 @@
 "use client";
 
-import { useId } from "react";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  CircleDollarSign,
-  Info,
-  Minus,
-  ShieldAlert,
-  Target,
-  TrendingUp,
-  UserMinus,
-} from "lucide-react";
-import type {
-  BidLadder,
-  DropCandidate,
-  FaabConfidence,
-  FaabSignal,
-  LeagueFaabReport,
-  MarginalValue,
-  MarginalWeek,
-  MarketRead,
-} from "@/lib/faab/types";
+import { useEffect, useId, useRef, type ReactNode } from "react";
+import { Target } from "lucide-react";
+import { BidActions } from "./bid-actions";
+import { BidHero } from "./bid-hero";
+import { BidReasons } from "./bid-reasons";
+import { ChoppedCard } from "./chopped-card";
+import { DropOptions } from "./drop-options";
+import { GoalToggle } from "./goal-toggle";
+import { ImpactGrid } from "./impact-grid";
+import { MarketCard } from "./market-card";
+import { RivalTable } from "./rival-table";
+import { SignalList } from "./signal-list";
+import { WeekStrip } from "./week-strip";
+import { WinChanceChart } from "./win-chance-chart";
+import { CONFIDENCE_LABEL, type BidView } from "./bid-view";
+import type { GoalKey, LeagueFaabReport } from "@/lib/faab/types";
+
+export type { BidView } from "./bid-view";
+export {
+  copyText,
+  liveMessage,
+  rungsForGoal,
+  shareImageHref,
+  winPercent,
+} from "./bid-view";
 
 /**
  * The recommendation, for either mode.
  *
- * Both the connected-league answer and the manual one render through here so
+ * Both the connected-league answer and the manual one render through here, so
  * the two never drift into looking like different products. What changes
- * between them is what the figures MEAN, not how they are laid out: league mode
- * measures against your actual lineup, manual mode against the best player you
- * could already start. The mode is stated on the card rather than left implied.
+ * between them is what the figures MEAN, not how they are laid out.
  *
- * Everything is text first. Screen readers get the same three numbers, the same
- * reasoning, and the same per-week detail, and nothing is hidden at any
- * breakpoint: the week strip wraps rather than disappearing.
+ * THE GOAL LIVES IN THE PARENT. There is exactly one polite live region per
+ * mode and it belongs to whichever parent owns the answer, so the goal and
+ * the sentence announcing it have to move together. Switching costs no server
+ * call either way: `ladder.bidsByGoal` carries both numbers.
+ *
+ * Headings: the player's name is the card's h3 and every section inside it is
+ * an h4, so a reader navigating by heading never meets an h4 with no h3 above
+ * it.
+ *
+ * Nothing is hidden at any breakpoint. On a phone the week strip, the signals
+ * and the notices sit inside one labelled disclosure; on a wide screen that
+ * disclosure is open. Collapsed is not hidden: the content is in the DOM at
+ * every width and reachable by keyboard.
  */
-
-export type BidView = {
-  mode: "league" | "manual";
-  title: string;
-  /** Sits under the title: the league name, or the format and league shape. */
-  subtitle: string;
-  headline: string;
-  explanation: string;
-  confidence: FaabConfidence;
-  ladder: BidLadder;
-  isDumpCandidate: boolean;
-  marginal: MarginalValue | null;
-  signals: FaabSignal[];
-  /** Null in manual mode: without a league there is no competition to read. */
-  market: MarketRead | null;
-  notices: string[];
-  /** Manual mode only: the player replacement level was measured against. */
-  replacement: { rank: number; pointsPerWeek: number } | null;
-  availability?: LeagueFaabReport["availability"];
-  rosteredBy?: string | null;
-};
-
-const CONFIDENCE_LABEL: Record<FaabConfidence, string> = {
-  high: "Strong read",
-  medium: "Reasonable read",
-  low: "Thin read",
-};
-
-/** Build the view from a connected-league report. */
-export function viewFromLeagueReport(report: LeagueFaabReport): BidView {
-  return {
-    mode: "league",
-    title: report.player.name,
-    subtitle: `${report.league.name}, week ${report.league.currentWeek}`,
-    headline: report.headline,
-    explanation: report.explanation,
-    confidence: report.confidence,
-    ladder: report.ladder,
-    isDumpCandidate: report.isDumpCandidate,
-    marginal: report.marginal,
-    signals: report.signals,
-    market: report.market,
-    notices: report.notices,
-    replacement: null,
-    availability: report.availability,
-    rosteredBy: report.rosteredBy,
-  };
-}
-
-export function BidResult({ view }: { view: BidView }) {
+export function BidResult({
+  view,
+  goal,
+  onGoalChange,
+  onAnnounce,
+  allLeaguesAction,
+}: {
+  view: BidView;
+  goal: GoalKey;
+  onGoalChange: (goal: GoalKey) => void;
+  /** Hands a one-off message to the parent's polite live region. */
+  onAnnounce: (message: string) => void;
+  /** League mode only: the existing "check every league" control. */
+  allLeaguesAction?: ReactNode;
+}) {
+  const ids = useId();
   const benchOnly = view.marginal?.isBenchOnly ?? false;
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+  // Open from lg up, closed below it. Done here rather than in CSS because a
+  // details element's open state is an attribute, and doing it during render
+  // would disagree with the server's HTML. The content is in the DOM either
+  // way, so a reader who never sees this run loses nothing but a click.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const query = window.matchMedia("(min-width: 1024px)");
+    const apply = () => {
+      if (detailsRef.current) detailsRef.current.open = query.matches;
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -117,514 +110,122 @@ export function BidResult({ view }: { view: BidView }) {
             </span>
           </p>
 
-          <h4 className="mt-2 text-base font-semibold text-ink">
+          <h3 className="mt-2 text-base font-semibold text-ink">
             {view.title}
             <span className="ml-2 font-normal text-ink-subtle">{view.subtitle}</span>
-          </h4>
+          </h3>
 
-          <Ladder ladder={view.ladder} />
+          <GoalToggle goal={goal} onChange={onGoalChange} name={`${ids}-goal`} />
+
+          <BidHero view={view} goal={goal} />
 
           <p className="mt-4 text-sm leading-relaxed text-ink">{view.explanation}</p>
         </div>
       </div>
 
-      {view.marginal && !benchOnly && <ImpactGrid view={view} />}
-      {view.marginal && (view.marginal.dropOptions.length > 0 || view.marginal.dropNote) && (
-        <DropOptions
-          options={view.marginal.dropOptions}
-          note={view.marginal.dropNote}
-          weeksConsidered={view.marginal.weeksConsidered}
+      <WinChanceChart view={view} goal={goal} />
+
+      <BidReasons reasons={view.reasons} />
+
+      {view.chopped && <ChoppedCard chopped={view.chopped} />}
+
+      {view.mode === "league" && (
+        <RivalTable
+          rivals={view.rivals}
+          notInterested={view.rivalsNotInterested}
+          playerName={view.title}
         />
       )}
-      {view.marginal && view.marginal.weeks.length > 0 && (
-        <WeekStrip weeks={view.marginal.weeks} mode={view.mode} />
-      )}
 
-      <SignalList signals={view.signals} />
       {view.market && <MarketCard view={view} market={view.market} />}
 
-      {view.notices.map((note, i) => (
-        <p
-          key={i}
-          className="rounded-card border border-dashed border-line bg-surface/40 px-4 py-3 text-sm leading-relaxed text-ink-muted"
+      {view.marginal && !benchOnly && <ImpactGrid view={view} />}
+
+      {view.marginal &&
+        (view.marginal.dropOptions.length > 0 || view.marginal.dropNote) && (
+          <DropOptions
+            options={view.marginal.dropOptions}
+            note={view.marginal.dropNote}
+            weeksConsidered={view.marginal.weeksConsidered}
+          />
+        )}
+
+      {((view.marginal?.weeks.length ?? 0) > 0 ||
+        view.signals.length > 0 ||
+        view.notices.length > 0) && (
+        <details
+          ref={detailsRef}
+          className="rounded-card border border-line bg-surface/40 p-4"
         >
-          {note}
-        </p>
-      ))}
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
+            More detail
+          </summary>
+          <div className="mt-3 space-y-4">
+            {view.marginal && view.marginal.weeks.length > 0 && (
+              <WeekStrip weeks={view.marginal.weeks} mode={view.mode} />
+            )}
+            <SignalList signals={view.signals} />
+            {view.notices.map((note) => (
+              <p
+                key={note}
+                className="rounded-card border border-dashed border-line bg-base/40 px-4 py-3 text-sm leading-relaxed text-ink-muted"
+              >
+                {note}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <BidActions
+        view={view}
+        goal={goal}
+        onAnnounce={onAnnounce}
+        allLeaguesAction={allLeaguesAction}
+      />
     </div>
   );
 }
 
 /**
- * Three rungs, in decision order. The walk-away number carries as much weight
- * as the recommendation because the expensive FAAB mistake is winning an
- * auction you should have lost.
- */
-function Ladder({ ladder }: { ladder: BidLadder }) {
-  const rungs = [
-    {
-      key: "likely",
-      label: "Bid this",
-      value: ladder.likely,
-      hint: `${ladder.likelyPct}% of budget, leaves ${ladder.budgetAfterLikely}.`,
-      strong: true,
-    },
-    {
-      key: "aggressive",
-      label: "To be sure",
-      value: ladder.aggressive,
-      hint: "Buys confidence, costs flexibility.",
-      strong: false,
-    },
-    {
-      key: "walkaway",
-      label: "Walk away above",
-      value: ladder.walkAway,
-      hint: "Past this you are overpaying.",
-      strong: false,
-    },
-  ];
-
-  return (
-    <dl className="mt-4 grid gap-3 sm:grid-cols-3">
-      {rungs.map((rung) => (
-        <div
-          key={rung.key}
-          className={`rounded-card border p-3 ${
-            rung.strong ? "border-brand-cyan/40 bg-base/60" : "border-line bg-base/40"
-          }`}
-        >
-          <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-subtle">
-            {rung.label}
-          </dt>
-          <dd>
-            <span
-              className={`mt-1 block font-mono font-bold tabular-nums ${
-                rung.strong
-                  ? "bg-clip-text text-2xl text-transparent forced-colors:text-ink sm:text-3xl"
-                  : "text-xl text-ink"
-              }`}
-              style={
-                rung.strong
-                  ? { backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }
-                  : undefined
-              }
-            >
-              {rung.value} FAAB
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-ink-subtle">
-              {rung.hint}
-            </span>
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** The measured impact, as figures rather than adjectives. */
-function ImpactGrid({ view }: { view: BidView }) {
-  const m = view.marginal;
-  if (!m) return null;
-
-  const cells: Array<{ label: string; value: string; spoken: string }> = [
-    {
-      label: "Points a week",
-      value: `+${m.netPointsPerWeek.toFixed(1)}`,
-      spoken:
-        view.mode === "league"
-          ? `Adds ${m.netPointsPerWeek.toFixed(1)} points a week to your starting lineup`
-          : `Adds ${m.netPointsPerWeek.toFixed(1)} points a week over a replacement-level starter`,
-    },
-  ];
-
-  if (view.mode === "league") {
-    cells.push({
-      label: "Weeks he starts",
-      value: `${m.weeksStarting} of ${m.weeksConsidered}`,
-      spoken: `Starts for you in ${m.weeksStarting} of your ${m.weeksConsidered} remaining weeks`,
-    });
-    if (m.expectedWinsAdded !== null) {
-      cells.push({
-        label: "Wins added",
-        value: `+${m.expectedWinsAdded.toFixed(1)}`,
-        spoken: `Worth about ${m.expectedWinsAdded.toFixed(1)} extra wins`,
-      });
-    }
-    if (m.playoffOddsBefore !== null && m.playoffOddsAfter !== null) {
-      cells.push({
-        label: "Playoff odds",
-        value: `${m.playoffOddsBefore.toFixed(0)}% to ${m.playoffOddsAfter.toFixed(0)}%`,
-        spoken: `Playoff odds move from ${m.playoffOddsBefore.toFixed(0)} percent to ${m.playoffOddsAfter.toFixed(0)} percent`,
-      });
-    }
-  } else {
-    cells.push({
-      label: "Weeks left",
-      value: String(m.weeksConsidered),
-      spoken: `${m.weeksConsidered} regular season weeks left`,
-    });
-    if (view.replacement) {
-      cells.push({
-        label: "Replacement level",
-        value: `${view.replacement.pointsPerWeek.toFixed(1)} a week`,
-        spoken: `The last startable player at his position projects ${view.replacement.pointsPerWeek.toFixed(1)} points a week`,
-      });
-      cells.push({
-        label: "Startable at",
-        value: `#${view.replacement.rank}`,
-        spoken: `Your league runs about ${view.replacement.rank} startable players at his position`,
-      });
-    }
-  }
-
-  return (
-    <section
-      aria-label={view.mode === "league" ? "What he adds to your team" : "What he adds"}
-      className="rounded-card border border-line bg-surface/40 p-4"
-    >
-      <h5 className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <TrendingUp aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-        {view.mode === "league" ? "What he adds to your team" : "What he adds over replacement"}
-      </h5>
-      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {cells.map((cell) => (
-          <div key={cell.label} className="rounded-card border border-line bg-base/50 p-3">
-            <dt className="text-xs text-ink-subtle">{cell.label}</dt>
-            <dd className="mt-1 font-mono text-sm font-bold tabular-nums text-ink">
-              <span aria-hidden="true">{cell.value}</span>
-              <span className="sr-only">{cell.spoken}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {/* The cut these figures are net of is named in the summary above and
-          badged on its own row in the shortlist below, so repeating it here
-          would be the third mention of one player on one screen. */}
-    </section>
-  );
-}
-
-/**
- * Who you could drop, as a shortlist rather than an instruction.
+ * Build the view from a connected-league report.
  *
- * The model ranks by projected lineup points and market value. Both are real,
- * and neither can see the reasons a reader keeps somebody: a handcuff whose
- * stock jumped the day the starter ahead of him went down, a rookie they are
- * high on, a piece of a trade already in motion. So this names a few players
- * and says plainly that the last call is theirs.
- *
- * Every figure a wide screen shows is present on a phone. The row stacks rather
- * than dropping the cost, and the cost keeps its own line at every width.
+ * The win curve is not rebuilt here: it travels on the ladder, sampled by
+ * lib/faab/ladder.ts, so the league chart and the manual one are drawn from
+ * the same numbers produced by the same code.
  */
-function DropOptions({
-  options,
-  note,
-  weeksConsidered,
-}: {
-  options: DropCandidate[];
-  note: string | null;
-  weeksConsidered: number;
-}) {
-  // Both a league answer and a manual answer can be on screen at once, so the
-  // heading id has to be unique per instance or the second section points its
-  // label at the first section's heading.
-  const headingId = `${useId()}-drop`;
+export function viewFromLeagueReport(report: LeagueFaabReport): BidView {
+  const totalBudget =
+    report.market.leagueTotalBudget ?? Math.max(1, report.market.yourBudget);
 
-  return (
-    <section
-      aria-labelledby={headingId}
-      className="rounded-card border border-line bg-surface/40 p-4"
-    >
-      <h5
-        id={headingId}
-        className="flex items-center gap-2 text-sm font-semibold text-ink"
-      >
-        <UserMinus aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-        Who you could drop
-      </h5>
-
-      {options.length > 0 ? (
-        <>
-          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-            Your roster is full, so somebody has to go.{" "}
-            {options.length === 1
-              ? "Only one player here looks spare. Everyone else is in your lineup or worth more than this claim."
-              : `Your lineup would miss these least over the next ${weeksConsidered} week${weeksConsidered === 1 ? "" : "s"}, cheapest first.`}
-          </p>
-
-          <ul role="list" className="mt-3 space-y-2">
-            {options.map((option, index) => (
-              <li
-                key={option.playerId}
-                className="rounded-card border border-line bg-base/50 p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
-                      {option.name}
-                      <span className="rounded-full border border-line bg-surface px-2 py-0.5 font-mono text-[11px] font-medium text-ink-subtle">
-                        {[option.position, option.team].filter(Boolean).join(" ") ||
-                          "Bench"}
-                      </span>
-                      {option.injuryStatus && (
-                        <span className="rounded-full border border-signal-warning/40 bg-signal-warning/10 px-2 py-0.5 text-[11px] font-medium text-signal-warning">
-                          {option.injuryStatus}
-                        </span>
-                      )}
-                      {index === 0 && (
-                        <span className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[11px] font-medium text-brand-cyan">
-                          Used for the figures above
-                        </span>
-                      )}
-                    </p>
-                    {option.note && (
-                      <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-                        {option.note}
-                      </p>
-                    )}
-                  </div>
-
-                  <p className="shrink-0 text-right">
-                    <span
-                      aria-hidden="true"
-                      className="block font-mono text-sm font-bold tabular-nums text-ink"
-                    >
-                      {option.pointsPerWeek <= 0.05
-                        ? "Free"
-                        : `-${option.pointsPerWeek.toFixed(1)}`}
-                    </span>
-                    <span aria-hidden="true" className="block text-[11px] text-ink-subtle">
-                      {option.pointsPerWeek <= 0.05 ? "to cut" : "points a week"}
-                    </span>
-                    <span className="sr-only">
-                      {option.pointsPerWeek <= 0.05
-                        ? "Cutting him costs your lineup nothing."
-                        : `Cutting him costs your lineup ${option.pointsPerWeek.toFixed(1)} points a week.`}
-                    </span>
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      {note && (
-        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{note}</p>
-      )}
-
-      {/* The caveat is part of the answer, not a disclaimer bolted to the end of
-          it, so it sits inside the same card and is read out with the list. */}
-      <p className="mt-3 flex items-start gap-2 rounded-card border border-dashed border-line bg-base/40 px-3 py-2.5 text-sm leading-relaxed text-ink-muted">
-        <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" />
-        <span>
-          A shortlist, not advice. We only see projected points and market value,
-          so we miss what you know: a backup who just became the starter, a rookie
-          you like, a name someone has asked you about in a trade. Check before you
-          cut.
-        </span>
-      </p>
-    </section>
-  );
-}
-
-/** How hard a matchup reads, for the manual week strip. */
-function matchupWord(multiplier: number): string {
-  if (multiplier >= 1.08) return "good";
-  if (multiplier <= 0.92) return "tough";
-  return "even";
-}
-
-/**
- * Week by week. A wrapping list rather than a table so nothing is dropped on a
- * phone, and every entry carries its own sentence, because "W7 +4.2" read aloud
- * is not one.
- */
-function WeekStrip({ weeks, mode }: { weeks: MarginalWeek[]; mode: BidView["mode"] }) {
-  return (
-    <section
-      aria-label="Week by week"
-      className="rounded-card border border-line bg-surface/40 p-4"
-    >
-      <h5 className="text-sm font-semibold text-ink">
-        {mode === "league" ? "Week by week" : "His remaining schedule"}
-      </h5>
-      <ul role="list" className="mt-3 flex flex-wrap gap-2">
-        {weeks.map((week) => {
-          const good =
-            mode === "league" ? week.startsForYou : week.opponentMultiplier >= 1.08;
-          const tough = mode === "manual" && week.opponentMultiplier <= 0.92;
-          return (
-            <li
-              key={week.week}
-              className={`inline-flex min-h-11 min-w-[4.5rem] flex-col justify-center rounded-card border px-3 py-1.5 ${
-                good
-                  ? "border-brand-cyan/40 bg-brand-cyan/10"
-                  : tough
-                    ? "border-signal-danger/40 bg-signal-danger/5"
-                    : "border-line bg-base/50"
-              }`}
-            >
-              <span aria-hidden="true" className="text-[11px] font-semibold text-ink-subtle">
-                Wk {week.week}
-                {week.opponent ? ` vs ${week.opponent}` : ""}
-              </span>
-              <span
-                aria-hidden="true"
-                className={`font-mono text-xs font-bold tabular-nums ${
-                  good ? "text-brand-cyan" : tough ? "text-signal-danger" : "text-ink-subtle"
-                }`}
-              >
-                {mode === "league"
-                  ? week.startsForYou
-                    ? `+${week.pointsAdded.toFixed(1)}`
-                    : "bench"
-                  : matchupWord(week.opponentMultiplier)}
-              </span>
-              <span className="sr-only">
-                {mode === "league"
-                  ? week.startsForYou
-                    ? `Week ${week.week}${week.opponent ? ` against ${week.opponent}` : ""}: starts, adds ${week.pointsAdded.toFixed(1)} points.`
-                    : `Week ${week.week}${week.opponent ? ` against ${week.opponent}` : ""}: does not crack your lineup.`
-                  : `Week ${week.week}${week.opponent ? ` against ${week.opponent}` : ""}: ${matchupWord(week.opponentMultiplier)} matchup.`}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function toneIcon(tone: FaabSignal["tone"]) {
-  if (tone === "good") return ArrowUpRight;
-  if (tone === "bad") return ArrowDownRight;
-  return Minus;
-}
-
-function toneClass(tone: FaabSignal["tone"]): string {
-  if (tone === "good") return "text-signal-success";
-  if (tone === "bad") return "text-signal-danger";
-  return "text-ink-subtle";
-}
-
-/** Every reason the number moved, so a reader can disagree with it. */
-function SignalList({ signals }: { signals: FaabSignal[] }) {
-  if (signals.length === 0) return null;
-
-  return (
-    <section
-      aria-label="Why this number"
-      className="rounded-card border border-line bg-surface/40 p-4"
-    >
-      <h5 className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <Info aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-        Why this number
-      </h5>
-      <ul role="list" className="mt-3 space-y-3">
-        {signals.map((signal) => {
-          const Icon = toneIcon(signal.tone);
-          const movePct = Math.round((signal.multiplier - 1) * 100);
-          return (
-            <li key={signal.id} className="flex items-start gap-2.5">
-              <Icon
-                aria-hidden="true"
-                className={`mt-0.5 h-4 w-4 shrink-0 ${toneClass(signal.tone)}`}
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink">
-                  {signal.label}
-                  {movePct !== 0 && (
-                    <span className={`ml-2 font-mono text-xs ${toneClass(signal.tone)}`}>
-                      {movePct > 0 ? "+" : ""}
-                      {movePct}%
-                    </span>
-                  )}
-                </p>
-                <p className="mt-0.5 text-sm leading-relaxed text-ink-muted">
-                  {signal.detail}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-/** The competition, spelled out. League mode only. */
-function MarketCard({ view, market }: { view: BidView; market: MarketRead }) {
-  const lines: string[] = [];
-
-  // Budgets, said in a way that survives a league where everybody is level.
-  // "The richest rival has 100" is a useless sentence on its own when 100 is
-  // the league maximum, so the line always states what it means for the bid.
-  if (market.richestRivalBudget === null) {
-    lines.push(`You have ${market.yourBudget} FAAB left.`);
-  } else if (market.everyoneAtFullBudget) {
-    lines.push(
-      `Every team still holds the full ${market.leagueTotalBudget ?? market.yourBudget}, you included. Nobody can be priced out yet.`,
-    );
-  } else if (market.richestRivalBudget > market.yourBudget) {
-    lines.push(
-      `You have ${market.yourBudget} FAAB and ${market.rivalsAtLeastAsRich} of the other teams can match or beat that, the richest with ${market.richestRivalBudget}.`,
-    );
-  } else if (market.richestRivalBudget === market.yourBudget) {
-    lines.push(
-      `You have ${market.yourBudget} FAAB and so does the richest rival. Nobody here can outspend anybody.`,
-    );
-  } else {
-    lines.push(
-      `You have ${market.yourBudget} FAAB and the richest rival has ${market.richestRivalBudget}, so nobody can take him past ${market.richestRivalBudget}.`,
-    );
-  }
-
-  if (market.interestedRivals !== null && market.rivalsChecked !== null) {
-    lines.push(
-      market.interestedRivals === 0
-        ? `None of the other ${market.rivalsChecked} rosters would start him.`
-        : `${market.interestedRivals} of ${market.rivalsChecked} rosters would start him.`,
-    );
-  }
-
-  if (market.comparable) {
-    lines.push(
-      `Winning bids here run ${market.comparable.p25} to ${market.comparable.p75}, median ${market.comparable.median}, over ${market.comparable.sampleSize} claims.`,
-    );
-  }
-
-  lines.push(`${market.weeksLeft} regular season week${market.weeksLeft === 1 ? "" : "s"} left.`);
-
-  return (
-    <section
-      aria-label="Who else is bidding"
-      className="rounded-card border border-line bg-surface/40 p-4"
-    >
-      <h5 className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <CircleDollarSign aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-        Who else is bidding
-      </h5>
-      <ul role="list" className="mt-2 space-y-1.5">
-        {lines.map((line, i) => (
-          <li key={i} className="text-sm leading-relaxed text-ink-muted">
-            {line}
-          </li>
-        ))}
-      </ul>
-      {view.availability === "rostered" && (
-        <p className="mt-3 flex items-start gap-2 text-sm text-ink">
-          <ShieldAlert
-            aria-hidden="true"
-            className="mt-0.5 h-4 w-4 shrink-0 text-signal-danger"
-          />
-          <span>
-            {view.rosteredBy} already has him here, so this is what he would be worth to you
-            rather than what you can bid.
-          </span>
-        </p>
-      )}
-    </section>
-  );
+  return {
+    mode: "league",
+    leagueKind: report.leagueKind,
+    title: report.player.name,
+    subtitle: `${report.league.name}, week ${report.league.currentWeek}`,
+    headline: report.headline,
+    explanation: report.explanation,
+    confidence: report.confidence,
+    ladder: report.ladder,
+    goalDefault: report.goalDefault,
+    isDumpCandidate: report.isDumpCandidate,
+    marginal: report.marginal,
+    signals: report.signals,
+    market: report.market,
+    notices: report.notices,
+    replacement: null,
+    availability: report.availability,
+    rosteredBy: report.rosteredBy,
+    reasons: report.reasons,
+    rivals: report.rivals,
+    rivalsNotInterested: report.rivalsNotInterested,
+    injuredStarters: report.injuredStarters,
+    positionalWar: report.positionalWar,
+    chopped: report.chopped,
+    heat: report.heat,
+    priorsFallback: report.priorsFallback,
+    remainingBudget: report.market.yourBudget,
+    totalBudget,
+    sleeperId: report.player.sleeperId,
+  };
 }

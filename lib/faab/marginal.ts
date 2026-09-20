@@ -75,6 +75,17 @@ export type LineupSwapInput = {
    */
   isKeeperLeague?: boolean;
   dropGuard?: DropGuardSettings;
+  /**
+   * How much each week counts when the per-week averages are taken. Absent, or
+   * a week with no entry, counts as 1.
+   *
+   * This exists for the playoff weeks. A week 15 start is worth more than a
+   * week 8 start to a team that will be playing, and worth nothing to one that
+   * will not, so a playoff week enters weighted by the chance of reaching it
+   * rather than either counted in full or left out. Counting them in full
+   * would price every roster as though it were already in the bracket.
+   */
+  weekWeights?: Map<number, number>;
 };
 
 export type RosterMetaEntry = {
@@ -111,6 +122,23 @@ export type LineupSwapResult = {
 function meanOf(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+/**
+ * A weighted mean, used so a playoff week can count for less than a regular
+ * one. Falls back to the plain mean when every weight is equal, and returns
+ * zero rather than NaN when the weights sum to nothing.
+ */
+function weightedMeanOf(values: Array<{ value: number; weight: number }>): number {
+  if (values.length === 0) return 0;
+  let total = 0;
+  let weight = 0;
+  for (const entry of values) {
+    if (entry.weight <= 0) continue;
+    total += entry.value * entry.weight;
+    weight += entry.weight;
+  }
+  return weight > 0 ? total / weight : 0;
 }
 
 function withCandidate(
@@ -441,9 +469,13 @@ export function computeLineupSwap(input: LineupSwapInput): LineupSwapResult {
   const appliedDrop = chosen.drop;
 
   const detail: MarginalWeek[] = [];
-  const grossGains: number[] = [];
-  const netGains: number[] = [];
-  const startedGains: number[] = [];
+  const grossGains: Array<{ value: number; weight: number }> = [];
+  const netGains: Array<{ value: number; weight: number }> = [];
+  const startedGains: Array<{ value: number; weight: number }> = [];
+  const weightFor = (week: number) => {
+    const weight = input.weekWeights?.get(week);
+    return weight === undefined || !Number.isFinite(weight) ? 1 : Math.max(0, weight);
+  };
 
   for (const week of weeks) {
     const base = baseTotals.get(week) ?? 0;
@@ -474,9 +506,10 @@ export function computeLineupSwap(input: LineupSwapInput): LineupSwapResult {
     const grossGain = gross.total - base;
     const netGain = afterDrop.total - base;
 
-    grossGains.push(grossGain);
-    netGains.push(netGain);
-    if (startsForYou) startedGains.push(grossGain);
+    const weight = weightFor(week);
+    grossGains.push({ value: grossGain, weight });
+    netGains.push({ value: netGain, weight });
+    if (startsForYou) startedGains.push({ value: grossGain, weight });
 
     const own = input.candidateByWeek.get(week);
     detail.push({
@@ -494,9 +527,9 @@ export function computeLineupSwap(input: LineupSwapInput): LineupSwapResult {
     weeks: detail,
     weeksConsidered: weeks.length,
     weeksStarting,
-    pointsPerWeek: meanOf(grossGains),
-    pointsPerStartedWeek: meanOf(startedGains),
-    netPointsPerWeek: meanOf(netGains),
+    pointsPerWeek: weightedMeanOf(grossGains),
+    pointsPerStartedWeek: weightedMeanOf(startedGains),
+    netPointsPerWeek: weightedMeanOf(netGains),
     dropCost: appliedDrop,
     dropOptions: chosen.options,
     dropNote: chosen.note,

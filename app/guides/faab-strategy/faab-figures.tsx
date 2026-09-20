@@ -1,21 +1,15 @@
-import {
-  ChartFigure,
-  DataTable,
-  Td,
-  Th,
-  linePath,
-  makeScale,
-} from "@/components/chart-kit";
+import { ChartFigure, DataTable, Td, Th, makeScale } from "@/components/chart-kit";
 
 /**
  * The diagrams in the FAAB guide.
  *
  * EVERY NUMBER HERE IS INVENTED unless the caption says it is a calculator
- * default. The figures teach a shape (the four bid bands, a dollar losing its
- * option value as the season runs out, a ladder with a walk-away line, a
- * pickup priced as weeks started times points over the cut), and each caption
- * says so in words. Nothing is read from the database, so nothing here can be
- * mistaken for a live figure about a real player or a real league.
+ * default. The figures teach a shape (the four bid bands, a ladder with a
+ * walk-away line, a pickup priced as weeks started times points over the cut),
+ * and each caption says so in words. Nothing is read from the database, so
+ * nothing here can be mistaken for a live figure about a real player or a real
+ * league. The measured tables the guide publishes are read at render in
+ * page.tsx instead, where the sample size can travel with them.
  *
  * Every figure goes through ChartFigure, which puts the conclusion in a
  * sentence before the graphic and the plotted values in a real table under a
@@ -28,17 +22,21 @@ import {
  * the bid curve bands (elite 65 to 100 percent, high-end starter 40 to 65,
  * strong weekly starter 25 to 40, starter-level 14 to 25, useful depth 8 to 14,
  * bench 4 to 8, speculative 1 to 4, flyer 0 to 2), merged into the guide's four
- * buckets, and the urgency curve (a 15 percent discount through week 3, a 40
- * percent boost from week 12, straight-line in between, per
- * lib/faab/market.ts urgencyMultiplier). An admin can change them, which is
- * why every caption says "by default".
+ * buckets. An admin can change them, which is why every caption says "by
+ * default".
+ *
+ * A fourth figure used to live here, drawing the old urgency ramp: 15 percent
+ * off a bid through week 3, rising to a 40 percent boost from week 12. The
+ * overhaul replaced that ramp with the measured calendar in
+ * lib/faab/market.ts calendarMultiplier, so the figure was removed rather than
+ * redrawn. The timing lesson now publishes the phase table the new bands came
+ * from, live, in page.tsx.
  */
 
 const PURPLE = "#A855F7";
 const CYAN = "#22D3EE";
 const INK = "#F4F4F8";
 const INK_SUBTLE = "#8A8A9C";
-const LINE = "#2A2A47";
 
 /* ---------- Lesson 3: the four bid bands ---------- */
 
@@ -200,178 +198,6 @@ export function BidBandsFigure() {
   );
 }
 
-/* ---------- Lesson 4: a dollar through the season ---------- */
-
-export function DollarCalendarFigure() {
-  // The calculator's default urgency curve: 15 percent off through week 3,
-  // straight-line up to 40 percent on from week 12. This is the multiplier the
-  // calculator applies to a bid, which is the same thing as how much a dollar
-  // is worth spending at that point in the year.
-  const weeks = Array.from({ length: 14 }, (_, i) => i + 1);
-  const early = 3;
-  const late = 12;
-  const discount = 15;
-  const boost = 40;
-  const mult = weeks.map((w) => {
-    if (w <= early) return 1 - discount / 100;
-    if (w >= late) return 1 + boost / 100;
-    const t = (w - early) / (late - early);
-    return 1 - discount / 100 + ((1 + boost / 100) - (1 - discount / 100)) * t;
-  });
-
-  const W = 640;
-  const H = 240;
-  const padL = 46;
-  const padR = 20;
-  const padT = 22;
-  const padB = 40;
-  const x = makeScale(1, 14, padL, W - padR);
-  const y = makeScale(0.8, 1.45, H - padB, padT);
-  const pts = weeks.map((w, i) => ({ x: x(w), y: y(mult[i]) }));
-
-  return (
-    <ChartFigure
-      titleLevel={3}
-      title="A dollar's worth through the season"
-      description="How much the calculator scales a bid by week, by default: a discount early, when every dollar still has a dozen Tuesdays to be spent on, and a boost late, when leftover money buys nothing. The weeks past the regular season are not drawn."
-      summary={`By default the calculator takes ${discount} percent off a bid through week ${early}, raises it in a straight line from there, and adds ${boost} percent from week ${late} on, because a dollar held into the playoffs bought nothing.`}
-      table={
-        <DataTable
-          caption="The calculator's default urgency multiplier by week."
-          head={
-            <>
-              <Th>Week</Th>
-              <Th numeric>Bid multiplier</Th>
-            </>
-          }
-        >
-          {weeks.map((w, i) => (
-            <tr key={w}>
-              <Td>Week {w}</Td>
-              <Td numeric>{mult[i].toFixed(2)}</Td>
-            </tr>
-          ))}
-        </DataTable>
-      }
-    >
-      <svg
-        aria-hidden="true"
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full"
-        role="presentation"
-      >
-        {weeks
-          .filter((w) => w % 2 === 1)
-          .map((w) => (
-            <g key={w}>
-              <line
-                x1={x(w)}
-                y1={padT}
-                x2={x(w)}
-                y2={H - padB}
-                stroke={LINE}
-                strokeWidth={1}
-              />
-              <text
-                x={x(w)}
-                y={H - padB + 18}
-                textAnchor="middle"
-                fontSize="11"
-                fill={INK_SUBTLE}
-              >
-                Wk {w}
-              </text>
-            </g>
-          ))}
-        {/* The no-change line. */}
-        <line
-          x1={padL}
-          y1={y(1)}
-          x2={W - padR}
-          y2={y(1)}
-          stroke={INK_SUBTLE}
-          strokeWidth={1}
-          strokeDasharray="4 4"
-        />
-        <text
-          x={padL - 8}
-          y={y(1) + 4}
-          textAnchor="end"
-          fontSize="10"
-          fill={INK_SUBTLE}
-        >
-          1.00
-        </text>
-        <text
-          x={padL - 8}
-          y={y(1 - discount / 100) + 4}
-          textAnchor="end"
-          fontSize="10"
-          fill={CYAN}
-        >
-          0.85
-        </text>
-        <text
-          x={padL - 8}
-          y={y(1 + boost / 100) + 4}
-          textAnchor="end"
-          fontSize="10"
-          fill={PURPLE}
-        >
-          1.40
-        </text>
-
-        {/* Early shade, late shade. */}
-        <rect
-          x={x(1) - 8}
-          y={padT}
-          width={x(early) - x(1) + 8}
-          height={H - padB - padT}
-          fill={CYAN}
-          opacity={0.06}
-        />
-        <text
-          x={x(2)}
-          y={padT + 12}
-          textAnchor="middle"
-          fontSize="11"
-          fill={INK}
-        >
-          pay for facts
-        </text>
-        <rect
-          x={x(late)}
-          y={padT}
-          width={x(14) - x(late) + 8}
-          height={H - padB - padT}
-          fill={PURPLE}
-          opacity={0.06}
-        />
-        <text
-          x={x(13)}
-          y={padT + 12}
-          textAnchor="middle"
-          fontSize="11"
-          fill={INK}
-        >
-          spend it
-        </text>
-
-        <path d={linePath(pts)} fill="none" stroke={PURPLE} strokeWidth={2.5} />
-        {pts.map((p, i) => (
-          <circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r={i + 1 <= early || i + 1 >= late ? 4.5 : 3.5}
-            fill={i + 1 <= early ? CYAN : PURPLE}
-          />
-        ))}
-      </svg>
-    </ChartFigure>
-  );
-}
-
 /* ---------- Lesson 5: the ladder ---------- */
 
 type Rung = {
@@ -383,15 +209,15 @@ type Rung = {
 
 const RUNGS: Rung[] = [
   {
-    label: "Bid this",
+    label: "Bid",
     amount: 27,
-    what: "What usually wins, read off the other teams' wallets and how many of them need him.",
+    what: "What usually wins, read off the other teams' wallets, how many of them need him, and what claims like this one have cleared at.",
     tone: "cyan",
   },
   {
-    label: "To be sure",
+    label: "Stretch to",
     amount: 36,
-    what: "What it takes when you cannot afford to lose him. By default about a third above the first rung.",
+    what: "What it takes when you cannot afford to lose him. This is the number the Make sure I win goal returns.",
     tone: "purple",
   },
   {
@@ -414,7 +240,7 @@ export function BidLadderFigure() {
       titleLevel={3}
       title="A ladder, not a number"
       description="The three rungs the calculator returns for every claim, on an invented 71-dollar budget. The first two come from the room. The third comes from your roster, and it is the one that stops you."
-      summary="For an invented claim with 71 dollars left, the ladder reads: bid 27, which usually wins; go to 36 to be sure; walk away above 40, because past that the player is worth less than the money."
+      summary="For an invented claim with 71 dollars left, the ladder reads: bid 27, which usually wins; stretch to 36 when you cannot afford to lose him; walk away above 40, because past that the player is worth less than the money."
       tableLabel="View the three rungs as a table"
       table={
         <DataTable

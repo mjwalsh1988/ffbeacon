@@ -97,6 +97,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "What your playoff odds mean, luck against points for, buy or sell at the deadline, how much playoff schedules matter, and win-or-go-home lineups.",
     badge: "8 lessons",
   },
+  "chopped-league-strategy": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "Chopped and guillotine:",
+    headlineBottom: "last score of the week is out",
+    subhead:
+      "One format under seven names. What to draft when a quiet Sunday ends your season, and how to spend a budget that never resets as the field shrinks.",
+    badge: "Elimination leagues",
+  },
 };
 
 /**

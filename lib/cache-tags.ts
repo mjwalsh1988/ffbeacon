@@ -28,6 +28,9 @@ export const CACHE_TAGS = {
   playerTrades: "player-trades",
   /** articles / article_players reads used by the profile news teaser. */
   playerArticles: "player-articles",
+  /** faab_market_priors: the anonymous clearing-price cells, rebuilt at most
+   *  every few days by the derived-data cron or by npm run faab:priors. */
+  faabPriors: "faab-priors",
 } as const;
 
 export const CACHE_TTL = {

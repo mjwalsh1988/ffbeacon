@@ -1,5 +1,284 @@
 # Handoff
 
+## FAAB overhaul and chopped guide build (FB-T / FB-G)
+
+Session of 2026-09-19. BUILT, REVIEWED, COMMITTED AND PUSHED to main at
+the owner's instruction at the end of the session.
+Plans: docs/faab/faab-calculator-overhaul-plan.md (FB-T) and
+docs/faab/chopped-guillotine-guide-seo-plan.md (FB-G). Every task and its
+notes are at the end of progress.md.
+
+### NEXT SESSION: START HERE
+
+The build is DONE and COMMITTED. Every task in both plans is built, the full
+suite passes, and the migrations are applied to production. What follows is
+what is left, in priority order, with a recommendation on each. Tracked as
+FB-R01 to FB-R08 at the end of progress.md.
+
+Where everything lives:
+
+- The plans of record, both still accurate as intent:
+  docs/faab/faab-calculator-overhaul-plan.md (tasks FB-T, list in section 9.2)
+  docs/faab/chopped-guillotine-guide-seo-plan.md (tasks FB-G, list in section 9)
+- Every task with its status and a note on what actually shipped: the end of
+  progress.md, prefixes FB-T, FB-G and FB-R.
+- The rules that bind any further work: CLAUDE.md in the repo root and
+  ~/.claude/CLAUDE.md. Read both before touching anything.
+
+THE PRIORITY LIST
+
+1. FB-R01, browser QA at phone width. HIGHEST RISK LEFT, and I recommend
+   doing it before anything else ships to readers. Nobody has opened the new
+   result card at 400px, checked the screen-reader announcements against plan
+   7.14, or checked prefers-reduced-motion. The card is entirely new and the
+   owner reads by screen reader, so this is the gap most likely to hide a
+   real problem. About twenty minutes in a browser.
+
+2. FB-R02, IndexNow after deploy. One command, tells the search engines the
+   new guide exists. It cannot run before the deploy because the URL 404s
+   until then. Recommended, it costs nothing:
+       npm run indexnow -- /guides/chopped-league-strategy
+
+3. FB-R03, finish the review coverage. The final reviewer ran out of road.
+   Unreviewed, meaning unknown rather than known bad: bid-hero, goal-toggle,
+   impact-grid, drop-options, week-strip, signal-list, market-card,
+   bid-actions, market-stats.tsx, the replay modules and script, the admin
+   Replay section, priors-write.ts, loadAuctionHistory and groupAuctions
+   against plan 7.5, and the guide copy against section 5 of the guide plan
+   (which lists the exact passages that had to change). Recommended AFTER
+   FB-R01, because the browser pass catches the same class of problem more
+   directly. Scope one reviewer to the UI components only.
+
+4. FB-R04, Power Pulse on chopped leagues (plan finding D3). Power Pulse,
+   Schedules and the League Pulse pages still run a head-to-head playoff
+   simulation on leagues that have no playoffs, and show odds that mean
+   nothing. Both plans put this out of scope on purpose. It is a real wart,
+   it predates this build, and it lives on other pages. Recommended as its
+   own piece of work, not a quick fix.
+
+5. FB-R05, the zero-dollar bid question. In a league with no minimum bid an
+   uncontested claim prices at $0, even for a player who will start. Plan 7.8
+   rule 7 and rule 2 can be read against each other. My recommendation is to
+   LEAVE IT: $0 is the honest answer when nobody else is bidding, and
+   lib/faab/ladder.test.ts pins it deliberately. Change it only if it reads
+   wrong to you.
+
+6. FB-R06, the unfed reason clause. reasons.ts implements ", k of them with a
+   starter out" and nothing populates rivalsWithStarterOut, so that half of
+   the sentence can never appear. Small, cosmetic, low value. Recommended to
+   leave unless someone is already in that file.
+
+7. FB-R07, the bid search cost. bidForTarget calls the simulation once per
+   whole dollar and each call scans every run, so a $1,000 budget at 3,000
+   runs is millions of iterations per goal. Correct, and measured at about
+   two seconds for a whole chopped answer, so it is not a problem today.
+   Recommended only if a page ever feels slow.
+
+8. FB-R08, ESLint. npm run lint still cannot run anywhere in this repo: there
+   is no ESLint config and next lint drops into its interactive setup. This
+   predates the build and is not caused by it. Recommended someday, so the
+   gate exists at all; typecheck and vitest are the gates until then.
+
+TWO THINGS A NEW SESSION SHOULD NOT UNDO
+
+- lib/faab/tendency.ts measures a manager as a shrunk deviation from the
+  room's own mean log bid, NOT plan 7.6's "divide by heat". The two shrink
+  constants differ, so the plan's literal form left identical managers at
+  1.12 instead of 1. The code is right and the plan text is unamended.
+- The replay prices an auction off the cell for the REAL bidder count, not
+  the plan's "count minus one". The cells count total bidders including the
+  winner, so minus one priced a contested auction off the uncontested
+  distribution. Correcting it moved the value goal from 35.2% to 60.7%.
+
+### State
+
+All 51 FB-T and 14 FB-G tasks are complete. The engine, the chopped model,
+the result card, the manual form, the admin panel, the OG route, the replay
+and both guides are built, checked and committed. What remains is FB-R01 to
+FB-R08 above: browser QA, the IndexNow ping, the unfinished review coverage
+and four judgement calls.
+
+### VERIFY FIRST results
+
+1. `settings.last_chopped_leg` (plan 7.12.2). NOT the final chop week. In the
+   one completed 2025 chopped league (18 teams, 17 eliminations) it reads 17,
+   which equals the LAST COMPLETED chop; in 2026 leagues with exactly one
+   elimination it reads 1; two 32-team leagues that have chopped twice carry
+   null; one 18-team league at week 1 carries 18. It is the most recent
+   completed leg and it is unreliable. DECISION: ignore it, per the plan's
+   fallback. finalWeek = min(17, currentWeek + aliveCount - 2), and
+   `finalWeekVerified` is false so the UI can hedge. Written out in full in
+   the header of lib/chopped/league.ts.
+
+2. Waiver position direction on a tie (plan 7.7). INCONCLUSIVE, and the check
+   cannot be made to work after the fact. Over 108 two-way ties at the same
+   top amount in 2025, the winner held the lower waiver_position number 31
+   times, the higher 40 and an equal one 37. `rosters.waiver_position` is
+   today's value and Sleeper sends a successful claimant to the back of the
+   order, which is most likely what the "higher" bias is. DECISION: pass null,
+   so a tie splits 0.5, per the plan's fallback. The reasoning is in the
+   comment at the call site in lib/faab/league-faab.ts.
+
+### Numbers from the two runs
+
+`npm run faab:priors`: 1,955 cells from 15,667 auctions across 351 leagues in
+8.3 seconds. Bidder-count medians as a share of budget: 0% at one bidder, 5%
+at two, 10.5% at three, 20% at four or more; winner over runner-up 2.0 times,
+which matches the plan's own audit. Chopped: alive_50p 324 samples across 16
+leagues, alive_30_50 53, alive_lt30 31.
+
+`npm run faab:replay`, 1,514 auctions graded across 104 leagues:
+value goal wins 60.7% (target 55 to 75, INSIDE), sure goal wins 89.6%
+(target 85 to 95, INSIDE), median overpay on the value goal 6.1% of budget
+(target under 2%, OUTSIDE).
+
+The overpay miss has a known cause and it is not a calibration problem: the
+replay cannot apply the worth cap, because historical rosters are not stored,
+and that cap (ladder rules 2, 4 and 5) is exactly what holds the live bid down
+to what the player is worth. The script prints that its win shares are an
+upper bound. The two chopped buckets with real samples sit at 2.1% and 1.8%.
+
+A SPEC CORRECTION came out of the first replay run and is worth knowing about:
+the priors cells count TOTAL bidders including the winner, so the plan's
+"bidders from the real count minus one" priced a contested auction off the
+uncontested distribution. Using the real count moved the value goal from 35.2%
+to 60.7% and the sure goal from 72.5% to 89.6%. The manual-mode mapping in the
+plan (Just me to "1", Half the league to "4p") was already consistent with
+total bidders and needed no change.
+
+### Migrations
+
+0290_faab_market_priors_public_floor is APPLIED TO PRODUCTION. It floors the
+PUBLIC read of the priors table at 5 claims per cell. The table is built with
+a cell for every combination, thin ones included, because the fallback ladder
+needs to know a cell is thin in order to widen past it, but 152 of the 1,955
+cells rested on a single claim and 299 on a single league, and a one-claim
+cell is not an aggregate: it is one manager's bid republished as a quantile.
+Owner decision 3 allows aggregates and forbids "a single identifiable claim".
+The floor is deliberately NOT the admin's display threshold
+(priors.minCellSamples, default 30), which an admin may lower: this is a
+privacy floor and must not move with a settings change. Verified as anon:
+1,555 cells visible, thinnest 5.
+
+0289_faab_market_priors is APPLIED TO PRODUCTION through the Supabase MCP.
+pg_policies shows SELECT for anon and authenticated and ALL for service_role;
+an anon SELECT inside a rolled-back transaction returned the row and an anon
+INSERT was refused with 42501. lib/database.types.ts is regenerated and
+prettier-formatted, and the only change to it is the new table.
+
+### Deliberate divergences from the plan
+
+1. FB-T24 is COMPLETE as of 2026-09-19 (see progress.md). The carry lives in
+   lib/faab/league-faab.ts, not in the shared projection path, so the other
+   four models are untouched. What follows was the earlier state:
+   FB-T24 was PARTIAL. `injuredStarters` ships and drives the superflex
+   emergency trigger, but `injury.carryOutFromSource` is not implemented: it
+   would have to change projectPlayerWeek in lib/power-pulse/project.ts, which
+   is the shared projection path behind Power Pulse, Lineups, Schedules and
+   the Manager Ledger, and plan section 12 puts changing those models out of
+   scope. The setting exists and is admin-editable. This needs its own call.
+2. Manual chopped has no survival card. Survival needs a real league's
+   rosters, so `chopped` is null there; the chopped controls still drive the
+   price through the alive-fraction curve and the danger multipliers.
+3. Manual mode prices a chopped league over the regular-season weeks rather
+   than to week 17, because lib/faab/outlook.ts has one season window and no
+   chopped variant.
+4. The guide register entry uses priority 0.8, matching every other content
+   guide, rather than the plan's 0.7 (the plan's own line said to match).
+5. The league deep view route segment is [league_id], not
+   [sleeper_league_id] as both plans write it.
+
+### Checks
+
+- `npx tsc --noEmit`: CLEAN.
+- `npx vitest run`: 371 files, 5,666 tests, ALL PASSING.
+- A scan of all 92 changed files for em dashes, en dashes, curly quotes,
+  ellipsis characters, middle dots, bullets, minus signs and non-breaking
+  spaces: ZERO hits. One was found and fixed on the way: the punctuation test
+  in lib/faab/reasons.test.ts had had its escape sequences turned into the
+  literal characters, so the test that forbids them contained them.
+- `npm run lint` STILL CANNOT RUN: the repo has no ESLint config and
+  `next lint` drops into its interactive setup. Unchanged since the Relays
+  build. Typecheck and vitest are the gates.
+
+### What running it end to end found
+
+The engine was run against a real standard league and a real chopped league
+from production data, which caught four things tests had not:
+
+1. `unstable_cache` throws "incrementalCache missing" outside a Next request,
+   so any script importing the engine crashed. loadPriorCellsCached now falls
+   back to an uncached read.
+2. The rival count and the rival table used two different definitions of
+   "would start him", so a chopped league rendered "Nobody else would start
+   him" above a table of thirteen rivals. There is now one definition.
+3. A chopped league was being told we had no stored schedule and therefore no
+   playoff odds, which is the same category error as simulating a bracket for
+   it. That notice is now standard-only.
+4. A reason could print "from 2% to 2%". It now says the figure barely moves
+   and gives it once.
+
+### The review, and what it is NOT saying
+
+One review agent ran at the end (two earlier attempts died on a session rate
+limit). Nine findings were fixed; the details and the fixes are in the FB-T50
+note in progress.md. The blocker was worth the pass on its own: the
+empty-the-clip walk-away still read the need control in league mode, so a
+radio the page describes as manual-only was moving the most important number
+on the card between 75% and 100% of the whole budget.
+
+WHAT THE REVIEW DID NOT REACH. Record these as unreviewed, not as clean:
+
+- Most of the new result UI beyond its structure: bid-hero, goal-toggle
+  keyboard and announcement behaviour, impact-grid, drop-options, week-strip,
+  signal-list, market-card, bid-actions. In particular NOBODY has checked the
+  400px layout, prefers-reduced-motion, the live-region wording against plan
+  7.14, or "no data hidden at any breakpoint" on the responsive utilities in
+  those files.
+- market-stats.tsx beyond its imports and heading levels.
+- The replay engine, its loader and script, and the admin Replay section,
+  including whether that action and rebuildFaabPriors require admin (the
+  building agent says both call requireAdmin; it was not independently read).
+- priors-write.ts, so nothing confirms the stale-cell deletion is right.
+- loadAuctionHistory and groupAuctions against plan 7.5, beyond their tests.
+- The guide side beyond structure, and specifically section 5 of the guide
+  plan, which lists the exact passages in /guides/faab-strategy that had to
+  change because they described the old behaviour.
+- An independent AI-writing pass over the build's strings. Each agent ran the
+  check on its own copy and named what it fixed; nobody checked another's.
+
+### Open decisions, not defects
+
+1. An uncontested claim in a league with no minimum bid is priced at zero
+   dollars, even for a player who starts. Plan 7.8 rule 7 can be read as
+   wanting 1 there, and rule 2 as wanting 0. A test pins the current 0.
+2. RESOLVED 2026-09-19. Chopped substitutes are now counted for real: the
+   chopped path loads the league's free agents at the candidate's position,
+   projects the top 40 through the SAME path the candidate went through, and
+   counts those whose rest-of-season mean clears substituteShare of his. A
+   failed read leaves the count at zero and simply forgoes the discount,
+   rather than reading as "we looked and found none".
+3. `rivalsWithStarterOut` is never populated, so the ", k of them with a
+   starter out" clause cannot fire.
+4. lib/faab/tendency.ts measures a manager as a shrunk deviation from the
+   room's own mean log bid, rather than plan 7.6's "divide by heat". The two
+   shrink constants differ, so the plan's form left identical managers at
+   1.12 instead of 1. The code is right and the PLAN TEXT IS UNAMENDED: do
+   not "fix" it back.
+5. `bidForTarget` calls the simulation's `winChanceAt` once per whole dollar,
+   and each call scans every run. Correct, but on a $1,000 budget at 3,000
+   runs that is millions of iterations per goal.
+
+### Known follow-ups
+
+1. Plan finding D3: Power Pulse, Schedules and the League Pulse pages still
+   run a head-to-head playoff simulation on chopped leagues, where it means
+   nothing. Out of scope here by plan section 12; it needs its own decision.
+2. The replay's overpay figure cannot be trusted until the worth cap can be
+   applied, which needs historical rosters we do not store.
+3. FB-T24's projection carry-forward, as above.
+4. IndexNow for the new guide is a POST-DEPLOY step: nothing here is
+   committed, so the URL is not live yet.
 ## Sessions of 2026-09-16 and 2026-09-17: Relays and Briefs, BUILT AND REVIEWED, NOT COMMITTED
 
 Plan of record: docs/beacon-brief/relays-and-briefs-plan.md. Tasks: progress.md,

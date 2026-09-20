@@ -87,6 +87,26 @@ export type AnalyticsEvent =
   | { name: "donation_complete"; params: { value: number; currency: "USD" } }
   /** A link to /join, the Discord invite, was followed. */
   | { name: "join_discord_click"; params: { cta_location: string } }
+  /**
+   * The FAAB calculator produced a bid. One per result, in either mode.
+   *
+   * bid_pct is a share of the league's FULL budget rather than dollars, for
+   * the same reason every figure in that model is: a $12 bid in a $100 league
+   * and a $120 bid in a $1,000 league are the same decision, and averaging
+   * dollars across both would tell us nothing.
+   */
+  | {
+      name: "faab_result";
+      params: {
+        mode: "league" | "manual";
+        league_kind: "standard" | "chopped";
+        goal: "value" | "sure";
+        bid_pct: number;
+        win_chance: number;
+      };
+    }
+  /** The reader switched between "Good value" and "Make sure I win". */
+  | { name: "faab_goal_change"; params: { goal: "value" | "sure" } }
   /** A sign-in was started with a provider or a magic link. */
   | { name: "login_start"; params: { method: "google" | "discord" | "email" } }
   /** A sign-in finished. GA's own recommended event name. */

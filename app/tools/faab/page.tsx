@@ -18,7 +18,9 @@ import {
 } from "@/lib/sleeper-handle/resolve";
 import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
 import { FaabForm, type FaabPlayer } from "./faab-form";
+import { parseManualSeed } from "./manual-setup";
 import { WrittenSections } from "./written-sections";
+import { MarketStats, loadMarketFacts } from "./market-stats";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -27,7 +29,7 @@ import { isDiscordMember } from "@/lib/discord-membership";
 
 const META_TITLE = "FAAB Calculator for Fantasy Football: What to Bid";
 const META_DESCRIPTION =
-  "A free fantasy football FAAB calculator: how much to bid on any waiver claim, and when to walk away. Priced against your roster and your rivals.";
+  "Free FAAB calculator: how much to bid on any waiver claim, your chance to win it, and when to walk away. Chopped and guillotine leagues too.";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/faab" },
@@ -69,9 +71,20 @@ export default async function FaabPage({
     source?: string;
     /** Shareable-link override (D2). Wins over the reader's saved handle. */
     username?: string | string[];
+    /**
+     * Manual setup, for a guide that links a reader into their own
+     * situation: the league type and, for a chopped league, the field it
+     * started with, the field still alive and how close to the cut they are.
+     * Parsed strictly by `parseManualSeed`; anything unexpected is ignored.
+     */
+    kind?: string | string[];
+    start?: string | string[];
+    alive?: string | string[];
+    danger?: string | string[];
   }>;
 }) {
   const params = await searchParams;
+  const manualSeed = parseManualSeed(params);
   const supabase = await createClient();
   // Settings are service-role-only (RLS); read them server-side with the admin
   // client, same as Signal Check. loadFaabSettings never throws and falls back
@@ -85,10 +98,13 @@ export default async function FaabPage({
   const formatSlug = formatResolution.slug;
   const requestedSourceSlug = sourceResolution.slug;
 
-  // These four are independent of each other, so they go together rather than
-  // in a waterfall: the format lookup, the source registry, who the league
-  // panel is acting for, and the reader's Discord membership.
-  const [{ data: format }, registry, handleGate, urlViewer, isMember] = await Promise.all([
+  // These are independent of each other, so they go together rather than in a
+  // waterfall: the format lookup, the source registry, who the league panel is
+  // acting for, the reader's Discord membership, and the market cells behind
+  // the "what leagues actually pay" section. The market read is cached daily
+  // and shared with the FAQ, which quotes it.
+  const [{ data: format }, registry, handleGate, urlViewer, isMember, marketFacts] =
+    await Promise.all([
     supabase
       .from("format_configs")
       .select("id, slug, display_name")
@@ -102,6 +118,7 @@ export default async function FaabPage({
     // fall-through League Pulse uses, and both reads are memoized per request.
     resolveSleeperViewer(supabase, params.username),
     isDiscordMember(),
+    loadMarketFacts(settings.priors.minCellSamples),
   ]);
 
   let players: FaabPlayer[] = [];
@@ -191,7 +208,7 @@ export default async function FaabPage({
           <PageMasthead
             eyebrow="Tools"
             title="Fantasy Football FAAB Calculator"
-            description="What to bid, and when to walk away. Connect your Sleeper league to price the claim against your real roster, or enter your setup by hand."
+            description="What to bid, your chance to win, and when to walk away. Connect your Sleeper league, chopped leagues included, or enter your setup by hand."
             chips={mastheadChips}
             actions={
               <>
@@ -229,6 +246,7 @@ export default async function FaabPage({
           rankingsSourceSlug={rankingsSourceSlug}
           handleGate={handleGate}
           urlViewer={urlViewer}
+          seed={manualSeed}
         />
         <p className="mt-8 text-sm leading-relaxed text-ink-muted">
           Curious what these bids are actually built from?{" "}
@@ -241,8 +259,12 @@ export default async function FaabPage({
           .
         </p>
         {/* Outside FaabForm on purpose: the form unmounts the masthead once a
-            player is picked, and these words must stay on the page. */}
-        <WrittenSections />
+            player is picked, and these words must stay on the page.
+            The market section follows the explainer rather than sitting inside
+            it, because ToolExplainer renders its steps, notes, FAQ and tiles as
+            one block with no slot between them. */}
+        <WrittenSections market={marketFacts} />
+        <MarketStats facts={marketFacts} />
       </PageBody>
       <DiscordCtaSection
         eyebrow="Waivers are stressful"

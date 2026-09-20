@@ -10,6 +10,8 @@ import { loadBeamSettings } from "@/lib/beam/settings";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { getActiveFormats } from "@/lib/source";
 import { submitIndexNow } from "@/lib/indexnow";
+import { loadFaabSettings } from "@/lib/faab/settings";
+import { priorsBuiltAt, rebuildFaabMarketPriors } from "@/lib/faab/priors-write";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,10 +25,19 @@ export const maxDuration = 300;
  *   1. seed-rankings (rebuild rankings table from latest player_value_history)
  *   2. calculate-trends (rebuild player_value_trends pre-calc)
  *   3. player_roster_exposure (how commonly each player is rostered anywhere)
+ *   4. faab_market_priors (what a waiver claim clears at, by situation), and
+ *      only when the existing cells are older than the admin's staleness
+ *      setting
  *
  * It also carries the global, deletion-only retention prunes that have nowhere
  * better to live: the rate-limit ledgers, the BEAM question log, and the On The
  * Clock caches. Each is non-fatal and none of them recompute anything.
+ *
+ * The roster-exposure rebuild and the FAAB priors rebuild are each ONE
+ * AGGREGATE OVER ROWS AND ITERATE NO LEAGUES, which is why they belong here
+ * rather than on demand. The priors rebuild reads waiver transactions and
+ * writes anonymous quantiles; it computes nothing per league and stores no
+ * identifier.
  *
  * The roster-exposure rebuild is one aggregate over every roster row and
  * ITERATES NO LEAGUES, which is why it belongs here rather than on demand. It
@@ -95,6 +106,38 @@ export async function GET(req: Request) {
 
       // Fresh values/trends -> bust the profile value caches.
       revalidateTag(CACHE_TAGS.playerValues);
+
+      // The FAAB clearing-price priors: what a waiver claim actually costs,
+      // measured across every league we hold. Like roster exposure, this is
+      // ONE AGGREGATE OVER TRANSACTION ROWS AND ITERATES NO LEAGUES, which is
+      // what keeps it on a global cron instead of on demand. It is also slow
+      // to change, so it rebuilds only when the newest cell is older than the
+      // admin's staleness setting rather than every night.
+      //
+      // Non-fatal, like every other step below: a failed rebuild leaves the
+      // previous cells in place and the calculator keeps pricing from them.
+      let faabPriors: unknown = null;
+      try {
+        const faabSettings = await loadFaabSettings(supabase);
+        const builtAt = await priorsBuiltAt(supabase);
+        const staleAfterMs = faabSettings.priors.staleAfterDays * 24 * 60 * 60 * 1000;
+        const stale = builtAt === null || Date.now() - builtAt.getTime() > staleAfterMs;
+        if (!stale) {
+          faabPriors = { rebuilt: false, reason: "fresh", builtAt: builtAt?.toISOString() };
+        } else {
+          const rebuild = await rebuildFaabMarketPriors(supabase, {
+            minCellSamples: faabSettings.priors.minCellSamples,
+          });
+          revalidateTag(CACHE_TAGS.faabPriors);
+          faabPriors = { rebuilt: true, ...rebuild };
+        }
+      } catch (err) {
+        console.error(
+          "[recalculate-derived] faab_market_priors rebuild failed:",
+          err instanceof Error ? err.message : err,
+        );
+        faabPriors = { rebuilt: false, reason: "error" };
+      }
 
       // Bounded retention prune for the On The Clock rate-limit ledgers (FFB-SEC-002).
       // Global and deletion-only (never per-league), so it belongs on this global cron.
@@ -199,6 +242,7 @@ export async function GET(req: Request) {
         rankings,
         trends,
         rosterExposure,
+        faabPriors,
         rateLimitLedgerRowsDeleted,
         onTheClockCacheRowsDeleted,
         beamQueryRowsDeleted,

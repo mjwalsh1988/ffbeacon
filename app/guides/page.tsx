@@ -13,6 +13,7 @@ import {
   Layers,
   Hourglass,
   Trophy,
+  Swords,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -190,6 +191,19 @@ const GUIDES: Guide[] = [
       "Bid ranges for a league-winner, a new starter, a streamer and a stash",
       "Why September dollars and December dollars are not the same money",
       "A bid worksheet you can try, and a pre-bid checklist",
+    ],
+  },
+  {
+    icon: Swords,
+    title: "Chopped and guillotine league strategy",
+    href: "/guides/chopped-league-strategy",
+    description:
+      "Every week the lowest scorer in the whole league is eliminated and their roster goes straight back on the wire. Chopped, guillotine, death and knockout are the same game, and it rewards a different draft board and a different waiver budget than a normal league.",
+    bullets: [
+      "One table mapping the rules across Sleeper, Yahoo, ESPN, the FFPC, the NFFC and MyFantasyLeague",
+      "The survival arithmetic, and why a high-floor roster is the correct roster",
+      "What to do with the money once the field shrinks, and the release cutoff that expires it",
+      "The mistakes that get you chopped, and the tiebreaks nobody reads",
     ],
   },
   {

@@ -1721,6 +1721,78 @@ export type Database = {
         };
         Relationships: [];
       };
+      faab_market_priors: {
+        Row: {
+          bidders: string;
+          built_at: string;
+          cell_key: string;
+          id: string;
+          league_kind: string;
+          leagues_count: number;
+          p05: number;
+          p10: number;
+          p25: number;
+          p50: number;
+          p75: number;
+          p90: number;
+          p95: number;
+          p99: number;
+          phase: string;
+          position: string;
+          runner_up_ratio_p50: number | null;
+          sample_size: number;
+          seasons: number[];
+          superflex: string;
+          zero_share: number;
+        };
+        Insert: {
+          bidders: string;
+          built_at?: string;
+          cell_key: string;
+          id?: string;
+          league_kind: string;
+          leagues_count: number;
+          p05: number;
+          p10: number;
+          p25: number;
+          p50: number;
+          p75: number;
+          p90: number;
+          p95: number;
+          p99: number;
+          phase: string;
+          position: string;
+          runner_up_ratio_p50?: number | null;
+          sample_size: number;
+          seasons: number[];
+          superflex: string;
+          zero_share: number;
+        };
+        Update: {
+          bidders?: string;
+          built_at?: string;
+          cell_key?: string;
+          id?: string;
+          league_kind?: string;
+          leagues_count?: number;
+          p05?: number;
+          p10?: number;
+          p25?: number;
+          p50?: number;
+          p75?: number;
+          p90?: number;
+          p95?: number;
+          p99?: number;
+          phase?: string;
+          position?: string;
+          runner_up_ratio_p50?: number | null;
+          sample_size?: number;
+          seasons?: number[];
+          superflex?: string;
+          zero_share?: number;
+        };
+        Relationships: [];
+      };
       format_configs: {
         Row: {
           created_at: string;

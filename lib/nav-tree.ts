@@ -153,6 +153,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "calculator",
       },
       {
+        id: "/guides/chopped-league-strategy",
+        label: "Chopped Leagues",
+        href: "/guides/chopped-league-strategy",
+        hint: "Guillotine, death and knockout leagues",
+        icon: "swords",
+      },
+      {
         id: "/guides/fantasy-football-trade-guide",
         label: "Trade Guide",
         href: "/guides/fantasy-football-trade-guide",

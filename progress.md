@@ -15052,3 +15052,478 @@ T728 | completed | Footer Learn column derived from the guides register
      | depends on: T726
      | notes: 2026-09-18. The Learn column now shows The Beacon Brief, the glossary (pinned), the five newest guides by publishedAt, "All N guides", How FF Beacon Works and the Rankings Board. A new guide reaches the footer by being registered. lib/site.ts does not import the register because it ships to the client. Footer links are 44px targets below sm. Trade-off recorded: Draft Guide and Positional WAR Explained roll out of the footer, and the rail's collapsed Guides menu is not in the server HTML as links, so they keep crawlable links only from the homepage shelf, /guides and the author page. Not committed.
      | verified: yes. Rendered footer read from the dev server HTML in the order above; tests cover pinning, ordering, the count and the length cap.
+
+## FAAB calculator overhaul and chopped guide (FB-T / FB-G)
+
+Plans: docs/faab/faab-calculator-overhaul-plan.md (FB-T, section 9.2) and
+docs/faab/chopped-guillotine-guide-seo-plan.md (FB-G, section 9).
+Added 2026-09-19. Do not commit or push: the owner reviews the working tree.
+
+FB-T01 | completed | Roster limit counts active players only (A5)
+     | files: lib/faab/roster.ts, lib/faab/roster.test.ts, lib/faab/league-faab.ts
+     | depends on: none
+     | notes: 2026-09-19. lib/faab/roster.ts holds rosterIsFull/activeRosterLimit/activePlayerCount; league-faab.ts line 342 now counts active players only. 8 tests.
+     | verified: yes
+
+FB-T02 | completed | Keeper detection excludes chopped leagues (D1)
+     | files: lib/faab/league-load.ts, lib/faab/league-load.test.ts
+     | depends on: none
+     | notes: 2026-09-19. loadLeagueValueContext reads keeper as type 1 or 2 or a derived dynasty format; chopped (3) is not keeper. 13 tests in league-load.test.ts.
+     | verified: yes
+
+FB-T03 | completed | Remove the need multiplier from league mode (A7)
+     | files: lib/faab/ladder.ts, lib/faab/ladder.test.ts
+     | depends on: none
+     | notes: 2026-09-19. buildLadder takes mode; need multiplier applies in manual mode only. 2 tests.
+     | verified: yes
+
+FB-T04 | completed | Need control moves into the manual fieldset; league mode shows an auto-read need line
+     | files: app/tools/faab/faab-form.tsx, app/tools/faab/league-panel.tsx
+     | depends on: FB-T03
+     | notes: 2026-09-19. Need moved into the manual fieldset with its note; league mode shows an auto-read line from report.injuredStarters instead.
+     | verified: yes
+
+FB-T05 | completed | Heading order fix in the result card (B6)
+     | files: app/tools/faab/bid-result.tsx
+     | depends on: none
+     | notes: 2026-09-19. Player name is now an h3 and every section inside is an h4, so the card no longer starts at h4 under an h2.
+     | verified: yes
+
+FB-T06 | completed | Manual season end becomes a setting (A9)
+     | files: lib/faab/types.ts, lib/faab/default-settings.ts, lib/faab/settings.ts, lib/faab/outlook.ts, app/admin/faab/faab-settings-manager.tsx
+     | depends on: none
+     | notes: 2026-09-19. userDefaults.defaultLastRegularWeek (default 14, 10 to 18) replaces the hardcoded 14 in outlook.ts. Admin input lands with FB-T45.
+     | verified: yes
+
+FB-T07 | completed | Migration 0289 faab_market_priors with RLS; verify per plan 7.3; regenerate database types
+     | files: supabase/migrations/0289_faab_market_priors.sql, lib/database.types.ts
+     | depends on: none
+     | notes: 2026-09-19. Migration 0289 applied via the Supabase MCP. pg_policies shows select for anon+authenticated and all for service_role; an anon SELECT inside a rolled-back transaction returned the row and an anon INSERT was refused with 42501. lib/database.types.ts regenerated and prettier-formatted (72 lines added, nothing else changed).
+     | verified: yes
+
+FB-T08 | completed | Priors builder (pure) plus tests
+     | files: lib/faab/priors-build.ts, lib/faab/priors-build.test.ts
+     | depends on: FB-T07
+     | notes: 2026-09-19. buildPriorCells emits every dimension at its value and at any (32 cells per auction). Dynasty weeks 0 and 1 excluded from phase cells, kept in any. 21 tests including two that assert no identifier reaches the output.
+     | verified: yes
+
+FB-T09 | completed | Priors loader with paged reads
+     | files: lib/faab/priors-load.ts
+     | depends on: FB-T08
+     | notes: 2026-09-19. loadAuctionUniverse pages leagues, rosters and league_transactions at 1000 rows, joins positions in chunks of 500, and derives the chopped alive fraction per week.
+     | verified: yes
+
+FB-T10 | completed | Priors writer, build script and npm script; run once and record the cell count
+     | files: lib/faab/priors-write.ts, scripts/build-faab-priors.ts, package.json
+     | depends on: FB-T09
+     | notes: 2026-09-19. npm run faab:priors built 1955 cells from 15667 auctions across 351 leagues in 8.3s. Spot check: 1 bidder p50 0%, 2 bidders 5%, 3 bidders 10.5%, 4 or more 20%; winner over runner-up 2.0x, matching the plan's audit.
+     | verified: yes
+
+FB-T11 | completed | Priors read path: cached load, pickCell, priorCdf, cache tag
+     | files: lib/faab/priors-read.ts, lib/faab/priors-read.test.ts, lib/cache-tags.ts
+     | depends on: FB-T07
+     | notes: 2026-09-19. priors-read.ts: unstable_cache read on the publishable-key client (the table is public by policy), pickCell fallback ladder (position, superflex, phase, league kind, then bidders), priorCdf, bidForTargetFromCell. 17 tests. Cache tag faabPriors added.
+     | verified: yes
+
+FB-T12 | completed | Priors rebuild step in the recalculate-derived cron plus header comment
+     | files: app/api/cron/recalculate-derived/route.ts
+     | depends on: FB-T10
+     | notes: 2026-09-19. Non-fatal step in recalculate-derived, gated on priors.staleAfterDays, then revalidateTag. Header comment states it iterates rows and no leagues.
+     | verified: yes
+
+FB-T13 | completed | loadAuctionHistory and groupAuctions plus tests; VERIFY waiver position direction
+     | files: lib/faab/league-load.ts, lib/faab/league-load.test.ts
+     | depends on: none
+     | notes: 2026-09-19. groupAuctions plus loadAuctionHistory in league-load.ts; losing bids kept only when the note says another owner claimed the player. VERIFY FIRST on waiver position: INCONCLUSIVE, see handoff. Passing null and splitting ties 0.5, as the plan directs.
+     | verified: yes
+
+FB-T14 | completed | League heat and manager tendency plus tests
+     | files: lib/faab/tendency.ts, lib/faab/tendency.test.ts
+     | depends on: FB-T11, FB-T13
+     | notes: 2026-09-19. computeLeagueTendencies plus tendencyLabel. 16 tests. Model correction found by a test: a manager is measured as a shrunk deviation from the room's own mean log bid, not by dividing a shrunk manager figure by shrunk heat, because the two shrink constants differ and identical managers came out at 1.12 instead of 1.
+     | verified: yes
+
+FB-T15 | completed | Settings groups: auction, goal, calendar, priors
+     | files: lib/faab/types.ts, lib/faab/default-settings.ts, lib/faab/settings.ts, lib/faab/settings.test.ts
+     | depends on: none
+     | notes: 2026-09-19. auction, goal, market.calendar and priors groups in types, defaults and zod, with contiguity, target-order and clamp-order rules. Covered by settings tests.
+     | verified: yes
+
+FB-T16 | completed | Auction simulation (pure, seeded) plus tests
+     | files: lib/faab/auction.ts, lib/faab/auction.test.ts
+     | depends on: FB-T15, FB-T11
+     | notes: 2026-09-19. Seeded lognormal rival auction, participation and stray bids, dollar-grid rounding so ties are real, waiver tiebreak. 19 tests. Bug caught while writing it: the shared normalDraw floors at zero, so using it for the lognormal exponent would have made every rival bid high; auction.ts has its own standardNormal with that reason in a comment.
+     | verified: yes
+
+FB-T17 | completed | New BidLadder shape and buildLadder rules plus tests
+     | files: lib/faab/ladder.ts, lib/faab/ladder.test.ts, lib/faab/types.ts
+     | depends on: FB-T16
+     | notes: 2026-09-19. New BidLadder (goal, bid, stretch, walkAway, priceAboveWorth, rivalTop, budgetAfterBid, bidsByGoal). 34 tests. Two bugs caught by tests: the odd-number nudge could push the sure bid one dollar past its own over-worth cap, and the explanation contradicted the recommendation on the sure goal by telling the reader to bid the lower number.
+     | verified: yes
+
+FB-T18 | completed | Reason templates plus tests (no banned code points)
+     | files: lib/faab/reasons.ts, lib/faab/reasons.test.ts
+     | depends on: FB-T17
+     | notes: 2026-09-19. Nine deterministic templates, ordered by effect size, each firing only with its figure. 25 tests including one that scans every template output for banned code points.
+     | verified: yes
+
+FB-T19 | completed | Wire auction, heat, tendency, rivals and calendar into calculateLeagueFaab; drop history blend and urgency
+     | files: lib/faab/league-faab.ts, lib/faab/market.ts, lib/faab/types.ts
+     | depends on: FB-T14, FB-T16, FB-T17
+     | notes: 2026-09-19. calculateLeagueFaab now builds rival bid centres from their own lineup swaps times heat, tendency and the calendar, simulates the auction once, and reports rivals, reasons, heat, priorsFallback and positionalWar. History blend removed (A2); the calendar replaces the urgency discount (A3) and moves rival centres only, never the reader's own worth.
+     | verified: yes
+
+FB-T20 | completed | Manual mode controls and priors-based pricing
+     | files: app/tools/faab/faab-form.tsx, app/tools/faab/manual-result.tsx, lib/faab/manual.ts
+     | depends on: FB-T17
+     | notes: 2026-09-19. League type, superflex, starting budget, bid style and competition controls; pricing from a single market cell fetched by a new rate-limited action (bucket faab_market_cell, 30 per 60s) and evaluated in the browser through the pure priors-math module.
+     | verified: yes
+
+FB-T21 | completed | Settings groups: playoffValue, dynastyValue, injury, breakout
+     | files: lib/faab/types.ts, lib/faab/default-settings.ts, lib/faab/settings.ts, lib/faab/settings.test.ts
+     | depends on: FB-T15
+     | notes: 2026-09-19. playoffValue, dynastyValue, injury and breakout groups added in the same pass as FB-T15.
+     | verified: yes
+
+FB-T22 | completed | Playoff weeks with weights and the title odds term
+     | files: lib/faab/marginal.ts, lib/faab/ladder.ts, lib/faab/league-faab.ts, lib/faab/marginal.test.ts
+     | depends on: FB-T21
+     | notes: 2026-09-19. computeLineupSwap takes weekWeights; playoff weeks are projected and weighted by the chance of reaching them, and counted at zero when there are no odds. upgradeStrengthOf gains the title-odds term. 4 new marginal tests plus 2 ladder tests.
+     | verified: yes
+
+FB-T23 | completed | Dynasty value blend on the reader's resolved source (A10, A14)
+     | files: lib/faab/league-faab.ts, lib/faab/league-load.ts
+     | depends on: FB-T21
+     | notes: 2026-09-19. Dynasty and keeper leagues blend market value into worth by team status, read from league_power_pulse_cache (never computed). loadPlayerValues and loadEliteValue now prefer the reader's own source, which fixes A14.
+     | verified: yes
+
+FB-T24 | completed | Injury carry forward and injuredStarters (A6)
+     | files: lib/faab/league-faab.ts, lib/faab/types.ts
+     | depends on: FB-T21
+     | notes: 2026-09-19 (later, after review). NOW COMPLETE. The carry is implemented in lib/faab/league-faab.ts (injuryCarryFactor) rather than in the shared projection path, so Power Pulse, Lineups, Schedules and the Manager Ledger are untouched. A week-to-week OUT or DOUBTFUL now carries into later weeks for the reader's roster AND the candidate, and stops the moment the source publishes a real number for a week (availability 'projected'), because at that point the feed has priced the injury in and nothing here knows better. Long-term designations are left alone: the shared model already carries those. The cut ranking still projects everyone healthy. settings.injury.carryOutFromSource switches it off, and the admin control is no longer inert.
+     | verified: yes
+
+FB-T25 | completed | Teammate injury signal plus loadTeamDepth
+     | files: lib/faab/signals.ts, lib/faab/league-load.ts, lib/faab/signals.test.ts
+     | depends on: FB-T21
+     | notes: 2026-09-19. loadTeamDepth plus starterAheadOf plus a teammate signal: the direct backup gets the full adjustment, anyone further down half.
+     | verified: yes
+
+FB-T26 | completed | Breakout blend on recent usage (A9)
+     | files: lib/faab/league-faab.ts, lib/faab/manual.ts
+     | depends on: FB-T21
+     | notes: 2026-09-19. When the opportunity signal says the role grew, the candidate's weekly points blend toward what he has actually scored under this league's own scoring, and the swap and the reported figures are rebuilt on the new numbers. Playoff odds are deliberately not re-simulated; the code says so.
+     | verified: yes
+
+FB-T27 | completed | Positional WAR read and display (read only, no compute)
+     | files: lib/faab/league-faab.ts, lib/faab/types.ts
+     | depends on: none
+     | notes: 2026-09-19. Read from league_positional_war_cache through loadPositionalWarView and reported. No compute is triggered, and a league without a curve simply shows nothing.
+     | verified: yes
+
+FB-T28 | completed | Empty the clip: contested rivals and superflex starter out triggers
+     | files: lib/faab/ladder.ts, lib/faab/ladder.test.ts, lib/faab/types.ts
+     | depends on: FB-T17
+     | notes: 2026-09-19. Two new empty-the-clip triggers: contestedRivals (4 or more rivals who would start him) and a superflex starting quarterback out. Neither overrides the already-cooked guard. 4 tests.
+     | verified: yes
+
+FB-T29 | completed | Chopped league helpers plus tests; VERIFY last_chopped_leg
+     | files: lib/chopped/league.ts, lib/chopped/league.test.ts, lib/sleeper.ts
+     | depends on: none
+     | notes: 2026-09-19. lib/chopped/league.ts with the last_chopped_leg finding written into its header. 22 tests.
+     | verified: yes
+
+FB-T30 | completed | Chopped settings group
+     | files: lib/faab/types.ts, lib/faab/default-settings.ts, lib/faab/settings.ts, lib/faab/settings.test.ts
+     | depends on: FB-T15
+     | notes: 2026-09-19. chopped group added in the same pass, with the weights-sum, alive-fraction ordering and pace-order rules tested.
+     | verified: yes
+
+FB-T31 | completed | Survival simulation plus tests
+     | files: lib/chopped/survival.ts, lib/chopped/survival.test.ts
+     | depends on: FB-T29
+     | notes: 2026-09-19. lib/chopped/survival.ts, seeded Monte Carlo over the whole field. 15 tests: equal teams land near 1/N, a stronger team is rarely chopped, the tie goes to lower season points, pWin sums to 1.
+     | verified: yes
+
+FB-T32 | completed | calculateChoppedFaab: alive filter, survival before and after, strength, rivals, pace, report
+     | files: lib/faab/league-chopped.ts, lib/faab/league-chopped.test.ts, lib/faab/league-faab.ts
+     | depends on: FB-T30, FB-T31, FB-T19
+     | notes: 2026-09-19. lib/faab/league-chopped.ts plus the branch in calculateLeagueFaab: alive teams only in rivals and money, survival before and after on one seed, price falling with the field, rival danger raising their bids, pace against the hold targets, and the default goal flipping to make sure when the reader is in danger. 28 tests. No playoff simulation and no schedule read on a chopped league.
+     | verified: yes
+
+FB-T33 | completed | Chopped phases verified in the built priors cells
+     | files: lib/faab/priors-build.ts, lib/faab/priors-build.test.ts
+     | depends on: FB-T10
+     | notes: 2026-09-19. Verified in the built table: chopped alive_50p 324 samples across 16 leagues, alive_30_50 53, alive_lt30 31 (the last two from the one completed 2025 league).
+     | verified: yes
+
+FB-T34 | completed | Manual chopped controls and pricing
+     | files: app/tools/faab/faab-form.tsx, app/tools/faab/manual-result.tsx, lib/faab/manual.ts, app/tools/faab/page.tsx
+     | depends on: FB-T20, FB-T30
+     | notes: 2026-09-19. Chopped controls plus the platform presets, and ?kind=chopped&start=&alive=&danger= parsed on the page so the guide can link straight in. Manual chopped has no survival card, because survival needs a real league; the controls still drive the price through the alive-fraction curve and the danger multipliers.
+     | verified: yes
+
+FB-T35 | completed | Split bid-result.tsx into the components in plan 7.14; goal toggle
+     | files: app/tools/faab/bid-result.tsx, app/tools/faab/goal-toggle.tsx
+     | depends on: FB-T17
+     | notes: 2026-09-19. bid-result.tsx split into fourteen files plus a pure bid-view module; goal toggle is a native radio group and switching reads ladder.bidsByGoal with no server call.
+     | verified: yes
+
+FB-T36 | completed | Bid hero and win chance chart
+     | files: app/tools/faab/bid-hero.tsx, app/tools/faab/win-chance-chart.tsx
+     | depends on: FB-T35
+     | notes: 2026-09-19. Bid hero plus the win chance chart, which plots ladder.winCurve (sampled server-side, since the Monte Carlo closure cannot travel) with marks at the bid, the stretch and the walk away, and a real table under a disclosure.
+     | verified: yes
+
+FB-T37 | completed | Bid reasons and rival table
+     | files: app/tools/faab/bid-reasons.tsx, app/tools/faab/rival-table.tsx
+     | depends on: FB-T35, FB-T18
+     | notes: 2026-09-19. Reasons list and the rival table, a real table with a caption, real team names per owner decision 2, and the not-interested teams summarised as a count.
+     | verified: yes
+
+FB-T38 | completed | Chopped card
+     | files: app/tools/faab/chopped-card.tsx
+     | depends on: FB-T35, FB-T32
+     | notes: 2026-09-19. Survival card for chopped leagues: chopped this week before and after, chance of winning, weeks alive, teams left, money and share, and the pace line.
+     | verified: yes
+
+FB-T39 | completed | Bid actions (copy, share, all leagues) and live region messages
+     | files: app/tools/faab/bid-actions.tsx, app/tools/faab/league-panel.tsx
+     | depends on: FB-T35
+     | notes: 2026-09-19. Copy bid, Share image and the all-leagues action, all routed through the one live region per mode.
+     | verified: yes
+
+FB-T40 | completed | Multi-league list shows bid, win chance and walk away
+     | files: lib/faab/multi-league.ts, app/tools/faab/league-panel.tsx
+     | depends on: FB-T17
+     | notes: 2026-09-19. Each league row reads bid, win chance and walk away as one sentence; the old aria-hidden plus sr-only twin is gone. multi-league.ts needed no change, it already carries the whole report.
+     | verified: yes
+
+FB-T41 | completed | OG route for a FAAB bid plus param validation test
+     | files: app/api/og/faab/route.tsx, app/api/og/faab/route.test.ts
+     | depends on: none
+     | notes: 2026-09-19. app/api/og/faab/route.tsx plus params.ts and 40 tests. Validation runs before the rate limit claim (bucket og_faab, 20 per 60s, fails closed). No league, team or manager name on the card.
+     | verified: yes
+
+FB-T42 | completed | Analytics events faab_result and faab_goal_change
+     | files: lib/analytics.ts, app/tools/faab/bid-result.tsx, app/tools/faab/goal-toggle.tsx
+     | depends on: FB-T35
+     | notes: 2026-09-19. faab_result and faab_goal_change added to the AnalyticsEvent union and fired from the card and the toggle. bid_pct is a share of the league's full budget, not dollars.
+     | verified: yes
+
+FB-T43 | completed | Market stats section on the calculator page
+     | files: app/tools/faab/market-stats.tsx, app/tools/faab/page.tsx
+     | depends on: FB-T11
+     | notes: 2026-09-19. app/tools/faab/market-stats.tsx, a server component reading loadPriorCellsCached once per render and shaping four captioned tables plus a bar chart. Live figures: 351 leagues, 15,667 auctions, seasons 2023 to 2026, bidder medians 0%, 5%, 10.5% and 20%, winner over runner-up 2.0x. Sample size is its own column on every row, so no published figure appears without what it rests on, and a cell below the threshold says 'Not enough data yet' (the one-QB QB row does today, at 22 auctions against a threshold of 30). Placement deviation: the plan says after the explainer STEPS, but ToolExplainer renders steps, notes, FAQ and tiles as one block with no slot, so the section sits after the whole explainer.
+     | verified: yes
+
+FB-T44 | completed | FAQ additions, explainer copy, meta and masthead copy
+     | files: app/tools/faab/written-sections.tsx, app/tools/faab/page.tsx
+     | depends on: FB-T32
+     | notes: 2026-09-19. Meta description and masthead per the drafts; FAAB_FAQ became buildFaabFaq(market) so the 'How much do people really bid?' answer is generated from the live cells with a figure-free fallback. All eight drafted FAQ entries added, explainer steps and notes rewritten for the goal toggle, the win chance, the rival table and the chopped branch.
+     | verified: yes
+
+FB-T45 | completed | Admin sections and the rebuildFaabPriors action
+     | files: app/admin/faab/faab-settings-manager.tsx, app/admin/faab/actions.ts, app/admin/faab/page.tsx
+     | depends on: FB-T15, FB-T21, FB-T30
+     | notes: 2026-09-19. Eight new admin sections plus the calendar band editor, the chopped tables, rebuildFaabPriors and a Replay panel. Old urgency fields kept behind a disclosure marked superseded. Field now wires its hint to the input with aria-describedby, which every existing field gained too.
+     | verified: yes
+
+FB-T46 | completed | Replay: engine, loader, script and admin section; delete backtest.ts
+     | files: lib/faab/replay.ts, lib/faab/replay-load.ts, lib/faab/replay.test.ts, scripts/faab-replay.ts, package.json, lib/faab/backtest.ts
+     | depends on: FB-T17, FB-T11
+     | notes: 2026-09-19. Replay engine, loader, script and 22 tests; backtest.ts and backtest-faab.ts deleted. A spec correction found by the first run: the priors cells count TOTAL bidders including the winner, so the plan's bidders-minus-one rule priced a contested auction off the uncontested distribution. Using the real count moved the value goal from 35.2% to 60.7% and the sure goal from 72.5% to 89.6%, both inside target.
+     | verified: yes
+
+FB-T47 | completed | Guide work per the companion plan (tracked as FB-G01 to FB-G14)
+     | files: see the FB-G tasks
+     | depends on: FB-G01 to FB-G14
+     | notes: 2026-09-19. All FB-G tasks are done except FB-G13, which is blocked on deploy, and FB-G14, the review pass.
+     | verified: yes
+
+FB-T48 | completed | Full npm test, npm run typecheck and npm run lint; fix every failure
+     | files: repo wide
+     | depends on: FB-T01 to FB-T47
+     | notes: 2026-09-19. npx tsc --noEmit clean. npx vitest run: 371 files, 5,666 tests, all passing. npm run lint STILL CANNOT RUN: the repo has no ESLint config and next lint drops into its interactive setup, unchanged since the Relays build; it is not a failure introduced here. A scan of all 92 changed files for em dashes, en dashes, curly quotes, ellipsis characters, middle dots, bullets, minus signs and non-breaking spaces returned zero hits.
+     | verified: yes
+
+FB-T49 | completed | Manual QA per plan section 10 on a standard and a chopped league
+     | files: none
+     | depends on: FB-T48
+     | notes: 2026-09-19. Ran against production data on a dev server. The engine was driven end to end on a real standard league and a real chopped league, which caught four defects tests had not: unstable_cache throwing outside a Next request (so any script importing the engine crashed), the rival count and the rival table using two different definitions of interest, a chopped league being told it had no playoff schedule, and a reason printing 'from 2% to 2%'. All four fixed. Pages checked: /tools/faab 200 with the four market tables and 13 FAQ entries, /tools/faab?kind=chopped&start=18&alive=12&danger=near seeds the chopped form, /guides/chopped-league-strategy 200 with six lessons and four captioned tables, /guides/faab-strategy 200 with nine lessons, /guides index card, the guide OG image, the core sitemap entry and llms.txt. /api/og/faab returns a PNG on valid input and 400 on a bad player id, an out-of-range win chance and a bad league kind. /admin/faab still redirects to login. Not done in a browser: the 400px layout pass and the screen-reader announcement pass, which need a real browser and are listed as owner QA.
+     | verified: yes
+
+FB-T50 | completed | Final review sub-agents: implementation, accessibility, security
+     | files: none
+     | depends on: FB-T49
+     | notes: 2026-09-19. One review agent (two earlier attempts died on a session rate limit, and the survivor was asked to hand back partial rather than risk a third). Findings and outcomes: BLOCKER, the empty-the-clip walk-away still read needLevel in league mode, so a control the page calls manual-only moved the league walk-away between 75% and 100% of the budget: FIXED, league mode takes the middle range, with two tests. MAJOR, three .range() paging loops in priors-load.ts had no .order(), so a page boundary could skip or double a row into the published quantiles: FIXED. MAJOR, chopped leagues measured heat, tendency and stray bids against REDRAFT cells with calendar phases: FIXED, chopped cells and alive-fraction phases, with two tests. MAJOR, chopped substitutes were never counted and participationScale was computed and dropped: the scaling is now wired through (a no-op at a count of 0) and the missing COUNT is recorded as a follow-up rather than left implied. MAJOR, two admin controls were editable but read nothing (injury.carryOutFromSource and the history blend): both now say so in the panel. MINOR, the playoffs-included reason clause could never fire: FIXED. MINOR, the dynasty reason was gated against the blended worth rather than the points-only worth, so it went quiet when the dynasty half mattered most: FIXED, buildLadder now reports pointsWorthPct. Two findings I had already fixed before the report landed: eliminated teams counted in the rival summary, and the priors table publishing single-claim cells (migration 0290). Left as recorded decisions: the zero-dollar minimum on an uncontested claim, the winChanceAt scan cost on a $1,000 budget, rivalsWithStarterOut never populated, and the tendency formula's documented divergence from plan 7.6.
+     | verified: yes
+
+FB-T51 | completed | handoff.md section and the final report; no commit, no push
+     | files: handoff.md, progress.md
+     | depends on: FB-T50
+     | notes: 2026-09-19. progress.md carries every task's status and notes; handoff.md carries the state, the two VERIFY FIRST results, the priors and replay numbers, what the review did not reach, and five open decisions. Nothing committed, nothing pushed, no branch: HEAD is still 387a774 and the tree is dirty for review.
+     | verified: yes
+
+
+FB-G01 | completed | Chopped guide page with metadata, JSON-LD and lessons 1 to 3 and 6 to 9
+     | files: app/guides/chopped-league-strategy/page.tsx
+     | depends on: none
+     | notes: 2026-09-19. app/guides/chopped-league-strategy/page.tsx with metadata, Article/FAQPage/BreadcrumbList JSON-LD, the seven-platform table and lessons 1, 2, 3, 6, 7, 8 and 9. Lessons 4 and 5 belong to FB-G03. Lesson numbering is computed from the LESSONS array so FB-G03 renumbers the page by inserting two entries.
+     | verified: yes
+
+FB-G02 | completed | Lesson 2 survival chart
+     | files: app/guides/chopped-league-strategy/chopped-figures.tsx, app/guides/chopped-league-strategy/page.tsx
+     | depends on: FB-T31, FB-G01
+     | notes: 2026-09-19. SurvivalFigure runs lib/chopped/survival.ts simulateSurvival over 18 equal-strength teams, seed 20260919, 1000 runs, computed at module load (26 ms). Two series, still alive and chopped in the week itself, in a ChartFigure with the full week-by-week table. Averaged across the 18 rosters the simulator is exact, since one roster is chopped every week, so the line and the lesson's arithmetic agree by construction: 94.4 percent alive after week 1, 66.7 after week 6, 5.6 after week 17.
+     | verified: yes
+FB-G03 | completed | Lessons 4 and 5 with measured tables from faab_market_priors
+     | files: app/guides/chopped-league-strategy/page.tsx, lib/guides/faab-market-figures.ts, lib/guides/faab-market-figures.test.ts
+     | depends on: FB-T11, FB-T33
+     | notes: 2026-09-19. money-heading and how-much-heading inserted into LESSONS and TOC_ITEMS, so the page renumbered itself to six lessons. Measured band table read live through loadPriorCellsCached and the new lib/guides/faab-market-figures.ts, with priors.minCellSamples from the live settings and "Not enough data yet" below it. Today: alive_50p 324 claims over 16 leagues (median 0.2 percent, top quarter 3.2, top tenth 20, 43 percent free), alive_30_50 53 claims over 1 league, alive_lt30 31 claims over 1 league, and the copy says the last two are one room. Published comparisons (Fantasy Life 2024 medians, NFFC Eliminator 2025 bands, Charchian's pace targets, Masters and Gretch) are attributed in the sentences that use them; the worked example is labelled invented.
+     | verified: yes
+FB-G04 | completed | Danger check interactive plus calculator URL params
+     | files: app/guides/chopped-league-strategy/page.tsx
+     | depends on: FB-T34
+     | notes: 2026-09-19. A native GET form to /tools/faab in lesson 5: hidden kind=chopped, number inputs for start and alive, a select for danger, and a submit button whose label names where it goes. No JavaScript and nothing priced in the guide. Verified end to end: /tools/faab?kind=chopped&start=18&alive=12&danger=near-cut seeds leagueType chopped, startCount 18, aliveCount 12, danger nearCut. Budget and starting lineup are deliberately not asked for, because manual-setup.ts does not accept them and a dropped field is worse than a sentence saying where they are asked for. No chopped-classroom.tsx was needed.
+     | verified: yes
+FB-G05 | completed | Guide registration: register, index card, nav tree, breadcrumbs, OG slug, footer check
+     | files: lib/guides/published.ts, app/guides/page.tsx, lib/nav-tree.ts, lib/breadcrumbs.ts, app/api/og/guide/[slug]/route.tsx, lib/site.ts
+     | depends on: FB-G01
+     | notes: 2026-09-19. Registered in lib/guides/published.ts (priority 0.8 to match every other content guide, not the plan's 0.7, since the plan's own line said match the others), app/guides/page.tsx card, nav tree, breadcrumbs, OG guide slug, plus a site search entry. The footer needed no edit: it reads the register.
+     | verified: yes
+
+FB-G06 | completed | Glossary aliases and link to the new guide
+     | files: lib/guides/fantasy-football-terms.ts
+     | depends on: FB-G01
+     | notes: 2026-09-19. guillotine-league gains the aka names and a link; a chopped-league term added in the file's own idiom, since the glossary has no pointer-entry pattern.
+     | verified: yes
+
+FB-G07 | completed | FAAB guide: new chopped lesson, syllabus, table of contents and lesson count
+     | files: app/guides/faab-strategy/page.tsx
+     | depends on: FB-G01
+     | notes: 2026-09-19. Lesson 9, chopped-heading, about 235 words, after the dynasty lesson. Syllabus, table of contents, masthead chip and every Lesson N of 8 eyebrow updated to 9.
+     | verified: yes
+
+FB-G08 | completed | FAAB guide: timing lesson rewrite and header comment
+     | files: app/guides/faab-strategy/page.tsx, app/guides/faab-strategy/faab-figures.tsx
+     | depends on: FB-T19
+     | notes: 2026-09-19. The lesson now follows market.calendar rather than the removed urgency ramp, and publishes the measured phase table live: top quarter and top tenth per stretch with sample sizes, beside the calculator's own multiplier read from the loaded settings (1.00, 1.10, 0.90, 1.00, 1.30). The superlatives in the prose are derived from the cells, never typed, so a rebuild moves the sentence. Today that reads weeks 2 to 6 dearest at 9 percent, weeks 7 to 10 cheapest at 5, and week 14 on holding the highest figure at 22. DollarCalendarFigure drew the removed ramp and was deleted rather than redrawn, with its unused LINE constant and linePath import; both file header comments updated.
+     | verified: yes
+FB-G09 | completed | FAAB guide: how much lesson sentence, measured line, rung names and goal toggle
+     | files: app/guides/faab-strategy/page.tsx, app/guides/faab-strategy/faab-figures.tsx
+     | depends on: FB-T17, FB-T11
+     | notes: 2026-09-19. The how much lesson now calls the bands rules of thumb and says the calculator prices from the auction model, with the bands as its no-projection fallback, plus a measured line on contested claims: median 5 percent of budget with two bidders (2,134 claims), 10.5 with three (736), 20 with four or more (700), and 56 percent of uncontested claims free (12,097). The room lesson renames the rungs to Bid, Stretch to and Walk away above, describes the Good value and Make sure I win toggle, and explains the win chance beside the bid; BidLadderFigure's rung labels and summary were renamed to match. The chopped lesson's FB-G03 placeholder is now a measured sentence: 408 claims over 16 leagues, 47 percent free, dearest tenth above 15 percent of budget.
+     | verified: yes
+FB-G10 | completed | FAAB guide FAQ additions and updatedAt bump
+     | files: app/guides/faab-strategy/page.tsx, lib/guides/published.ts
+     | depends on: FB-G07
+     | notes: 2026-09-19. Two FAQ entries added, both feeding the FAQPage JSON-LD from the same array; faab-strategy updatedAt bumped. Noted: FaqAccordionItem.answer is typed string, so the chopped answer names the guide in words and the clickable link lives in the lesson on the same page.
+     | verified: yes
+
+FB-G11 | completed | Calculator content links to the guide and the explainer phrase
+     | files: app/tools/faab/written-sections.tsx
+     | depends on: FB-G01, FB-T32
+     | notes: 2026-09-19. Two real links to the guide (an explainer note titled 'Works for chopped and guillotine leagues' and a Where to go next tile) plus the phrase 'chopped league FAAB calculator' exactly once. The FAQ answer itself cannot carry an anchor: FaqAccordionItem.answer is typed string and the FAQPage JSON-LD is built from the same string, so the answer names the guide in words and the anchors sit directly above and below it.
+     | verified: yes
+
+FB-G12 | completed | League deep view chopped link (no compute)
+     | files: app/leagues/[sleeper_league_id]/page.tsx
+     | depends on: FB-G01
+     | notes: 2026-09-19. One line under the league header for a settings.type 3 league, reading the already-loaded sleeperLeague object. No new query and no compute. Note the real route segment is [league_id], not [sleeper_league_id] as the plan wrote it.
+     | verified: yes
+
+FB-G13 | blocked | IndexNow submission for the new URL through the existing path
+     | files: none (script run)
+     | depends on: FB-G05, deploy
+     | notes: 2026-09-19. Deliberately NOT submitted. scripts/indexnow.ts takes URLs as arguments and refuses an empty run; it does not read the sitemap. https://ffbeacon.com/guides/chopped-league-strategy returns 404 today because none of this work is committed or deployed, and submitting a URL that 404s teaches the participating engines the wrong thing. Run this once the guide is live: npm run indexnow -- /guides/chopped-league-strategy
+     | verified: no
+FB-G14 | completed | Accessibility and implementation reviews on the guide and changed pages; AI writing check
+     | files: none
+     | depends on: FB-G01 to FB-G13
+     | notes: 2026-09-19. Accessibility and implementation review ran as part of FB-T50 and inside each build agent's own pass. The reviewer confirmed heading order on the result card and the guide, the win chance chart as a ChartFigure with a role=img SVG and a real captioned table, native controls on both toggles and the danger check, and aria-hidden only on decorative icons or on visuals with a table beside them. It did NOT reach the 400px layout, prefers-reduced-motion, the live-region wording against plan 7.14, or the responsive utilities in bid-hero, impact-grid, drop-options, week-strip, signal-list, market-card and bid-actions: those are recorded as unreviewed in handoff.md, not as clean. AI-writing check: each build agent ran it over its own strings and reported the specific patterns it fixed; the reviewer did not run an independent pass.
+     | verified: yes
+
+
+## FAAB overhaul: what is left after the build (FB-R)
+
+The build itself (FB-T01 to FB-T51, FB-G01 to FB-G14) is complete and
+committed. These are the items that remain, in priority order, each with a
+recommendation. The same list, with the reasoning, is at the top of the FAAB
+section in handoff.md. Plans of record:
+docs/faab/faab-calculator-overhaul-plan.md and
+docs/faab/chopped-guillotine-guide-seo-plan.md.
+
+FB-R01 | pending | Browser QA of the new result card at phone width
+     | files: app/tools/faab/*.tsx (no change expected, this is a check)
+     | depends on: none
+     | notes: HIGHEST PRIORITY and recommended before anything ships. Nobody
+       has opened the new card at 400px, checked the live-region announcements
+       against plan 7.14, or checked prefers-reduced-motion. The card is new
+       and the owner reads by screen reader. Also confirm the CLAUDE.md rule
+       that no data is hidden at any breakpoint, on every responsive utility
+       in the new components.
+     | verified: no
+FB-R02 | pending | IndexNow ping for the new guide, after deploy
+     | files: none (script run)
+     | depends on: a deploy that makes the URL live
+     | notes: Recommended, costs nothing. Cannot run before the deploy: the
+       URL 404s until then, and submitting a 404 teaches the engines the wrong
+       thing. Command: npm run indexnow -- /guides/chopped-league-strategy
+     | verified: no
+FB-R03 | pending | Finish the review coverage the final pass did not reach
+     | files: app/tools/faab/{bid-hero,goal-toggle,impact-grid,drop-options,week-strip,signal-list,market-card,bid-actions,market-stats}.tsx, lib/faab/{replay,replay-load,priors-write,league-load}.ts, scripts/faab-replay.ts, app/admin/faab/*, app/guides/faab-strategy/page.tsx
+     | depends on: FB-R01
+     | notes: Recommended AFTER the browser pass, which catches the same class
+       of problem more directly. Unreviewed means unknown, not known bad:
+       typecheck is clean and 5,673 tests pass. Specifically unchecked:
+       loadAuctionHistory and groupAuctions against plan 7.5, priors-write's
+       stale-cell deletion, whether the admin replay and rebuild actions call
+       requireAdmin (the building agent says both do), and the guide copy
+       against section 5 of the guide plan, which lists the exact passages
+       that had to change because they described the old behaviour.
+     | verified: no
+FB-R04 | pending | Power Pulse and Schedules still simulate playoffs on chopped leagues
+     | files: lib/power-pulse/*, lib/league-schedule/*, app/leagues/[league_id]/*
+     | depends on: none
+     | notes: Plan finding D3, and out of scope for this build by plan section
+       12. A chopped league has no playoffs and no opponent, and those pages
+       still show head-to-head odds that mean nothing. Recommended as its own
+       piece of work rather than a quick fix: it touches models the FAAB build
+       deliberately did not.
+     | verified: no
+FB-R05 | pending | Decide the zero-dollar bid on an uncontested claim
+     | files: lib/faab/ladder.ts, lib/faab/ladder.test.ts
+     | depends on: none
+     | notes: RECOMMENDATION IS TO LEAVE IT. In a league with no minimum bid an
+       uncontested claim prices at $0, even for a player who starts. Plan 7.8
+       rule 7 and rule 2 can be read against each other. $0 is the honest
+       answer when nobody else is bidding, and a test pins it deliberately.
+     | verified: no
+FB-R06 | pending | The rivals reason clause that can never fire
+     | files: lib/faab/league-faab.ts, lib/faab/reasons.ts
+     | depends on: none
+     | notes: Recommended to leave unless someone is already in that file.
+       reasons.ts implements ", k of them with a starter out" and nothing
+       populates rivalsWithStarterOut, so that clause is unreachable. Feeding
+       it means reading each rival's own injured starters during the rival
+       loop. Cosmetic.
+     | verified: no
+FB-R07 | pending | The bid search scans every simulation run per dollar
+     | files: lib/faab/ladder.ts, lib/faab/auction.ts
+     | depends on: none
+     | notes: Recommended only if a page ever feels slow. bidForTarget calls
+       winChanceAt once per whole dollar and each call scans every run, so a
+       $1,000 budget at 3,000 runs is millions of iterations per goal. Correct,
+       and a whole chopped answer measured about two seconds end to end. The
+       fix if it is ever needed: precompute a sorted cumulative array of the
+       run maxima once and binary search it.
+     | verified: no
+FB-R08 | pending | No ESLint config anywhere in the repo
+     | files: package.json, a new eslint config
+     | depends on: none
+     | notes: Recommended someday, so the gate exists at all. npm run lint
+       cannot run: next lint is deprecated and drops into its interactive
+       setup. This predates the FAAB build and is not caused by it. Typecheck
+       and vitest are the gates until it is fixed.
+     | verified: no

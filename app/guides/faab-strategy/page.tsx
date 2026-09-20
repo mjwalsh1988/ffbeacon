@@ -13,13 +13,22 @@ import { FaqAccordion, type FaqAccordionItem } from "@/components/faq-accordion"
 import { faqPageJsonLd } from "@/components/tool-explainer";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
-import {
-  BidBandsFigure,
-  BidLadderFigure,
-  DollarCalendarFigure,
-  PickupWorthFigure,
-} from "./faab-figures";
+import { BidBandsFigure, BidLadderFigure, PickupWorthFigure } from "./faab-figures";
 import { BidWorksheet, PreBidChecklist } from "./faab-classroom";
+import { createAdminClient } from "@/lib/supabase/server";
+import { loadPriorCellsCached } from "@/lib/faab/priors-read";
+import { loadFaabSettings } from "@/lib/faab/settings";
+import { calendarMultiplier } from "@/lib/faab/market";
+import {
+  NOT_ENOUGH,
+  moneyText,
+  newestBuiltAt,
+  pctText,
+  readCell,
+  sampleText,
+  shareText,
+  type MarketRead,
+} from "@/lib/guides/faab-market-figures";
 
 /**
  * /guides/faab-strategy
@@ -36,19 +45,34 @@ import { BidWorksheet, PreBidChecklist } from "./faab-classroom";
  * answers one claim at a time; this page is the season-long reasoning behind
  * its answers.
  *
- * THE BID RANGES ARE THE CALCULATOR'S FALLBACK BANDS. The tiers in the "how
- * much" section are the bid curve bands in lib/faab/default-settings.ts (elite
- * 65 to 100 percent, high-end starter 40 to 65, strong weekly starter 25 to 40,
- * starter-level 14 to 25, useful depth 8 to 14, bench 4 to 8, speculative 1 to
- * 4, flyer 0 to 2), merged into four plain-English buckets. The connected and
- * manual paths normally price from the marginal model in lib/faab/ladder.ts
- * instead, and the page says so. The timing section follows lib/faab/market.ts
- * urgencyMultiplier (an early-season discount, a late-season boost, and the
- * "leftover FAAB buys nothing" rule). The walk-away number and the drop list
- * are lib/faab/ladder.ts and lib/faab/marginal.ts. An admin can change those
- * defaults, so the page says "by default" where it quotes them.
+ * THE BID RANGES ARE RULES OF THUMB, AND NO LONGER THE MODEL. The tiers in the
+ * "how much" section are the bid curve bands in lib/faab/default-settings.ts
+ * (elite 65 to 100 percent, high-end starter 40 to 65, strong weekly starter
+ * 25 to 40, starter-level 14 to 25, useful depth 8 to 14, bench 4 to 8,
+ * speculative 1 to 4, flyer 0 to 2), merged into four plain-English buckets.
+ * Since the overhaul the calculator prices from the auction model in
+ * lib/faab/auction.ts against the measured market in faab_market_priors, and
+ * those bands survive only as the fallback for a player it cannot project. The
+ * page says so.
  *
- * EIGHT LESSONS, FOUR DIAGRAMS, TWO INTERACTIVES, the same shape as the trade
+ * THE TIMING LESSON FOLLOWS THE MEASURED CALENDAR, NOT THE OLD DISCOUNT. It
+ * used to describe lib/faab/market.ts urgencyMultiplier, a straight-line ramp
+ * that took 15 percent off the first three weeks on the theory that early
+ * money has option value. Our own priced winning bids say the market does the
+ * opposite, so that ramp was replaced by market.calendar in
+ * lib/faab/default-settings.ts (week 1 at 1.0, weeks 2 to 6 at 1.1, weeks 7 to
+ * 10 at 0.9, weeks 11 to 13 at 1.0, week 14 on at 1.3) and the lesson now
+ * quotes the phase table those bands came from. The walk-away number and the
+ * drop list are lib/faab/ladder.ts and lib/faab/marginal.ts. An admin can
+ * change any of it, so the page reads the live settings where it quotes them.
+ *
+ * THE MEASURED FIGURES ARE READ AT RENDER. Everything on this page attributed
+ * to "the leagues we hold" comes from faab_market_priors through
+ * lib/faab/priors-read.ts and lib/guides/faab-market-figures.ts, with its
+ * sample size beside it. A cell under the calculator's own publishing
+ * threshold prints "Not enough data yet" instead of a number.
+ *
+ * NINE LESSONS, FOUR DIAGRAMS, TWO INTERACTIVES, the same shape as the trade
  * guide. The diagrams are in faab-figures.tsx and the interactives in
  * faab-classroom.tsx. EVERY WORKED NUMBER IS INVENTED AND SAYS SO, in the
  * figure captions, in the worksheet, and in the worked example.
@@ -121,6 +145,7 @@ const TOC_ITEMS = [
   { id: "drop-heading", label: "Who to drop" },
   { id: "all-in-heading", label: "When to spend it all" },
   { id: "dynasty-heading", label: "Dynasty and rookies" },
+  { id: "chopped-heading", label: "Chopped and guillotine leagues" },
   { id: "mistakes-heading", label: "Mistakes I see every year" },
   { id: "example-heading", label: "A worked example" },
   { id: "checklist-heading", label: "Before you bid" },
@@ -154,14 +179,89 @@ const FAQ: FaqAccordionItem[] = [
       "In a dynasty league a waiver pickup has value beyond this season, so an undrafted rookie with a real path to a role is a stash worth low single digits, and a rookie whose role just changed because of an injury is priced like any other new starter. What you should not do is empty a dynasty budget on a name alone, because that budget has to last a long time and the player usually does not.",
   },
   {
+    question: "How does FAAB work in a chopped league?",
+    answer:
+      "It is the same blind auction with the dial turned up. Budgets are usually $1,000 and never reset, trades are normally switched off so the wire is the only way to improve, and a whole eliminated roster lands on waivers at once, so several startable players compete for the same money. Prices fall as the field shrinks, because there are fewer bidders left every week. Our chopped league strategy guide covers the format, the draft and the bid sizes week by week.",
+  },
+  {
+    question: "Should I bid odd numbers?",
+    answer:
+      "Yes. Most people bid in round numbers, so a tie at 10 or 20 is the one you are most likely to be in, and your league settles it with waiver priority or a coin flip rather than in your favor. 4for4's waiver wire FAAB guide gives the same advice: make it 11 instead of 10, and 21 instead of 20. The extra dollar costs almost nothing and it wins the claims nobody realized were close.",
+  },
+  {
     question: "Do I have to bid at all if nobody else wants him?",
     answer:
       "Bid one dollar, or whatever your league's minimum is. A zero-dollar claim and a free-agent pickup after waivers clear are the same thing in most leagues, and a one-dollar bid protects you from the one other manager who had the same idea. You only ever have to beat one person.",
   },
 ];
 
+/**
+ * The measured market this page quotes, read once per render.
+ *
+ * Three slices, and each one answers a sentence somewhere below: what a
+ * contested claim costs (the bidder cells), what each stretch of the season
+ * costs (the phase cells), and what a chopped league pays (the chopped cell).
+ * The calendar multiplier travels with the phase rows so the table can show
+ * the measurement and what the calculator does about it side by side, read
+ * from the live settings rather than typed in.
+ */
+type MarketSlice = { label: string; read: MarketRead | null };
+
+type FaabMarket = {
+  bidders: MarketSlice[];
+  phases: (MarketSlice & { multiplier: number | null })[];
+  chopped: MarketRead | null;
+  updatedAt: string | null;
+};
+
+const BIDDER_CELLS: { key: string; label: string }[] = [
+  { key: "any|any|any|any|1", label: "Nobody else bid" },
+  { key: "any|any|any|any|2", label: "Two teams bidding" },
+  { key: "any|any|any|any|3", label: "Three teams bidding" },
+  { key: "any|any|any|any|4p", label: "Four or more bidding" },
+];
+
+const PHASE_CELLS: { key: string; label: string; week: number }[] = [
+  { key: "any|any|any|wk1|any", label: "Week 1", week: 1 },
+  { key: "any|any|any|wk2_6|any", label: "Weeks 2 to 6", week: 2 },
+  { key: "any|any|any|wk7_10|any", label: "Weeks 7 to 10", week: 7 },
+  { key: "any|any|any|wk11_13|any", label: "Weeks 11 to 13", week: 11 },
+  { key: "any|any|any|wk14p|any", label: "Week 14 on", week: 14 },
+];
+
+async function loadFaabMarket(): Promise<FaabMarket> {
+  const [cells, settings] = await Promise.all([
+    loadPriorCellsCached(),
+    loadFaabSettings(createAdminClient()),
+  ]);
+  const minSamples = settings.priors.minCellSamples;
+  const calendar = settings.market.calendar;
+
+  const bidders = BIDDER_CELLS.map((c) => ({
+    label: c.label,
+    read: readCell(cells, c.key, minSamples),
+  }));
+  const phases = PHASE_CELLS.map((c) => ({
+    label: c.label,
+    read: readCell(cells, c.key, minSamples),
+    multiplier: calendar.enabled ? calendarMultiplier(c.week, calendar) : null,
+  }));
+  const chopped = readCell(cells, "chopped|any|any|any|any", minSamples);
+
+  return {
+    bidders,
+    phases,
+    chopped,
+    updatedAt: newestBuiltAt([
+      chopped,
+      ...bidders.map((b) => b.read),
+      ...phases.map((p) => p.read),
+    ]),
+  };
+}
+
 export default async function FaabStrategyGuide() {
-  const isMember = await isDiscordMember();
+  const [isMember, market] = await Promise.all([isDiscordMember(), loadFaabMarket()]);
 
   const jsonLd = [
     {
@@ -213,7 +313,7 @@ export default async function FaabStrategyGuide() {
           chips={[
             { label: "Guide", tone: "cyan" },
             { label: "Waiver wire", tone: "purple" },
-            { label: "8 lessons", tone: "cyan" },
+            { label: "9 lessons", tone: "cyan" },
           ]}
         >
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-subtle">
@@ -240,12 +340,13 @@ export default async function FaabStrategyGuide() {
           <div className="text-[15px] sm:text-base">
             <WhatSection />
             <RuleSection />
-            <HowMuchSection />
-            <TimingSection />
+            <HowMuchSection market={market} />
+            <TimingSection market={market} />
             <RoomSection />
             <DropSection />
             <AllInSection />
             <DynastySection />
+            <ChoppedSection market={market} />
             <MistakesSection />
             <ExampleSection />
             <ChecklistSection />
@@ -464,6 +565,12 @@ const LESSONS: { n: string; title: string; href: string; takeaway: string }[] = 
     href: "#dynasty-heading",
     takeaway: "A stash is worth next year, not this Sunday.",
   },
+  {
+    n: "09",
+    title: "Chopped and guillotine leagues",
+    href: "#chopped-heading",
+    takeaway: "A whole roster hits the wire every week.",
+  },
 ];
 
 function Syllabus() {
@@ -473,7 +580,7 @@ function Syllabus() {
         id="syllabus-heading"
         className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle"
       >
-        The eight lessons
+        The nine lessons
       </h2>
       <ol role="list" className="mt-3 grid gap-2 sm:grid-cols-2">
         {LESSONS.map((l) => (
@@ -510,7 +617,7 @@ function WhatSection() {
     <section aria-labelledby="what-heading" className="mt-12">
       <GuideSectionHeader
         id="what-heading"
-        eyebrow="Lesson 1 of 8"
+        eyebrow="Lesson 1 of 9"
         heading="What FAAB is, and how it differs from waiver priority"
         tone="purple"
       />
@@ -550,7 +657,7 @@ function RuleSection() {
     <section aria-labelledby="rule-heading" className="mt-12">
       <GuideSectionHeader
         id="rule-heading"
-        eyebrow="Lesson 2 of 8"
+        eyebrow="Lesson 2 of 9"
         heading="Bid on what he does for your lineup, not on the hype"
       />
       <Para>
@@ -592,12 +699,15 @@ function RuleSection() {
 
 /* ---------- Lesson 3: how much ---------- */
 
-function HowMuchSection() {
+function HowMuchSection({ market }: { market: FaabMarket }) {
+  const [alone, two, three, four] = market.bidders.map((b) => b.read);
+  const contested = [two, three, four].every((r) => r?.enough);
+
   return (
     <section aria-labelledby="how-much-heading" className="mt-12">
       <GuideSectionHeader
         id="how-much-heading"
-        eyebrow="Lesson 3 of 8"
+        eyebrow="Lesson 3 of 9"
         heading="How much to bid, by kind of pickup"
         tone="purple"
       />
@@ -605,13 +715,19 @@ function HowMuchSection() {
         Every bid is a share of what you have left, not of what you started with. If you have 40
         dollars in week eight, a "forty percent" bid is 16, not 40. With that said, here are the
         four kinds of waiver pickup and roughly what each one is worth, in a typical twelve-team
-        league. This is the shape of the calculator&apos;s answer, and the bands it falls back
-        on when it cannot project a player, merged into buckets you can actually remember. With a
-        league connected it prices the specific player against your specific roster instead.
+        league.
+      </Para>
+      <Para>
+        Treat these as rules of thumb for a bid you are making in your head on a Tuesday night.
+        The calculator does not price this way any more. It runs an auction: it simulates the
+        rivals who would want the player, what each of them can spend, and what claims like this
+        one have actually cleared at, and it returns a bid with a win chance attached. These
+        bands are what it falls back on for a player it cannot project at all, and they are still
+        the right shape to carry around in your head.
       </Para>
       <BidBandsFigure />
       <GuideTable
-        caption="Rough bid ranges as a share of your remaining budget. The calculator prices a specific player against your specific roster; this is the shape of the answer."
+        caption="Rough bid ranges as a share of your remaining budget, for a bid you are sizing by hand. The calculator prices the specific player against your specific roster and the rivals who would bid against you."
         head={["Kind of pickup", "What he is", "Share of remaining budget"]}
         rows={[
           [
@@ -636,6 +752,20 @@ function HowMuchSection() {
           ],
         ]}
       />
+      {contested && (
+        <Para>
+          Company is what actually moves a price, and we can measure how much. Across the leagues
+          synced into this site, the median winning bid on a claim two teams wanted was{" "}
+          {pctText(two!.p50)} percent of the whole budget ({sampleText(two!)}). With three teams
+          on it the median was {pctText(three!.p50)} percent ({sampleText(three!)}), and with
+          four or more it was {pctText(four!.p50)} percent ({sampleText(four!)}).
+          {alone?.enough
+            ? ` A claim nobody else bid on cleared for nothing ${shareText(alone.zeroShare)} percent of the time, over ${sampleText(alone)}.`
+            : ""}{" "}
+          The median roughly doubles each time another rival joins, which is the real argument
+          for reading the room before you write a number down.
+        </Para>
+      )}
       <Para>
         Notice how much room there is between the top row and the second. Most bad bids are
         second-row players priced like first-row ones. The test I use: would I start him over my
@@ -664,40 +794,114 @@ function HowMuchSection() {
 
 /* ---------- Lesson 4: timing ---------- */
 
-function TimingSection() {
+function TimingSection({ market }: { market: FaabMarket }) {
+  // The superlatives in the copy are derived, never typed, so a rebuild that
+  // moves the market moves the sentence with it rather than leaving the page
+  // asserting last season's shape.
+  const priced = market.phases.filter((p) => p.read?.enough);
+  const dearest = priced.reduce<(typeof priced)[number] | null>(
+    (best, p) => (best === null || p.read!.p75 > best.read!.p75 ? p : best),
+    null,
+  );
+  const cheapest = priced.reduce<(typeof priced)[number] | null>(
+    (best, p) => (best === null || p.read!.p75 < best.read!.p75 ? p : best),
+    null,
+  );
+  const peak = priced.reduce<(typeof priced)[number] | null>(
+    (best, p) => (best === null || p.read!.p90 > best.read!.p90 ? p : best),
+    null,
+  );
+  const measured = priced.length >= 3 && dearest !== null && cheapest !== null && peak !== null;
+
   return (
     <section aria-labelledby="timing-heading" className="mt-12">
       <GuideSectionHeader
         id="timing-heading"
-        eyebrow="Lesson 4 of 8"
+        eyebrow="Lesson 4 of 9"
         heading="September dollars and December dollars are not the same money"
       />
       <Para>
         A dollar of FAAB is worth exactly what it can still buy. In week two it can buy any of a
-        dozen or so weeks of upgrades. In week fourteen it can buy one or two. So the same player deserves
-        a bigger bid late in the season than early, and money you are still holding when the
-        playoffs start bought you nothing at all. Leftover FAAB in January is a mistake, not a
+        dozen or so weeks of upgrades. In week fourteen it can buy one or two. So the same player
+        deserves a bigger bid late in the season than early, and money you are still holding when
+        the playoffs start bought you nothing at all. Leftover FAAB in January is a mistake, not a
         badge.
       </Para>
       <Para>
-        Early in the year the pull goes the other way. The week one waiver wire is full of
-        players who had one big game in a role that will not last, and the entire league is
-        bidding on the same hope with full wallets. The calculator discounts its answer in the
-        first few weeks for exactly this reason, by up to about fifteen percent by default, and
-        then raises it week by week until it is adding up to forty percent late in the season
-        when a real upgrade has nothing left to be saved for.
+        That is the theory, and for years I taught the other half of it as well: hold off early,
+        because week one is full of players who had one big game in a role that will not last.
+        Then we measured what the market does. Our own priced winning bids say the early weeks are
+        where the money actually goes, and that the quiet middle of the season is the cheapest
+        place to buy.
       </Para>
-      <DollarCalendarFigure />
+      {measured && (
+        <Para>
+          Close to half of all waiver claims clear for nothing in every stretch of the season, so
+          the median is the wrong number to look at. Look at the top quarter, where the contested
+          claims live. The dearest quarter of winning bids cleared above{" "}
+          {pctText(dearest!.read!.p75)} percent of the budget in{" "}
+          {dearest!.label.toLowerCase()}, which is the most expensive stretch we measure, and
+          above {pctText(cheapest!.read!.p75)} percent in {cheapest!.label.toLowerCase()}, the
+          cheapest. The highest figure on the table belongs to {peak!.label.toLowerCase()}, where
+          the dearest tenth of winning bids cleared above {pctText(peak!.read!.p90)} percent.
+        </Para>
+      )}
+      <GuideTable
+        caption="Winning bids as a share of the league's whole budget, measured across the leagues synced into FF Beacon, beside what the calculator does with each stretch. A multiplier above 1 means it expects rivals to bid up."
+        head={[
+          "Stretch of the season",
+          "Top quarter cleared above",
+          "Top tenth cleared above",
+          "What we measured",
+          "Calculator",
+        ]}
+        rows={market.phases.map((phase) => {
+          const multiplier =
+            phase.multiplier === null ? "Off" : `${phase.multiplier.toFixed(2)}x`;
+          if (!phase.read || !phase.read.enough) {
+            return [
+              phase.label,
+              NOT_ENOUGH,
+              NOT_ENOUGH,
+              phase.read ? `${phase.read.sampleSize} claims so far` : "Nothing measured yet",
+              multiplier,
+            ];
+          }
+          return [
+            phase.label,
+            `${pctText(phase.read.p75)}%`,
+            `${pctText(phase.read.p90)}%`,
+            sampleText(phase.read),
+            multiplier,
+          ];
+        })}
+      />
+      {market.updatedAt && (
+        <p className="mt-2 text-xs text-ink-subtle">
+          Updated {formatEasternDate(market.updatedAt)}, and rebuilt whenever the leagues behind
+          it resync. An admin can change the calculator column, so it is read live rather than
+          written here.
+        </p>
+      )}
       <Para>
-        The practical rule: spend real money early only on a change you can name, like an
-        injury to the starter ahead of him or a trade that emptied a depth chart. Spend freely
-        late, because there is no later. And if you are a contender at the trade deadline with
-        half your budget left, you have been too careful, and the fix is to be the highest bidder
-        on the next real upgrade rather than the second-highest on three.
+        The calculator follows that table rather than the old theory. It used to take about
+        fifteen percent off a bid in the first three weeks on the argument that early money has
+        option value, and it no longer does. Option value is real, but it belongs to your
+        judgement about whether to hold, not to a guess about what a rival will bid, and the
+        rivals bid up in September.
+      </Para>
+      <Para>
+        The practical rule: in the busy early weeks, pay a real price only for a change you can
+        name, like an injury to the starter ahead of him or a trade that emptied a depth chart,
+        and expect company when you do. The middle of the season is where a patient manager gets
+        paid, because the same quality of player costs less. From week 14 spend freely, because
+        there is no later. And if you are a contender at the deadline with half your budget left,
+        you have been too careful, and the fix is to be the highest bidder on the next real
+        upgrade rather than the second-highest on three.
       </Para>
       <KeyIdea>
-        Pay for facts in September and spend freely in December. A dollar you carry into the
-        playoffs bought nothing.
+        The market is dearest in the first six weeks and again from week 14, and cheapest in
+        between. Buy in the quiet part, and never carry a dollar into January.
       </KeyIdea>
     </section>
   );
@@ -710,7 +914,7 @@ function RoomSection() {
     <section aria-labelledby="room-heading" className="mt-12">
       <GuideSectionHeader
         id="room-heading"
-        eyebrow="Lesson 5 of 8"
+        eyebrow="Lesson 5 of 9"
         heading="Reading the room: you only have to beat one person"
         tone="purple"
       />
@@ -748,10 +952,23 @@ function RoomSection() {
         ]}
       />
       <Para>
-        Put together, this is why the calculator gives you a ladder instead of one number. Bid
-        this is the amount that usually wins. To be sure is what it takes when you cannot afford
-        to lose him. Walk away above is the ceiling, the point where winning stops being worth
-        it, and it is the most useful number on the page.
+        Put together, this is why the calculator gives you a ladder instead of one number. Bid is
+        the amount that usually wins. Stretch to is what it takes when you cannot afford to lose
+        him. Walk away above is the ceiling, the point where winning stops being worth it, and it
+        is the most useful number on the page.
+      </Para>
+      <Para>
+        Which of the first two rungs you should be reading is a question about you rather than
+        about the player, so the calculator asks it. The goal toggle above the answer offers Good
+        value, the cheapest bid that usually wins him, and Make sure I win, which pays up to end
+        the argument. Switching between them is instant, because both were priced when the answer
+        was built.
+      </Para>
+      <Para>
+        Beside the bid is the number that makes the choice concrete: the chance that bid actually
+        wins him, worked out from the same simulated auction that produced it. A bid with a six
+        in ten chance and one with a nine in ten chance are different decisions even when the
+        dollars are close, and seeing the odds is what stops you adding twenty to feel safe.
       </Para>
       <BidLadderFigure />
       <div className="mt-6">
@@ -774,7 +991,7 @@ function RoomSection() {
 function DropSection() {
   return (
     <section aria-labelledby="drop-heading" className="mt-12">
-      <GuideSectionHeader id="drop-heading" eyebrow="Lesson 6 of 8" heading="Who to drop" />
+      <GuideSectionHeader id="drop-heading" eyebrow="Lesson 6 of 9" heading="Who to drop" />
       <Para>
         Every add is also a cut, and the cut is half the decision. The right player to drop is
         the one your lineup would miss least, which is not always the one with the fewest points.
@@ -820,7 +1037,7 @@ function AllInSection() {
     <section aria-labelledby="all-in-heading" className="mt-12">
       <GuideSectionHeader
         id="all-in-heading"
-        eyebrow="Lesson 7 of 8"
+        eyebrow="Lesson 7 of 9"
         heading="When to spend it all"
         tone="purple"
       />
@@ -865,7 +1082,7 @@ function DynastySection() {
     <section aria-labelledby="dynasty-heading" className="mt-12">
       <GuideSectionHeader
         id="dynasty-heading"
-        eyebrow="Lesson 8 of 8"
+        eyebrow="Lesson 8 of 9"
         heading="Dynasty FAAB, and how much to spend on rookies"
       />
       <Para>
@@ -896,6 +1113,83 @@ function DynastySection() {
         The player you were going to cut in a dynasty league is usually worth a late pick to
         somebody. The trade guide covers what a pick is worth, and when.
       </TryIt>
+    </section>
+  );
+}
+
+/* ---------- Lesson 9: chopped and guillotine leagues ---------- */
+
+/**
+ * The elimination formats, from inside the FAAB topic. This section deliberately
+ * stays short and hands the reader to /guides/chopped-league-strategy, which
+ * owns the format: the plan (docs/faab/chopped-guillotine-guide-seo-plan.md,
+ * sections 3 and 5) keeps this page on its own FAAB terms and keeps the two
+ * pages from competing for the same searches.
+ */
+function ChoppedSection({ market }: { market: FaabMarket }) {
+  const chopped = market.chopped;
+
+  return (
+    <section aria-labelledby="chopped-heading" className="mt-12">
+      <GuideSectionHeader
+        id="chopped-heading"
+        eyebrow="Lesson 9 of 9"
+        heading="FAAB in chopped and guillotine leagues"
+        tone="purple"
+      />
+      <Para>
+        A chopped league, which most people still call a guillotine league,
+        eliminates the lowest scorer in the whole league every week and puts that
+        team&apos;s entire roster back on the wire. Everything above still applies.
+        Four things change.
+      </Para>
+      <Para>
+        Budgets never reset and they usually start at $1,000, so the percentages
+        in this guide turn into much larger dollar figures and every overpay costs
+        you more. A whole roster arrives at once, which means you are not pricing
+        one claim, you are pricing a quarterback, two backs and a receiver who all
+        hit waivers on the same Tuesday and compete with each other for the same
+        money. Work out which of them actually starts for you before you write a
+        single number down.
+      </Para>
+      <Para>
+        There are no rebuilders either. Every surviving team is a rival for every
+        player, and the number of rivals falls every week, which is why prices
+        drop as the field shrinks. And the goal is a different one. There is no
+        playoff seed to chase here, and the thing you have to avoid is the lowest
+        score in the league this Sunday, so a bid that raises your floor beats
+        one that raises your ceiling.
+      </Para>
+      <Para>
+        {chopped?.enough ? (
+          <>
+            The chopped leagues synced into this site show how lopsided that market is. Across{" "}
+            {sampleText(chopped)}, {shareText(chopped.zeroShare)} percent of winning claims cost
+            nothing at all, while the dearest tenth cleared above {pctText(chopped.p90)} percent
+            of the whole budget, or {moneyText(chopped.p90, 1000)} out of a $1,000 pot. Almost
+            every claim is free, and the few that are not decide the season.
+          </>
+        ) : (
+          <>
+            We publish measured bids by league type as the sample grows, and the chopped one is
+            still thin: {NOT_ENOUGH.toLowerCase()} to put a number on what these leagues pay.
+          </>
+        )}
+      </Para>
+      <Para>
+        Our{" "}
+        <Link href="/guides/chopped-league-strategy" className={LINK_CLASS}>
+          chopped league strategy
+        </Link>{" "}
+        guide covers drafting, survival and bid sizes week by week, and the FAAB
+        calculator has a chopped mode that prices a claim against the teams still
+        alive.
+      </Para>
+      <KeyIdea>
+        The wire refills with a whole roster every week and the budget never comes
+        back. Bid on the player who keeps you off the bottom, not the one who wins
+        you the week.
+      </KeyIdea>
     </section>
   );
 }

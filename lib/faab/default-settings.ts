@@ -21,6 +21,9 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
     // aggressive out of the box; users can still pick 10-12 manually.
     defaultNeed: "medium",
     defaultBudget: 100,
+    defaultLastRegularWeek: 14,
+    defaultLeagueBudget: 100,
+    defaultStyle: "typical",
   },
 
   // playerRatio = effectiveOverallRank / (teams * offensiveStarters).
@@ -143,6 +146,19 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
     rivalBudget: { enabled: true, maxAdjustPct: 20 },
     rivalNeed: { enabled: true, maxAdjustPct: 25, minPointsPerWeek: 1 },
     history: { enabled: true, minSamples: 6, lookbackSeasons: 3, blendWeight: 0.35 },
+    // Measured from 8,257 priced winning bids in our synced leagues, seasons
+    // 2024 to 2026, then tempered: the p75 ratios are steeper than this and a
+    // model should not bet the whole difference on one season of data.
+    calendar: {
+      enabled: true,
+      bands: [
+        { fromWeek: 1, toWeek: 1, multiplier: 1.0 },
+        { fromWeek: 2, toWeek: 6, multiplier: 1.1 },
+        { fromWeek: 7, toWeek: 10, multiplier: 0.9 },
+        { fromWeek: 11, toWeek: 13, multiplier: 1.0 },
+        { fromWeek: 14, toWeek: null, multiplier: 1.3 },
+      ],
+    },
     urgency: {
       enabled: true,
       lateSeasonWeek: 12,
@@ -164,6 +180,7 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
     startersPerTeam: { QB: 1.0, RB: 2.8, WR: 3.9, TE: 1.3, K: 1.0, DEF: 1.0 },
     baselineStarters: 9,
     flatPositions: ["K", "DEF"],
+    superflexQbPerTeam: 1.9,
   },
 
   leagueDump: {
@@ -178,5 +195,100 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
       medium: { minPct: 70, maxPct: 90 },
       high: { minPct: 85, maxPct: 100 },
     },
+    // Four teams that would start him is where our auction data turns brutal:
+    // the median winning bid at four or more bidders is 16% of budget against
+    // 6.5% at three, and the p90 is 53%.
+    contestedRivals: 4,
+    superflexQbStarterOut: true,
+  },
+
+  auction: {
+    enabled: true,
+    // 4,000 runs settles a win chance to well under a percentage point, and the
+    // whole simulation is arithmetic over at most 31 rivals.
+    runs: 4000,
+    participation: 0.7,
+    strayBidRate: 0.06,
+    bidSigma: 0.55,
+    heatShrink: 20,
+    tendencyShrink: 8,
+    heatClamp: [0.5, 2.5],
+    tendencyClamp: [0.5, 2.5],
+    // Week 1 is a different market: budgets are full and half the room bids on
+    // everything. Counting it would make every league look hot.
+    minContestedWeek: 2,
+    oddNudge: true,
+  },
+
+  goal: {
+    defaultGoal: "value",
+    valueTarget: 0.6,
+    sureTarget: 0.9,
+    sureMaxOverWorthPct: 25,
+  },
+
+  priors: {
+    minCellSamples: 30,
+    staleAfterDays: 6,
+    styleMultipliers: { tight: 0.7, typical: 1, wild: 1.4 },
+  },
+
+  playoffValue: {
+    enabled: true,
+    playoffWeekWeight: 1.0,
+    titleOddsWeight: 0.25,
+    bigTitleOddsPoints: 5,
+  },
+
+  dynastyValue: {
+    enabled: true,
+    // A contender is buying weeks; a rebuilder is buying an asset. The blend is
+    // the one number that separates those two answers about the same player.
+    blendByStatus: { competitor: 0.15, loaded: 0.25, middle: 0.35, rebuilder: 0.6 },
+    eliteRankFactor: 0.25,
+  },
+
+  injury: {
+    carryOutFromSource: true,
+    teammateSignal: { enabled: true, maxAdjustPct: 20 },
+  },
+
+  breakout: {
+    enabled: true,
+    blendWeight: 0.5,
+  },
+
+  chopped: {
+    enabled: true,
+    runs: 3000,
+    strengthWeights: { surviveThisWeek: 0.4, winLeague: 0.35, weeksAlive: 0.25 },
+    bigSurvivePoints: 10,
+    bigWinPoints: 5,
+    bigWeeksAlive: 1.0,
+    maxPctFromUpgrade: 70,
+    // Money loses value as the field shrinks and the pool fills with starters.
+    // Fantasy Life's 2024 guillotine medians have the same player falling 22%
+    // (Jefferson) to 77% (St. Brown) between about 13 alive and about 6, and
+    // the NFFC Eliminator study has top-12 running backs at 28.9% of budget
+    // with half the field alive, 12.8% at 30 to 50%, and 0% below that.
+    priceByAliveFraction: [
+      { minFraction: 0.5, multiplier: 1.0 },
+      { minFraction: 0.3, multiplier: 0.45 },
+      { minFraction: 0, multiplier: 0.15 },
+    ],
+    dangerThreshold: 0.2,
+    dangerWeight: 0.5,
+    substituteShare: 0.9,
+    substituteDiscount: 0.5,
+    // Charchian's published hold targets, which the 2024 champion's ledger
+    // ($969 after week 4, $904 after week 8, $240 after week 12, $11 after 14)
+    // tracks closely.
+    paceTargets: [
+      { throughWeek: 4, holdPct: 90 },
+      { throughWeek: 8, holdPct: 75 },
+      { throughWeek: 12, holdPct: 25 },
+      { throughWeek: 17, holdPct: 0 },
+    ],
+    manualDangerMultipliers: { bottomTwo: 1.6, nearCut: 1.25, midPack: 1.0, safe: 0.8 },
   },
 };

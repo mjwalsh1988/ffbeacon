@@ -42,8 +42,10 @@ import {
 import { useStepScroll } from "@/lib/use-step-scroll";
 import { trackEvent } from "@/lib/analytics";
 import { BidResult, viewFromLeagueReport } from "./bid-result";
+import { analyticsBid, liveMessage, winPercent } from "./bid-view";
 import { PlayerCombobox, type FaabPlayer } from "./player-combobox";
 import type {
+  GoalKey,
   LeagueFaabReport,
   MultiLeagueRow,
   NeedLevel,
@@ -179,6 +181,16 @@ export function LeaguePanel({
   const [pricing, startPricing] = useTransition();
   const [report, setReport] = useState<LeagueFaabReport | null>(null);
   const [bidError, setBidError] = useState<string | null>(null);
+  /**
+   * Which question the reader is asking of the answer on screen.
+   *
+   * Held here rather than inside the card because the panel owns the polite
+   * live region, and the new bid and the sentence announcing it have to move
+   * together. Switching costs no server call: the report carries both numbers.
+   */
+  const [goal, setGoal] = useState<GoalKey>("value");
+  /** A one-off message (a copy confirmation) for the same live region. */
+  const [announcement, setAnnouncement] = useState<string | null>(null);
 
   const [checkingAll, startCheckingAll] = useTransition();
   const [allRows, setAllRows] = useState<MultiLeagueRow[] | null>(null);
@@ -491,6 +503,15 @@ export function LeaguePanel({
         return;
       }
       trackEvent("tool_use", { tool: "faab" });
+      // One event per answer. The goal is the one the server priced on,
+      // which is the one the card opens on; switching it afterwards is
+      // counted by the toggle itself.
+      trackEvent("faab_result", {
+        mode: "league",
+        league_kind: result.report.leagueKind,
+        goal: result.report.ladder.goal,
+        ...analyticsBid(result.report.ladder, result.report.ladder.goal),
+      });
       setReport(result.report);
     });
   }, [player, selected, needLevel, fallbackBudget]);
@@ -518,6 +539,48 @@ export function LeaguePanel({
   }, [player, sleeperUserId, priceable, needLevel, fallbackBudget]);
 
   const busy = connecting || pricing || checkingAll || loadingAgents;
+
+  const view = useMemo(
+    () => (report ? viewFromLeagueReport(report) : null),
+    [report],
+  );
+
+  // A new answer arrives with its own opinion about which goal to open on:
+  // chopped danger flips it to "make sure I win". The reader's own choice
+  // stands until the next answer replaces it.
+  useEffect(() => {
+    if (!report) return;
+    setGoal(report.goalDefault);
+    setAnnouncement(null);
+  }, [report]);
+
+  const changeGoal = useCallback((next: GoalKey) => {
+    setAnnouncement(null);
+    setGoal(next);
+  }, []);
+
+  /**
+   * The same control in two places, never both at once: in the step-2 footer
+   * while there is no answer yet, and inside the answer's own action row once
+   * there is one.
+   */
+  const allLeaguesButton =
+    priceable.length > 1 ? (
+      <button
+        type="button"
+        onClick={priceAll}
+        disabled={busy || !player?.sleeper_id}
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-card border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        {checkingAll && (
+          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+        )}
+        <Users aria-hidden="true" className="h-4 w-4" />
+        {checkingAll
+          ? "Checking"
+          : `Check this bid in all ${priceable.length} of my leagues`}
+      </button>
+    ) : null;
 
   return (
     <section
@@ -837,38 +900,24 @@ export function LeaguePanel({
                 {pricing ? "Pricing" : "Price this bid"}
               </button>
 
-              {priceable.length > 1 && (
-                <button
-                  type="button"
-                  onClick={priceAll}
-                  disabled={busy || !player?.sleeper_id}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-card border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                >
-                  {checkingAll && (
-                    <Loader2
-                      aria-hidden="true"
-                      className="h-4 w-4 animate-spin"
-                    />
-                  )}
-                  <Users aria-hidden="true" className="h-4 w-4" />
-                  {checkingAll ? "Checking" : `All ${priceable.length} leagues`}
-                </button>
-              )}
+              {!report && allLeaguesButton}
             </div>
           </form>
         )}
 
-        {/* Short on purpose: the detail is in the cards below. */}
+        {/* The one polite region for this mode. Everything that has something
+            to say says it here, so nothing is announced twice. */}
         <p className="sr-only" role="status" aria-live="polite">
-          {syncingLeague
-            ? "Syncing this league from Sleeper. This takes a few seconds."
-            : pricing || checkingAll
-              ? "Working on it."
-              : report
-                ? `${report.headline}. Bid ${report.ladder.likely} FAAB, walk away above ${report.ladder.walkAway}.`
-                : allRows
-                  ? `Checked ${allRows.length} leagues.`
-                  : ""}
+          {announcement ??
+            (syncingLeague
+              ? "Syncing this league from Sleeper. This takes a few seconds."
+              : pricing || checkingAll
+                ? "Working on it."
+                : view
+                  ? liveMessage(view, goal)
+                  : allRows
+                    ? `Checked ${allRows.length} leagues.`
+                    : "")}
         </p>
 
         {bidError && (
@@ -882,12 +931,30 @@ export function LeaguePanel({
           </p>
         )}
 
-        {report && (
+        {report && view && (
           <div id={`${ids}-result`} className="scroll-mt-24 space-y-3">
             <p className="rounded-card border border-dashed border-line bg-base/40 px-4 py-3 text-sm leading-relaxed text-ink-muted">
               {leagueModeNotice}
             </p>
-            <BidResult view={viewFromLeagueReport(report)} />
+            {/* The need control's replacement. With a roster in hand we read
+                need off it rather than asking, so this says what we read. */}
+            <p className="rounded-card border border-line bg-base/40 px-4 py-3 text-sm leading-relaxed text-ink-muted">
+              {report.injuredStarters.length === 0
+                ? "No starters out. We read your need off your lineup rather than asking for it."
+                : `${report.injuredStarters.length} starter${report.injuredStarters.length === 1 ? "" : "s"} out this week: ${report.injuredStarters
+                    .map(
+                      (starter) =>
+                        `${starter.name} (${starter.status.toLowerCase()}${starter.weeksOut !== null ? `, ${starter.weeksOut} week${starter.weeksOut === 1 ? "" : "s"}` : ""})`,
+                    )
+                    .join(", ")}.`}
+            </p>
+            <BidResult
+              view={view}
+              goal={goal}
+              onGoalChange={changeGoal}
+              onAnnounce={setAnnouncement}
+              allLeaguesAction={allLeaguesButton}
+            />
           </div>
         )}
 
@@ -936,15 +1003,12 @@ function MultiLeagueList({
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p className="text-sm font-semibold text-ink">{row.leagueName}</p>
               {row.status === "ok" && row.report && (
-                <p className="font-mono text-sm font-bold tabular-nums text-brand-cyan">
-                  <span aria-hidden="true">
-                    {row.report.ladder.likely} to {row.report.ladder.walkAway}{" "}
-                    FAAB
-                  </span>
-                  <span className="sr-only">
-                    Bid {row.report.ladder.likely} FAAB, walk away above{" "}
-                    {row.report.ladder.walkAway}.
-                  </span>
+                <p className="text-sm font-semibold text-brand-cyan">
+                  Bid {row.report.ladder.bid.dollars} FAAB
+                  {winPercent(row.report.ladder.bid) !== null
+                    ? `, ${winPercent(row.report.ladder.bid)}% to win`
+                    : ""}
+                  , walk away above {row.report.ladder.walkAway.dollars}
                 </p>
               )}
             </div>

@@ -23,6 +23,8 @@ export const FAAB_SETTINGS_ID = "global";
 const d = DEFAULT_FAAB_SETTINGS;
 
 const needLevel = z.enum(["low", "medium", "high"]);
+const bidStyle = z.enum(["tight", "typical", "wild"]);
+const goalKey = z.enum(["value", "sure"]);
 
 const pct = z.number().min(0).max(100);
 const nonNegative = z.number().min(0);
@@ -34,6 +36,11 @@ const signalToggle = z.object({
   enabled: z.boolean().default(true),
   maxAdjustPct: pct.default(15),
 });
+
+/** A [min, max] pair, stored as a tuple so the admin form can edit both ends. */
+const clampPair = z
+  .tuple([z.number(), z.number()])
+  .refine(([min, max]) => min < max, { message: "The lower clamp must be below the upper one." });
 
 const pctRange = z
   .object({ minPct: pct, maxPct: pct })
@@ -65,6 +72,18 @@ export const faabSettingsSchema = z.object({
       starterOptions: z.array(z.number().int().positive()).min(1).default(d.userDefaults.starterOptions),
       defaultNeed: needLevel.default(d.userDefaults.defaultNeed),
       defaultBudget: z.number().int().positive().default(d.userDefaults.defaultBudget),
+      defaultLastRegularWeek: z
+        .number()
+        .int()
+        .min(10)
+        .max(18)
+        .default(d.userDefaults.defaultLastRegularWeek),
+      defaultLeagueBudget: z
+        .number()
+        .int()
+        .positive()
+        .default(d.userDefaults.defaultLeagueBudget),
+      defaultStyle: bidStyle.default(d.userDefaults.defaultStyle),
     })
     .default(d.userDefaults),
 
@@ -211,6 +230,37 @@ export const faabSettingsSchema = z.object({
           blendWeight: unitInterval.default(d.market.history.blendWeight),
         })
         .default(d.market.history),
+      calendar: z
+        .object({
+          enabled: z.boolean().default(d.market.calendar.enabled),
+          bands: z
+            .array(
+              z.object({
+                fromWeek: z.number().int().min(1).max(18),
+                toWeek: z.number().int().min(1).max(18).nullable(),
+                multiplier: z.number().min(0.1).max(5),
+              }),
+            )
+            .min(1)
+            .default(d.market.calendar.bands),
+        })
+        .default(d.market.calendar)
+        // Contiguous, in order, and open at the end. A gap would price one week
+        // of the season at nothing, and an overlap would price it twice.
+        .refine((c) => c.bands[0]?.fromWeek === 1, {
+          message: "The first calendar band must start at week 1.",
+        })
+        .refine((c) => c.bands[c.bands.length - 1]?.toWeek === null, {
+          message: "The last calendar band must run to the end of the season (toWeek null).",
+        })
+        .refine(
+          (c) =>
+            c.bands.every((band, i) => {
+              if (i === c.bands.length - 1) return true;
+              return band.toWeek !== null && c.bands[i + 1].fromWeek === band.toWeek + 1;
+            }),
+          { message: "Calendar bands must be contiguous and in week order." },
+        ),
       urgency: z
         .object({
           enabled: z.boolean().default(d.market.urgency.enabled),
@@ -244,6 +294,11 @@ export const faabSettingsSchema = z.object({
         .positive()
         .default(d.manualReplacement.baselineStarters),
       flatPositions: z.array(z.string()).default(d.manualReplacement.flatPositions),
+      superflexQbPerTeam: z
+        .number()
+        .min(1)
+        .max(2)
+        .default(d.manualReplacement.superflexQbPerTeam),
     })
     .default(d.manualReplacement),
 
@@ -260,8 +315,156 @@ export const faabSettingsSchema = z.object({
           high: pctRange.default(d.leagueDump.ranges.high),
         })
         .default(d.leagueDump.ranges),
+      contestedRivals: z.number().int().min(1).max(32).default(d.leagueDump.contestedRivals),
+      superflexQbStarterOut: z.boolean().default(d.leagueDump.superflexQbStarterOut),
     })
     .default(d.leagueDump),
+
+  auction: z
+    .object({
+      enabled: z.boolean().default(d.auction.enabled),
+      runs: z.number().int().min(500).max(20000).default(d.auction.runs),
+      participation: unitInterval.default(d.auction.participation),
+      strayBidRate: unitInterval.default(d.auction.strayBidRate),
+      bidSigma: z.number().min(0.1).max(1.5).default(d.auction.bidSigma),
+      heatShrink: nonNegative.default(d.auction.heatShrink),
+      tendencyShrink: nonNegative.default(d.auction.tendencyShrink),
+      heatClamp: clampPair.default(d.auction.heatClamp),
+      tendencyClamp: clampPair.default(d.auction.tendencyClamp),
+      minContestedWeek: z.number().int().min(1).max(18).default(d.auction.minContestedWeek),
+      oddNudge: z.boolean().default(d.auction.oddNudge),
+    })
+    .default(d.auction),
+
+  goal: z
+    .object({
+      defaultGoal: goalKey.default(d.goal.defaultGoal),
+      valueTarget: unitInterval.default(d.goal.valueTarget),
+      sureTarget: unitInterval.default(d.goal.sureTarget),
+      sureMaxOverWorthPct: z.number().min(0).max(200).default(d.goal.sureMaxOverWorthPct),
+    })
+    .default(d.goal)
+    .refine((g) => g.valueTarget < g.sureTarget, {
+      message: "The value target must be below the sure target.",
+    }),
+
+  priors: z
+    .object({
+      minCellSamples: z.number().int().min(1).default(d.priors.minCellSamples),
+      staleAfterDays: z.number().int().min(1).max(60).default(d.priors.staleAfterDays),
+      styleMultipliers: z
+        .object({
+          tight: z.number().min(0.1).max(3).default(d.priors.styleMultipliers.tight),
+          typical: z.number().min(0.1).max(3).default(d.priors.styleMultipliers.typical),
+          wild: z.number().min(0.1).max(3).default(d.priors.styleMultipliers.wild),
+        })
+        .default(d.priors.styleMultipliers),
+    })
+    .default(d.priors),
+
+  playoffValue: z
+    .object({
+      enabled: z.boolean().default(d.playoffValue.enabled),
+      playoffWeekWeight: z.number().min(0).max(3).default(d.playoffValue.playoffWeekWeight),
+      titleOddsWeight: unitInterval.default(d.playoffValue.titleOddsWeight),
+      bigTitleOddsPoints: z.number().min(0.1).max(100).default(d.playoffValue.bigTitleOddsPoints),
+    })
+    .default(d.playoffValue),
+
+  dynastyValue: z
+    .object({
+      enabled: z.boolean().default(d.dynastyValue.enabled),
+      blendByStatus: z
+        .object({
+          competitor: unitInterval.default(d.dynastyValue.blendByStatus.competitor),
+          loaded: unitInterval.default(d.dynastyValue.blendByStatus.loaded),
+          middle: unitInterval.default(d.dynastyValue.blendByStatus.middle),
+          rebuilder: unitInterval.default(d.dynastyValue.blendByStatus.rebuilder),
+        })
+        .default(d.dynastyValue.blendByStatus),
+      eliteRankFactor: z.number().min(0.01).max(2).default(d.dynastyValue.eliteRankFactor),
+    })
+    .default(d.dynastyValue),
+
+  injury: z
+    .object({
+      carryOutFromSource: z.boolean().default(d.injury.carryOutFromSource),
+      teammateSignal: signalToggle.default(d.injury.teammateSignal),
+    })
+    .default(d.injury),
+
+  breakout: z
+    .object({
+      enabled: z.boolean().default(d.breakout.enabled),
+      blendWeight: unitInterval.default(d.breakout.blendWeight),
+    })
+    .default(d.breakout),
+
+  chopped: z
+    .object({
+      enabled: z.boolean().default(d.chopped.enabled),
+      runs: z.number().int().min(500).max(20000).default(d.chopped.runs),
+      strengthWeights: z
+        .object({
+          surviveThisWeek: unitInterval.default(d.chopped.strengthWeights.surviveThisWeek),
+          winLeague: unitInterval.default(d.chopped.strengthWeights.winLeague),
+          weeksAlive: unitInterval.default(d.chopped.strengthWeights.weeksAlive),
+        })
+        .default(d.chopped.strengthWeights)
+        .refine(
+          (w) => {
+            const sum = w.surviveThisWeek + w.winLeague + w.weeksAlive;
+            return sum >= 0.99 && sum <= 1.01;
+          },
+          { message: "The three chopped strength weights must sum to 1." },
+        ),
+      bigSurvivePoints: z.number().min(0.1).max(100).default(d.chopped.bigSurvivePoints),
+      bigWinPoints: z.number().min(0.1).max(100).default(d.chopped.bigWinPoints),
+      bigWeeksAlive: z.number().min(0.1).max(18).default(d.chopped.bigWeeksAlive),
+      maxPctFromUpgrade: pct.default(d.chopped.maxPctFromUpgrade),
+      priceByAliveFraction: z
+        .array(
+          z.object({
+            minFraction: unitInterval,
+            multiplier: z.number().min(0).max(3),
+          }),
+        )
+        .min(1)
+        .default(d.chopped.priceByAliveFraction)
+        .refine(
+          (rows) => rows.every((r, i) => i === 0 || rows[i - 1].minFraction > r.minFraction),
+          { message: "Alive-fraction bands must run from the highest fraction down." },
+        )
+        .refine((rows) => rows[rows.length - 1]?.minFraction === 0, {
+          message: "The last alive-fraction band must start at 0, so every league is covered.",
+        }),
+      dangerThreshold: unitInterval.default(d.chopped.dangerThreshold),
+      dangerWeight: z.number().min(0).max(3).default(d.chopped.dangerWeight),
+      substituteShare: unitInterval.default(d.chopped.substituteShare),
+      substituteDiscount: z.number().min(0).max(3).default(d.chopped.substituteDiscount),
+      paceTargets: z
+        .array(
+          z.object({
+            throughWeek: z.number().int().min(1).max(18),
+            holdPct: pct,
+          }),
+        )
+        .min(1)
+        .default(d.chopped.paceTargets)
+        .refine(
+          (rows) => rows.every((r, i) => i === 0 || rows[i - 1].throughWeek < r.throughWeek),
+          { message: "Pace targets must run in week order." },
+        ),
+      manualDangerMultipliers: z
+        .object({
+          bottomTwo: z.number().min(0.1).max(3).default(d.chopped.manualDangerMultipliers.bottomTwo),
+          nearCut: z.number().min(0.1).max(3).default(d.chopped.manualDangerMultipliers.nearCut),
+          midPack: z.number().min(0.1).max(3).default(d.chopped.manualDangerMultipliers.midPack),
+          safe: z.number().min(0.1).max(3).default(d.chopped.manualDangerMultipliers.safe),
+        })
+        .default(d.chopped.manualDangerMultipliers),
+    })
+    .default(d.chopped),
 }).superRefine((s, ctx) => {
   // The bid curve must cover every playerRatio from 0 upward with no gaps, so a
   // valid player can never fall through to the wrong band. Enforce: starts at 0,

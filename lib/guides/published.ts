@@ -94,7 +94,9 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     publishedAt: "2026-09-15T09:00:00-04:00",
     // 2026-09-16: rebuilt as eight lessons with diagrams, a bid worksheet and
     // a pre-bid checklist.
-    updatedAt: "2026-09-16T09:00:00-04:00",
+    // 2026-09-19: a ninth lesson on chopped and guillotine leagues, and two
+    // more questions in the FAQ. New prose, so the date moves.
+    updatedAt: "2026-09-19T09:00:00-04:00",
     priority: 0.8,
   },
   {
@@ -143,6 +145,19 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // the method does not expire.
     publishedAt: "2026-09-18T12:00:00-04:00",
     updatedAt: "2026-09-18T12:00:00-04:00",
+    priority: 0.8,
+  },
+  {
+    slug: "chopped-league-strategy",
+    navLabel: "Chopped Leagues",
+    title: "Chopped and guillotine league strategy",
+    summary:
+      "What chopped, guillotine, death and knockout leagues are, how to draft for them, and how much FAAB to bid when a roster is cut",
+    // "chopped" rather than "guillotine" in the slug: it is the rising term and
+    // it is Sleeper's own name, while "guillotine" carries the title and the
+    // H1. The plan is docs/faab/chopped-guillotine-guide-seo-plan.md 4.1.
+    publishedAt: "2026-09-19T09:00:00-04:00",
+    updatedAt: "2026-09-19T09:00:00-04:00",
     priority: 0.8,
   },
 ];

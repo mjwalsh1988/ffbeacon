@@ -393,3 +393,68 @@ describe("cut guards", () => {
     expect(result.dropCost?.playerId).toBe("stud");
   });
 });
+
+describe("week weights", () => {
+  /**
+   * The playoff weeks. A week 15 start is worth everything to a team that
+   * reaches the bracket and nothing to one that does not, so those weeks
+   * enter the average weighted by the chance of playing them. Without the
+   * weighting the model priced every roster as though it were already in.
+   */
+  it("counts every week equally when no weights are given", () => {
+    const flat = computeLineupSwap(baseInput());
+    const explicitOnes = computeLineupSwap(
+      baseInput({ weekWeights: new Map([[5, 1], [6, 1], [7, 1]]) }),
+    );
+    expect(explicitOnes.netPointsPerWeek).toBeCloseTo(flat.netPointsPerWeek, 10);
+  });
+
+  it("lets a weighted week pull the average toward itself", () => {
+    const weeks = [5, 6];
+    const roster = [player("qb1", "QB", 18), player("rb1", "RB", 14)];
+    const candidate = new Map([
+      [5, { points: 30, sigma: 5, opponent: null, opponentMultiplier: 1 }],
+      [6, { points: 0, sigma: 5, opponent: null, opponentMultiplier: 1 }],
+    ]);
+    const shared = {
+      ...baseInput({ weeks, rosterByWeek: weeksOf(weeks, roster), candidateByWeek: candidate }),
+    };
+    const even = computeLineupSwap(shared);
+    const leaningOnWeekFive = computeLineupSwap({
+      ...shared,
+      weekWeights: new Map([[5, 1], [6, 0.1]]),
+    });
+    expect(leaningOnWeekFive.netPointsPerWeek).toBeGreaterThan(even.netPointsPerWeek);
+  });
+
+  it("drops a week weighted at zero out of the average entirely", () => {
+    const weeks = [5, 6];
+    const roster = [player("qb1", "QB", 18), player("rb1", "RB", 14)];
+    const candidate = new Map([
+      [5, { points: 30, sigma: 5, opponent: null, opponentMultiplier: 1 }],
+      [6, { points: 0, sigma: 5, opponent: null, opponentMultiplier: 1 }],
+    ]);
+    const onlyWeekFive = computeLineupSwap({
+      ...baseInput({ weeks, rosterByWeek: weeksOf(weeks, roster), candidateByWeek: candidate }),
+      weekWeights: new Map([[5, 1], [6, 0]]),
+    });
+    const weekFiveAlone = computeLineupSwap(
+      baseInput({
+        weeks: [5],
+        rosterByWeek: weeksOf([5], roster),
+        candidateByWeek: new Map([
+          [5, { points: 30, sigma: 5, opponent: null, opponentMultiplier: 1 }],
+        ]),
+      }),
+    );
+    expect(onlyWeekFive.netPointsPerWeek).toBeCloseTo(weekFiveAlone.netPointsPerWeek, 10);
+  });
+
+  it("returns zero rather than NaN when every week is weighted at nothing", () => {
+    const out = computeLineupSwap(
+      baseInput({ weekWeights: new Map([[5, 0], [6, 0], [7, 0]]) }),
+    );
+    expect(out.netPointsPerWeek).toBe(0);
+    expect(Number.isNaN(out.pointsPerWeek)).toBe(false);
+  });
+});

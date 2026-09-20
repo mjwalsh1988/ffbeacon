@@ -35,7 +35,25 @@ export interface UserDefaults {
   starterOptions: number[];
   defaultNeed: NeedLevel;
   defaultBudget: number;
+  /**
+   * The last regular season week manual mode assumes. Without a league there is
+   * no playoff_week_start to read, and the figure was hardcoded at 14 in two
+   * places, which quietly told every reader in a 17-week league that the season
+   * ends three weeks early.
+   */
+  defaultLastRegularWeek: number;
+  /**
+   * The league's FULL starting FAAB allowance, not the reader's remaining
+   * money. Every price in the model is a share of this, converted to dollars
+   * at the edge.
+   */
+  defaultLeagueBudget: number;
+  /** How hard the reader's room bids, when they have no league connected. */
+  defaultStyle: BidStyle;
 }
+
+/** How hard a room bids, relative to the wider market. */
+export type BidStyle = "tight" | "typical" | "wild";
 
 export interface DepthAdjustments {
   /** leagueDemand <= this is a "shallow" league. */
@@ -236,7 +254,16 @@ export interface MarketSettings {
      */
     blendWeight: number;
   };
-  /** Unspent FAAB is worth nothing in January. */
+  /**
+   * What time of season does to prices, measured rather than assumed.
+   *
+   * The old urgency setting discounted the first three weeks. Our own 8,257
+   * priced winning bids say the opposite: weeks 2 to 6 are the most expensive
+   * stretch of the regular season, the middle is the cheapest, and week 14 on
+   * is dearer than anything, because leftover budget buys nothing in January.
+   */
+  calendar: CalendarSettings;
+  /** Superseded by `calendar`. Kept only until nothing reads it. */
   urgency: {
     enabled: boolean;
     /** From this week onward the late-season boost is at full strength. */
@@ -277,6 +304,11 @@ export interface ManualReplacementSettings {
   baselineStarters: number;
   /** Positions that do not scale with starter count. Nobody starts two kickers. */
   flatPositions: string[];
+  /**
+   * Quarterbacks started per team in superflex. Not 2: the second starter is
+   * optional, and in practice a few teams run a flex instead.
+   */
+  superflexQbPerTeam: number;
 }
 
 /** When league mode should shout. */
@@ -289,6 +321,140 @@ export interface LeagueDumpSettings {
   /** Teams whose playoff odds are at or below this are told to sit it out. */
   loserOddsCeiling: number;
   ranges: Record<NeedLevel, PctRange>;
+  /** This many rivals who would start him is itself a reason to spend. */
+  contestedRivals: number;
+  /** In superflex, a starting quarterback going out is an emergency. */
+  superflexQbStarterOut: boolean;
+}
+
+/** Which question the reader is asking of the calculator. */
+export type GoalKey = "value" | "sure";
+
+/**
+ * The rival auction.
+ *
+ * Price is not worth. What it takes to win a player is set by how many other
+ * teams bid and how hard, and our own data says the winner pays about twice
+ * the runner-up. So the price side of the answer is a simulation of the other
+ * wallets in the room rather than a multiplier on the reader's own valuation.
+ */
+export interface AuctionSettings {
+  enabled: boolean;
+  /** Monte Carlo runs. Seeded, so the same league gets the same answer twice. */
+  runs: number;
+  /** Chance an interested rival actually files a claim. */
+  participation: number;
+  /** Chance a rival who does not need him bids anyway. */
+  strayBidRate: number;
+  /** Lognormal spread of a rival's bid around its centre. */
+  bidSigma: number;
+  /** Samples at which a league's own price level gets half weight. */
+  heatShrink: number;
+  /** The same, for one manager's own habit. */
+  tendencyShrink: number;
+  heatClamp: [number, number];
+  tendencyClamp: [number, number];
+  /** Auctions before this week are ignored: week 1 is a different market. */
+  minContestedWeek: number;
+  /** Ties are common on round numbers, so nudge a round bid up by one. */
+  oddNudge: boolean;
+}
+
+export interface GoalSettings {
+  defaultGoal: GoalKey;
+  /** Win chance the "good value" bid aims at, 0 to 1. */
+  valueTarget: number;
+  /** Win chance the "make sure I win" bid aims at, 0 to 1. */
+  sureTarget: number;
+  /** The most the sure bid may exceed his worth, as a percent. Labelled when it does. */
+  sureMaxOverWorthPct: number;
+}
+
+/** One stretch of the season and what it does to prices. */
+export interface CalendarBand {
+  fromWeek: number;
+  /** Null means "to the end of the season". */
+  toWeek: number | null;
+  multiplier: number;
+}
+
+export interface CalendarSettings {
+  enabled: boolean;
+  bands: CalendarBand[];
+}
+
+export interface PriorsSettings {
+  /** A cell below this sample size falls back to a coarser one. */
+  minCellSamples: number;
+  /** The cron rebuilds the priors when the newest row is older than this. */
+  staleAfterDays: number;
+  styleMultipliers: Record<BidStyle, number>;
+}
+
+export interface PlayoffValueSettings {
+  enabled: boolean;
+  /** A playoff week counts this much, times the chance of playing it. */
+  playoffWeekWeight: number;
+  /** Share of upgrade strength taken from the title odds gain. */
+  titleOddsWeight: number;
+  /** Title-odds gain, in points, that counts as full strength. */
+  bigTitleOddsPoints: number;
+}
+
+export interface DynastyValueSettings {
+  enabled: boolean;
+  /** Weight on market value against lineup points, by team status. */
+  blendByStatus: { competitor: number; loaded: number; middle: number; rebuilder: number };
+  /** Elite value is the value at rank teams x starters x this. */
+  eliteRankFactor: number;
+}
+
+export interface InjurySettings {
+  /** Carry an OUT week forward into weeks the source published nothing for. */
+  carryOutFromSource: boolean;
+  teammateSignal: { enabled: boolean; maxAdjustPct: number };
+}
+
+export interface BreakoutSettings {
+  enabled: boolean;
+  /** Weight on recent usage-implied points when a role has just grown. */
+  blendWeight: number;
+}
+
+/**
+ * Chopped, guillotine, death and knockout leagues.
+ *
+ * A different game with the same currency. There are no playoffs and no
+ * opponent: the whole league is the opponent, the lowest score each week is
+ * eliminated, and the whole of that roster returns to waivers. So worth is
+ * measured in survival, and price falls as the field shrinks.
+ */
+export interface ChoppedSettings {
+  enabled: boolean;
+  runs: number;
+  /** Must sum to 1. Validated. */
+  strengthWeights: { surviveThisWeek: number; winLeague: number; weeksAlive: number };
+  /** Gain in the chance of surviving this week, in points, that is full strength. */
+  bigSurvivePoints: number;
+  /** Gain in the chance of winning the league, in points. */
+  bigWinPoints: number;
+  /** Gain in expected weeks alive. */
+  bigWeeksAlive: number;
+  maxPctFromUpgrade: number;
+  /** Price multiplier by the share of the field still alive, high to low. */
+  priceByAliveFraction: Array<{ minFraction: number; multiplier: number }>;
+  /** Chance of being chopped this week that flips the default goal to "sure". */
+  dangerThreshold: number;
+  /** How much a rival's own danger raises what it will bid. */
+  dangerWeight: number;
+  /** A free agent projecting at least this share of the candidate is a substitute. */
+  substituteShare: number;
+  /** Each substitute divides rival participation by 1 plus this. */
+  substituteDiscount: number;
+  /** How much budget a manager should still hold, by week. */
+  paceTargets: Array<{ throughWeek: number; holdPct: number }>;
+  /** Manual mode has no roster, so the reader says how much danger they are in. */
+  manualDangerMultipliers: { bottomTwo: number; nearCut: number; midPack: number; safe: number };
 }
 
 export interface FaabSettings {
@@ -306,6 +472,14 @@ export interface FaabSettings {
   ladder: LadderSettings;
   leagueDump: LeagueDumpSettings;
   manualReplacement: ManualReplacementSettings;
+  auction: AuctionSettings;
+  goal: GoalSettings;
+  priors: PriorsSettings;
+  playoffValue: PlayoffValueSettings;
+  dynastyValue: DynastyValueSettings;
+  injury: InjurySettings;
+  breakout: BreakoutSettings;
+  chopped: ChoppedSettings;
 }
 
 /** The selected player, reduced to only what the calculator consumes. */
@@ -514,21 +688,53 @@ export interface MarketRead {
   comparable: ComparableBids | null;
   /** Weeks left in the regular season, including the current one. */
   weeksLeft: number;
+  /** Superseded by calendarMultiplier. Kept until the admin fields go. */
   urgencyMultiplier: number;
+  /** What this stretch of the season does to what rivals bid. 1 is neutral. */
+  calendarMultiplier: number;
+  /** Chopped leagues: teams still in it. Null everywhere else. */
+  aliveCount: number | null;
 }
 
-/** The recommendation, as a ladder rather than one number. */
+/** One number on the ladder, in dollars, with what it buys. */
+export interface BidRung {
+  dollars: number;
+  /** The same number as a share of the league's FULL budget. */
+  pct: number;
+  /** Chance this bid beats every rival, 0 to 1. Null when we cannot price it. */
+  winChance: number | null;
+}
+
+/**
+ * The answer, as three numbers and the reasoning that ties them together.
+ *
+ * `walkAway` is worth: the most he is worth to THIS roster, which nothing
+ * about the other teams may raise. `bid` is the recommendation for the goal
+ * the reader picked. `bidsByGoal` carries both answers so the toggle on the
+ * page is instant and needs no server call.
+ */
 export interface BidLadder {
-  /** Above this, walk away. The most useful number on the page. */
-  walkAway: number;
-  /** What it probably takes to win him. */
-  likely: number;
-  /** What it takes to be confident. */
-  aggressive: number;
-  /** Percent of remaining budget the likely bid represents. */
-  likelyPct: number;
-  /** What you would have left after the likely bid. */
-  budgetAfterLikely: number;
+  goal: GoalKey;
+  bid: BidRung;
+  /** The other goal's number when it is higher, otherwise the walk-away. */
+  stretch: BidRung;
+  walkAway: BidRung;
+  /** True when winning him is likely to cost more than he is worth to you. */
+  priceAboveWorth: boolean;
+  /** The highest rival bid we expect, in dollars. Null without a simulation. */
+  rivalTop: { p50: number; p75: number } | null;
+  budgetAfterBid: number;
+  bidsByGoal: { value: BidRung; sure: BidRung };
+  /**
+   * The whole win curve, sampled, so the page can draw it.
+   *
+   * The simulation itself is a closure on the server and cannot travel, so
+   * without this the chart could only plot the three priced rungs and would
+   * be a bar chart of numbers already printed above it. Sampled every 5% of
+   * the reader's budget, plus the three marked bids, which is enough to draw
+   * the shape and small enough to ship.
+   */
+  winCurve: Array<{ dollars: number; winChance: number }>;
 }
 
 export type FaabConfidence = "high" | "medium" | "low";
@@ -569,6 +775,77 @@ export interface LeagueFaabReport {
   explanation: string;
   notices: string[];
   confidence: FaabConfidence;
+  /** Standard leagues and chopped ones are different games, not one game. */
+  leagueKind: LeagueKind;
+  /** Which goal the page opens on. Chopped danger can flip it. */
+  goalDefault: GoalKey;
+  /** One line each, every one citing a figure elsewhere in this report. */
+  reasons: string[];
+  /** Who else would start him, and what they can spend. */
+  rivals: RivalRow[];
+  /** Rivals who would not start him, summarised rather than listed. */
+  rivalsNotInterested: number;
+  /** The reader's own starters who are out this week. */
+  injuredStarters: InjuredStarter[];
+  /** Read from the league's Positional WAR cache. Never computed here. */
+  positionalWar: { value: number; positionRank: number; position: string } | null;
+  /** Chopped leagues only. */
+  chopped: ChoppedRead | null;
+  /** The league's own price level against the wider market. */
+  heat: { value: number; samples: number } | null;
+  /** How far the market cell had to be widened to find enough samples. */
+  priorsFallback: string | null;
+}
+
+export type LeagueKind = "standard" | "chopped";
+
+export type RivalBidStyle = "Spends big" | "Typical" | "Holds money" | "Not enough history";
+
+/** One rival team in the "who else wants him" table. */
+export interface RivalRow {
+  rosterId: number;
+  teamName: string;
+  budget: number;
+  wouldStart: boolean;
+  style: RivalBidStyle;
+  /** The range their bid is likely to land in, in dollars. */
+  likelyBid: { low: number; high: number } | null;
+}
+
+export interface InjuredStarter {
+  name: string;
+  status: string;
+  /** Weeks the source says he is out for. Null when it only says this week. */
+  weeksOut: number | null;
+}
+
+/**
+ * The state of a chopped league, from the reader's seat.
+ *
+ * No playoff odds, no opponent, no schedule: the whole league is the opponent
+ * and the only question each week is whether somebody scores less than you.
+ */
+export interface ChoppedRead {
+  aliveCount: number;
+  startCount: number;
+  currentWeek: number;
+  finalWeek: number;
+  /** False while we are inferring the final week rather than reading it. */
+  finalWeekVerified: boolean;
+  before: { pChoppedThisWeek: number; pWin: number; expectedWeeksAlive: number };
+  after: { pChoppedThisWeek: number; pWin: number; expectedWeeksAlive: number };
+  /** 1 is the team most likely to be chopped this week. */
+  dangerRank: number;
+  /** Dollars held by every team still alive. */
+  moneyLeftInLeague: number;
+  yourShareOfMoney: number;
+  /** 1 is the richest team still alive. */
+  yourMoneyRank: number;
+  pace: { holdPct: number; targetHoldPct: number; status: "ahead" | "on-pace" | "behind" };
+  /** Free agents at his position projecting nearly as well as he does. */
+  substitutes: number;
+  /** The week this format stops releasing chopped rosters. Null when it does not. */
+  releaseCutoffWeek: number | null;
 }
 
 /** One league's answer inside the all-leagues view. */

@@ -243,11 +243,29 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
       {
         id: "guillotine-league",
         term: "Guillotine league",
-        aka: "chop league",
+        aka: "chopped league, chop league, death league, knockout league",
         body: [
           "In a guillotine league the lowest-scoring team each week is eliminated and its entire roster returns to the waiver pool, until one manager is left.",
           "There is no bad week you can absorb. Every eliminated roster floods the wire with startable players, so the format ends up being about managing waiver budget as much as drafting.",
+          "The names are platform branding and the game is the same one: Sleeper calls it Chopped, Yahoo calls it a death league, ESPN calls it a knockout league, and the FFPC runs a Chop Classic. A survivor league is something else entirely, an NFL pick'em pool with no rosters at all.",
         ],
+        link: {
+          href: "/guides/chopped-league-strategy",
+          label: "Read the chopped league strategy guide",
+        },
+      },
+      {
+        id: "chopped-league",
+        term: "Chopped league",
+        aka: "guillotine league",
+        body: [
+          "A chopped league is Sleeper's name for a guillotine league: the lowest scorer in the whole league is eliminated every week and their roster goes back on the wire.",
+          "Sleeper launched the format in August 2025 and recommends 18 teams with a $1,000 waiver budget and trades switched off. Everything under Guillotine league above applies.",
+        ],
+        link: {
+          href: "/guides/chopped-league-strategy",
+          label: "Read the chopped league strategy guide",
+        },
       },
       {
         id: "orphan",

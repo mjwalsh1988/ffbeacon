@@ -18,12 +18,27 @@ import { BeaconValue } from "@/components/beacon-value-icon";
 import { LeaguePanel } from "./league-panel";
 import { ManualResult } from "./manual-result";
 import { PlayerCombobox, type FaabPlayer } from "./player-combobox";
+import {
+  CHOPPED_PLATFORMS,
+  COMPETITION_LABEL,
+  DANGER_LABEL,
+  EMPTY_MANUAL_SEED,
+  LEAGUE_TYPE_LABEL,
+  STYLE_LABEL,
+  type ChoppedPlatformKey,
+  type ManualCompetition,
+  type ManualDanger,
+  type ManualLeagueType,
+  type ManualSeed,
+  type ManualSetupState,
+} from "./manual-setup";
 import { calculateFaabRecommendation } from "@/lib/faab/calculate-faab";
 import type {
   HandleGateState,
   SleeperViewer,
 } from "@/lib/sleeper-handle/types";
 import type {
+  BidStyle,
   FaabResult,
   FaabSettings,
   NeedLevel as FaabNeedLevel,
@@ -58,6 +73,7 @@ export function FaabForm({
   rankingsSourceSlug = null,
   handleGate,
   urlViewer,
+  seed = EMPTY_MANUAL_SEED,
 }: {
   /**
    * The page hero, rendered on the server and handed in so this component can
@@ -90,14 +106,36 @@ export function FaabForm({
   /** Editable calculator settings (bid curve, depth, dump, copy). Resolved
    * server-side; always a complete object thanks to code defaults. */
   settings: FaabSettings;
+  /**
+   * Setup read off the URL, for a guide that links a reader straight into
+   * their own situation. Parsed and validated on the server.
+   */
+  seed?: ManualSeed;
 }) {
   const { userDefaults } = settings;
   const [query, setQuery] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<FaabPlayer | null>(null);
   const [budget, setBudget] = useState(userDefaults.defaultBudget);
+  const [leagueBudget, setLeagueBudget] = useState(userDefaults.defaultLeagueBudget);
   const [need, setNeed] = useState<NeedLevel>(userDefaults.defaultNeed);
   const [teams, setTeams] = useState(userDefaults.defaultTeams);
   const [starters, setStarters] = useState(userDefaults.defaultStarters);
+  const [leagueType, setLeagueType] = useState<ManualLeagueType>(
+    seed.leagueType ?? "redraft",
+  );
+  const [superflex, setSuperflex] = useState(false);
+  const [style, setStyle] = useState<BidStyle>(userDefaults.defaultStyle);
+  const [competition, setCompetition] = useState<ManualCompetition>("auto");
+  const [startCount, setStartCount] = useState(
+    seed.startCount ?? userDefaults.defaultTeams,
+  );
+  const [aliveCount, setAliveCount] = useState(
+    seed.aliveCount ?? seed.startCount ?? userDefaults.defaultTeams,
+  );
+  const [danger, setDanger] = useState<ManualDanger>(seed.danger ?? "midPack");
+  const [platform, setPlatform] = useState<ChoppedPlatformKey>("sleeper");
+
+  const isChopped = leagueType === "chopped";
 
   // The page already resolved the ranked player list for the active
   // (source, format). That same list IS the value pool the calculator needs:
@@ -108,6 +146,23 @@ export function FaabForm({
   );
 
   const budgetValid = Number.isFinite(budget) && budget > 0;
+  const leagueBudgetValid = Number.isFinite(leagueBudget) && leagueBudget > 0;
+
+  const setup: ManualSetupState = {
+    leagueType,
+    superflex,
+    teams,
+    starters,
+    remainingBudget: budget,
+    leagueBudget: leagueBudgetValid ? leagueBudget : userDefaults.defaultLeagueBudget,
+    style,
+    competition,
+    need,
+    startCount,
+    aliveCount: Math.min(aliveCount, startCount),
+    danger,
+    platform,
+  };
 
   const result = useMemo<FaabResult | null>(() => {
     if (!selectedPlayer || !budgetValid) return null;
@@ -232,10 +287,35 @@ export function FaabForm({
         />
       )}
 
-      {/* League setup */}
+      {/* League setup, in the order a reader thinks about it: what kind of
+          league, how it is shaped, what the money is, how the room bids, and
+          only then what this particular claim is worth to them. */}
       <fieldset className="rounded-card border border-line bg-base/40 p-4">
         <legend className="px-1 text-sm font-semibold text-ink">League setup</legend>
         <div className="mt-2 space-y-5">
+          <ChoiceGroup
+            label="What kind of league?"
+            help="A chopped or guillotine league eliminates the lowest score every week, which changes what a claim is worth and what it costs."
+            icon={Trophy}
+            name="faab-league-type"
+            options={(["redraft", "dynasty", "chopped"] as ManualLeagueType[]).map(
+              (key) => ({ key, label: LEAGUE_TYPE_LABEL[key] }),
+            )}
+            value={leagueType}
+            onChange={setLeagueType}
+          />
+          <ChoiceGroup
+            label="How many quarterbacks start?"
+            help="Superflex prices quarterbacks against a superflex replacement level, where the second starter is scarce."
+            icon={Shuffle}
+            name="faab-superflex"
+            options={[
+              { key: "one", label: "One QB" },
+              { key: "sf", label: "Superflex" },
+            ]}
+            value={superflex ? "sf" : "one"}
+            onChange={(key) => setSuperflex(key === "sf")}
+          />
           <PillGroup
             label="How many teams?"
             help={settings.copy.teamsHelp}
@@ -254,50 +334,217 @@ export function FaabForm({
             value={starters}
             onChange={setStarters}
           />
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label htmlFor="faab-budget" className="block text-sm font-medium text-ink">
+                Your remaining FAAB
+              </label>
+              <input
+                id="faab-budget"
+                type="number"
+                min={1}
+                max={100000}
+                inputMode="numeric"
+                value={Number.isFinite(budget) ? budget : ""}
+                aria-invalid={!budgetValid}
+                aria-describedby={!budgetValid ? "faab-budget-error" : undefined}
+                onChange={(event) =>
+                  setBudget(Number.parseInt(event.target.value || "0", 10))
+                }
+                className="mt-2 min-h-11 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+              />
+              {!budgetValid && (
+                <p
+                  id="faab-budget-error"
+                  role="alert"
+                  className="mt-1.5 text-xs text-signal-danger"
+                >
+                  Enter a remaining budget of at least 1 FAAB.
+                </p>
+              )}
+            </div>
+            <div>
+              <label
+                htmlFor="faab-league-budget"
+                className="block text-sm font-medium text-ink"
+              >
+                League starting budget
+              </label>
+              <input
+                id="faab-league-budget"
+                type="number"
+                min={1}
+                max={100000}
+                inputMode="numeric"
+                value={Number.isFinite(leagueBudget) ? leagueBudget : ""}
+                aria-invalid={!leagueBudgetValid}
+                aria-describedby="faab-league-budget-help"
+                onChange={(event) =>
+                  setLeagueBudget(Number.parseInt(event.target.value || "0", 10))
+                }
+                className="mt-2 min-h-11 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+              />
+              <p
+                id="faab-league-budget-help"
+                className="mt-1.5 text-xs leading-relaxed text-ink-subtle"
+              >
+                What everyone started the season with. Every price we quote is a
+                share of this, so 12% is 12 of 100 and 120 of 1,000.
+              </p>
+            </div>
+          </div>
+
+          <ChoiceGroup
+            label="How does your league bid?"
+            help="A tight room clears claims cheaply. A wild one pays up for everything."
+            icon={Flame}
+            name="faab-style"
+            options={(["tight", "typical", "wild"] as BidStyle[]).map((key) => ({
+              key,
+              label: STYLE_LABEL[key],
+            }))}
+            value={style}
+            onChange={setStyle}
+          />
+          <ChoiceGroup
+            label="How many teams will chase him?"
+            help="The single biggest thing that decides what a claim costs. Let us guess reads it off how big an upgrade he is."
+            icon={Users}
+            name="faab-competition"
+            options={(["auto", "1", "2", "4p"] as ManualCompetition[]).map((key) => ({
+              key,
+              label: COMPETITION_LABEL[key],
+            }))}
+            value={competition}
+            onChange={setCompetition}
+          />
+
+          <fieldset aria-describedby="faab-need-help">
+            <legend className="block text-sm font-medium text-ink">
+              How badly do you need this position?
+            </legend>
+            <p
+              id="faab-need-help"
+              className="mt-1 text-xs leading-relaxed text-ink-subtle"
+            >
+              Manual mode only. With a league connected we read your need from
+              your roster.
+            </p>
+            <div className="mt-2 flex max-w-md flex-col gap-2">
+              {(["low", "medium", "high"] as NeedLevel[]).map((level) => (
+                <NeedOption
+                  key={level}
+                  level={level}
+                  selected={need === level}
+                  onSelect={() => setNeed(level)}
+                />
+              ))}
+            </div>
+          </fieldset>
+          {isChopped && (
+            <div className="space-y-5 rounded-card border border-line bg-surface/40 p-4">
+              <p className="text-sm font-semibold text-ink">
+                Your chopped league, this week
+              </p>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="faab-start-count"
+                    className="block text-sm font-medium text-ink"
+                  >
+                    Teams at the start
+                  </label>
+                  <input
+                    id="faab-start-count"
+                    type="number"
+                    min={2}
+                    max={32}
+                    inputMode="numeric"
+                    value={Number.isFinite(startCount) ? startCount : ""}
+                    onChange={(event) =>
+                      setStartCount(Number.parseInt(event.target.value || "0", 10))
+                    }
+                    className="mt-2 min-h-11 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="faab-alive-count"
+                    className="block text-sm font-medium text-ink"
+                  >
+                    Teams still alive
+                  </label>
+                  <input
+                    id="faab-alive-count"
+                    type="number"
+                    min={2}
+                    max={32}
+                    inputMode="numeric"
+                    value={Number.isFinite(aliveCount) ? aliveCount : ""}
+                    aria-describedby="faab-alive-help"
+                    onChange={(event) =>
+                      setAliveCount(Number.parseInt(event.target.value || "0", 10))
+                    }
+                    className="mt-2 min-h-11 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                  />
+                  <p
+                    id="faab-alive-help"
+                    className="mt-1.5 text-xs leading-relaxed text-ink-subtle"
+                  >
+                    Prices fall as the field shrinks, because fewer teams are
+                    left to bid and the pool is full of starters.
+                  </p>
+                </div>
+              </div>
+
+              <ChoiceGroup
+                label="Your danger this week"
+                help="There is no opponent in a chopped league, so this is the only way to say how close you are to the bottom."
+                icon={Flame}
+                name="faab-danger"
+                options={(
+                  ["bottomTwo", "nearCut", "midPack", "safe"] as ManualDanger[]
+                ).map((key) => ({ key, label: DANGER_LABEL[key] }))}
+                value={danger}
+                onChange={setDanger}
+              />
+
+              <div>
+                <label
+                  htmlFor="faab-platform"
+                  className="block text-sm font-medium text-ink"
+                >
+                  Platform rules
+                </label>
+                <select
+                  id="faab-platform"
+                  value={platform}
+                  onChange={(event) =>
+                    setPlatform(event.target.value as ChoppedPlatformKey)
+                  }
+                  aria-describedby="faab-platform-help"
+                  className="mt-2 min-h-11 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                >
+                  {CHOPPED_PLATFORMS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p
+                  id="faab-platform-help"
+                  className="mt-1.5 text-xs leading-relaxed text-ink-subtle"
+                >
+                  Sets the smallest bid your platform accepts, and the last week
+                  a chopped roster is released back onto waivers.
+                </p>
+              </div>
+            </div>
+          )}
+
         </div>
       </fieldset>
-
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div>
-          <label htmlFor="faab-budget" className="block text-sm font-medium text-ink">
-            Remaining FAAB budget
-          </label>
-          <input
-            id="faab-budget"
-            type="number"
-            min={1}
-            max={1000}
-            inputMode="numeric"
-            value={Number.isFinite(budget) ? budget : ""}
-            aria-invalid={!budgetValid}
-            aria-describedby={!budgetValid ? "faab-budget-error" : undefined}
-            onChange={(event) =>
-              setBudget(Number.parseInt(event.target.value || "0", 10))
-            }
-            className="mt-2 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
-          />
-          {!budgetValid && (
-            <p id="faab-budget-error" role="alert" className="mt-1.5 text-xs text-signal-danger">
-              Enter a remaining budget of at least 1 FAAB.
-            </p>
-          )}
-        </div>
-        <fieldset>
-          <legend className="block text-sm font-medium text-ink">
-            How badly do you need this position?
-          </legend>
-          <div className="mt-2 flex max-w-md flex-col gap-2">
-            {(["low", "medium", "high"] as NeedLevel[]).map((level) => (
-              <NeedOption
-                key={level}
-                level={level}
-                selected={need === level}
-                onSelect={() => setNeed(level)}
-              />
-            ))}
-          </div>
-        </fieldset>
-      </div>
 
       </div>
 
@@ -306,11 +553,8 @@ export function FaabForm({
         player={selectedPlayer}
         formatSlug={formatSlug}
         formatName={formatName}
-        teams={teams}
-        starters={starters}
-        budget={budget}
+        setup={setup}
         budgetValid={budgetValid}
-        need={need}
         settings={settings}
         fallbackResult={result}
       />
@@ -347,6 +591,87 @@ function OrDivider() {
   );
 }
 
+
+/**
+ * The same pill radiogroup as PillGroup, for the controls whose options are
+ * words rather than numbers.
+ *
+ * Kept as its own component rather than making PillGroup generic, because the
+ * two differ in what they render (a tabular number against a label that can
+ * wrap) and merging them would mean a component with two layouts and a flag.
+ * Native radios either way, so arrow keys, the selected state and the group's
+ * name all come from the platform, and the selected pill carries a tick as
+ * well as the gradient.
+ */
+function ChoiceGroup<T extends string>({
+  label,
+  help,
+  icon: Icon,
+  name,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  help: string;
+  icon: LucideIcon;
+  name: string;
+  options: Array<{ key: T; label: string }>;
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  const helpId = useId();
+  return (
+    <fieldset aria-describedby={helpId}>
+      <legend className="flex items-center gap-2 text-sm font-medium text-ink">
+        <Icon aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
+        {label}
+      </legend>
+      <p id={helpId} className="mt-1 text-xs leading-relaxed text-ink-subtle">
+        {help}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {options.map((option) => {
+          const selected = option.key === value;
+          return (
+            <label key={option.key} className="relative cursor-pointer">
+              <input
+                type="radio"
+                name={name}
+                value={option.key}
+                checked={selected}
+                onChange={() => onChange(option.key)}
+                className="peer sr-only"
+              />
+              <span
+                className={`flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-card border px-4 py-2 text-sm font-semibold motion-safe:transition-all peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-cyan ${
+                  selected
+                    ? "border-transparent text-ink"
+                    : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
+                }`}
+                style={
+                  selected
+                    ? {
+                        backgroundImage:
+                          "linear-gradient(135deg, rgba(168,85,247,0.22) 0%, rgba(34,211,238,0.14) 100%)",
+                        borderColor: "rgba(168,85,247,0.55)",
+                        boxShadow: "0 0 28px -16px rgba(168,85,247,0.7)",
+                      }
+                    : undefined
+                }
+              >
+                {selected && (
+                  <Check aria-hidden="true" className="h-3.5 w-3.5 text-brand-cyan" />
+                )}
+                {option.label}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
 /**
  * Accessible pill-style radiogroup for the team count and starter count. Native

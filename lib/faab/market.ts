@@ -25,6 +25,7 @@
 
 import type {
   ComparableBids,
+  FaabSettings,
   FaabSignal,
   MarketRead,
   MarketSettings,
@@ -51,6 +52,8 @@ export type MarketInput = {
    * their whole budget got described as a league full of broke teams.
    */
   leagueTotalBudget: number | null;
+  /** Chopped leagues: teams still in the league. Null everywhere else. */
+  aliveCount?: number | null;
   settings: MarketSettings;
 };
 
@@ -206,12 +209,35 @@ function rivalNeedSignal(input: MarketInput): FaabSignal | null {
 }
 
 /**
- * What the calendar is worth.
+ * What time of season actually does to a price.
  *
- * Early, your budget has a whole season of claims ahead of it and hoarding has
- * real option value. Late, unspent FAAB is confetti. The curve between the two
- * is linear because nothing about the real behavior justifies more shape than
- * that, and a simple ramp is one an admin can reason about.
+ * This replaces the old urgency ramp, which discounted the first three weeks
+ * on the theory that early budget has option value. Our own 8,257 priced
+ * winning bids say the opposite about what the market DOES: weeks 2 to 6 are
+ * the dearest in-season stretch (p75 15% of budget), weeks 7 to 10 the
+ * cheapest (p75 10%), and week 14 on the dearest of all (p75 18%, p90 42%),
+ * because leftover budget is about to be worth nothing.
+ *
+ * Option value is still real, but it belongs to the reader's own judgement
+ * about holding money, not to an estimate of what a rival will bid. This
+ * multiplier moves rival bid centres only.
+ */
+export function calendarMultiplier(
+  week: number,
+  settings: FaabSettings["market"]["calendar"],
+): number {
+  if (!settings.enabled) return 1;
+  for (const band of settings.bands) {
+    const withinStart = week >= band.fromWeek;
+    const withinEnd = band.toWeek === null || week <= band.toWeek;
+    if (withinStart && withinEnd) return band.multiplier;
+  }
+  return 1;
+}
+
+/**
+ * The old calendar ramp. Superseded by calendarMultiplier and kept only until
+ * the admin screen stops offering its fields.
  */
 export function urgencyMultiplier(input: MarketInput): number {
   const cfg = input.settings.urgency;
@@ -270,13 +296,17 @@ export function buildMarket(input: MarketInput): {
     comparable: input.comparable,
     weeksLeft: Math.max(0, input.lastRegularWeek - input.currentWeek + 1),
     urgencyMultiplier: urgencyMultiplier(input),
+    calendarMultiplier: calendarMultiplier(input.currentWeek, input.settings.calendar),
+    aliveCount: input.aliveCount ?? null,
   };
 
-  const signals = [
-    rivalNeedSignal(input),
-    rivalBudgetSignal(input, read),
-    urgencySignal(input, read.urgencyMultiplier),
-  ].filter((s): s is FaabSignal => s !== null);
+  // The calendar no longer produces a signal that moves the reader's own
+  // number: it moves what we expect RIVALS to bid, inside the auction model.
+  // Leaving a multiplier on the reader's valuation as well would apply the
+  // same seasonal effect twice.
+  const signals = [rivalNeedSignal(input), rivalBudgetSignal(input, read)].filter(
+    (s): s is FaabSignal => s !== null,
+  );
 
   return { read, signals };
 }

@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
-import { ChevronDown, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { cloneElement, isValidElement, useEffect, useId, useState, useTransition } from "react";
+import { ChevronDown, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import type {
   BidBand,
+  BidStyle,
+  CalendarBand,
   FaabSettings,
+  GoalKey,
   NeedLevel,
   PctRange,
 } from "@/lib/faab/types";
 import { DEFAULT_FAAB_SETTINGS } from "@/lib/faab/default-settings";
-import { saveFaabSettings } from "./actions";
+import type { ReplayBucket, ReplaySummary } from "@/lib/faab/replay";
+import { formatEastern } from "@/lib/datetime";
+import { rebuildFaabPriors, runFaabReplay, saveFaabSettings } from "./actions";
 
 const inputCls =
   "mt-1 min-h-11 w-full rounded-card border border-line bg-base px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
@@ -24,12 +29,16 @@ function NumberInput({
   onChange,
   step = "any",
   min,
+  max,
+  "aria-describedby": describedBy,
 }: {
   id: string;
   value: number;
   onChange: (n: number) => void;
   step?: string;
   min?: number;
+  max?: number;
+  "aria-describedby"?: string;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -43,6 +52,8 @@ function NumberInput({
       inputMode="decimal"
       step={step}
       min={min}
+      max={max}
+      aria-describedby={describedBy}
       value={text}
       onFocus={() => setFocused(true)}
       onBlur={() => {
@@ -72,15 +83,218 @@ function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  // The hint carries the range and the meaning, so it is wired to the control
+  // rather than left as text that only a sighted reader is sure to find. Done
+  // by cloning the single child so every existing field gains it without a
+  // call-site change; a child that already names its own description keeps it.
+  const hintId = `${htmlFor}-hint`;
+  const described =
+    hint && isValidElement(children)
+      ? cloneElement(children as React.ReactElement<{ "aria-describedby"?: string }>, {
+          "aria-describedby":
+            (children as React.ReactElement<{ "aria-describedby"?: string }>).props[
+              "aria-describedby"
+            ] ?? hintId,
+        })
+      : children;
   return (
     <div>
       <label htmlFor={htmlFor} className={labelCls}>
         {label}
       </label>
-      {children}
-      {hint && <p className="mt-1 text-[11px] text-ink-subtle">{hint}</p>}
+      {described}
+      {hint && (
+        <p id={hintId} className="mt-1 text-[11px] text-ink-subtle">
+          {hint}
+        </p>
+      )}
     </div>
   );
+}
+
+/**
+ * The zod rules the server enforces, said out loud while the admin types.
+ *
+ * Every message here mirrors a refinement in lib/faab/settings.ts. Server-side
+ * validation still governs: this exists so a save that would be rejected is
+ * visible before the button is pressed, not instead of the check.
+ */
+function ValidationNotes({ problems }: { problems: string[] }) {
+  return (
+    <div aria-live="polite" className="mt-3">
+      {problems.length > 0 && (
+        <ul className="space-y-1 rounded-card border border-signal-danger/50 bg-signal-danger/10 p-3 text-xs leading-relaxed text-signal-danger">
+          {problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Contiguity, in the same terms the schema puts it. */
+function calendarProblems(bands: CalendarBand[]): string[] {
+  const problems: string[] = [];
+  if (bands.length === 0) return ["Add at least one band."];
+  if (bands[0].fromWeek !== 1) {
+    problems.push("The first band must start at week 1.");
+  }
+  if (bands[bands.length - 1].toWeek !== null) {
+    problems.push(
+      "The last band must run to the end of the season. Tick its end-of-season box.",
+    );
+  }
+  bands.forEach((band, i) => {
+    if (i === bands.length - 1) return;
+    if (band.toWeek === null) {
+      problems.push(`Band ${i + 1} ends the season, so nothing may follow it.`);
+      return;
+    }
+    if (bands[i + 1].fromWeek !== band.toWeek + 1) {
+      problems.push(
+        `Band ${i + 2} must start at week ${band.toWeek + 1}, where band ${i + 1} ends.`,
+      );
+    }
+  });
+  return problems;
+}
+
+function aliveFractionProblems(
+  rows: FaabSettings["chopped"]["priceByAliveFraction"],
+): string[] {
+  const problems: string[] = [];
+  if (rows.length === 0) return ["Add at least one alive-fraction band."];
+  rows.forEach((row, i) => {
+    if (i > 0 && rows[i - 1].minFraction <= row.minFraction) {
+      problems.push(
+        `Row ${i + 1} must start below row ${i}. These run from the fullest field down.`,
+      );
+    }
+  });
+  if (rows[rows.length - 1].minFraction !== 0) {
+    problems.push("The last row must start at 0, so every league is covered.");
+  }
+  return problems;
+}
+
+/** A share, 0 to 1, as a percent with one decimal. */
+function sharePct(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+/** Median overpay, with the win count it was measured over. */
+function overpayCell(value: number | null, wins: number): string {
+  if (value === null) return "No wins to measure";
+  return `${value.toFixed(2)}% over ${wins} wins`;
+}
+
+/** One row of the replay table. Scored on the SAME figures the script prints. */
+function ReplayRow({ bucket }: { bucket: ReplayBucket }) {
+  return (
+    <tr className="border-t border-line">
+      <th scope="row" className="py-2 pr-3 text-left font-medium text-ink">
+        {bucket.label}
+      </th>
+      <td className="py-2 pr-3 tabular-nums text-ink-muted">{bucket.sampleSize}</td>
+      <td className="py-2 pr-3 tabular-nums text-ink-muted">
+        {sharePct(bucket.valueWinShare)}
+      </td>
+      <td className="py-2 pr-3 tabular-nums text-ink-muted">
+        {sharePct(bucket.sureWinShare)}
+      </td>
+      <td className="py-2 pr-3 tabular-nums text-ink-muted">
+        {overpayCell(bucket.valueMedianOverpayPct, bucket.valueWins)}
+      </td>
+      <td className="py-2 tabular-nums text-ink-muted">
+        {overpayCell(bucket.sureMedianOverpayPct, bucket.sureWins)}
+      </td>
+    </tr>
+  );
+}
+
+function ReplayTable({ summary }: { summary: ReplaySummary }) {
+  return (
+    <div
+      role="region"
+      aria-label="Replay results by bucket"
+      tabIndex={0}
+      className="mt-3 overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    >
+      <table className="w-full min-w-[46rem] border-collapse text-left text-xs">
+        <caption className="px-3 pt-3 text-left text-xs text-ink-subtle">
+          Every bucket, with the number of auctions behind it. Win share counts
+          a bid over the real winner as a win and a bid level with it as half.
+          Overpay is the median of our bid minus the winning bid, as a share of
+          the league&apos;s full budget, over the auctions we strictly won.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="px-3 py-2 font-semibold text-ink">
+              Bucket
+            </th>
+            <th scope="col" className="py-2 pr-3 font-semibold text-ink">
+              Auctions
+            </th>
+            <th scope="col" className="py-2 pr-3 font-semibold text-ink">
+              Good value wins
+            </th>
+            <th scope="col" className="py-2 pr-3 font-semibold text-ink">
+              Make sure wins
+            </th>
+            <th scope="col" className="py-2 pr-3 font-semibold text-ink">
+              Good value overpay
+            </th>
+            <th scope="col" className="py-2 font-semibold text-ink">
+              Make sure overpay
+            </th>
+          </tr>
+        </thead>
+        <tbody className="[&_th]:px-3 [&_td:first-of-type]:pl-0">
+          <ReplayRow bucket={summary.overall} />
+          {summary.standard.length > 0 && (
+            <tr className="border-t border-line">
+              <th
+                scope="colgroup"
+                colSpan={6}
+                className="py-2 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-subtle"
+              >
+                Standard leagues, by time of season
+              </th>
+            </tr>
+          )}
+          {summary.standard.map((bucket) => (
+            <ReplayRow key={bucket.key} bucket={bucket} />
+          ))}
+          {summary.chopped.length > 0 && (
+            <tr className="border-t border-line">
+              <th
+                scope="colgroup"
+                colSpan={6}
+                className="py-2 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-subtle"
+              >
+                Chopped leagues, by how much of the field is left
+              </th>
+            </tr>
+          )}
+          {summary.chopped.map((bucket) => (
+            <ReplayRow key={bucket.key} bucket={bucket} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function paceProblems(rows: FaabSettings["chopped"]["paceTargets"]): string[] {
+  const problems: string[] = [];
+  if (rows.length === 0) return ["Add at least one pace target."];
+  rows.forEach((row, i) => {
+    if (i > 0 && rows[i - 1].throughWeek >= row.throughWeek) {
+      problems.push(`Row ${i + 1} must be a later week than row ${i}.`);
+    }
+  });
+  return problems;
 }
 
 /**
@@ -250,12 +464,28 @@ function parseIntList(text: string): number[] {
     .map((n) => Math.round(n));
 }
 
+/** What the market priors table holds right now, read server-side. */
+export type PriorsStatus = {
+  /** ISO timestamp of the newest cell, or null when nothing is built. */
+  builtAt: string | null;
+  cells: number;
+  leagues: number;
+};
+
 export function FaabSettingsManager({
   initialSettings,
+  initialPriorsStatus,
 }: {
   initialSettings: FaabSettings;
+  initialPriorsStatus: PriorsStatus;
 }) {
   const [settings, setSettings] = useState<FaabSettings>(initialSettings);
+  const [priorsStatus, setPriorsStatus] = useState<PriorsStatus>(initialPriorsStatus);
+  const [priorsMessage, setPriorsMessage] = useState("");
+  const [isRebuilding, startRebuild] = useTransition();
+  const [replay, setReplay] = useState<ReplaySummary | null>(null);
+  const [replayMessage, setReplayMessage] = useState("");
+  const [isReplaying, startReplay] = useTransition();
   const [teamOptionsText, setTeamOptionsText] = useState(
     initialSettings.userDefaults.teamOptions.join(", "),
   );
@@ -326,6 +556,181 @@ export function FaabSettingsManager({
       market: { ...s.market, [key]: { ...s.market[key], ...next } },
     }));
 
+  // ---- the groups added by the overhaul ----
+  const patchAuction = (next: Partial<FaabSettings["auction"]>) =>
+    setSettings((s) => ({ ...s, auction: { ...s.auction, ...next } }));
+  const patchGoal = (next: Partial<FaabSettings["goal"]>) =>
+    setSettings((s) => ({ ...s, goal: { ...s.goal, ...next } }));
+  const patchPriors = (next: Partial<FaabSettings["priors"]>) =>
+    setSettings((s) => ({ ...s, priors: { ...s.priors, ...next } }));
+  const patchStyleMultiplier = (style: BidStyle, multiplier: number) =>
+    setSettings((s) => ({
+      ...s,
+      priors: {
+        ...s.priors,
+        styleMultipliers: { ...s.priors.styleMultipliers, [style]: multiplier },
+      },
+    }));
+  const patchPlayoffValue = (next: Partial<FaabSettings["playoffValue"]>) =>
+    setSettings((s) => ({ ...s, playoffValue: { ...s.playoffValue, ...next } }));
+  const patchDynastyValue = (next: Partial<FaabSettings["dynastyValue"]>) =>
+    setSettings((s) => ({ ...s, dynastyValue: { ...s.dynastyValue, ...next } }));
+  const patchDynastyBlend = (
+    status: keyof FaabSettings["dynastyValue"]["blendByStatus"],
+    weight: number,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      dynastyValue: {
+        ...s.dynastyValue,
+        blendByStatus: { ...s.dynastyValue.blendByStatus, [status]: weight },
+      },
+    }));
+  const patchInjury = (next: Partial<FaabSettings["injury"]>) =>
+    setSettings((s) => ({ ...s, injury: { ...s.injury, ...next } }));
+  const patchBreakout = (next: Partial<FaabSettings["breakout"]>) =>
+    setSettings((s) => ({ ...s, breakout: { ...s.breakout, ...next } }));
+  const patchChopped = (next: Partial<FaabSettings["chopped"]>) =>
+    setSettings((s) => ({ ...s, chopped: { ...s.chopped, ...next } }));
+  const patchChoppedWeight = (
+    key: keyof FaabSettings["chopped"]["strengthWeights"],
+    weight: number,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        strengthWeights: { ...s.chopped.strengthWeights, [key]: weight },
+      },
+    }));
+  const patchChoppedDanger = (
+    key: keyof FaabSettings["chopped"]["manualDangerMultipliers"],
+    multiplier: number,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        manualDangerMultipliers: {
+          ...s.chopped.manualDangerMultipliers,
+          [key]: multiplier,
+        },
+      },
+    }));
+
+  // ---- calendar bands ----
+  const updateCalendarBand = (idx: number, next: Partial<CalendarBand>) =>
+    setSettings((s) => ({
+      ...s,
+      market: {
+        ...s.market,
+        calendar: {
+          ...s.market.calendar,
+          bands: s.market.calendar.bands.map((b, i) =>
+            i === idx ? { ...b, ...next } : b,
+          ),
+        },
+      },
+    }));
+  const addCalendarBand = () =>
+    setSettings((s) => {
+      const bands = [...s.market.calendar.bands];
+      const last = bands[bands.length - 1];
+      // The new band starts where the old last one ended, and the old last one
+      // gives up its open end, so the list stays contiguous by construction.
+      const startAt = last ? Math.min(18, (last.toWeek ?? last.fromWeek) + 1) : 1;
+      if (last && last.toWeek === null) {
+        bands[bands.length - 1] = { ...last, toWeek: Math.max(1, startAt - 1) };
+      }
+      bands.push({ fromWeek: startAt, toWeek: null, multiplier: 1 });
+      return {
+        ...s,
+        market: { ...s.market, calendar: { ...s.market.calendar, bands } },
+      };
+    });
+  const removeCalendarBand = (idx: number) =>
+    setSettings((s) => {
+      const bands = s.market.calendar.bands.filter((_, i) => i !== idx);
+      // Whatever is left has to end the season, or nothing prices the last weeks.
+      if (bands.length > 0) {
+        bands[bands.length - 1] = { ...bands[bands.length - 1], toWeek: null };
+      }
+      return {
+        ...s,
+        market: { ...s.market, calendar: { ...s.market.calendar, bands } },
+      };
+    });
+
+  // ---- chopped tables ----
+  const updateAliveRow = (
+    idx: number,
+    next: Partial<FaabSettings["chopped"]["priceByAliveFraction"][number]>,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        priceByAliveFraction: s.chopped.priceByAliveFraction.map((r, i) =>
+          i === idx ? { ...r, ...next } : r,
+        ),
+      },
+    }));
+  const addAliveRow = () =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        priceByAliveFraction: [
+          ...s.chopped.priceByAliveFraction,
+          { minFraction: 0, multiplier: 1 },
+        ],
+      },
+    }));
+  const removeAliveRow = (idx: number) =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        priceByAliveFraction: s.chopped.priceByAliveFraction.filter((_, i) => i !== idx),
+      },
+    }));
+  const updatePaceRow = (
+    idx: number,
+    next: Partial<FaabSettings["chopped"]["paceTargets"][number]>,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        paceTargets: s.chopped.paceTargets.map((r, i) =>
+          i === idx ? { ...r, ...next } : r,
+        ),
+      },
+    }));
+  const addPaceRow = () =>
+    setSettings((s) => {
+      const rows = s.chopped.paceTargets;
+      const last = rows[rows.length - 1];
+      return {
+        ...s,
+        chopped: {
+          ...s.chopped,
+          paceTargets: [
+            ...rows,
+            { throughWeek: Math.min(18, (last?.throughWeek ?? 0) + 1), holdPct: 0 },
+          ],
+        },
+      };
+    });
+  const removePaceRow = (idx: number) =>
+    setSettings((s) => ({
+      ...s,
+      chopped: {
+        ...s.chopped,
+        paceTargets: s.chopped.paceTargets.filter((_, i) => i !== idx),
+      },
+    }));
+
   const updateBand = (idx: number, next: Partial<BidBand>) =>
     setSettings((s) => ({
       ...s,
@@ -393,6 +798,67 @@ export function FaabSettingsManager({
       }
     });
   }
+
+  function rebuildPriors() {
+    setPriorsMessage("");
+    startRebuild(async () => {
+      const res = await rebuildFaabPriors();
+      if (res.ok) {
+        setPriorsStatus({
+          builtAt: res.builtAt,
+          cells: res.cells,
+          leagues: res.leagues,
+        });
+        setPriorsMessage(
+          `Rebuilt ${res.cells} cells from ${res.auctions} auctions across ${res.leagues} leagues. ${res.deleted} stale cells removed.`,
+        );
+      } else {
+        setPriorsMessage(`Rebuild failed: ${res.error}`);
+      }
+    });
+  }
+
+  function runReplay() {
+    setReplayMessage("");
+    startReplay(async () => {
+      const res = await runFaabReplay();
+      if (res.ok) {
+        setReplay(res.summary);
+        setReplayMessage(
+          `Graded ${res.summary.graded} of ${res.auctions} auctions across ${res.summary.leagues} leagues against ${res.cells} market cells in ${(res.ms / 1000).toFixed(1)} seconds. ${res.summary.skipped} skipped, ${res.summary.unpriced} had no cell to price from.`,
+        );
+      } else {
+        setReplay(null);
+        setReplayMessage(`Replay failed: ${res.error}`);
+      }
+    });
+  }
+
+  const calendarIssues = calendarProblems(settings.market.calendar.bands);
+  const goalIssues =
+    settings.goal.valueTarget < settings.goal.sureTarget
+      ? []
+      : ["The good-value target must be below the make-sure target."];
+  const clampIssues = [
+    ...(settings.auction.heatClamp[0] < settings.auction.heatClamp[1]
+      ? []
+      : ["The lower league-heat clamp must be below the upper one."]),
+    ...(settings.auction.tendencyClamp[0] < settings.auction.tendencyClamp[1]
+      ? []
+      : ["The lower manager-tendency clamp must be below the upper one."]),
+  ];
+  const choppedWeightSum =
+    settings.chopped.strengthWeights.surviveThisWeek +
+    settings.chopped.strengthWeights.winLeague +
+    settings.chopped.strengthWeights.weeksAlive;
+  const choppedWeightIssues =
+    choppedWeightSum >= 0.99 && choppedWeightSum <= 1.01
+      ? []
+      : [
+          `The three survival weights must sum to 1. They currently sum to ${choppedWeightSum.toFixed(2)}.`,
+        ];
+  const aliveIssues = aliveFractionProblems(settings.chopped.priceByAliveFraction);
+  const paceIssues = paceProblems(settings.chopped.paceTargets);
 
   return (
     <div className="mt-8 space-y-6">
@@ -471,6 +937,53 @@ export function FaabSettingsManager({
               step="1"
               min={1}
             />
+          </Field>
+          <Field
+            label="League's full FAAB allowance"
+            htmlFor={`${ids}-defleaguebudget`}
+            hint="What every team started the season with, not what the reader has left. Every price in the model is a share of this."
+          >
+            <NumberInput
+              id={`${ids}-defleaguebudget`}
+              value={settings.userDefaults.defaultLeagueBudget}
+              onChange={(n) => patchUserDefaults({ defaultLeagueBudget: Math.round(n) })}
+              step="1"
+              min={1}
+            />
+          </Field>
+          <Field
+            label="Last regular season week"
+            htmlFor={`${ids}-deflastweek`}
+            hint="What manual mode assumes when there is no league to read a playoff start from. 10 to 18."
+          >
+            <NumberInput
+              id={`${ids}-deflastweek`}
+              value={settings.userDefaults.defaultLastRegularWeek}
+              onChange={(n) =>
+                patchUserDefaults({ defaultLastRegularWeek: Math.round(n) })
+              }
+              step="1"
+              min={10}
+              max={18}
+            />
+          </Field>
+          <Field
+            label="Default room aggression"
+            htmlFor={`${ids}-defstyle`}
+            hint="How hard the reader's league is assumed to bid when no league is connected."
+          >
+            <select
+              id={`${ids}-defstyle`}
+              value={settings.userDefaults.defaultStyle}
+              onChange={(e) =>
+                patchUserDefaults({ defaultStyle: e.target.value as BidStyle })
+              }
+              className={inputCls}
+            >
+              <option value="tight">Tight, the room holds its money</option>
+              <option value="typical">Typical</option>
+              <option value="wild">Wild, the room overpays</option>
+            </select>
           </Field>
         </div>
         <div className="mt-4">
@@ -958,9 +1471,35 @@ export function FaabSettingsManager({
                   value={settings.leagueDump.loserOddsCeiling}
                   onChange={(n) => patchLeagueDump({ loserOddsCeiling: n })}
                   min={0}
+                  max={100}
+                />
+              </Field>
+              <Field
+                label="Rivals who would start him that triggers it"
+                htmlFor={`${ids}-lds-contested`}
+                hint="A crowded claim is itself a reason to spend. Our auction data turns brutal at four bidders. 1 to 32."
+              >
+                <NumberInput
+                  id={`${ids}-lds-contested`}
+                  value={settings.leagueDump.contestedRivals}
+                  onChange={(n) => patchLeagueDump({ contestedRivals: Math.round(n) })}
+                  step="1"
+                  min={1}
+                  max={32}
                 />
               </Field>
             </div>
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={settings.leagueDump.superflexQbStarterOut}
+                onChange={(e) =>
+                  patchLeagueDump({ superflexQbStarterOut: e.target.checked })
+                }
+                className="h-4 w-4"
+              />
+              In superflex, treat a starting quarterback going out as an emergency
+            </label>
             <div className="mt-3 space-y-3">
               {(["low", "medium", "high"] as NeedLevel[]).map((level) => (
                 <div key={level} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -1012,6 +1551,25 @@ export function FaabSettingsManager({
                 }))
               }
               min={1}
+            />
+          </Field>
+          <Field
+            label="Quarterbacks started per team in superflex"
+            htmlFor={`${ids}-mr-sfqb`}
+            hint="Not 2: the second starter is optional and in practice some teams run a flex instead. 1 to 2."
+          >
+            <NumberInput
+              id={`${ids}-mr-sfqb`}
+              value={settings.manualReplacement.superflexQbPerTeam}
+              onChange={(n) =>
+                setSettings((s) => ({
+                  ...s,
+                  manualReplacement: { ...s.manualReplacement, superflexQbPerTeam: n },
+                }))
+              }
+              step="0.05"
+              min={1}
+              max={2}
             />
           </Field>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -1141,8 +1699,20 @@ export function FaabSettingsManager({
                 onChange={(e) => patchMarket("history", { enabled: e.target.checked })}
                 className="h-4 w-4"
               />
-              Blend the recommendation toward the league&apos;s own winning bids
+              Blend the recommendation toward the league&apos;s own winning
+              bids (superseded)
             </label>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-subtle">
+              SUPERSEDED, and the blend no longer runs. It pulled every
+              recommendation toward the median of every priced claim the league
+              had ever made, including the dollar cleanup adds and, in dynasty
+              leagues, the offseason rookie claims, which is how a
+              season-changing running back came out at five dollars. What the
+              league pays now enters as league heat, measured against the same
+              situation in other leagues rather than against every claim ever
+              filed here. Only the lookback in seasons below is still read, and
+              it decides how far back the auction history goes.
+            </p>
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field
                 label="How far to pull toward it"
@@ -1185,66 +1755,10 @@ export function FaabSettingsManager({
             </div>
           </fieldset>
 
-          <fieldset className="rounded-card border border-line bg-base/40 p-3">
-            <legend className="px-1 text-xs font-semibold text-ink">
-              Time of season
-            </legend>
-            <p className="mt-1 text-xs text-ink-subtle">
-              FAAB left over when the season ends bought nothing, so the right bid climbs as
-              the weeks run out.
-            </p>
-            <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={settings.market.urgency.enabled}
-                onChange={(e) => patchMarket("urgency", { enabled: e.target.checked })}
-                className="h-4 w-4"
-              />
-              Enabled
-            </label>
-            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field
-                label="Early-season discount applies through week"
-                htmlFor={`${ids}-mkt-urg-ew`}
-              >
-                <NumberInput
-                  id={`${ids}-mkt-urg-ew`}
-                  value={settings.market.urgency.earlySeasonWeek}
-                  onChange={(n) => patchMarket("urgency", { earlySeasonWeek: Math.round(n) })}
-                  step="1"
-                  min={0}
-                />
-              </Field>
-              <Field label="Size of that discount" htmlFor={`${ids}-mkt-urg-ed`} hint="Percent.">
-                <NumberInput
-                  id={`${ids}-mkt-urg-ed`}
-                  value={settings.market.urgency.maxEarlyDiscountPct}
-                  onChange={(n) => patchMarket("urgency", { maxEarlyDiscountPct: n })}
-                  min={0}
-                />
-              </Field>
-              <Field
-                label="Late-season boost is full from week"
-                htmlFor={`${ids}-mkt-urg-lw`}
-              >
-                <NumberInput
-                  id={`${ids}-mkt-urg-lw`}
-                  value={settings.market.urgency.lateSeasonWeek}
-                  onChange={(n) => patchMarket("urgency", { lateSeasonWeek: Math.round(n) })}
-                  step="1"
-                  min={1}
-                />
-              </Field>
-              <Field label="Size of that boost" htmlFor={`${ids}-mkt-urg-lb`} hint="Percent.">
-                <NumberInput
-                  id={`${ids}-mkt-urg-lb`}
-                  value={settings.market.urgency.maxLateBoostPct}
-                  onChange={(n) => patchMarket("urgency", { maxLateBoostPct: n })}
-                  min={0}
-                />
-              </Field>
-            </div>
-          </fieldset>
+          <p className="rounded-card border border-line bg-base/40 p-3 text-xs leading-relaxed text-ink-subtle">
+            Time of season moved out of this list. It is now the calendar bands
+            under Time of season, further down the page.
+          </p>
         </div>
       </CollapsibleSection>
 
@@ -1298,6 +1812,1276 @@ export function FaabSettingsManager({
           </fieldset>
         </div>
       </CollapsibleSection>
+
+      {/* 7. The rival auction */}
+      <SectionCard
+        title="Auction model"
+        badge={{ tone: "strategy", label: "League mode" }}
+        blurb="Price is not worth. What it takes to win a player is set by how many other teams file a claim and how hard they bid, so the price side of the answer is a simulation of the other wallets in the room rather than a multiplier on the reader's own valuation."
+      >
+        <div className="space-y-5">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={settings.auction.enabled}
+              onChange={(e) => patchAuction({ enabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Simulate the rival auction
+          </label>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Simulation runs"
+              htmlFor={`${ids}-auc-runs`}
+              hint="Seeded, so the same league gets the same answer twice. 500 to 20000."
+            >
+              <NumberInput
+                id={`${ids}-auc-runs`}
+                value={settings.auction.runs}
+                onChange={(n) => patchAuction({ runs: Math.round(n) })}
+                step="100"
+                min={500}
+                max={20000}
+              />
+            </Field>
+            <Field
+              label="Chance an interested rival files a claim"
+              htmlFor={`${ids}-auc-part`}
+              hint="0 to 1. Wanting a player and actually bidding on him are not the same thing."
+            >
+              <NumberInput
+                id={`${ids}-auc-part`}
+                value={settings.auction.participation}
+                onChange={(n) => patchAuction({ participation: n })}
+                step="0.01"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Chance a rival who does not need him bids anyway"
+              htmlFor={`${ids}-auc-stray`}
+              hint="0 to 1. Stray bids are why a claim nobody wanted still costs a dollar."
+            >
+              <NumberInput
+                id={`${ids}-auc-stray`}
+                value={settings.auction.strayBidRate}
+                onChange={(n) => patchAuction({ strayBidRate: n })}
+                step="0.01"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Bid spread"
+              htmlFor={`${ids}-auc-sigma`}
+              hint="How widely a rival's bid scatters around its centre. Higher means a noisier room. 0.1 to 1.5."
+            >
+              <NumberInput
+                id={`${ids}-auc-sigma`}
+                value={settings.auction.bidSigma}
+                onChange={(n) => patchAuction({ bidSigma: n })}
+                step="0.05"
+                min={0.1}
+                max={1.5}
+              />
+            </Field>
+            <Field
+              label="Samples before league heat is trusted"
+              htmlFor={`${ids}-auc-heatshrink`}
+              hint="A league's own price level gets half weight at this many past auctions. Higher means we lean on the wider market for longer."
+            >
+              <NumberInput
+                id={`${ids}-auc-heatshrink`}
+                value={settings.auction.heatShrink}
+                onChange={(n) => patchAuction({ heatShrink: n })}
+                step="1"
+                min={0}
+                max={500}
+              />
+            </Field>
+            <Field
+              label="Samples before a manager's habit is trusted"
+              htmlFor={`${ids}-auc-tendshrink`}
+              hint="The same, for one manager rather than a whole league. One person bids far less often, so this is lower."
+            >
+              <NumberInput
+                id={`${ids}-auc-tendshrink`}
+                value={settings.auction.tendencyShrink}
+                onChange={(n) => patchAuction({ tendencyShrink: n })}
+                step="1"
+                min={0}
+                max={500}
+              />
+            </Field>
+            <Field
+              label="Earliest week counted"
+              htmlFor={`${ids}-auc-minweek`}
+              hint="Auctions before this week are ignored. Week 1 is a different market: budgets are full and half the room bids on everything. 1 to 18."
+            >
+              <NumberInput
+                id={`${ids}-auc-minweek`}
+                value={settings.auction.minContestedWeek}
+                onChange={(n) => patchAuction({ minContestedWeek: Math.round(n) })}
+                step="1"
+                min={1}
+                max={18}
+              />
+            </Field>
+          </div>
+
+          <fieldset className="rounded-card border border-line bg-base/40 p-3">
+            <legend className="px-1 text-xs font-semibold text-ink">
+              How far heat and habit may move a price
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              Both are multipliers on a rival's bid, and both are clamped so a
+              handful of loud auctions cannot double or halve a whole room.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Field label="League heat, lowest" htmlFor={`${ids}-auc-heat-min`}>
+                <NumberInput
+                  id={`${ids}-auc-heat-min`}
+                  value={settings.auction.heatClamp[0]}
+                  onChange={(n) =>
+                    patchAuction({ heatClamp: [n, settings.auction.heatClamp[1]] })
+                  }
+                  step="0.05"
+                  min={0}
+                  max={10}
+                />
+              </Field>
+              <Field label="League heat, highest" htmlFor={`${ids}-auc-heat-max`}>
+                <NumberInput
+                  id={`${ids}-auc-heat-max`}
+                  value={settings.auction.heatClamp[1]}
+                  onChange={(n) =>
+                    patchAuction({ heatClamp: [settings.auction.heatClamp[0], n] })
+                  }
+                  step="0.05"
+                  min={0}
+                  max={10}
+                />
+              </Field>
+              <Field label="Manager habit, lowest" htmlFor={`${ids}-auc-tend-min`}>
+                <NumberInput
+                  id={`${ids}-auc-tend-min`}
+                  value={settings.auction.tendencyClamp[0]}
+                  onChange={(n) =>
+                    patchAuction({
+                      tendencyClamp: [n, settings.auction.tendencyClamp[1]],
+                    })
+                  }
+                  step="0.05"
+                  min={0}
+                  max={10}
+                />
+              </Field>
+              <Field label="Manager habit, highest" htmlFor={`${ids}-auc-tend-max`}>
+                <NumberInput
+                  id={`${ids}-auc-tend-max`}
+                  value={settings.auction.tendencyClamp[1]}
+                  onChange={(n) =>
+                    patchAuction({
+                      tendencyClamp: [settings.auction.tendencyClamp[0], n],
+                    })
+                  }
+                  step="0.05"
+                  min={0}
+                  max={10}
+                />
+              </Field>
+            </div>
+            <ValidationNotes problems={clampIssues} />
+          </fieldset>
+
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={settings.auction.oddNudge}
+              onChange={(e) => patchAuction({ oddNudge: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Nudge a round recommended bid up by one dollar
+          </label>
+          <p className="text-[11px] leading-relaxed text-ink-subtle">
+            Ties are common on round numbers, and in most leagues a tie is
+            settled by waiver order rather than by money.
+          </p>
+        </div>
+      </SectionCard>
+
+      {/* 8. Which question the reader is asking */}
+      <SectionCard
+        title="Goals"
+        badge={{ tone: "strategy", label: "League mode" }}
+        blurb="Two different questions about the same player: what is he worth, and what does it take to be sure of him. Each goal is a win chance the recommended bid aims at."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Goal the page opens on"
+            htmlFor={`${ids}-goal-default`}
+            hint="A chopped league in danger can still flip this for that reader."
+          >
+            <select
+              id={`${ids}-goal-default`}
+              value={settings.goal.defaultGoal}
+              onChange={(e) => patchGoal({ defaultGoal: e.target.value as GoalKey })}
+              className={inputCls}
+            >
+              <option value="value">Good value</option>
+              <option value="sure">Make sure I win him</option>
+            </select>
+          </Field>
+          <Field
+            label="Most the sure bid may exceed his worth"
+            htmlFor={`${ids}-goal-over`}
+            hint="Percent. The page labels the bid when it does. 0 to 200."
+          >
+            <NumberInput
+              id={`${ids}-goal-over`}
+              value={settings.goal.sureMaxOverWorthPct}
+              onChange={(n) => patchGoal({ sureMaxOverWorthPct: n })}
+              step="1"
+              min={0}
+              max={200}
+            />
+          </Field>
+          <Field
+            label="Win chance the good-value bid aims at"
+            htmlFor={`${ids}-goal-value`}
+            hint="0 to 1. Must be below the make-sure target."
+          >
+            <NumberInput
+              id={`${ids}-goal-value`}
+              value={settings.goal.valueTarget}
+              onChange={(n) => patchGoal({ valueTarget: n })}
+              step="0.01"
+              min={0}
+              max={1}
+            />
+          </Field>
+          <Field
+            label="Win chance the make-sure bid aims at"
+            htmlFor={`${ids}-goal-sure`}
+            hint="0 to 1. Must be above the good-value target."
+          >
+            <NumberInput
+              id={`${ids}-goal-sure`}
+              value={settings.goal.sureTarget}
+              onChange={(n) => patchGoal({ sureTarget: n })}
+              step="0.01"
+              min={0}
+              max={1}
+            />
+          </Field>
+        </div>
+        <ValidationNotes problems={goalIssues} />
+      </SectionCard>
+
+      {/* 9. Time of season, as measured bands */}
+      <SectionCard
+        title="Time of season"
+        badge={{ tone: "strategy", label: "Strategy" }}
+        blurb="What each stretch of the season does to prices, measured rather than assumed. Our own priced winning bids say weeks 2 to 6 are the most expensive run of the regular season, the middle is the cheapest, and week 14 on is dearer than anything, because leftover budget buys nothing in January."
+      >
+        <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={settings.market.calendar.enabled}
+            onChange={(e) =>
+              setSettings((s) => ({
+                ...s,
+                market: {
+                  ...s.market,
+                  calendar: { ...s.market.calendar, enabled: e.target.checked },
+                },
+              }))
+            }
+            className="h-4 w-4"
+          />
+          Apply the calendar multiplier
+        </label>
+
+        <p className="mt-3 rounded-card border border-line bg-base/40 p-3 text-xs leading-relaxed text-ink-muted">
+          The bands must cover every week with no gap and no overlap: they start
+          at week 1, each one picks up where the last ended, and the final band
+          runs to the end of the season. A multiplier of 1 leaves prices alone.
+        </p>
+
+        <div className="mt-3 space-y-3">
+          {settings.market.calendar.bands.map((band, i) => {
+            const runsToEnd = band.toWeek === null;
+            return (
+              <div
+                key={`calendar-${i}`}
+                className="rounded-card border border-line bg-base/40 p-3"
+              >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <Field label="From week" htmlFor={`${ids}-cal-${i}-from`}>
+                    <NumberInput
+                      id={`${ids}-cal-${i}-from`}
+                      value={band.fromWeek}
+                      onChange={(n) =>
+                        updateCalendarBand(i, { fromWeek: Math.round(n) })
+                      }
+                      step="1"
+                      min={1}
+                      max={18}
+                    />
+                  </Field>
+                  <Field
+                    label="Through week"
+                    htmlFor={`${ids}-cal-${i}-to`}
+                    hint={runsToEnd ? "Runs to the end of the season." : undefined}
+                  >
+                    <NumberInput
+                      id={`${ids}-cal-${i}-to`}
+                      value={band.toWeek ?? band.fromWeek}
+                      onChange={(n) => updateCalendarBand(i, { toWeek: Math.round(n) })}
+                      step="1"
+                      min={1}
+                      max={18}
+                    />
+                  </Field>
+                  <Field
+                    label="Price multiplier"
+                    htmlFor={`${ids}-cal-${i}-mult`}
+                    hint="0.1 to 5."
+                  >
+                    <NumberInput
+                      id={`${ids}-cal-${i}-mult`}
+                      value={band.multiplier}
+                      onChange={(n) => updateCalendarBand(i, { multiplier: n })}
+                      step="0.05"
+                      min={0.1}
+                      max={5}
+                    />
+                  </Field>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <label className="flex min-h-11 items-center gap-2 text-[11px] text-ink-subtle">
+                    <input
+                      type="checkbox"
+                      checked={runsToEnd}
+                      onChange={(e) =>
+                        updateCalendarBand(i, {
+                          toWeek: e.target.checked ? null : band.fromWeek,
+                        })
+                      }
+                      className="h-4 w-4"
+                    />
+                    Runs to the end of the season
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeCalendarBand(i)}
+                    aria-label={`Remove the band starting at week ${band.fromWeek}`}
+                    className="inline-flex h-11 items-center gap-1.5 rounded-card border border-line px-3 text-sm text-ink-muted hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
+                  >
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={addCalendarBand}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
+          >
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            Add band
+          </button>
+        </div>
+        <ValidationNotes problems={calendarIssues} />
+
+        <details className="mt-4 rounded-card border border-line bg-base/40">
+          <summary className="flex min-h-11 cursor-pointer items-center gap-2 p-3 text-xs font-semibold text-ink-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
+            Superseded: the old urgency settings
+          </summary>
+          <div className="border-t border-line p-3">
+            <p className="text-xs leading-relaxed text-ink-subtle">
+              These four fields no longer affect the bid. The calendar bands
+              above replaced them. They are still stored and still editable only
+              so an older saved row keeps loading; nothing reads them, and they
+              will be deleted once every stored row has been rewritten.
+            </p>
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={settings.market.urgency.enabled}
+                onChange={(e) => patchMarket("urgency", { enabled: e.target.checked })}
+                className="h-4 w-4"
+              />
+              Enabled (has no effect)
+            </label>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="Early-season discount applies through week"
+                htmlFor={`${ids}-mkt-urg-ew`}
+                hint="No longer read. 0 to 18."
+              >
+                <NumberInput
+                  id={`${ids}-mkt-urg-ew`}
+                  value={settings.market.urgency.earlySeasonWeek}
+                  onChange={(n) =>
+                    patchMarket("urgency", { earlySeasonWeek: Math.round(n) })
+                  }
+                  step="1"
+                  min={0}
+                  max={18}
+                />
+              </Field>
+              <Field
+                label="Size of that discount"
+                htmlFor={`${ids}-mkt-urg-ed`}
+                hint="Percent. No longer read. 0 to 100."
+              >
+                <NumberInput
+                  id={`${ids}-mkt-urg-ed`}
+                  value={settings.market.urgency.maxEarlyDiscountPct}
+                  onChange={(n) => patchMarket("urgency", { maxEarlyDiscountPct: n })}
+                  min={0}
+                  max={100}
+                />
+              </Field>
+              <Field
+                label="Late-season boost is full from week"
+                htmlFor={`${ids}-mkt-urg-lw`}
+                hint="No longer read. Must be after the early-season week. 1 to 18."
+              >
+                <NumberInput
+                  id={`${ids}-mkt-urg-lw`}
+                  value={settings.market.urgency.lateSeasonWeek}
+                  onChange={(n) =>
+                    patchMarket("urgency", { lateSeasonWeek: Math.round(n) })
+                  }
+                  step="1"
+                  min={1}
+                  max={18}
+                />
+              </Field>
+              <Field
+                label="Size of that boost"
+                htmlFor={`${ids}-mkt-urg-lb`}
+                hint="Percent. No longer read. 0 to 300."
+              >
+                <NumberInput
+                  id={`${ids}-mkt-urg-lb`}
+                  value={settings.market.urgency.maxLateBoostPct}
+                  onChange={(n) => patchMarket("urgency", { maxLateBoostPct: n })}
+                  min={0}
+                  max={300}
+                />
+              </Field>
+            </div>
+            <ValidationNotes
+              problems={
+                settings.market.urgency.earlySeasonWeek <
+                settings.market.urgency.lateSeasonWeek
+                  ? []
+                  : [
+                      "The early-season week must still be before the late-season week, or the save is rejected.",
+                    ]
+              }
+            />
+          </div>
+        </details>
+      </SectionCard>
+
+      {/* 10. The anonymous clearing-price cells */}
+      <SectionCard
+        title="Market data"
+        badge={{ tone: "strategy", label: "Strategy" }}
+        blurb="What a waiver claim actually costs, measured across every league we hold and stored as anonymous quantiles by situation. The nightly derived-data job rebuilds these when they go stale; this is the same work on demand."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Minimum samples per cell"
+            htmlFor={`${ids}-pri-min`}
+            hint="A cell thinner than this falls back to a coarser one instead of being trusted."
+          >
+            <NumberInput
+              id={`${ids}-pri-min`}
+              value={settings.priors.minCellSamples}
+              onChange={(n) => patchPriors({ minCellSamples: Math.round(n) })}
+              step="1"
+              min={1}
+              max={10000}
+            />
+          </Field>
+          <Field
+            label="Rebuild after this many days"
+            htmlFor={`${ids}-pri-stale`}
+            hint="The nightly job rebuilds only when the newest cell is older than this. 1 to 60."
+          >
+            <NumberInput
+              id={`${ids}-pri-stale`}
+              value={settings.priors.staleAfterDays}
+              onChange={(n) => patchPriors({ staleAfterDays: Math.round(n) })}
+              step="1"
+              min={1}
+              max={60}
+            />
+          </Field>
+        </div>
+
+        <fieldset className="mt-5 rounded-card border border-line bg-base/40 p-3">
+          <legend className="px-1 text-xs font-semibold text-ink">
+            How hard the room bids
+          </legend>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+            Applied to the measured price when the reader has no league connected
+            and has told us what kind of room they are in. 0.1 to 3.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field
+              label="Tight room"
+              htmlFor={`${ids}-pri-tight`}
+              hint="Below 1: this league holds its money."
+            >
+              <NumberInput
+                id={`${ids}-pri-tight`}
+                value={settings.priors.styleMultipliers.tight}
+                onChange={(n) => patchStyleMultiplier("tight", n)}
+                step="0.05"
+                min={0.1}
+                max={3}
+              />
+            </Field>
+            <Field
+              label="Typical room"
+              htmlFor={`${ids}-pri-typical`}
+              hint="Usually 1, the measured market as it is."
+            >
+              <NumberInput
+                id={`${ids}-pri-typical`}
+                value={settings.priors.styleMultipliers.typical}
+                onChange={(n) => patchStyleMultiplier("typical", n)}
+                step="0.05"
+                min={0.1}
+                max={3}
+              />
+            </Field>
+            <Field
+              label="Wild room"
+              htmlFor={`${ids}-pri-wild`}
+              hint="Above 1: this league overpays."
+            >
+              <NumberInput
+                id={`${ids}-pri-wild`}
+                value={settings.priors.styleMultipliers.wild}
+                onChange={(n) => patchStyleMultiplier("wild", n)}
+                step="0.05"
+                min={0.1}
+                max={3}
+              />
+            </Field>
+          </div>
+        </fieldset>
+
+        <div className="mt-5 rounded-card border border-line bg-base/60 p-3">
+          <p className="text-sm text-ink-muted">
+            {priorsStatus.builtAt
+              ? `Last built ${formatEastern(priorsStatus.builtAt)}, ${priorsStatus.cells} cells from ${priorsStatus.leagues} leagues.`
+              : "Not built yet. No cells are stored, so the calculator is pricing without measured market data."}
+          </p>
+          <button
+            type="button"
+            onClick={rebuildPriors}
+            disabled={isRebuilding}
+            className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink hover:border-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <RefreshCw aria-hidden="true" className="h-4 w-4" />
+            {isRebuilding ? "Rebuilding..." : "Rebuild now"}
+          </button>
+          <p aria-live="polite" className="mt-2 text-sm text-ink-muted">
+            {isRebuilding
+              ? "Rebuilding the market cells. This reads every auction we hold, so it can take a minute."
+              : priorsMessage}
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-subtle">
+            A rebuild uses the minimum sample size already saved, so save this
+            page first if you have just changed it.
+          </p>
+        </div>
+      </SectionCard>
+
+      {/* 11. Playoffs and title */}
+      <CollapsibleSection
+        title="Playoffs and title"
+        badge={{ tone: "advanced", label: "Advanced" }}
+        blurb="A week in the bracket is not the same purchase as a week in November. These decide how much of a player's worth comes from the games that decide the season."
+      >
+        <div className="space-y-4">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={settings.playoffValue.enabled}
+              onChange={(e) => patchPlayoffValue({ enabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Weigh playoff weeks and title odds
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field
+              label="What a playoff week is worth"
+              htmlFor={`${ids}-pv-week`}
+              hint="Counted this much, times the chance of actually playing it. 1 means a playoff week counts the same as a regular one. 0 to 3."
+            >
+              <NumberInput
+                id={`${ids}-pv-week`}
+                value={settings.playoffValue.playoffWeekWeight}
+                onChange={(n) => patchPlayoffValue({ playoffWeekWeight: n })}
+                step="0.05"
+                min={0}
+                max={3}
+              />
+            </Field>
+            <Field
+              label="Share of strength from title odds"
+              htmlFor={`${ids}-pv-title`}
+              hint="0 to 1. The rest comes from points and playoff odds."
+            >
+              <NumberInput
+                id={`${ids}-pv-title`}
+                value={settings.playoffValue.titleOddsWeight}
+                onChange={(n) => patchPlayoffValue({ titleOddsWeight: n })}
+                step="0.01"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Title odds gain that is full strength"
+              htmlFor={`${ids}-pv-big`}
+              hint="In percentage points. Titles move far less than playoff berths do, so this is a smaller number. 0.1 to 100."
+            >
+              <NumberInput
+                id={`${ids}-pv-big`}
+                value={settings.playoffValue.bigTitleOddsPoints}
+                onChange={(n) => patchPlayoffValue({ bigTitleOddsPoints: n })}
+                step="0.1"
+                min={0.1}
+                max={100}
+              />
+            </Field>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* 12. Dynasty */}
+      <CollapsibleSection
+        title="Dynasty value"
+        badge={{ tone: "advanced", label: "Advanced" }}
+        blurb="A contender is buying weeks and a rebuilder is buying an asset. The blend is the one number that separates those two answers about the same player."
+      >
+        <div className="space-y-4">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={settings.dynastyValue.enabled}
+              onChange={(e) => patchDynastyValue({ enabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Blend market value into the bid in dynasty and keeper leagues
+          </label>
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              Weight on market value, by team status
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              0 prices purely on lineup points this season, 1 purely on what the
+              market says he is worth.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Field label="Contender" htmlFor={`${ids}-dv-comp`}>
+                <NumberInput
+                  id={`${ids}-dv-comp`}
+                  value={settings.dynastyValue.blendByStatus.competitor}
+                  onChange={(n) => patchDynastyBlend("competitor", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field label="Loaded" htmlFor={`${ids}-dv-loaded`}>
+                <NumberInput
+                  id={`${ids}-dv-loaded`}
+                  value={settings.dynastyValue.blendByStatus.loaded}
+                  onChange={(n) => patchDynastyBlend("loaded", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field label="Middle" htmlFor={`${ids}-dv-middle`}>
+                <NumberInput
+                  id={`${ids}-dv-middle`}
+                  value={settings.dynastyValue.blendByStatus.middle}
+                  onChange={(n) => patchDynastyBlend("middle", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field label="Rebuilder" htmlFor={`${ids}-dv-rebuild`}>
+                <NumberInput
+                  id={`${ids}-dv-rebuild`}
+                  value={settings.dynastyValue.blendByStatus.rebuilder}
+                  onChange={(n) => patchDynastyBlend("rebuilder", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+            </div>
+          </fieldset>
+          <Field
+            label="Where elite dynasty value sits"
+            htmlFor={`${ids}-dv-elite`}
+            hint="Elite value is read at the rank teams x starters x this. 0.25 means the top quarter of the weekly starter pool. 0.01 to 2."
+          >
+            <NumberInput
+              id={`${ids}-dv-elite`}
+              value={settings.dynastyValue.eliteRankFactor}
+              onChange={(n) => patchDynastyValue({ eliteRankFactor: n })}
+              step="0.01"
+              min={0.01}
+              max={2}
+            />
+          </Field>
+        </div>
+      </CollapsibleSection>
+
+      {/* 13. Injuries and roles */}
+      <CollapsibleSection
+        title="Injuries and roles"
+        badge={{ tone: "advanced", label: "Advanced" }}
+        blurb="Why a player is suddenly available usually matters more than what he did last Sunday. These control how an injury ahead of him, and a role that has just grown, move the bid."
+      >
+        <div className="space-y-5">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={settings.injury.carryOutFromSource}
+              onChange={(e) => patchInjury({ carryOutFromSource: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Carry an OUT week forward into weeks the source published nothing
+            for (not active yet)
+          </label>
+          <p className="text-[11px] leading-relaxed text-ink-subtle">
+            NOT ACTIVE YET. This switch is saved but nothing reads it. Carrying
+            an injury forward means changing the shared projection path that
+            Power Pulse, Lineups, Schedules and the Manager Ledger all run on,
+            which is a decision of its own rather than part of the FAAB work.
+            The intent, when it lands: a player ruled out for the season should
+            not read as available again the moment the feed stops mentioning
+            him.
+          </p>
+
+          <SignalRow
+            id={`${ids}-inj-teammate`}
+            title="The man ahead of him is hurt"
+            hint="A back-up whose starter is out is a different player this week from the one he was last week."
+            enabled={settings.injury.teammateSignal.enabled}
+            onToggle={(enabled) =>
+              patchInjury({
+                teammateSignal: { ...settings.injury.teammateSignal, enabled },
+              })
+            }
+            maxAdjustPct={settings.injury.teammateSignal.maxAdjustPct}
+            onMax={(maxAdjustPct) =>
+              patchInjury({
+                teammateSignal: { ...settings.injury.teammateSignal, maxAdjustPct },
+              })
+            }
+          />
+
+          <fieldset className="rounded-card border border-line bg-base/40 p-3">
+            <legend className="px-1 text-xs font-semibold text-ink">
+              A role that has just grown
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              A projection built on last month's usage understates a player who
+              took over the job two weeks ago.
+            </p>
+            <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={settings.breakout.enabled}
+                onChange={(e) => patchBreakout({ enabled: e.target.checked })}
+                className="h-4 w-4"
+              />
+              Blend recent usage into the projection
+            </label>
+            <Field
+              label="How far to pull toward recent usage"
+              htmlFor={`${ids}-brk-weight`}
+              hint="0 keeps the published projection, 1 replaces it with what recent usage implies. 0 to 1."
+            >
+              <NumberInput
+                id={`${ids}-brk-weight`}
+                value={settings.breakout.blendWeight}
+                onChange={(n) => patchBreakout({ blendWeight: n })}
+                step="0.05"
+                min={0}
+                max={1}
+              />
+            </Field>
+          </fieldset>
+        </div>
+      </CollapsibleSection>
+
+      {/* 14. Chopped, guillotine, death and knockout */}
+      <CollapsibleSection
+        title="Chopped leagues"
+        badge={{ tone: "advanced", label: "Advanced" }}
+        blurb="A different game with the same currency. There are no playoffs and no opponent: the whole league is the opponent, the lowest score each week is eliminated, and that whole roster returns to waivers. Worth is measured in survival, and price falls as the field shrinks."
+      >
+        <div className="space-y-6">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={settings.chopped.enabled}
+              onChange={(e) => patchChopped({ enabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Price chopped and guillotine leagues with their own model
+          </label>
+
+          <Field
+            label="Survival simulation runs"
+            htmlFor={`${ids}-ch-runs`}
+            hint="Seeded, like every other simulation here. 500 to 20000."
+          >
+            <NumberInput
+              id={`${ids}-ch-runs`}
+              value={settings.chopped.runs}
+              onChange={(n) => patchChopped({ runs: Math.round(n) })}
+              step="100"
+              min={500}
+              max={20000}
+            />
+          </Field>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              What survival is made of
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              The three weights must sum to 1. Surviving this week is the
+              immediate question, winning the league is the whole one, and
+              expected weeks alive is the ground between them.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field
+                label="Surviving this week"
+                htmlFor={`${ids}-ch-w-survive`}
+                hint="0 to 1."
+              >
+                <NumberInput
+                  id={`${ids}-ch-w-survive`}
+                  value={settings.chopped.strengthWeights.surviveThisWeek}
+                  onChange={(n) => patchChoppedWeight("surviveThisWeek", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field
+                label="Winning the league"
+                htmlFor={`${ids}-ch-w-win`}
+                hint="0 to 1."
+              >
+                <NumberInput
+                  id={`${ids}-ch-w-win`}
+                  value={settings.chopped.strengthWeights.winLeague}
+                  onChange={(n) => patchChoppedWeight("winLeague", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field
+                label="Expected weeks alive"
+                htmlFor={`${ids}-ch-w-weeks`}
+                hint="0 to 1."
+              >
+                <NumberInput
+                  id={`${ids}-ch-w-weeks`}
+                  value={settings.chopped.strengthWeights.weeksAlive}
+                  onChange={(n) => patchChoppedWeight("weeksAlive", n)}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+            </div>
+            <ValidationNotes problems={choppedWeightIssues} />
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              What counts as a full-strength add
+            </legend>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="Survival gain that is full strength"
+                htmlFor={`${ids}-ch-bigsurvive`}
+                hint="In percentage points on the chance of surviving this week. 0.1 to 100."
+              >
+                <NumberInput
+                  id={`${ids}-ch-bigsurvive`}
+                  value={settings.chopped.bigSurvivePoints}
+                  onChange={(n) => patchChopped({ bigSurvivePoints: n })}
+                  step="0.5"
+                  min={0.1}
+                  max={100}
+                />
+              </Field>
+              <Field
+                label="Win-the-league gain that is full strength"
+                htmlFor={`${ids}-ch-bigwin`}
+                hint="In percentage points. 0.1 to 100."
+              >
+                <NumberInput
+                  id={`${ids}-ch-bigwin`}
+                  value={settings.chopped.bigWinPoints}
+                  onChange={(n) => patchChopped({ bigWinPoints: n })}
+                  step="0.5"
+                  min={0.1}
+                  max={100}
+                />
+              </Field>
+              <Field
+                label="Weeks-alive gain that is full strength"
+                htmlFor={`${ids}-ch-bigweeks`}
+                hint="In weeks. 0.1 to 18."
+              >
+                <NumberInput
+                  id={`${ids}-ch-bigweeks`}
+                  value={settings.chopped.bigWeeksAlive}
+                  onChange={(n) => patchChopped({ bigWeeksAlive: n })}
+                  step="0.1"
+                  min={0.1}
+                  max={18}
+                />
+              </Field>
+              <Field
+                label="Most of budget an upgrade can justify"
+                htmlFor={`${ids}-ch-maxpct`}
+                hint="Percent. Lower than the standard league ceiling, because money in a shrinking field is worth less every week. 0 to 100."
+              >
+                <NumberInput
+                  id={`${ids}-ch-maxpct`}
+                  value={settings.chopped.maxPctFromUpgrade}
+                  onChange={(n) => patchChopped({ maxPctFromUpgrade: n })}
+                  step="1"
+                  min={0}
+                  max={100}
+                />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              Price as the field shrinks
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              Rows run from the fullest field down, and the last row must start
+              at 0 so every league is covered. The multiplier is applied to the
+              measured price.
+            </p>
+            <div className="mt-3 space-y-3">
+              {settings.chopped.priceByAliveFraction.map((row, i) => (
+                <div
+                  key={`alive-${i}`}
+                  className="grid grid-cols-2 gap-3 rounded-card border border-line bg-base/40 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+                >
+                  <Field
+                    label="Share of teams still alive, from"
+                    htmlFor={`${ids}-ch-alive-${i}-frac`}
+                    hint="0 to 1."
+                  >
+                    <NumberInput
+                      id={`${ids}-ch-alive-${i}-frac`}
+                      value={row.minFraction}
+                      onChange={(n) => updateAliveRow(i, { minFraction: n })}
+                      step="0.05"
+                      min={0}
+                      max={1}
+                    />
+                  </Field>
+                  <Field
+                    label="Price multiplier"
+                    htmlFor={`${ids}-ch-alive-${i}-mult`}
+                    hint="0 to 3."
+                  >
+                    <NumberInput
+                      id={`${ids}-ch-alive-${i}-mult`}
+                      value={row.multiplier}
+                      onChange={(n) => updateAliveRow(i, { multiplier: n })}
+                      step="0.05"
+                      min={0}
+                      max={3}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={() => removeAliveRow(i)}
+                    aria-label={`Remove the alive-fraction band starting at ${row.minFraction}`}
+                    className="col-span-2 inline-flex h-11 items-center justify-center gap-1.5 rounded-card border border-line px-3 text-sm text-ink-muted hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan sm:col-span-1"
+                  >
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addAliveRow}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
+              >
+                <Plus aria-hidden="true" className="h-4 w-4" />
+                Add alive-fraction band
+              </button>
+            </div>
+            <ValidationNotes problems={aliveIssues} />
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              How much budget to still be holding
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              Rows run in week order. The page tells a reader whether they are
+              ahead of, on, or behind this pace.
+            </p>
+            <div className="mt-3 space-y-3">
+              {settings.chopped.paceTargets.map((row, i) => (
+                <div
+                  key={`pace-${i}`}
+                  className="grid grid-cols-2 gap-3 rounded-card border border-line bg-base/40 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+                >
+                  <Field
+                    label="Through week"
+                    htmlFor={`${ids}-ch-pace-${i}-week`}
+                    hint="1 to 18."
+                  >
+                    <NumberInput
+                      id={`${ids}-ch-pace-${i}-week`}
+                      value={row.throughWeek}
+                      onChange={(n) => updatePaceRow(i, { throughWeek: Math.round(n) })}
+                      step="1"
+                      min={1}
+                      max={18}
+                    />
+                  </Field>
+                  <Field
+                    label="Budget still held"
+                    htmlFor={`${ids}-ch-pace-${i}-hold`}
+                    hint="Percent. 0 to 100."
+                  >
+                    <NumberInput
+                      id={`${ids}-ch-pace-${i}-hold`}
+                      value={row.holdPct}
+                      onChange={(n) => updatePaceRow(i, { holdPct: n })}
+                      step="1"
+                      min={0}
+                      max={100}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={() => removePaceRow(i)}
+                    aria-label={`Remove the pace target through week ${row.throughWeek}`}
+                    className="col-span-2 inline-flex h-11 items-center justify-center gap-1.5 rounded-card border border-line px-3 text-sm text-ink-muted hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan sm:col-span-1"
+                  >
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addPaceRow}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
+              >
+                <Plus aria-hidden="true" className="h-4 w-4" />
+                Add pace target
+              </button>
+            </div>
+            <ValidationNotes problems={paceIssues} />
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              Danger, rivals and substitutes
+            </legend>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="Danger that flips the goal to make-sure"
+                htmlFor={`${ids}-ch-danger`}
+                hint="Chance of being chopped this week, 0 to 1. Above this the page opens on the make-sure bid."
+              >
+                <NumberInput
+                  id={`${ids}-ch-danger`}
+                  value={settings.chopped.dangerThreshold}
+                  onChange={(n) => patchChopped({ dangerThreshold: n })}
+                  step="0.01"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field
+                label="How much a rival's own danger raises their bid"
+                htmlFor={`${ids}-ch-dangerw`}
+                hint="0 leaves rivals unmoved by their own position, higher makes a desperate team bid harder. 0 to 3."
+              >
+                <NumberInput
+                  id={`${ids}-ch-dangerw`}
+                  value={settings.chopped.dangerWeight}
+                  onChange={(n) => patchChopped({ dangerWeight: n })}
+                  step="0.05"
+                  min={0}
+                  max={3}
+                />
+              </Field>
+              <Field
+                label="What counts as a substitute"
+                htmlFor={`${ids}-ch-subshare`}
+                hint="A free agent projecting at least this share of the candidate is a substitute for him. 0 to 1."
+              >
+                <NumberInput
+                  id={`${ids}-ch-subshare`}
+                  value={settings.chopped.substituteShare}
+                  onChange={(n) => patchChopped({ substituteShare: n })}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field
+                label="What each substitute does to rival interest"
+                htmlFor={`${ids}-ch-subdisc`}
+                hint="Each substitute divides rival participation by 1 plus this. 0 to 3."
+              >
+                <NumberInput
+                  id={`${ids}-ch-subdisc`}
+                  value={settings.chopped.substituteDiscount}
+                  onChange={(n) => patchChopped({ substituteDiscount: n })}
+                  step="0.05"
+                  min={0}
+                  max={3}
+                />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              Danger the reader tells us, with no league connected
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              Manual mode has no roster to read, so the reader says how much
+              trouble they are in and these multiply the bid. 0.1 to 3.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Field label="Bottom two" htmlFor={`${ids}-ch-md-bottom`}>
+                <NumberInput
+                  id={`${ids}-ch-md-bottom`}
+                  value={settings.chopped.manualDangerMultipliers.bottomTwo}
+                  onChange={(n) => patchChoppedDanger("bottomTwo", n)}
+                  step="0.05"
+                  min={0.1}
+                  max={3}
+                />
+              </Field>
+              <Field label="Near the cut" htmlFor={`${ids}-ch-md-near`}>
+                <NumberInput
+                  id={`${ids}-ch-md-near`}
+                  value={settings.chopped.manualDangerMultipliers.nearCut}
+                  onChange={(n) => patchChoppedDanger("nearCut", n)}
+                  step="0.05"
+                  min={0.1}
+                  max={3}
+                />
+              </Field>
+              <Field label="Mid pack" htmlFor={`${ids}-ch-md-mid`}>
+                <NumberInput
+                  id={`${ids}-ch-md-mid`}
+                  value={settings.chopped.manualDangerMultipliers.midPack}
+                  onChange={(n) => patchChoppedDanger("midPack", n)}
+                  step="0.05"
+                  min={0.1}
+                  max={3}
+                />
+              </Field>
+              <Field label="Safe" htmlFor={`${ids}-ch-md-safe`}>
+                <NumberInput
+                  id={`${ids}-ch-md-safe`}
+                  value={settings.chopped.manualDangerMultipliers.safe}
+                  onChange={(n) => patchChoppedDanger("safe", n)}
+                  step="0.05"
+                  min={0.1}
+                  max={3}
+                />
+              </Field>
+            </div>
+          </fieldset>
+        </div>
+      </CollapsibleSection>
+
+      {/* 15. Replay the model against everything we hold */}
+      <SectionCard
+        title="Replay"
+        badge={{ tone: "advanced", label: "Advanced" }}
+        blurb="Run the price model against every settled auction in the database and see how often its recommended bid would have won. Reads only: nothing is written, nothing is synced, and no reader sees anything change."
+      >
+        <p className="rounded-card border border-line bg-base/40 p-3 text-xs leading-relaxed text-ink-muted">
+          Historical rosters are not stored, so the replay cannot apply the
+          worth cap and does not know what the bidder had left to spend. The win
+          shares below are an upper bound on the real ones. Read them as a
+          direction, not a score. The targets are reported and never enforced:
+          the good-value goal should win 55 to 75 percent, the make-sure goal 85
+          to 95 percent, and the median overpay should sit under 2 percent of
+          budget.
+        </p>
+
+        <button
+          type="button"
+          onClick={runReplay}
+          disabled={isReplaying}
+          className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink hover:border-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <RefreshCw aria-hidden="true" className="h-4 w-4" />
+          {isReplaying ? "Replaying..." : "Run replay"}
+        </button>
+        <p aria-live="polite" className="mt-2 text-sm text-ink-muted">
+          {isReplaying
+            ? "Replaying every settled auction we hold. This can take a minute."
+            : replayMessage}
+        </p>
+
+        {replay && (
+          <>
+            <ReplayTable summary={replay} />
+            {(replay.valueAtBudgetCap > 0 || replay.sureAtBudgetCap > 0) && (
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-subtle">
+                The target was out of reach at the whole budget on{" "}
+                {replay.valueAtBudgetCap} good-value bids and{" "}
+                {replay.sureAtBudgetCap} make-sure bids.
+              </p>
+            )}
+          </>
+        )}
+      </SectionCard>
 
       {/* 5. Result copy */}
       <SectionCard

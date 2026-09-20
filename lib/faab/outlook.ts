@@ -293,10 +293,10 @@ export async function loadPlayerOutlook(
   const nflState = await getNflState();
   const season = Number(nflState?.season) || new Date().getUTCFullYear();
   // Sleeper's own week, floored at 1 so the preseason reads as week 1 rather
-  // than zero. 14 is the last regular season week we assume without a league
-  // telling us when its playoffs start.
+  // than zero. Without a league there is no playoff_week_start to read, so the
+  // last regular week is a setting rather than a number written into the code.
   const currentWeek = Math.max(1, Number(nflState?.week) || 1);
-  const lastRegularWeek = 14;
+  const lastRegularWeek = settings.userDefaults.defaultLastRegularWeek;
   const weeksRemaining = Math.max(0, lastRegularWeek - currentWeek + 1);
 
   const notices: string[] = [];

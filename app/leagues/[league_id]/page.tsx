@@ -342,6 +342,13 @@ export default async function LeagueDeepViewPage({
     pickSourceDisplay,
   };
 
+  // A chopped league (Sleeper's name for a guillotine league) plays by rules
+  // nothing else on this page explains, so the header offers the guide that
+  // does. Read straight off the raw Sleeper object already in `league.metadata`
+  // (settings.type: 0 redraft, 1 keeper, 2 dynasty, 3 chopped), so this costs
+  // no query and triggers no compute.
+  const isChoppedLeague = Number(sleeperLeague.settings?.type) === 3;
+
   return (
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
@@ -354,14 +361,28 @@ export default async function LeagueDeepViewPage({
       otherLeagues={otherLeagues}
       masthead={mastheadProps}
       alert={
-        league.pulse_status === "error" && league.pulse_error ? (
-          <p
-            role="alert"
-            className="mb-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
-          >
-            Last refresh failed: {league.pulse_error}
-          </p>
-        ) : null
+        <>
+          {league.pulse_status === "error" && league.pulse_error ? (
+            <p
+              role="alert"
+              className="mb-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
+            >
+              Last refresh failed: {league.pulse_error}
+            </p>
+          ) : null}
+          {isChoppedLeague ? (
+            <p className="mb-4 rounded-card border border-line bg-surface/60 p-3 text-sm text-ink-muted">
+              New to chopped leagues?{" "}
+              <Link
+                href="/guides/chopped-league-strategy"
+                className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Read the chopped league strategy guide
+              </Link>
+              .
+            </p>
+          ) : null}
+        </>
       }
     >
       {activeTab === "overview" ? (

@@ -305,6 +305,26 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     ],
   },
   {
+    label: "Chopped Leagues",
+    href: "/guides/chopped-league-strategy",
+    description:
+      "Chopped, guillotine, death and knockout leagues: drafting, surviving and bidding",
+    keywords: [
+      "chopped",
+      "chopped league",
+      "chopped league strategy",
+      "guillotine",
+      "guillotine league",
+      "guillotine league strategy",
+      "death league",
+      "knockout league",
+      "eliminator",
+      "chop classic",
+      "elimination league",
+      "lowest score eliminated",
+    ],
+  },
+  {
     label: "Trade Guide",
     href: "/guides/fantasy-football-trade-guide",
     description: "How to judge any fantasy football trade before you send it",

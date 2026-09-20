@@ -52,6 +52,9 @@ import {
 } from "@/lib/faab/multi-league";
 import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
 import { loadPlayerOutlook, type PlayerOutlook } from "@/lib/faab/outlook";
+import { loadPriorCellsCached } from "@/lib/faab/priors-read";
+import { pickCell, type PriorCell } from "@/lib/faab/priors-math";
+import type { PriorBidders, PriorLeagueKind } from "@/lib/faab/priors-build";
 import {
   loadLeagueFreeAgents,
   type FreeAgentOption,
@@ -76,6 +79,7 @@ const CONNECT_RATE_MAX = 10;
 const SINGLE_RATE_MAX = 12;
 const ALL_LEAGUES_RATE_MAX = 4;
 const OUTLOOK_RATE_MAX = 30;
+const MARKET_CELL_RATE_MAX = 30;
 
 /** Fails closed: a limit we cannot evaluate is not a limit that passes. */
 async function claimSlot(bucket: string, max: number): Promise<boolean> {
@@ -151,6 +155,99 @@ export async function fetchPlayerOutlook(input: {
   } catch (err) {
     console.error("[faab] outlook failed", err);
     return { ok: false, error: "Something went wrong reading that player." };
+  }
+}
+
+export type MarketCellResult =
+  | { ok: true; cell: PriorCell; fellBackTo: string | null }
+  | { ok: false; error: string };
+
+const PRIOR_KINDS: Array<PriorLeagueKind | "any"> = [
+  "redraft",
+  "dynasty",
+  "chopped",
+  "any",
+];
+const PRIOR_BIDDERS: Array<PriorBidders | "any"> = ["1", "2", "3", "4p", "any"];
+const POSITION_PATTERN = /^[A-Z]{1,4}$/;
+const PHASE_PATTERN = /^[a-z0-9_]{1,16}$/;
+
+/**
+ * One market cell, for the calculator with no league connected.
+ *
+ * WHY THE SERVER PICKS IT. The whole set is about two thousand rows, which is
+ * far too much to ship to a browser that will use exactly one of them. So the
+ * reader's situation comes up, the fallback ladder runs here, and one cell
+ * goes back. The maths that turns it into a win curve is pure
+ * (lib/faab/priors-math.ts) and runs in the browser, so dragging the budget
+ * or the bid style stays instant and costs nothing.
+ *
+ * The cells are public by policy and carry no identifier: no league, no
+ * manager, no player. The rate limit is here because the cached read is still
+ * work, not because the answer is sensitive.
+ */
+export async function fetchMarketCell(input: {
+  leagueKind: string;
+  superflex: boolean | null;
+  position: string | null;
+  phase: string | null;
+  bidders: string;
+}): Promise<MarketCellResult> {
+  const leagueKind = String(input.leagueKind ?? "");
+  if (!PRIOR_KINDS.includes(leagueKind as PriorLeagueKind | "any")) {
+    return { ok: false, error: "Invalid league type" };
+  }
+  const bidders = String(input.bidders ?? "");
+  if (!PRIOR_BIDDERS.includes(bidders as PriorBidders | "any")) {
+    return { ok: false, error: "Invalid bidder count" };
+  }
+  const position =
+    input.position === null || input.position === undefined
+      ? null
+      : String(input.position).toUpperCase();
+  if (position !== null && !POSITION_PATTERN.test(position)) {
+    return { ok: false, error: "Invalid position" };
+  }
+  const phase =
+    input.phase === null || input.phase === undefined ? null : String(input.phase);
+  if (phase !== null && !PHASE_PATTERN.test(phase)) {
+    return { ok: false, error: "Invalid time of season" };
+  }
+  const superflex =
+    input.superflex === null || input.superflex === undefined
+      ? null
+      : Boolean(input.superflex);
+
+  if (!(await claimSlot("faab_market_cell", MARKET_CELL_RATE_MAX))) {
+    return { ok: false, error: "Slow down a moment and try that again." };
+  }
+
+  try {
+    const [cells, settings] = await Promise.all([
+      loadPriorCellsCached(),
+      loadFaabSettings(createAdminClient()),
+    ]);
+    const picked = pickCell(
+      cells,
+      {
+        leagueKind: leagueKind as PriorLeagueKind | "any",
+        superflex,
+        position,
+        phase,
+        bidders: bidders as PriorBidders | "any",
+      },
+      settings.priors.minCellSamples,
+    );
+    if (!picked) {
+      return {
+        ok: false,
+        error: "We have not built the market read yet, so no win chance here.",
+      };
+    }
+    return { ok: true, cell: picked.cell, fellBackTo: picked.fellBackTo };
+  } catch (err) {
+    console.error("[faab] market cell failed", err);
+    return { ok: false, error: "Something went wrong reading the market." };
   }
 }
 
