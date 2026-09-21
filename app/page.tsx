@@ -53,7 +53,11 @@ import {
 import { formatEasternShortDate } from "@/lib/datetime";
 import { SITE } from "@/lib/site";
 import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
-import { PUBLISHED_GUIDES, newestPublishedGuide } from "@/lib/guides/published";
+import {
+  PUBLISHED_GUIDES,
+  newestPublishedGuide,
+  type PublishedGuide,
+} from "@/lib/guides/published";
 import type { ToolHref } from "@/lib/tools-catalog";
 import type { HomepageToolCard } from "@/lib/site-layout/default-settings";
 import { loadSiteLayout } from "@/lib/site-layout/settings";
@@ -1152,21 +1156,28 @@ function ArticlesSection({
 /* ---------- Guides ---------- */
 
 /**
- * The guides shelf on the homepage: one spotlight and a stack.
+ * The guides shelf on the homepage: one spotlight above, a card grid below.
  *
  * This used to be a single card pointing at /guides, written when the shelf
  * held one guide. It now reads the register (lib/guides/published.ts), so a
- * guide that ships appears here the same day without a homepage edit. The
- * newest guide gets the spotlight, with its date and the lessons inside it, and
- * the rest sit in a stack beside it as rows a reader can scan in one pass.
+ * guide that ships appears here the same day without a homepage edit.
+ *
+ * THE LAYOUT IS A ROW AND THEN A GRID, NOT TWO COLUMNS, and that is the whole
+ * point of the shape. The spotlight and the rest used to sit side by side,
+ * which worked at three guides and fell apart at ten: the spotlight card is a
+ * fixed amount of words and the list beside it grows by a row every time a
+ * guide ships, so the right column ran hundreds of pixels past the left one
+ * and the section read as half empty. A full-width spotlight has no neighbour
+ * to be shorter than, and a grid of equal cards stays even at any count
+ * because the rows fill themselves.
  *
  * HOME_GUIDE_DETAILS holds the words this surface needs that the register does
  * not carry: an icon, a one-line hint, and the lessons for the spotlight. A
  * guide with no entry still renders, on a book icon and its register summary,
  * so a missing row here is a duller card rather than a missing guide.
  *
- * Every column renders at every width. On a phone the spotlight stacks above
- * the shelf; nothing is hidden.
+ * Every card renders at every width. One column on a phone, two from sm, three
+ * from lg; nothing is hidden and no card drops a line of its text.
  */
 type HomeGuideDetail = {
   icon: LucideIcon;
@@ -1258,6 +1269,18 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
       "Floor when favored, ceiling when you are the underdog",
     ],
   },
+  "chopped-league-strategy": {
+    // Swords, the same icon the card on /guides carries, so a reader who has
+    // seen one surface recognises the guide on the other.
+    icon: Swords,
+    hint: "Guillotine leagues, where last place goes home every week",
+    lessons: [
+      "Chopped, guillotine, death and knockout are one format under seven names",
+      "Beat the worst team, not the best one, and draft a floor to do it",
+      "What to do with the budget the Tuesday a whole roster hits the wire",
+      "The endgame, where money left is measured against players left",
+    ],
+  },
 };
 
 const FALLBACK_GUIDE_DETAIL: HomeGuideDetail = { icon: BookOpen, hint: "" };
@@ -1266,11 +1289,27 @@ function guideDetail(slug: string): HomeGuideDetail {
   return HOME_GUIDE_DETAILS[slug] ?? FALLBACK_GUIDE_DETAIL;
 }
 
+/**
+ * The date line on a shelf card. A guide that has been rewritten says so,
+ * because "updated last week" is the reason to open it again; one that has not
+ * carries the day it went up. Both go through lib/datetime.ts, so they are
+ * Eastern like every other timestamp on the site.
+ */
+function guideDateLine(guide: PublishedGuide): { iso: string; label: string } {
+  const revised = guide.updatedAt !== guide.publishedAt;
+  const iso = revised ? guide.updatedAt : guide.publishedAt;
+  return {
+    iso,
+    label: `${revised ? "Updated" : "Published"} ${formatEasternShortDate(iso)}`,
+  };
+}
+
 function GuidesSection() {
   const newest = newestPublishedGuide();
   const shelf = PUBLISHED_GUIDES.filter((g) => g.slug !== newest.slug);
   const spotlight = guideDetail(newest.slug);
   const SpotlightIcon = spotlight.icon;
+  const newestDate = guideDateLine(newest);
 
   return (
     <section
@@ -1305,54 +1344,55 @@ function GuidesSection() {
           </Link>
         </div>
 
-        <div className="mt-10 grid items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-8">
-          {/* The spotlight: the newest guide, with what is inside it. */}
-          <article
-            aria-labelledby="guide-spotlight-heading"
-            className="relative flex flex-col overflow-hidden rounded-modal border border-line-accent bg-surface-elevated p-6 shadow-lg shadow-black/20 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan sm:p-8"
+        {/* The spotlight: the newest guide, full width, with what is inside it
+            beside the pitch rather than under it. */}
+        <article
+          aria-labelledby="guide-spotlight-heading"
+          className="group relative mt-10 overflow-hidden rounded-modal border border-line-accent bg-surface-elevated shadow-lg shadow-black/20 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan hover:border-brand-cyan/50"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.16) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-0.5"
             style={{
               backgroundImage:
-                "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.16) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+                "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
             }}
-          >
-            <span
-              aria-hidden="true"
-              className="absolute inset-x-0 top-0 h-0.5"
-              style={{
-                backgroundImage:
-                  "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
-              }}
-            />
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span
-                className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-black"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-                }}
-              >
-                Newest guide
-              </span>
-              <time
-                dateTime={newest.publishedAt}
-                className="text-xs text-ink-subtle"
-              >
-                {formatEasternShortDate(newest.publishedAt)}
-              </time>
-              <span className="text-xs text-ink-subtle">Free to read</span>
-            </div>
+          />
+          <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-2 lg:gap-12 lg:p-10">
+            <div className="flex min-w-0 flex-col">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span
+                  className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-black"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+                  }}
+                >
+                  Newest guide
+                </span>
+                <time
+                  dateTime={newestDate.iso}
+                  className="text-xs text-ink-subtle"
+                >
+                  {newestDate.label}
+                </time>
+                <span className="text-xs text-ink-subtle">Free to read</span>
+              </div>
 
-            <div className="mt-5 flex items-start gap-4">
-              <span
-                aria-hidden="true"
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-card bg-beacon text-black"
-              >
-                <SpotlightIcon className="h-6 w-6" />
-              </span>
-              <div className="min-w-0">
+              <div className="mt-5 flex items-start gap-4">
+                <span
+                  aria-hidden="true"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-card bg-beacon text-black"
+                >
+                  <SpotlightIcon className="h-6 w-6" />
+                </span>
                 <h3
                   id="guide-spotlight-heading"
-                  className="text-2xl font-semibold tracking-tight text-ink"
+                  className="min-w-0 text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
                 >
                   {/* Stretched link: the heading is the accessible name and the
                       whole spotlight is clickable, one tab stop. */}
@@ -1363,22 +1403,33 @@ function GuidesSection() {
                     {newest.title}
                   </Link>
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                  {newest.summary}.
-                </p>
               </div>
+
+              <p className="mt-4 text-base leading-relaxed text-ink-muted">
+                {newest.summary}.
+              </p>
+
+              {/* Visual affordance only. The stretched link on the heading is the
+                  real control, so this is hidden from assistive tech. */}
+              <p
+                aria-hidden="true"
+                className="mt-6 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20"
+              >
+                Read the guide
+                <ArrowRight className="h-3.5 w-3.5" />
+              </p>
             </div>
 
             {spotlight.lessons && spotlight.lessons.length > 0 && (
-              <div className="mt-6">
+              <div className="min-w-0 lg:border-l lg:border-line lg:pl-12">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
                   Inside
                 </p>
-                <ul role="list" className="mt-2 grid gap-2 sm:grid-cols-2">
+                <ol role="list" className="mt-3 grid gap-2">
                   {spotlight.lessons.map((lesson, i) => (
                     <li
                       key={lesson}
-                      className="flex items-start gap-2.5 rounded-card border border-line bg-base/50 px-3 py-2.5 text-sm leading-relaxed text-ink"
+                      className="flex items-start gap-3 rounded-card border border-line bg-base/60 px-3.5 py-3 text-sm leading-relaxed text-ink"
                     >
                       <span
                         aria-hidden="true"
@@ -1389,98 +1440,93 @@ function GuidesSection() {
                       <span>{lesson}</span>
                     </li>
                   ))}
-                </ul>
+                </ol>
               </div>
             )}
-
-            {/* Visual affordance only. The stretched link on the heading is the
-                real control, so this is hidden from assistive tech. */}
-            <p
-              aria-hidden="true"
-              className="mt-6 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan"
-            >
-              Read the guide
-              <ArrowRight className="h-3.5 w-3.5" />
-            </p>
-          </article>
-
-          {/* The shelf: every other guide as a row, in register order, which
-              is also the order a new reader should take them in. */}
-          <div className="flex flex-col gap-4">
-            <h3
-              id="guide-shelf-heading"
-              className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
-            >
-              The rest of the shelf
-            </h3>
-            <ul
-              aria-labelledby="guide-shelf-heading"
-              role="list"
-              className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface"
-            >
-              {shelf.map((guide) => {
-                const detail = guideDetail(guide.slug);
-                const Icon = detail.icon;
-                return (
-                  <li key={guide.slug}>
-                    <Link
-                      href={`/guides/${guide.slug}`}
-                      className="group flex min-h-11 items-center gap-3 px-4 py-3 transition-colors hover:bg-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-ink group-hover:text-brand-cyan">
-                          {guide.title}
-                        </span>
-                        {detail.hint && (
-                          <span className="block text-xs leading-relaxed text-ink-muted">
-                            {detail.hint}
-                          </span>
-                        )}
-                      </span>
-                      <ArrowRight
-                        aria-hidden="true"
-                        className="h-4 w-4 shrink-0 text-ink-subtle transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-brand-cyan motion-reduce:transition-none"
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <dl className="grid grid-cols-3 gap-2">
-              <div className="rounded-card border border-line bg-base/50 px-3 py-2.5 text-center">
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                  Guides
-                </dt>
-                <dd className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-brand-cyan">
-                  {PUBLISHED_GUIDES.length}
-                </dd>
-              </div>
-              <div className="rounded-card border border-line bg-base/50 px-3 py-2.5 text-center">
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                  Terms defined
-                </dt>
-                <dd className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-brand-purple">
-                  {TERM_COUNT}
-                </dd>
-              </div>
-              <div className="rounded-card border border-line bg-base/50 px-3 py-2.5 text-center">
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                  Cost to read
-                </dt>
-                <dd className="mt-0.5 font-mono text-lg font-semibold text-ink">
-                  Free
-                </dd>
-              </div>
-            </dl>
           </div>
+        </article>
+
+        {/* The shelf: every other guide as a card, in register order, which is
+            also the order a new reader should take them in. */}
+        <div className="mt-14 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <h3
+            id="guide-shelf-heading"
+            className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+          >
+            The rest of the shelf
+          </h3>
+          <dl className="flex flex-wrap items-center gap-2">
+            <div className="flex items-baseline gap-2 rounded-full border border-line bg-base/60 px-3 py-1.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                Guides
+              </dt>
+              <dd className="font-mono text-sm font-semibold tabular-nums text-brand-cyan">
+                {PUBLISHED_GUIDES.length}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2 rounded-full border border-line bg-base/60 px-3 py-1.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                Terms defined
+              </dt>
+              <dd className="font-mono text-sm font-semibold tabular-nums text-brand-purple">
+                {TERM_COUNT}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2 rounded-full border border-line bg-base/60 px-3 py-1.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                Cost to read
+              </dt>
+              <dd className="font-mono text-sm font-semibold text-ink">Free</dd>
+            </div>
+          </dl>
         </div>
+
+        <ul
+          aria-labelledby="guide-shelf-heading"
+          role="list"
+          className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {shelf.map((guide) => {
+            const detail = guideDetail(guide.slug);
+            const Icon = detail.icon;
+            const date = guideDateLine(guide);
+            return (
+              <li key={guide.slug} className="flex">
+                <Link
+                  href={`/guides/${guide.slug}`}
+                  className="group flex w-full flex-col gap-3 rounded-card border border-line bg-surface p-5 transition duration-200 hover:-translate-y-0.5 hover:border-brand-cyan/50 hover:bg-surface-elevated hover:shadow-lg hover:shadow-black/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan transition-colors group-hover:border-brand-cyan/60 group-hover:bg-brand-cyan/10"
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="flex flex-1 flex-col gap-1.5">
+                    <span className="block text-base font-semibold leading-snug text-ink transition-colors group-hover:text-brand-cyan">
+                      {guide.title}
+                    </span>
+                    <span className="block text-sm leading-relaxed text-ink-muted">
+                      {detail.hint || `${guide.summary}.`}
+                    </span>
+                  </span>
+                  <span className="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
+                    <time
+                      dateTime={date.iso}
+                      className="text-xs text-ink-subtle"
+                    >
+                      {date.label}
+                    </time>
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="h-4 w-4 shrink-0 text-ink-subtle transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-brand-cyan motion-reduce:transition-none"
+                    />
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </section>
   );
