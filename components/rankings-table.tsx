@@ -282,10 +282,17 @@ export function RankingsTable({
             measured over 30 days, because a week barely moves a rank. On mobile, tap a
             player row for full details.
           </caption>
-          {/* Desktop header. Hidden on mobile because the chip row above and the
-              compact 3-column body handle sort + columns differently. */}
-          <thead className="hidden bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle md:table-header-group">
-            <tr>
+          {/* ONE thead, TWO header rows, one per breakpoint.
+              These were two separate <thead> elements until 2026-09-21, which
+              is invalid: a table gets exactly one. A thead may hold as many
+              rows as it likes, so the split moves down a level and the markup
+              becomes legal without either layout changing. Whichever row the
+              breakpoint hides is display:none, so assistive tech is offered
+              exactly one header row, the same as before. */}
+          <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+            {/* Desktop. Hidden on mobile because the chip row above and the
+                compact 3-column body handle sort + columns differently. */}
+            <tr className="hidden md:table-row">
               {columns.map((col, idx) => {
                 const isActive = col.key === sortKey;
                 const isFirst = idx === 0;
@@ -335,12 +342,10 @@ export function RankingsTable({
                 );
               })}
             </tr>
-          </thead>
 
-          {/* Mobile header (Rank, Player, dynamic metric). Renders only at
-              <md and reflects the active mobile sort chip in the third cell. */}
-          <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle md:hidden">
-            <tr>
+            {/* Mobile (Rank, Player, dynamic metric). Renders only below md
+                and reflects the active mobile sort chip in the third cell. */}
+            <tr className="md:hidden">
               <th scope="col" className="w-14 py-3 pl-4 pr-2 text-center">
                 Rank
               </th>
