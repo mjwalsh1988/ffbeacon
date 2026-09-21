@@ -74,6 +74,69 @@ export function formatPhraseLower(format: RankingFormat): string {
     .replace(/\bHalf PPR\b/, "half PPR");
 }
 
+/**
+ * The same phrase as `formatPhrase`, worked out from the SLUG ALONE.
+ *
+ * The breadcrumb bar (lib/breadcrumbs.ts) is synchronous and slug-based: it
+ * draws a trail from a pathname with no database in reach, so it fell back to
+ * `humanizeSegment` and published "Dynasty PPR TEP Sflex" as the crumb, and as
+ * the name inside the BreadcrumbList structured data, on a page whose own h1
+ * says "dynasty superflex PPR TE Premium". Two different names for one page is
+ * exactly what a breadcrumb is not for.
+ *
+ * Slug shape, in order, with everything but the scoring token optional:
+ * `[bestball-][dynasty|redraft-]<ppr|half|std>[-tep][-sflex|-std]`. An absent
+ * league reads as redraft and an absent quarterback token as 1QB, which is how
+ * `format_configs` stores the best ball rows. Anything that does not parse
+ * cleanly returns null, so an unfamiliar slug falls back to the old humanized
+ * label rather than being guessed at.
+ */
+const SCORING_FROM_SLUG: Record<string, string> = {
+  ppr: "PPR",
+  half: "Half PPR",
+  std: "Standard",
+};
+
+export function formatPhraseFromSlug(slug: string): string | null {
+  const tokens = slug.split("-").filter(Boolean);
+  let i = 0;
+
+  const bestBall = tokens[i] === "bestball";
+  if (bestBall) i += 1;
+
+  let league = "redraft";
+  if (tokens[i] === "dynasty" || tokens[i] === "redraft") {
+    league = tokens[i];
+    i += 1;
+  }
+
+  const scoring = SCORING_FROM_SLUG[tokens[i] ?? ""];
+  if (!scoring) return null;
+  i += 1;
+
+  const tePremium = tokens[i] === "tep";
+  if (tePremium) i += 1;
+
+  let superflex = false;
+  if (tokens[i] === "sflex" || tokens[i] === "std") {
+    superflex = tokens[i] === "sflex";
+    i += 1;
+  }
+
+  // Anything left over is a shape this parser does not know about.
+  if (i !== tokens.length) return null;
+
+  return [
+    bestBall ? "Best Ball" : null,
+    leagueLabel(league),
+    superflex ? "Superflex" : "1QB",
+    scoring,
+    tePremium ? "TE Premium" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export interface RankingsSeoCopy {
   /** <title>, before the site template appends the brand. */
   title: string;
@@ -112,7 +175,7 @@ export function rankingsSeoCopy(format: RankingFormat): RankingsSeoCopy {
 
   return {
     title: `${phrase} Rankings`,
-    description: `${phrase} fantasy football rankings, sorted by market value and updated daily, with 7-day trends, positional ranks, and tiers.`,
+    description: `${phrase} fantasy football rankings, sorted by market value and updated daily, with 30-day value and rank movement, positional tiers, and scarcity gaps.`,
     headline: `${lower} fantasy football rankings`,
     intro: `Every ranked player in ${phrase}, sorted by ${horizon}. ${qbNote}${teNote} Sort any column, filter by position, and switch data source without losing your place.`,
   };

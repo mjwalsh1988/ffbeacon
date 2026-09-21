@@ -58,7 +58,6 @@ const RANKINGS_BOARD_REVALIDATE_SECONDS = 900;
 export type RankingsBoardRow = {
   overall_rank: number;
   position_rank: number;
-  tier: number | null;
   slug: string;
   sleeper_id: string | null;
   name: string;
@@ -66,11 +65,29 @@ export type RankingsBoardRow = {
   team: string | null;
   status: string;
   value: number | null;
-  change_7d: number | null;
+  /* THE 30-DAY WINDOW IS WHAT THE BOARD RENDERS. A week of market movement is
+     mostly noise around one piece of news, and a week of RANK movement barely
+     moves at all: the column was a screenful of plus-or-minus one. The table
+     columns are 30-day for both, as of 2026-09-21. */
+  change_30d_pct: number | null;
+  trend_30d: string | null;
+  rank_change_30d: number | null;
+  show_trend_30d: boolean;
+  /** Highest and lowest value over the last 30 days, for the detail sheet. */
+  high_30d: number | null;
+  low_30d: number | null;
+  /* THE 7-DAY FIELDS THAT SURVIVE, AND ONLY THESE THREE. Nothing in the table
+     reads a week any more; the Market movers panel still runs a "last 7 days"
+     list beside its "last 30 days" one, because a top-five list of the week's
+     biggest movers is news even when the same week rendered as a column of
+     every player was noise. That panel needs a percentage, a rank delta and
+     the window gate, so those three stay and the rest were dropped from the
+     select: `change_7d` (the absolute figure, only ever a sort key for a
+     column that no longer exists), `trend_7d` (the stable-or-not flag, read
+     only by the cell that no longer renders), and `rank_7d_ago` (never
+     rendered anywhere, at any point). */
   change_7d_pct: number | null;
-  trend_7d: string | null;
   rank_change_7d: number | null;
-  rank_7d_ago: number | null;
   show_trend_7d: boolean;
 };
 
@@ -113,6 +130,68 @@ export async function loadFreshestRankingsGeneratedAt(
 }
 
 /**
+ * Every `player_value_trends` row for one (format, source), paged.
+ *
+ * PostgREST caps a response at 1,000 rows and says nothing when it does, so
+ * the unpaged version of this read had a silent cliff waiting for it. The
+ * biggest live pairing is 615 rows today, which is comfortably under, but the
+ * failure mode past the cap is the quiet kind: the players who fell off the
+ * end would keep their Value (the chunked history fallback below still finds
+ * it) and silently lose their tier, their gap and both movement columns, on a
+ * board that otherwise looked completely normal.
+ *
+ * One request in every realistic case. The loop only asks for a second page
+ * when the first came back exactly full, which is the only situation where
+ * there might be more. `order("player_id")` is what makes the paging sound:
+ * `range()` over an unordered result can repeat or skip rows between pages.
+ *
+ * Same shape as the house pattern in lib/beacon/derive.ts.
+ */
+const TRENDS_PAGE = 1000;
+
+type TrendRow = {
+  player_id: string;
+  current_value: number;
+  change_30d_pct: number | null;
+  trend_30d: string | null;
+  rank_change_30d: number | null;
+  show_trend_30d: boolean;
+  high_30d: number | null;
+  low_30d: number | null;
+  change_7d_pct: number | null;
+  rank_change_7d: number | null;
+  show_trend_7d: boolean;
+};
+
+async function loadTrendRows(
+  supabase: SupabaseClient<Database>,
+  formatConfigId: string,
+  source: string,
+): Promise<TrendRow[]> {
+  const rows: TrendRow[] = [];
+  for (let from = 0; ; from += TRENDS_PAGE) {
+    const { data, error } = await supabase
+      .from("player_value_trends")
+      .select(
+        "player_id, current_value, change_30d_pct, trend_30d, rank_change_30d, show_trend_30d, high_30d, low_30d, change_7d_pct, rank_change_7d, show_trend_7d",
+      )
+      .eq("format_config_id", formatConfigId)
+      .eq("source", source)
+      .order("player_id", { ascending: true })
+      .range(from, from + TRENDS_PAGE - 1);
+    // A failed page returns what we have rather than throwing: the board's
+    // whole design is that a missing trend row degrades to a dash, and the
+    // history fallback below still recovers the values. Failing the render
+    // outright would be a worse answer than a partial board.
+    if (error) break;
+    const page = (data ?? []) as TrendRow[];
+    rows.push(...page);
+    if (page.length < TRENDS_PAGE) break;
+  }
+  return rows;
+}
+
+/**
  * The uncached read. Exported for tests; callers wanting the cache should use
  * loadRankingsBoardCached below.
  */
@@ -127,7 +206,7 @@ export async function loadRankingsBoard(
   const rankingsQuery = supabase
     .from("rankings")
     .select(
-      "overall_rank, position_rank, tier, players!inner(id, slug, first_name, last_name, position, team, status, external_ids)",
+      "overall_rank, position_rank, players!inner(id, slug, first_name, last_name, position, team, status, external_ids)",
     )
     .eq("format_config_id", formatConfigId)
     .eq("source", rankingsSource ?? "__none__")
@@ -135,17 +214,11 @@ export async function loadRankingsBoard(
     .order("overall_rank")
     .limit(500);
 
-  const [rankingsResult, trendsResult, capturedResult] = await Promise.all([
+  const [rankingsResult, trendRows, capturedResult] = await Promise.all([
     rankingsSource ? rankingsQuery : Promise.resolve({ data: [] as never }),
     valueHistorySource
-      ? supabase
-          .from("player_value_trends")
-          .select(
-            "player_id, current_value, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, show_trend_7d",
-          )
-          .eq("format_config_id", formatConfigId)
-          .eq("source", valueHistorySource)
-      : Promise.resolve({ data: [] as never }),
+      ? loadTrendRows(supabase, formatConfigId, valueHistorySource)
+      : Promise.resolve([]),
     // ONE ROW, for the "Values as of" date and nothing else. See the note in
     // the previous version of this read (now here) for why the trends row's
     // own updated_at is the wrong timestamp for that chip.
@@ -161,7 +234,7 @@ export async function loadRankingsBoard(
   ]);
 
   const valueByPlayer = new Map<string, { value: number }>();
-  for (const t of trendsResult.data ?? []) {
+  for (const t of trendRows) {
     valueByPlayer.set(t.player_id, { value: t.current_value });
   }
 
@@ -212,24 +285,29 @@ export async function loadRankingsBoard(
     }
   }
 
-  const trendByPlayer = new Map<
-    string,
-    {
-      change_7d: number | null;
-      change_7d_pct: number | null;
-      trend_7d: string | null;
-      rank_change_7d: number | null;
-      rank_7d_ago: number | null;
-      show_trend_7d: boolean;
-    }
-  >();
-  for (const t of trendsResult.data ?? []) {
+  type TrendFields = Omit<
+    RankingsBoardRow,
+    | "overall_rank"
+    | "position_rank"
+    | "slug"
+    | "sleeper_id"
+    | "name"
+    | "position"
+    | "team"
+    | "status"
+    | "value"
+  >;
+  const trendByPlayer = new Map<string, TrendFields>();
+  for (const t of trendRows) {
     trendByPlayer.set(t.player_id, {
-      change_7d: t.change_7d,
+      change_30d_pct: t.change_30d_pct,
+      trend_30d: t.trend_30d,
+      rank_change_30d: t.rank_change_30d,
+      show_trend_30d: t.show_trend_30d,
+      high_30d: t.high_30d,
+      low_30d: t.low_30d,
       change_7d_pct: t.change_7d_pct,
-      trend_7d: t.trend_7d,
       rank_change_7d: t.rank_change_7d,
-      rank_7d_ago: t.rank_7d_ago,
       show_trend_7d: t.show_trend_7d,
     });
   }
@@ -261,7 +339,6 @@ export async function loadRankingsBoard(
     return {
       overall_rank: r.overall_rank,
       position_rank: r.position_rank,
-      tier: r.tier ?? null,
       slug: player.slug,
       sleeper_id,
       name: `${player.first_name} ${player.last_name}`,
@@ -269,11 +346,14 @@ export async function loadRankingsBoard(
       team: player.team,
       status: player.status,
       value: value?.value ?? null,
-      change_7d: trend?.change_7d ?? null,
+      change_30d_pct: trend?.change_30d_pct ?? null,
+      trend_30d: trend?.trend_30d ?? null,
+      rank_change_30d: trend?.rank_change_30d ?? null,
+      show_trend_30d: trend?.show_trend_30d ?? false,
+      high_30d: trend?.high_30d ?? null,
+      low_30d: trend?.low_30d ?? null,
       change_7d_pct: trend?.change_7d_pct ?? null,
-      trend_7d: trend?.trend_7d ?? null,
       rank_change_7d: trend?.rank_change_7d ?? null,
-      rank_7d_ago: trend?.rank_7d_ago ?? null,
       show_trend_7d: trend?.show_trend_7d ?? false,
     };
   });
@@ -303,7 +383,15 @@ export function loadRankingsBoardCached(
         valueHistorySource,
       }),
     [
-      "rankings-board",
+      // THE SHAPE OF THE ROW IS PART OF THE KEY, via this literal, and it is
+      // bumped whenever the select changes. Vercel's Data Cache outlives a
+      // deployment, so entries written by the previous build come back as
+      // rows missing whatever columns the new build added: the 30-day cells
+      // would all render "-", the pulse strip and the movers panel would
+      // return null, and two FAQ items would vanish, for up to the revalidate
+      // window after every deploy. "v2" is the 2026-09-21 change that added
+      // the 30-day columns and dropped the 7-day ones.
+      "rankings-board-v2",
       formatConfigId,
       rankingsSource ?? "none",
       valueHistorySource ?? "none",

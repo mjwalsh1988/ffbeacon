@@ -10,7 +10,21 @@ import { BeaconValue } from "@/components/beacon-value-icon";
 export type RankingsRow = {
   overall_rank: number;
   position_rank: number;
+  /** POSITIONAL tier from lib/rankings/tiers.ts, computed from the value
+   *  cliffs inside this player's own position. Deliberately not the
+   *  `rankings.tier` column, which is a percentile sixth of the whole board
+   *  (tier 1 ran from rank 1 to rank 102) and told a reader nothing. */
   tier: number | null;
+  /** How many players share the tier, so the badge can say how deep it is. */
+  tierSize?: number | null;
+  /** True for the best player in the tier, the one just past a cliff. */
+  startsTier?: boolean;
+  /** Value drop to the next player at the SAME position, which is the number
+   *  that answers "does waiting a round cost me anything". */
+  gapToNext?: number | null;
+  gapToNextPct?: number | null;
+  /** True when that next player is a tier down, so this gap IS the cliff. */
+  opensNextTier?: boolean;
   slug: string;
   /** Sleeper player id from players.external_ids.sleeper. Drives the
    * small headshot circle next to the player name. */
@@ -20,15 +34,23 @@ export type RankingsRow = {
   team: string | null;
   status: string;
   value: number | null;
-  change_7d: number | null;
-  change_7d_pct: number | null;
-  trend_7d: string | null;
-  rank_change_7d: number | null;
-  rank_7d_ago: number | null;
-  /** Per-window bookend gate from player_value_trends. True when the source has
-   *  a data point near both ends of the 7-day window. Replaces the old
-   *  data_points_30d >= 7 count gate. */
-  show_trend_7d: boolean;
+  /* THE BOARD'S MOVEMENT COLUMNS ARE 30-DAY, BOTH OF THEM, and no 7-day field
+     reaches this component at all as of 2026-09-21. A week of rank movement
+     was a column of plus-or-minus one on nearly every row, and a week of value
+     movement was the noise around whichever single piece of news happened to
+     land. A month is a direction, which is the thing a reader can act on.
+     The week survives only in the Market movers panel, as a top-five list,
+     where a big move is news rather than a column of nothing. */
+  change_30d_pct: number | null;
+  trend_30d: string | null;
+  rank_change_30d: number | null;
+  /** Per-window bookend gate from player_value_trends. True when the source
+   *  has a data point near both ends of the 30-day window. */
+  show_trend_30d: boolean;
+  /** Highest and lowest value over the last 30 days, shown in the detail
+   *  sheet so a reader can see whether today's number is a peak or a trough. */
+  high_30d: number | null;
+  low_30d: number | null;
   /** Resolved source cadence (same for every row in one table). Drives the
    *  "updated weekly" note so a weekly trend is not misread as daily-fresh. */
   cadence?: "daily" | "weekly";
@@ -42,13 +64,14 @@ type SortKey =
   | "team"
   | "tier"
   | "value"
-  | "change_7d"
-  | "rank_change_7d";
+  | "gapToNext"
+  | "rank_change_30d"
+  | "change_30d_pct";
 type SortDir = "asc" | "desc";
 
-// The 7-day trend display is gated by row.show_trend_7d (computed in
+// The 30-day trend display is gated by row.show_trend_30d (computed in
 // calculate-trends.ts via the cadence-aware bookend rule): show movement only
-// when the source has a data point near both ends of the 7-day window.
+// when the source has a data point near both ends of the 30-day window.
 
 type Column = { key: SortKey; label: string; numeric: boolean };
 type MobileSortOption = {
@@ -79,8 +102,9 @@ function buildColumns(positional: boolean): Column[] {
       { key: "position", label: "Pos", numeric: false },
       { key: "tier", label: "Tier", numeric: true },
       { key: "value", label: "Value", numeric: true },
-      { key: "rank_change_7d", label: "Rank 7d", numeric: true },
-      { key: "change_7d", label: "Value 7d", numeric: true },
+      { key: "gapToNext", label: "Gap", numeric: true },
+      { key: "rank_change_30d", label: "Rank 30d", numeric: true },
+      { key: "change_30d_pct", label: "Value 30d", numeric: true },
     ];
   }
   return [
@@ -91,8 +115,9 @@ function buildColumns(positional: boolean): Column[] {
     { key: "position_rank", label: "Pos rank", numeric: true },
     { key: "tier", label: "Tier", numeric: true },
     { key: "value", label: "Value", numeric: true },
-    { key: "rank_change_7d", label: "Rank 7d", numeric: true },
-    { key: "change_7d", label: "Value 7d", numeric: true },
+    { key: "gapToNext", label: "Gap", numeric: true },
+    { key: "rank_change_30d", label: "Rank 30d", numeric: true },
+    { key: "change_30d_pct", label: "Value 30d", numeric: true },
   ];
 }
 
@@ -108,8 +133,9 @@ function buildMobileSortOptions(positional: boolean): MobileSortOption[] {
       { key: "position_rank", label: "Rank", short: "Rank", defaultDir: "asc" },
       { key: "value", label: "Value", short: "Value", defaultDir: "desc" },
       { key: "tier", label: "Tier", short: "Tier", defaultDir: "asc" },
-      { key: "rank_change_7d", label: "Rank 7d", short: "Rank 7d", defaultDir: "desc" },
-      { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
+      { key: "gapToNext", label: "Gap", short: "Gap", defaultDir: "desc" },
+      { key: "rank_change_30d", label: "Rank 30d", short: "Rank 30d", defaultDir: "desc" },
+      { key: "change_30d_pct", label: "Value 30d", short: "Val 30d", defaultDir: "desc" },
     ];
   }
   return [
@@ -117,8 +143,9 @@ function buildMobileSortOptions(positional: boolean): MobileSortOption[] {
     { key: "value", label: "Value", short: "Value", defaultDir: "desc" },
     { key: "tier", label: "Tier", short: "Tier", defaultDir: "asc" },
     { key: "position_rank", label: "Pos rank", short: "Pos #", defaultDir: "asc" },
-    { key: "rank_change_7d", label: "Rank 7d", short: "Rank 7d", defaultDir: "desc" },
-    { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
+    { key: "gapToNext", label: "Gap", short: "Gap", defaultDir: "desc" },
+    { key: "rank_change_30d", label: "Rank 30d", short: "Rank 30d", defaultDir: "desc" },
+    { key: "change_30d_pct", label: "Value 30d", short: "Val 30d", defaultDir: "desc" },
   ];
 }
 
@@ -153,8 +180,12 @@ export function RankingsTable({
   const sorted = useMemo(() => {
     const copy = [...rows];
     copy.sort((a, b) => {
-      const va = a[sortKey];
-      const vb = b[sortKey];
+      // Undefined is normalized to null before the comparison below. The
+      // newer columns are optional on RankingsRow (a caller that has not been
+      // updated still type-checks), so an absent field arrives as undefined
+      // and would otherwise skip the numeric branch and be string-compared.
+      const va = a[sortKey] ?? null;
+      const vb = b[sortKey] ?? null;
       if (va === null && vb === null) return 0;
       if (va === null) return 1;
       if (vb === null) return -1;
@@ -243,9 +274,13 @@ export function RankingsTable({
       <div className="overflow-x-auto rounded-card border border-line">
         <table className="w-full text-sm">
           <caption className="sr-only">
-            Player rankings. Sortable by rank, name, team, position, tier, value, 7-day rank
-            movement, and 7-day value change. On mobile, tap a player row for full
-            details.
+            Player rankings. Sortable by rank, name, team, position, tier, value, the
+            gap to the next player at the same position, 30-day rank movement, and
+            30-day value change. Tier is worked out from the value cliffs inside each
+            position, so a tier of two and a tier of eleven are both normal. Gap is how
+            far the value falls to the next player at the same position. Movement is
+            measured over 30 days, because a week barely moves a rank. On mobile, tap a
+            player row for full details.
           </caption>
           {/* Desktop header. Hidden on mobile because the chip row above and the
               compact 3-column body handle sort + columns differently. */}
@@ -313,7 +348,7 @@ export function RankingsTable({
                 Player
               </th>
               <th scope="col" className="py-3 pl-2 pr-4 text-center">
-                {mobileMetricLabel(sortKey, mobileSortOptions)}
+                {mobileMetricLabel(sortKey, mobileSortOptions, positional)}
               </th>
             </tr>
           </thead>
@@ -413,13 +448,7 @@ export function RankingsTable({
                   </td>
                 )}
                 <td className="hidden px-3 py-3 text-center md:table-cell">
-                  {row.tier ? (
-                    <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
-                      T{row.tier}
-                    </span>
-                  ) : (
-                    <span className="text-ink-subtle">-</span>
-                  )}
+                  <TierCell row={row} />
                 </td>
                 <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
                   {row.value !== null ? (
@@ -430,12 +459,15 @@ export function RankingsTable({
                     "-"
                   )}
                 </td>
-                <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
+                <td className="hidden px-2.5 py-3 text-center font-mono tabular-nums md:table-cell">
+                  <GapCell row={row} />
+                </td>
+                <td className="hidden px-2.5 py-3 text-center font-mono tabular-nums md:table-cell">
                   <span className="inline-flex justify-center">
                     <RankTrendCell row={row} />
                   </span>
                 </td>
-                <td className="hidden py-3 pl-3 pr-4 text-center font-mono tabular-nums md:table-cell">
+                <td className="hidden py-3 pl-2.5 pr-4 text-center font-mono tabular-nums md:table-cell">
                   <span className="inline-flex justify-center">
                     <ValueTrendCell row={row} />
                   </span>
@@ -455,16 +487,119 @@ export function RankingsTable({
   );
 }
 
+/**
+ * Which metric the mobile table's third column actually renders.
+ *
+ * ONE FUNCTION DECIDES, and both the header and the cell ask it. They used to
+ * decide separately and disagreed: sorting by Rank put "Rank" in the header
+ * while the cell fell through to the value, because the rank already lives in
+ * the left-hand column and repeating it would waste the only metric slot a
+ * phone has. Every sort key that has no metric of its own to show lands on
+ * "value" here, so the header can never name a column the body is not
+ * rendering.
+ */
+function mobileMetricKey(sortKey: SortKey, positional: boolean): SortKey {
+  if (sortKey === "tier") return "tier";
+  if (sortKey === "gapToNext") return "gapToNext";
+  if (sortKey === "rank_change_30d") return "rank_change_30d";
+  if (sortKey === "change_30d_pct") return "change_30d_pct";
+  // On a positional board the "Pos rank" chip is dropped and the "Rank" chip
+  // sorts by position_rank, which the left Rank column already shows.
+  if (sortKey === "position_rank" && !positional) return "position_rank";
+  return "value";
+}
+
 function mobileMetricLabel(
   sortKey: SortKey,
   options: MobileSortOption[],
+  positional: boolean,
 ): string {
-  const opt = options.find((o) => o.key === sortKey);
-  // When the active sort is one of the "name"-style sort keys that don't
-  // have a mobile chip (e.g. desktop sorted by team/name then user came to
-  // mobile), default the third column to Value to preserve the user's
-  // explicit "default = Value" instruction.
+  const key = mobileMetricKey(sortKey, positional);
+  const opt = options.find((o) => o.key === key);
+  // "value" always has a chip, so the fallback is unreachable in practice and
+  // is here only so a future chip list that drops it still names something.
   return opt?.label ?? "Value";
+}
+
+/**
+ * The tier badge.
+ *
+ * The number means something now: it is the player's tier inside his OWN
+ * position, cut at the value cliffs (lib/rankings/tiers.ts), not the
+ * percentile sixth of the whole board the database column holds. A reader
+ * cannot see that from "T2" alone, so the size of the tier and the fact that
+ * it is positional both live in the accessible name, and the first player in
+ * each tier takes a cyan ring so the cliffs are visible down the column
+ * without reading a single number.
+ */
+function TierCell({ row }: { row: RankingsRow }) {
+  if (row.tier === null) {
+    return (
+      <span className="text-ink-subtle">
+        -<span className="sr-only">No tier, no value published for this player</span>
+      </span>
+    );
+  }
+  const size = row.tierSize ?? null;
+  const depth =
+    size === null
+      ? ""
+      : `, ${size} ${size === 1 ? "player" : "players"} in it`;
+  const top = row.startsTier ? ", top of the tier" : "";
+  return (
+    <span
+      className={`inline-flex rounded px-2 py-0.5 text-xs ${
+        row.startsTier
+          ? "bg-brand-cyan/10 text-brand-cyan ring-1 ring-inset ring-brand-cyan/40"
+          : "bg-surface-elevated"
+      }`}
+    >
+      T{row.tier}
+      <span className="sr-only">{`, ${row.position}${depth}${top}`}</span>
+    </span>
+  );
+}
+
+/**
+ * The drop in value to the next player at the same position.
+ *
+ * This is the scarcity number, and it is the one a draft board is really
+ * asking about: a run of small gaps means the position is deep and waiting
+ * costs nothing, one large gap means the next man down is a real step
+ * backwards. It is per POSITION, never to the next row on screen, because the
+ * receiver sitting between two running backs is not a choice anybody faces.
+ *
+ * A gap that IS a tier boundary is toned, so the cliffs stand out down the
+ * column, and it is the same boundary the tier ring marks rather than a
+ * percentage threshold of its own. Those were two different rules once, and
+ * they disagreed in both directions: a pass-two tier cut lands on whatever the
+ * steepest step in an over-wide run happens to be, which is often well under
+ * ten percent, and a ten percent step that fails the minimum-gap floor opens
+ * no tier at all. The column was highlighting gaps no ring marked and leaving
+ * ringed rows plain.
+ *
+ * The fact is spoken as well as toned, since colour is not information a
+ * screen reader or a colour-blind reader receives.
+ */
+function GapCell({ row }: { row: RankingsRow }) {
+  const gap = row.gapToNext ?? null;
+  if (gap === null) {
+    return (
+      <span className="text-ink-subtle">
+        -
+        <span className="sr-only">{`Last ranked ${row.position} on this board, no next player to fall to`}</span>
+      </span>
+    );
+  }
+  const pct = row.gapToNextPct ?? null;
+  const isCliff = Boolean(row.opensNextTier) && gap > 0;
+  const pctWords = pct === null ? "" : `, a ${pct.toFixed(1)} percent drop`;
+  return (
+    <span className={isCliff ? "font-semibold text-brand-cyan" : "text-ink-muted"}>
+      {Math.round(gap).toLocaleString()}
+      <span className="sr-only">{` points clear of the next ${row.position}${pctWords}${isCliff ? ", the drop into the next tier" : ""}`}</span>
+    </span>
+  );
 }
 
 function MobileMetricCell({
@@ -478,45 +613,42 @@ function MobileMetricCell({
   valueIsBeacon: boolean;
   positional: boolean;
 }) {
-  if (sortKey === "tier") {
-    return row.tier !== null ? (
-      <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
-        T{row.tier}
-      </span>
-    ) : (
-      <span className="text-ink-subtle">-</span>
-    );
+  // The same decision the header made, so the two cannot drift apart.
+  switch (mobileMetricKey(sortKey, positional)) {
+    case "tier":
+      return <TierCell row={row} />;
+    case "gapToNext":
+      return <GapCell row={row} />;
+    case "rank_change_30d":
+      return <RankTrendCell row={row} />;
+    case "change_30d_pct":
+      return <ValueTrendCell row={row} />;
+    case "position_rank":
+      return (
+        <span className="text-ink">
+          {row.position}
+          {row.position_rank}
+        </span>
+      );
+    default:
+      return row.value !== null ? (
+        <BeaconValue show={valueIsBeacon}>
+          {row.value.toLocaleString()}
+        </BeaconValue>
+      ) : (
+        <span>-</span>
+      );
   }
-  // On a positional board the "Pos rank" chip is dropped and the "Rank" chip
-  // sorts by position_rank; that number already lives in the left Rank column,
-  // so the dynamic metric cell falls through to Value (matching how the
-  // overall board treats its Rank sort).
-  if (sortKey === "position_rank" && !positional) {
-    return (
-      <span className="text-ink">
-        {row.position}
-        {row.position_rank}
-      </span>
-    );
-  }
-  if (sortKey === "rank_change_7d") {
-    return <RankTrendCell row={row} />;
-  }
-  if (sortKey === "change_7d") {
-    return <ValueTrendCell row={row} />;
-  }
-  return row.value !== null ? (
-    <BeaconValue show={valueIsBeacon}>{row.value.toLocaleString()}</BeaconValue>
-  ) : (
-    <span>-</span>
-  );
 }
 
 /**
  * Mobile bottom-sheet that surfaces every column from the desktop table
- * (team, position, tier, value, 7-day rank movement, 7-day value movement)
- * plus a CTA to the full player profile. Satisfies the mobile-first rule:
- * data hidden from the mobile table is still reachable via this sheet.
+ * (team, position, tier, value, the gap to the next player at the position,
+ * 30-day rank movement and 30-day value movement) plus the 30-day range,
+ * which the desktop table has no room for, and a CTA to the full player
+ * profile. Satisfies the mobile-first rule: data hidden from the mobile table
+ * is still reachable here, and this sheet is the ONE place on the board that
+ * shows the 30-day high and low.
  */
 function PlayerDetailSheet({
   row,
@@ -581,10 +713,7 @@ function PlayerDetailSheet({
               label={`${row.position} rank`}
               value={`#${row.position_rank}`}
             />
-            <MetricTile
-              label="Tier"
-              value={row.tier !== null ? `T${row.tier}` : "-"}
-            />
+            <MetricTile label="Tier" value={<TierCell row={row} />} />
             <MetricTile
               label="Value"
               value={
@@ -597,14 +726,32 @@ function PlayerDetailSheet({
                 )
               }
             />
-            <MetricTile
-              label="Rank 7d"
-              value={<RankTrendCell row={row} />}
-            />
-            <MetricTile
-              label="Value 7d"
-              value={<ValueTrendCell row={row} />}
-            />
+            <MetricTile label="Gap to next" value={<GapCell row={row} />} />
+            <MetricTile label="Rank 30d" value={<RankTrendCell row={row} />} />
+            <MetricTile label="Value 30d" value={<ValueTrendCell row={row} />} />
+            {/* The 30-day range has no column on the desktop table, so this
+                is where it lives. It answers the question the percentage
+                cannot: is today's number a peak, a trough, or the middle of
+                a quiet month. */}
+            {row.high_30d !== null &&
+              row.high_30d !== undefined &&
+              row.low_30d !== null &&
+              row.low_30d !== undefined && (
+                <div className="col-span-2 rounded-card border border-line bg-base/60 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                    30-day range
+                  </p>
+                  <p className="mt-1 font-mono text-base font-semibold tabular-nums text-ink">
+                    {Math.round(row.low_30d).toLocaleString()} to{" "}
+                    {Math.round(row.high_30d).toLocaleString()}
+                    {row.value !== null && (
+                      <span className="ml-2 text-xs font-normal text-ink-muted">
+                        now {row.value.toLocaleString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
           </section>
 
           <div className="mt-5 flex flex-col gap-2 px-5">
@@ -648,81 +795,99 @@ function MetricTile({
   );
 }
 
-// Plain-language verb the screen reader uses for rank movement.
-function rankMovementVerb(change: number): string {
-  if (change > 0) return `Moved up ${change} position${change === 1 ? "" : "s"} in the last 7 days`;
-  if (change < 0)
-    return `Moved down ${Math.abs(change)} position${change === -1 ? "" : "s"} in the last 7 days`;
-  return "No rank change in the last 7 days";
-}
-
-function valueMovementVerb(pct: number): string {
-  const abs = Math.abs(pct).toFixed(1);
-  if (pct > 0) return `Value increased ${abs} percent in the last 7 days`;
-  if (pct < 0) return `Value decreased ${abs} percent in the last 7 days`;
-  return "No value change in the last 7 days";
-}
-
+/**
+ * HOW EVERY FIGURE IN THIS TABLE IS NARRATED, and why it is not an aria-label.
+ *
+ * These cells used to be a `<span aria-label="Moved up 3 positions">` wrapping
+ * an `<span aria-hidden="true">3</span>`. Two things are wrong with that.
+ * `aria-label` is only honoured on elements with a widget or structural role,
+ * and a bare `<span>` has neither, so the label was liable to be dropped and
+ * the only remaining text was hidden: the cell could read as empty. And even
+ * where it was honoured, hiding the visible number means a reader who points
+ * at it finds nothing and falls back to an ancestor.
+ *
+ * So every figure below is ONE REAL TEXT NODE, never hidden, with only the
+ * words a sighted reader gets from the arrow and the column header appended
+ * as `sr-only` INSIDE THE SAME ELEMENT. The arrow icons stay `aria-hidden`,
+ * because they are decoration whose meaning is in those words. Same rule the
+ * Lineups board follows, and for the same reason.
+ */
 function RankTrendCell({ row }: { row: RankingsRow }) {
-  if (!row.show_trend_7d || row.rank_change_7d === null) {
+  const cadenceNote = row.cadence === "weekly" ? ", updated weekly" : "";
+  const title = row.cadence === "weekly" ? "Updated weekly" : undefined;
+
+  if (!row.show_trend_30d || row.rank_change_30d === null) {
     return (
-      <span className="text-ink-subtle" aria-label="Insufficient history for 7-day rank movement">
-        -
+      <span className="text-ink-subtle">
+        -<span className="sr-only">No 30-day rank movement, not enough history</span>
       </span>
     );
   }
-  const weekly = row.cadence === "weekly" ? ", updated weekly" : "";
-  const title = row.cadence === "weekly" ? "Updated weekly" : undefined;
-  const change = row.rank_change_7d;
+  const change = row.rank_change_30d;
   if (change === 0) {
     return (
-      <span className="text-ink-muted" aria-label={`No rank change in the last 7 days${weekly}`} title={title}>
+      <span className="text-ink-muted" title={title}>
         -
+        <span className="sr-only">
+          No rank change over the last 30 days{cadenceNote}
+        </span>
       </span>
     );
   }
   const isUp = change > 0;
   const tone = isUp ? "text-signal-positive" : "text-signal-warning";
   const Icon = isUp ? ArrowUp : ArrowDown;
+  const places = Math.abs(change);
   return (
     <span
       className={`inline-flex items-center justify-center gap-1 ${tone}`}
-      aria-label={`${rankMovementVerb(change)}${weekly}`}
       title={title}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-      <span aria-hidden="true">{Math.abs(change)}</span>
+      {places}
+      <span className="sr-only">
+        {` ${places === 1 ? "place" : "places"} ${isUp ? "gained" : "lost"} over the last 30 days${cadenceNote}`}
+      </span>
     </span>
   );
 }
 
+/**
+ * Percentage value movement over the last 30 days.
+ *
+ * A month rather than a week, deliberately: a week is whichever single piece
+ * of news happened to land, and it reverses about as often as it holds. The
+ * week still has a home in the Market movers panel, where a top-five list is
+ * news; as a column over every row it was noise.
+ *
+ * `show_trend_30d` off renders a dash rather than a zero, because "no data
+ * near both ends of the window" is not the same claim as "the price held".
+ */
 function ValueTrendCell({ row }: { row: RankingsRow }) {
-  if (!row.show_trend_7d || row.change_7d_pct === null || row.trend_7d === null) {
+  const cadenceNote = row.cadence === "weekly" ? ", updated weekly" : "";
+  const title = row.cadence === "weekly" ? "Updated weekly" : undefined;
+
+  if (!row.show_trend_30d || row.change_30d_pct === null || row.trend_30d === null) {
     return (
-      <span className="text-ink-subtle" aria-label="Insufficient history for 7-day value trend">
-        -
+      <span className="text-ink-subtle">
+        -<span className="sr-only">No 30-day value trend, not enough history</span>
       </span>
     );
   }
-  const weekly = row.cadence === "weekly" ? ", updated weekly" : "";
-  const title = row.cadence === "weekly" ? "Updated weekly" : undefined;
-  const pct = row.change_7d_pct;
-  if (row.trend_7d === "stable" || pct === 0) {
-    // "Stable" can include a small non-zero pct (within the ±2% trend
-    // threshold). Visible text + aria-label both reflect the actual number
-    // so screen-reader users hear what sighted users see.
+  const pct = row.change_30d_pct;
+  if (row.trend_30d === "stable" || pct === 0) {
+    // "Stable" can include a small non-zero pct (within the trend threshold).
+    // The visible number is the real one either way, so the spoken figure and
+    // the printed figure are the same text node.
     const pctText = pct === 0 ? "0.0%" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
     return (
-      <span
-        className="text-ink-muted"
-        aria-label={
-          pct === 0
-            ? `No value change in the last 7 days${weekly}`
-            : `Value held roughly steady in the last 7 days, ${valueMovementVerb(pct).toLowerCase().replace(/^value /, "")}${weekly}`
-        }
-        title={title}
-      >
+      <span className="text-ink-muted" title={title}>
         {pctText}
+        <span className="sr-only">
+          {pct === 0
+            ? ` no value change over the last 30 days${cadenceNote}`
+            : ` value change over the last 30 days, roughly steady${cadenceNote}`}
+        </span>
       </span>
     );
   }
@@ -733,11 +898,13 @@ function ValueTrendCell({ row }: { row: RankingsRow }) {
   return (
     <span
       className={`inline-flex items-center justify-center gap-1 ${tone}`}
-      aria-label={`${valueMovementVerb(pct)}${weekly}`}
       title={title}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-      <span aria-hidden="true">{pctText}</span>
+      {pctText}
+      <span className="sr-only">
+        {` value ${isUp ? "gained" : "lost"} over the last 30 days${cadenceNote}`}
+      </span>
     </span>
   );
 }

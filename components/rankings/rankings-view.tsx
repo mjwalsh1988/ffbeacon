@@ -11,7 +11,7 @@ import {
 } from "@/lib/source";
 import { RankingsTable, type RankingsRow } from "@/components/rankings-table";
 import { ScrollToRankings } from "@/app/rankings/scroll-to-rankings";
-import { POSITIONS } from "@/lib/site";
+import { POSITIONS, SITE } from "@/lib/site";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -28,6 +28,19 @@ import {
 } from "@/lib/rankings-board";
 import { isBestBall } from "@/lib/rankings-formats";
 import { ALL_TERMS } from "@/lib/guides/fantasy-football-terms";
+import {
+  boardPulse,
+  enrichBoardRows,
+  topMovers,
+} from "@/lib/rankings/insights";
+import { BoardPulsePanel } from "@/components/rankings/board-pulse-panel";
+import { MarketMovers } from "@/components/rankings/market-movers";
+import { buildRankingsFaq } from "@/lib/rankings/faq";
+import { FaqAccordion } from "@/components/faq-accordion";
+import { itemListJsonLd, serializeJsonLd } from "@/lib/json-ld";
+
+/** How many ranked players the ItemList block carries. */
+const ITEM_LIST_CAP = 100;
 
 /**
  * The rankings board, rendered by every /rankings/[format] page. Until 2026-09-11 the
@@ -159,12 +172,61 @@ export async function RankingsView({
     (s) => s.slug === valueHistoryResolution.source,
   )?.update_cadence as "daily" | "weekly" | undefined;
 
+  // TIERS ARE COMPUTED ON THE WHOLE BOARD, BEFORE THE POSITION FILTER.
+  //
+  // A tier is a group inside one position, so filtering first would produce
+  // the same answer for a position the reader filtered to and a wrong one for
+  // nobody. The reason to do it up here anyway is that it keeps the tier a
+  // player carries IDENTICAL between the overall board and a filtered one: a
+  // reader who clicks RB must not watch every tier number change under them.
+  // enrichBoardRows also replaces the useless `rankings.tier` column (a
+  // percentile sixth of the board, tier 1 running from rank 1 to rank 102)
+  // with the real thing. See lib/rankings/tiers.ts.
+  const enriched = enrichBoardRows(board.rows);
+
   // Position filtering happens here, in memory, against the cached full board,
   // rather than as a query param on the cached read: the cache is keyed by
   // format and source only, so one cache entry serves every position filter.
-  const rows: RankingsRow[] = (
-    position ? board.rows.filter((r) => r.position === position) : board.rows
-  ).map((r) => ({ ...r, cadence: tableCadence }));
+  const filtered = position
+    ? enriched.filter((r) => r.position === position)
+    : enriched;
+
+  // FIELD BY FIELD, NOT A SPREAD. RankingsTable is a client component, so
+  // every property on every one of up to 500 rows is serialized into the
+  // flight payload. A spread would ship the three 7-day fields the Market
+  // movers panel needs on the SERVER to the browser as well, for every row,
+  // where nothing reads them.
+  const rows: RankingsRow[] = filtered.map((r) => ({
+    overall_rank: r.overall_rank,
+    position_rank: r.position_rank,
+    tier: r.tier,
+    tierSize: r.tierSize,
+    startsTier: r.startsTier,
+    gapToNext: r.gapToNext,
+    gapToNextPct: r.gapToNextPct,
+    opensNextTier: r.opensNextTier,
+    slug: r.slug,
+    sleeper_id: r.sleeper_id,
+    name: r.name,
+    position: r.position,
+    team: r.team,
+    status: r.status,
+    value: r.value,
+    change_30d_pct: r.change_30d_pct,
+    trend_30d: r.trend_30d,
+    rank_change_30d: r.rank_change_30d,
+    show_trend_30d: r.show_trend_30d,
+    high_30d: r.high_30d,
+    low_30d: r.low_30d,
+    cadence: tableCadence,
+  }));
+
+  // The panels read the FILTERED rows, so a reader looking at running backs
+  // gets the running backs who moved rather than the board's. Derived from
+  // the rows already in hand; no query of their own.
+  const pulse = boardPulse(filtered);
+  const weekMovers = topMovers(filtered, { window: "7d" });
+  const monthMovers = topMovers(filtered, { window: "30d" });
 
   // Which glossary entries this format's own settings touch (SEO-T974).
   const glossaryLinks = glossaryLinksForFormat(format);
@@ -214,8 +276,66 @@ export async function RankingsView({
     });
   }
 
+  // THE QUESTIONS UNDER THE BOARD, AND THE STRUCTURED DATA, FROM ONE ARRAY.
+  //
+  // buildRankingsFaq answers out of the rows on this screen, so the prose and
+  // the table cannot disagree, and the FAQPage block below is built from the
+  // same array rather than a parallel copy: the structured data can never
+  // claim an answer the page does not show. Same rule the tool pages follow
+  // (app/tools/trade-calculator/page.tsx).
+  const faqItems = buildRankingsFaq({
+    format,
+    rows: filtered,
+    pulse,
+    position,
+    sourceLabel,
+    cadence: tableCadence,
+  });
+  const faqJsonLd =
+    faqItems.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: faqItems.map((item) => ({
+            "@type": "Question",
+            name: item.question,
+            acceptedAnswer: { "@type": "Answer", text: item.answer },
+          })),
+        }
+      : null;
+
+  // ItemList for the ranked order itself. A ranked list is the one thing
+  // schema.org has a type for that this page is literally made of, and the
+  // board had no page-level structured data at all. Capped at ITEM_LIST_CAP:
+  // the whole 500 would add a large block of markup to every response for
+  // rows nobody's search result is going to surface.
+  const rankingsJsonLd =
+    rows.length > 0
+      ? itemListJsonLd(
+          rows.slice(0, ITEM_LIST_CAP).map((row, i) => ({
+            position: i + 1,
+            url: `${SITE.url}/players/${row.slug}`,
+            name: row.name,
+          })),
+        )
+      : null;
+
   return (
     <main id="main">
+      {rankingsJsonLd && (
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(rankingsJsonLd) }}
+        />
+      )}
+      {faqJsonLd && (
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqJsonLd) }}
+        />
+      )}
       <PageBody>
         {reconciled.fallback && (
           <p
@@ -302,6 +422,15 @@ export async function RankingsView({
               sorted by current market value. Click any column header to
               re-sort, or open a player&apos;s row for the full breakdown.
             </p>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+              <span className="font-medium text-ink">Tier</span> is worked out
+              from the value cliffs inside each position, so a tier of two and
+              a tier of eleven are both normal answers, and the top player in
+              each one is ringed.{" "}
+              <span className="font-medium text-ink">Gap</span> is how far the
+              value falls to the next player at the same position, which is
+              the number that says whether waiting a round costs you anything.
+            </p>
             <GlossaryTermsNote
               links={glossaryLinks}
               superflex={format.is_superflex}
@@ -360,6 +489,11 @@ export async function RankingsView({
             </div>
           </div>
 
+          {/* The board's own state in four figures, before the 500 rows. A
+              reader arriving cold cannot see which way the market moved this
+              week or where the one real cliff is, and both are in the rows. */}
+          <BoardPulsePanel pulse={pulse} />
+
           <div className="overflow-hidden rounded-card border border-line bg-surface">
             {rows.length === 0 ? (
               <p className="p-6 text-sm text-ink-muted">
@@ -375,6 +509,38 @@ export async function RankingsView({
             )}
           </div>
         </section>
+
+        {/* Below the board rather than above it: the table is what the page
+            is for and the reader came to see it, but "who did the market buy
+            this month" is the question they ask next. */}
+        <div className="mt-10">
+          <MarketMovers
+            week={weekMovers}
+            month={monthMovers}
+            cadence={tableCadence}
+          />
+        </div>
+
+        {faqItems.length > 0 && (
+          <section
+            aria-labelledby="rankings-faq-heading"
+            className="mt-12 border-t border-line pt-10"
+          >
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+              Questions
+            </p>
+            <h2
+              id="rankings-faq-heading"
+              className="text-3xl font-semibold tracking-tight sm:text-4xl"
+            >
+              What this board is telling you.
+            </h2>
+            <p className="mb-6 mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
+              Answered from the rows above, so these move when the board moves.
+            </p>
+            <FaqAccordion items={faqItems} />
+          </section>
+        )}
 
         {footerSlot}
       </PageBody>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatPhrase,
+  formatPhraseFromSlug,
   formatPhraseLower,
   isBestBall,
   rankingsSeoCopy,
@@ -209,5 +210,44 @@ describe("rankingsSeoCopy", () => {
         }
       }
     }
+  });
+});
+
+/**
+ * Every active row in format_configs as of 2026-09-21, with the structural
+ * columns the slug has to be able to reproduce. The breadcrumb bar has no
+ * database in reach, so formatPhraseFromSlug reads the slug instead, and the
+ * only thing that makes that safe is this table agreeing with formatPhrase on
+ * every real format.
+ */
+const ACTIVE_FORMATS: RankingFormat[] = [
+  { slug: "redraft-ppr-std", display_name: "Redraft 1QB PPR", league_type: "redraft", scoring_type: "ppr", is_superflex: false, te_premium_bonus: "0" },
+  { slug: "redraft-half-std", display_name: "Redraft 1QB Half PPR", league_type: "redraft", scoring_type: "half_ppr", is_superflex: false, te_premium_bonus: "0" },
+  { slug: "redraft-std-std", display_name: "Redraft 1QB Standard", league_type: "redraft", scoring_type: "standard", is_superflex: false, te_premium_bonus: "0" },
+  { slug: "redraft-ppr-sflex", display_name: "Redraft PPR SF", league_type: "redraft", scoring_type: "ppr", is_superflex: true, te_premium_bonus: "0" },
+  { slug: "redraft-ppr-tep", display_name: "Redraft 1QB PPR TEP", league_type: "redraft", scoring_type: "ppr", is_superflex: false, te_premium_bonus: "0.5" },
+  { slug: "redraft-ppr-tep-sflex", display_name: "Redraft PPR SF TEP", league_type: "redraft", scoring_type: "ppr", is_superflex: true, te_premium_bonus: "0.5" },
+  { slug: "dynasty-ppr-std", display_name: "Dynasty PPR 1QB", league_type: "dynasty", scoring_type: "ppr", is_superflex: false, te_premium_bonus: "0" },
+  { slug: "dynasty-ppr-sflex", display_name: "Dynasty PPR SF", league_type: "dynasty", scoring_type: "ppr", is_superflex: true, te_premium_bonus: "0" },
+  { slug: "dynasty-ppr-tep-sflex", display_name: "Dynasty PPR SF TEP", league_type: "dynasty", scoring_type: "ppr", is_superflex: true, te_premium_bonus: "0.5" },
+  { slug: "dynasty-ppr-tep", display_name: "Dynasty PPR 1QB TEP", league_type: "dynasty", scoring_type: "ppr", is_superflex: false, te_premium_bonus: "0.5" },
+  { slug: "bestball-ppr-std", display_name: "Best Ball PPR 1QB", league_type: "redraft", scoring_type: "ppr", is_superflex: false, te_premium_bonus: "0" },
+  { slug: "bestball-ppr-sflex", display_name: "Best Ball PPR SF", league_type: "redraft", scoring_type: "ppr", is_superflex: true, te_premium_bonus: "0" },
+  { slug: "bestball-dynasty-ppr-sflex", display_name: "Best Ball Dynasty PPR SF", league_type: "dynasty", scoring_type: "ppr", is_superflex: true, te_premium_bonus: "0" },
+];
+
+describe("formatPhraseFromSlug", () => {
+  it.each(ACTIVE_FORMATS)(
+    "reads $slug the same way formatPhrase reads the row",
+    (format) => {
+      expect(formatPhraseFromSlug(format.slug)).toBe(formatPhrase(format));
+    },
+  );
+
+  it("refuses a slug it does not recognise rather than guessing", () => {
+    expect(formatPhraseFromSlug("dynasty-ppr-sflex-extra")).toBeNull();
+    expect(formatPhraseFromSlug("dynasty-superflex")).toBeNull();
+    expect(formatPhraseFromSlug("")).toBeNull();
+    expect(formatPhraseFromSlug("not-a-format")).toBeNull();
   });
 });

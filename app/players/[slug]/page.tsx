@@ -233,10 +233,16 @@ export default async function PlayerPage({
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
         {
+          // The rankings hub, canonically. This used to point at
+          // /rankings?position=QB, which is not a page: the hub either
+          // redirects a reader with a saved format or renders the format
+          // directory, and /rankings is what its own canonical tag names.
+          // A breadcrumb item naming a URL that redirects is a breadcrumb
+          // item naming the wrong page.
           "@type": "ListItem",
           position: 2,
-          name: player.position,
-          item: `${SITE.url}/rankings?position=${player.position}`,
+          name: "Rankings",
+          item: `${SITE.url}/rankings`,
         },
         { "@type": "ListItem", position: 3, name: fullName, item: canonical },
       ],

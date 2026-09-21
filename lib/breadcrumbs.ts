@@ -1,4 +1,5 @@
 import { RANKINGS_HUB_HREF } from "@/lib/rankings-hub";
+import { formatPhraseFromSlug } from "@/lib/rankings-formats";
 
 /**
  * Breadcrumbs for every route on the site, derived from the pathname.
@@ -186,7 +187,15 @@ export function buildBreadcrumbs(pathname: string): Crumb[] {
   segments.forEach((segment, index) => {
     prefix += `/${segment}`;
     const isLast = index === segments.length - 1;
-    const label = ROUTE_LABELS[prefix] ?? humanizeSegment(segment);
+    // A rankings format segment is named the way its own h1 names it. The
+    // generic humanizer turns "dynasty-ppr-tep-sflex" into "Dynasty PPR TEP
+    // Sflex", which is neither the page's title nor anything a reader would
+    // say, and it went into the structured data under that name too.
+    const formatLabel =
+      index === 1 && segments[0] === "rankings"
+        ? formatPhraseFromSlug(segment)
+        : null;
+    const label = ROUTE_LABELS[prefix] ?? formatLabel ?? humanizeSegment(segment);
     crumbs.push({
       label,
       href:

@@ -31,7 +31,6 @@ function row(
   return {
     overall_rank,
     position_rank: 1,
-    tier: null,
     slug,
     sleeper_id: null,
     name: slug,
@@ -39,11 +38,14 @@ function row(
     team: null,
     status: "Active",
     value,
-    change_7d: null,
+    change_30d_pct: null,
+    trend_30d: null,
+    rank_change_30d: null,
+    show_trend_30d: false,
+    high_30d: null,
+    low_30d: null,
     change_7d_pct: null,
-    trend_7d: null,
     rank_change_7d: null,
-    rank_7d_ago: null,
     show_trend_7d: false,
   };
 }
