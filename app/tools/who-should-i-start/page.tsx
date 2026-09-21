@@ -414,7 +414,7 @@ export default async function WhoShouldIStartPage({
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
-      <PageBody>
+      <PageBody width="tool">
         <PageMasthead
           eyebrow="Tools"
           title={START_SIT_H1}
@@ -442,7 +442,7 @@ export default async function WhoShouldIStartPage({
           aria-labelledby="start-sit-board-heading"
           className="mt-8 scroll-mt-24"
         >
-          <div className="mx-auto max-w-[90rem]">
+          <div>
             <h2
               id="start-sit-board-heading"
               className="scroll-mt-24 text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
@@ -476,11 +476,14 @@ export default async function WhoShouldIStartPage({
           </div>
         </section>
 
-        <div className="mt-16 mx-auto max-w-5xl">
+        {/* Both of these used to cap themselves at max-w-5xl inside a 90rem
+            board, which left the page with a wide tool and two narrower blocks
+            under it. The page's column is the one measure now. */}
+        <div className="mt-16">
           <ToughestCalls result={toughestCalls} basePath={TOOL_PATH} week={clock.currentWeek} />
         </div>
 
-        <div className="mx-auto max-w-5xl">
+        <div>
           <WrittenSections
             week={clock.currentWeek}
             season={clock.season ?? Number(currentNflSeason())}

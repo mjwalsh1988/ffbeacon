@@ -15586,3 +15586,139 @@ FB-R08 | pending | No ESLint config anywhere in the repo
        setup. This predates the FAAB build and is not caused by it. Typecheck
        and vitest are the gates until it is fixed.
      | verified: no
+
+## Session of 2026-09-20: page widths and the League Pulse season switch
+
+Two unrelated pieces of work, both UNCOMMITTED at the end of the session.
+Tasks PW (page width) and LS (league season).
+
+PW-T01 | completed | One content width per tool page
+     | files: components/app-shell/page-body.tsx, components/tool-explainer.tsx,
+       app/tools/faab/page.tsx, app/tools/faab/faab-form.tsx,
+       app/tools/trade-calculator/page.tsx, app/tools/on-the-clock/page.tsx,
+       app/tools/who-should-i-start/page.tsx, app/tools/league-pulse/page.tsx,
+       app/tools/manager-pulse/page.tsx, app/games/signal-scout/page.tsx
+     | depends on: none
+     | notes: The FAAB page showed three widths down one screen and nothing
+       said which one was the page: the form capped itself at 88rem and
+       centred, ToolExplainer capped itself at 80rem and centred inside that,
+       and MarketStats had no cap at all so it ran the full width of the
+       dashboard column. The same defect, with different numbers, was on the
+       trade calculator (90rem builder, uncapped explainer, 80rem closing
+       paragraph) and On The Clock (96rem room, uncapped explainer).
+       THE FIX IS ONE COLUMN PER PAGE, SET ONCE. PageBody gained width="tool"
+       (90rem) and width="board" (96rem), each page sets one, and the inner
+       per-block caps came out. ToolExplainer no longer caps itself: it fills
+       the column it is given, which is what puts its left edge on the same
+       line as the tool above it. Nothing in it is a long line of prose (the
+       steps, notes and next steps are card grids), so the reading measure it
+       was protecting was not protecting anything.
+       board (96rem) exists for exactly one page. On The Clock's draft room
+       carries eight columns under a clock and the written rationale for its
+       extra 6rem was already in the file; it keeps it, and now the sections
+       below it line up with the room instead of running past it.
+       manager-pulse deliberately stays on the wide column. Its other branch,
+       the report, lays out as PageColumns with a rail and is wide by
+       construction, and a search box in a narrower column than the page it
+       hands you to makes the width jump on submit.
+     | verified: typecheck clean, 5,701 tests pass. NOT opened in a browser.
+
+LS-T01 | completed | One resolver for where a league is in its season
+     | files: lib/league-season/phase.ts, lib/league-season/phase.test.ts
+     | depends on: none
+     | notes: Pure, no I/O, no clock. Answers phase (pre_draft, in_season,
+       complete), who won, and the most recent chop.
+       TWO WAYS A LEAGUE ENDS. A bracket league ends when the championship
+       match is won: Sleeper marks it with p equal to 1 in the winners bracket
+       and w is the winner. That is a fact rather than a date, so a decided
+       bracket counts as complete even before Sleeper flips the league's
+       status. A chopped league has no bracket and ends when one roster is left
+       with no elimination week against it.
+       A league can be complete with NO champion (season over, bracket never
+       played or never captured) and that is reported as its own state rather
+       than rounded to either neighbour. The third place game (p equal to 3) is
+       never read as the final. 14 tests.
+     | verified: yes (unit tests, plus three real production leagues checked)
+
+LS-T02 | completed | The read behind it, with identities resolved
+     | files: lib/league-season/load.ts
+     | depends on: LS-T01
+     | notes: React cache() so the page's consumers share one result. Three
+       reads, plus one more only when there is a chop to date. "Was this chop
+       this week" is answered from the newest is_final week in league_matchups
+       rather than from the NFL calendar, so it needs no Sleeper request and
+       cannot disagree with the scores on the Schedules page.
+     | verified: yes (run against production: a completed 2025 dynasty league
+       returned the right champion and runner-up off the bracket, a live
+       chopped league returned roster 7 chopped in week 1 with thisWeek true,
+       17 alive and 1 out, and an ordinary in-season league returned nothing)
+
+LS-T03 | completed | The axe card and the champion card on the overview
+     | files: components/league-season/chop-card.tsx,
+       components/league-season/champion-card.tsx,
+       app/leagues/[league_id]/page.tsx
+     | depends on: LS-T02
+     | notes: Whichever applies leads the main column, above the activity log,
+       because a champion and a chop are both the largest thing that has
+       happened in the league and the overview reported neither.
+       ONE OR THE OTHER, NEVER BOTH. A finished chopped league has a champion
+       and a last chop and they are the same event described twice: the final
+       elimination is what crowned the survivor. The champion wins.
+       The axe and the trophy are decorative and marked aria-hidden. Every word
+       of the meaning is in the eyebrow, the heading and the sentence beside
+       them, so a reader who never sees the icon loses nothing.
+     | verified: typecheck clean. NOT opened in a browser.
+
+LS-T04 | completed | Post-season states on Trade Ideas and Lineups
+     | files: components/league-season/post-season-notice.tsx,
+       app/leagues/[league_id]/trade-ideas/page.tsx,
+       app/leagues/[league_id]/lineups/page.tsx
+     | depends on: LS-T02
+     | notes: Both pages answer a question that stops existing. Trade Ideas
+       prices a deal by what it does to the rest of the season, and Lineups is
+       about one week. With no weeks left both would run their models against
+       an empty slate and return a confident zero, which is the same defect
+       Power Pulse refuses to cache.
+       Schedules, Decisions and Transactions deliberately keep their normal
+       content: all three are retrospectives already, and a finished season is
+       when they are most worth reading.
+       The notice is not an error state and does not read like one. It names
+       the champion when there is one and links to the pages that still have
+       something to say.
+     | verified: typecheck clean. NOT opened in a browser.
+
+LS-T05 | completed | A finished league's trade values stop moving
+     | files: lib/league-pulse.ts, lib/league-pulse.test.ts,
+       components/league-season/frozen-values-note.tsx,
+       app/leagues/[league_id]/page.tsx,
+       app/leagues/[league_id]/transactions/page.tsx
+     | depends on: none
+     | notes: NO SNAPSHOT TABLE, AND THAT IS THE POINT. Almost everything in
+       League Pulse is already fixed once a season ends: the Manager Ledger
+       reads settled weeks only, Schedules holds final scores, and Power Pulse
+       and Positional WAR both refuse to compute without a remaining schedule
+       and clear what they had. The one thing that kept moving was the
+       trade-value power rankings, priced off a market that does not stop in
+       February. Measured on production: "The Royal Dynasty", a 2025 league
+       that finished in December, had its values recomputed on 2026-09-18.
+       So powerRankingsAreStale now takes a seasonComplete flag and declines to
+       recompute when the season is complete AND rows exist. The rows are
+       already a per-league copy of the values, so the cache IS the snapshot
+       and its generated_at is the date the reader is shown.
+       A league with no rows still computes even when complete: freezing an
+       empty table would leave a finished league with no rankings at all.
+       force=true is the way back.
+       The trigger is Sleeper's own status, not the fuller reading in
+       lib/league-season/phase.ts, because this sits on the critical path of
+       every league page. The cost is a few days of drift on a league whose
+       bracket is decided but whose status has not flipped. The freeze is a
+       promise about the offseason, not about championship Sunday.
+       WHAT IS NOT FROZEN, and is said out loud on the page rather than left to
+       be discovered: the trade grades on the Transactions feed still price at
+       today's values. Pricing a trade as of the day it was made needs a dated
+       lookup against player_value_history that analyzeTrade does not do yet.
+       That is the obvious next piece of work if it matters.
+     | verified: yes. Ran npm run pulse:league against the finished 2025 league
+       and confirmed generated_at did not move (2026-09-18 05:34, unchanged),
+       while Power Pulse and Positional WAR skipped as designed and the Manager
+       Ledger recomputed. 5 unit tests on the gate itself.

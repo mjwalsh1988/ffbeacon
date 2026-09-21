@@ -1,5 +1,37 @@
 # Handoff
 
+## Session of 2026-09-20 (part two): page widths and the League Pulse season switch
+
+NOT COMMITTED, by instruction. The chopped Power Pulse work from earlier the
+same day IS committed (6f2ed87). Tasks PW-T01 and LS-T01 to LS-T05 at the end
+of progress.md carry the detail; this says where it stands.
+
+State: typecheck clean, 373 test files and 5,701 tests passing, punctuation
+scan clean over every changed file. No migration in this half: the value
+freeze needed no new table.
+
+Two things NOT done, both stated rather than hidden:
+
+1. Nothing here has been opened in a browser. The overview cards, the two
+   post-season states and every re-widened tool page are verified by typecheck,
+   by unit tests and, where there was data to check, against production rows.
+   None of them has been looked at.
+2. Trade grades on a finished league's Transactions feed still price at
+   TODAY's player values, not at the values on the day of the trade. The page
+   says so in a line of its own. Fixing it properly means an as-of lookup
+   against player_value_history inside lib/trade-analyzer.ts, threaded through
+   every caller of analyzeTrade. That is the obvious next piece of work.
+
+Verified against production during the session:
+
+- A completed 2025 dynasty league resolves the right champion and runner-up
+  off Sleeper's winners bracket.
+- A live chopped league resolves the right elimination (roster 7, week 1),
+  correctly flagged as this week's, with 17 alive and 1 out.
+- The value freeze holds: a full pulse of a finished 2025 league left
+  generated_at exactly where it was, where before this change the 24-hour TTL
+  would have recomputed it.
+
 ## FAAB overhaul and chopped guide build (FB-T / FB-G)
 
 Session of 2026-09-19. BUILT, REVIEWED, COMMITTED AND PUSHED to main at

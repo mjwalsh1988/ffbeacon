@@ -192,7 +192,7 @@ export default async function FaabPage({
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
       />
-      <PageBody>
+      <PageBody width="tool">
         {fallbackBanner && (
           <p
             role="status"

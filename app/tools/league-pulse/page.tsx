@@ -189,7 +189,7 @@ export default async function LeaguePulsePage({
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
       />
-      <PageBody>
+      <PageBody width="tool">
         {/* The "sign in to save" sentence is only true for a reader who has
             nothing saved. Saying it to someone whose handle is already on file
             sends them to a page to do a thing they did. */}

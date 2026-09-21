@@ -99,7 +99,11 @@ export function WrittenSections({ settings }: { settings: WrittenSectionsSetting
   const faq = buildTradeCalculatorFaq(settings);
 
   return (
-    <div className="mx-auto mt-20 max-w-5xl space-y-16 sm:space-y-20">
+    // No width of its own, matching ToolExplainer: it fills the page's column
+    // so its left edge lines up with the builder above it and the methodology
+    // line below it. It used to cap itself at max-w-5xl and centre, which left
+    // this page with three edges once the page took over the measure.
+    <div className="mt-20 space-y-16 sm:space-y-20">
       <HowGradedSection settings={settings} />
       <WhatCountsAsFairSection settings={settings} />
       <FaqSection faq={faq} />

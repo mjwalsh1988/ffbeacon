@@ -188,15 +188,17 @@ export function FaabForm({
     // spacing instead.
     <>
       {!selectedPlayer && masthead}
-      {/* One width, always, matching the other tools. An earlier version only
-          widened once a player was picked, which left the page people actually
-          land on sitting in a 48rem column under a full-width hero, and made
-          the layout jump the moment they picked someone. */}
+      {/* No width here. The page's own column (PageBody width="tool") sets it,
+          so the form, the explainer and the market tables below all share one
+          measure. An earlier version capped this block at 88rem while the
+          sections under it ran wider, which is what made the page look like two
+          pages. It also used to widen only once a player was picked, so the
+          layout jumped at the moment of the answer. */}
       <div
         id="faab-form-section"
         // The top margin belongs to the gap under the hero, so it goes when the
         // hero does and the tool sits directly under the breadcrumb bar.
-        className={`mx-auto max-w-[88rem] scroll-mt-24 ${selectedPlayer ? "" : "mt-8"}`}
+        className={`scroll-mt-24 ${selectedPlayer ? "" : "mt-8"}`}
       >
       {/* The page h1 while the hero is not rendering one. Not painted: the
           selected player's card names him directly below. */}

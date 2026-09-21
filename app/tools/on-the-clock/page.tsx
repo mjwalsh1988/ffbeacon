@@ -111,7 +111,7 @@ export default async function OnTheClockPage({
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
       />
-      <PageBody>
+      <PageBody width="board">
         {/* The hero belongs to the steps before a draft is open, so it is handed
             to the client rather than rendered here. Once you are inside a room,
             the first thing under the breadcrumbs is the room itself, with the
@@ -121,11 +121,14 @@ export default async function OnTheClockPage({
           {/* The draft room is the one screen on the site that is genuinely
               column-starved: the available players table carries seven or eight
               columns at once and a drafter is reading it under time pressure, so
-              it gets the widest measure we allow. Every step BEFORE the room
-              constrains itself with its own max-w-3xl / max-w-4xl wrapper inside
-              this one, so the connect flow stays narrow and centered and only
-              the room spreads out. */}
-          <div className="mx-auto max-w-[96rem]">
+              it gets the widest measure we allow, and that measure is now the
+              whole page's (PageBody width="board") rather than this block's, so
+              the written sections below line up with the room instead of
+              running past it. Every step BEFORE the room constrains itself with
+              its own max-w-3xl / max-w-4xl wrapper inside this one, so the
+              connect flow stays narrow and centered and only the room spreads
+              out. */}
+          <div>
             {settings.feature.enabled ? (
               <OnTheClockClient
                 masthead={<Masthead isMember={isMember} season={season} />}
@@ -147,7 +150,7 @@ export default async function OnTheClockPage({
             )}
           </div>
         </div>
-        <p className="mx-auto mt-8 max-w-[96rem] text-sm leading-relaxed text-ink-muted">
+        <p className="mt-8 text-sm leading-relaxed text-ink-muted">
           <Link
             href="/guides/how-ff-beacon-works"
             className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"

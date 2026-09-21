@@ -125,10 +125,53 @@ type ServiceClient = SupabaseClient<Database>;
  * when there are no cache rows yet, or the freshest cache row is older than
  * LEAGUE_POWER_RANKINGS_TTL_MS. On any query error we return true (recompute
  * rather than silently serve stale rankings). Reads a single indexed row.
+ *
+ * A FINISHED SEASON FREEZES, and this is where that happens.
+ *
+ * These rankings are the one thing in League Pulse that keeps moving after a
+ * league stops playing. Every other surface is already fixed: the Manager
+ * Ledger reads settled weeks and nothing else, Schedules holds final scores,
+ * Power Pulse and Positional WAR both refuse to compute without a remaining
+ * schedule and clear what they had. But the value rankings are priced off
+ * today's player market, which does not stop moving in February, so a reader
+ * coming back to a league they won in December would find their roster
+ * revalued by a rookie class they never had, a ranking table reordered by it,
+ * and no way to tell that from what actually happened.
+ *
+ * So once the season is complete the last computed rows are the answer, and
+ * they stay. Nothing new is stored and no snapshot table is needed: the rows
+ * are already a per-league copy of the values, and their `generated_at` is the
+ * date the reader is shown.
+ *
+ * `force` still recomputes, which is the manual way back for a league that
+ * froze on rows somebody does not want. And a league with NO rows yet still
+ * computes even when complete, because freezing an empty table would leave a
+ * finished league with no rankings at all rather than with its final ones.
+ *
+ * The trigger is Sleeper's own `status`, not our fuller reading of who won
+ * (lib/league-season/phase.ts), because this runs on the critical path of
+ * every league page and that reading costs a rosters read and a bracket parse.
+ * The difference is a few days of drift on a league whose bracket has been
+ * decided but which Sleeper has not flipped yet, against a read on every load
+ * of every league forever. The freeze is a promise about the offseason, not
+ * about championship Sunday.
+ *
+ * ONE KNOWN HOLE, stated rather than left to be found. The check is per LEAGUE
+ * and not per (format, source): any row at all freezes the lot. So a value
+ * source added to `source_registry` after a league completed will never be
+ * computed for that league, and its rankings table for that source stays
+ * empty rather than filling in on the next TTL expiry the way it used to.
+ * Scoping the gate to the combination being viewed would mean threading it in
+ * from the page, and calculateLeaguePowerRankings iterates every active combo
+ * anyway, so the fix for a league in that state is the manual
+ * `npm run calculate:power-rankings -- --sleeper-league-id <id>`.
+ *
+ * Exported for its own test, which is the only caller outside this file.
  */
-async function powerRankingsAreStale(
+export async function powerRankingsAreStale(
   supabase: ServiceClient,
   leagueRowId: string,
+  seasonComplete: boolean,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("league_power_rankings_cache")
@@ -138,6 +181,7 @@ async function powerRankingsAreStale(
     .limit(1)
     .maybeSingle();
   if (error || !data?.generated_at) return true;
+  if (seasonComplete) return false;
   return Date.now() - new Date(data.generated_at).getTime() >= LEAGUE_POWER_RANKINGS_TTL_MS;
 }
 
@@ -576,7 +620,13 @@ export async function pulseLeagueDerived(
       // so they recompute at most once per 24h. A failure is non-fatal; the
       // cache row can be backfilled by npm run calculate:power-rankings.
       (async () => {
-        if (!force && !(await powerRankingsAreStale(supabase, leagueRowId))) return;
+        const seasonComplete = (league.status ?? "").toLowerCase() === "complete";
+        if (
+          !force &&
+          !(await powerRankingsAreStale(supabase, leagueRowId, seasonComplete))
+        ) {
+          return;
+        }
         try {
           const calcResult = await timed("rankings", () =>
             calculateLeaguePowerRankings(supabase, leagueRowId),

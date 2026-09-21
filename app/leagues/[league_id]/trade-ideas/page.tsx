@@ -17,6 +17,8 @@ import {
   buildLeagueScoringTags,
 } from "@/lib/league-format-tags";
 import { LeagueShell } from "@/components/league-shell";
+import { PostSeasonNotice } from "@/components/league-season/post-season-notice";
+import { loadLeagueSeasonView } from "@/lib/league-season/load";
 import { Panel } from "@/components/dashboard-panel";
 import { TradeFinder, type PlayerOption } from "@/components/trade-finder";
 import {
@@ -230,21 +232,32 @@ export default async function LeagueTradeFinderPage({
     typeof resolveLeagueContext
   >[1];
 
-  // WAVE (post-league). None of these three needs another's result: the header
+  // WAVE (post-league). None of these four needs another's result: the header
   // actions need league.id and the viewer resolved above; the source
   // preference and the signed-in check need only the request's own session.
-  const [{ otherLeagues }, resolvedSource, userResult] = await Promise.all([
-    loadLeagueHeaderActions(
-      supabase,
-      league.id,
-      sleeperLeagueId,
-      viewer,
-      league.season != null ? String(league.season) : null,
-    ),
-    resolveSourceSlug(supabase, sp.source),
-    supabase.auth.getUser(),
-  ]);
+  //
+  // The season view rides in this wave rather than in front of it. Trade Ideas
+  // prices a deal by what it does to the rest of the season, and with no weeks
+  // left there is no rest of the season: the engine would run against an empty
+  // slate and return a confident zero for every offer, which is the same
+  // defect Power Pulse refuses to cache. It needs nothing the others produce,
+  // so awaiting it on its own line would put a whole round trip in front of
+  // the wave that exists to avoid one.
+  const [{ otherLeagues }, resolvedSource, userResult, seasonView] =
+    await Promise.all([
+      loadLeagueHeaderActions(
+        supabase,
+        league.id,
+        sleeperLeagueId,
+        viewer,
+        league.season != null ? String(league.season) : null,
+      ),
+      resolveSourceSlug(supabase, sp.source),
+      supabase.auth.getUser(),
+      loadLeagueSeasonView(supabase, league.id),
+    ]);
   const user = userResult.data.user;
+  const postSeason = seasonView?.phase === "complete";
 
   // No handle on the crumbs for a saved reader: /tools/league-pulse resolves
   // the same identity itself, and the deep view matches on the Sleeper user id.
@@ -310,6 +323,31 @@ export default async function LeagueTradeFinderPage({
       otherLeagues={otherLeagues}
       masthead={mastheadProps}
     >
+      {postSeason ? (
+        <PostSeasonNotice
+          title="This league's season is over"
+          explanation="Trade Ideas measures an offer by what it does to the rest of your season: the wins it adds, the weeks it changes, the playoff run it buys. There are no weeks left to change, so every offer would come back worth nothing, and that is a fact about the calendar rather than about the trade. It comes back when the next season's schedule does."
+          champion={seasonView?.champion ?? null}
+          season={league.season != null ? Number(league.season) : null}
+          links={[
+            {
+              href: `/leagues/${sleeperLeagueId}/decisions${qs}`,
+              label: "Decisions",
+              hint: "What every trade, claim and lineup was actually worth",
+            },
+            {
+              href: `/leagues/${sleeperLeagueId}/transactions${qs}`,
+              label: "Transactions",
+              hint: "Every move the league made, with the trades graded",
+            },
+            {
+              href: `/leagues/${sleeperLeagueId}/schedules${qs}`,
+              label: "Schedules",
+              hint: "How the season fell, week by week",
+            },
+          ]}
+        />
+      ) : (
       <>
         <section
           aria-labelledby="tf-intro"
@@ -465,6 +503,7 @@ export default async function LeagueTradeFinderPage({
           </aside>
         </div>
       </>
+      )}
     </LeagueShell>
   );
 }

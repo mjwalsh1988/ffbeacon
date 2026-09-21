@@ -288,7 +288,7 @@ export default async function SignalScoutPage() {
       {/* The masthead is rendered INSIDE the game column rather than above the
           whole page, because the game takes it away once a round is live and a
           page-level masthead could not be removed from in here. */}
-      <PageBody>
+      <PageBody width="tool">
         {railEnabled ? (
           <LeaderboardRail
             boards={enabledBoards}

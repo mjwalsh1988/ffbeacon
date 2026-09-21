@@ -48,7 +48,15 @@ export function FaqAccordion({ items }: { items: FaqAccordionItem[] }) {
             </span>
           </summary>
           <div className="px-4 pb-4 sm:pl-[3.75rem]">
-            <p className="leading-relaxed text-ink-muted">{item.answer}</p>
+            {/* The MEASURE is capped, not the block. An answer sits in the
+                flexible column of its parent grid, so on a wide tool page it
+                would otherwise run to about 180 characters a line, which is
+                roughly twice a comfortable measure. Capping the block instead
+                would pull its left edge away from everything above it, which is
+                the thing that made these pages look like several pages. */}
+            <p className="max-w-3xl leading-relaxed text-ink-muted">
+              {item.answer}
+            </p>
           </div>
         </details>
       ))}

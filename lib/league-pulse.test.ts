@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { orphanRowIds, transactionWeek } from "./league-pulse";
+import {
+  LEAGUE_POWER_RANKINGS_TTL_MS,
+  orphanRowIds,
+  powerRankingsAreStale,
+  transactionWeek,
+} from "./league-pulse";
 
 /**
  * The rule that keeps our copy of a league the same shape as Sleeper's.
@@ -76,5 +81,59 @@ describe("transactionWeek", () => {
     expect(transactionWeek({})).toBeNull();
     expect(transactionWeek({ week: 0, leg: 0 })).toBeNull();
     expect(transactionWeek({ leg: -1 })).toBeNull();
+  });
+});
+
+/**
+ * A finished league's trade values stop moving.
+ *
+ * These rankings are the one League Pulse surface priced off a market that
+ * keeps running after a league stops playing. Everything else is already
+ * fixed: the Manager Ledger reads settled weeks, Schedules holds final scores,
+ * and Power Pulse and Positional WAR refuse to compute without a remaining
+ * schedule. Without this gate, a reader coming back to a league they won in
+ * December would find their roster revalued by a rookie class they never had.
+ */
+describe("powerRankingsAreStale", () => {
+  /** One row's worth of fake PostgREST, for the single query this makes. */
+  function client(generatedAt: string | null) {
+    const builder = {
+      select: () => builder,
+      eq: () => builder,
+      order: () => builder,
+      limit: () => builder,
+      maybeSingle: () =>
+        Promise.resolve({
+          data: generatedAt === null ? null : { generated_at: generatedAt },
+          error: null,
+        }),
+    };
+    return { from: () => builder } as never;
+  }
+
+  const fresh = new Date().toISOString();
+  const old = new Date(Date.now() - LEAGUE_POWER_RANKINGS_TTL_MS - 1000).toISOString();
+
+  it("recomputes when the league has no rows yet", async () => {
+    expect(await powerRankingsAreStale(client(null), "league-1", false)).toBe(true);
+  });
+
+  it("recomputes a finished league that has no rows yet", async () => {
+    // Freezing an empty table would leave a finished league with no rankings
+    // at all rather than with its final ones.
+    expect(await powerRankingsAreStale(client(null), "league-1", true)).toBe(true);
+  });
+
+  it("recomputes an in-season league once the rows pass the TTL", async () => {
+    expect(await powerRankingsAreStale(client(old), "league-1", false)).toBe(true);
+  });
+
+  it("leaves an in-season league alone inside the TTL", async () => {
+    expect(await powerRankingsAreStale(client(fresh), "league-1", false)).toBe(false);
+  });
+
+  it("freezes a finished league however old its rows are", async () => {
+    const ancient = new Date("2025-12-30T12:00:00Z").toISOString();
+    expect(await powerRankingsAreStale(client(ancient), "league-1", true)).toBe(false);
   });
 });

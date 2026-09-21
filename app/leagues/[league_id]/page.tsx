@@ -34,6 +34,10 @@ import { LeagueLoadError } from "@/components/league-load-error";
 import { LeagueShell } from "@/components/league-shell";
 import { WarRailSection } from "@/components/league-war/positional-war-section";
 import { PulseFavoriteCard } from "@/components/league-rail/pulse-favorite-card";
+import { ChampionCard } from "@/components/league-season/champion-card";
+import { FrozenValuesNote } from "@/components/league-season/frozen-values-note";
+import { ChopCard } from "@/components/league-season/chop-card";
+import { loadLeagueSeasonView } from "@/lib/league-season/load";
 import { loadPulseFavorite } from "@/lib/league-pulse-favorite";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import { LeagueActivityPanel } from "@/components/league-activity/activity-panel";
@@ -394,7 +398,10 @@ export default async function LeagueDeepViewPage({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-6">
             {/*
-              THE LOG LEADS THE COLUMN. It is the answer to "what did I miss",
+              THE LOG LEADS THE REST OF THE COLUMN. The only thing above it
+              is the result of the season, which is not "what did I miss" but
+              "it is over", and which is absent for most leagues most of the
+              time. This is the answer to "what did I miss",
               which is the question a reader has on the way in; the rankings
               answer "where do I stand", which is the question they have once
               they are oriented. It also has to sit above the table because it
@@ -405,6 +412,30 @@ export default async function LeagueDeepViewPage({
               league_activity, no valuation, no projection. The rankings do not
               wait on it and it does not wait on the rankings.
             */}
+            {/*
+              THE RESULT LEADS, WHEN THERE IS ONE. A champion and a chop are
+              both the largest thing that has happened in the league, and until
+              now the overview reported neither: a finished league opened on a
+              live-season page and a guillotine league reported an elimination
+              the same way it reports a waiver claim.
+
+              Its own boundary, and cheap reads against tables the sync has
+              already written. Nothing here computes and nothing can trigger a
+              compute, which is why it can sit above everything without holding
+              anything up.
+
+              The fallback is null rather than a skeleton ON PURPOSE. Most
+              leagues have no card here at all, so reserving height would push
+              the column down and then pull it back up again for the majority,
+              which is a worse shift than the one it would prevent.
+            */}
+            <Suspense fallback={null}>
+              <SeasonResultSection
+                leagueRowId={league.id}
+                season={league.season != null ? Number(league.season) : null}
+              />
+            </Suspense>
+
             <Suspense fallback={<ActivitySkeleton />}>
               <ActivitySection
                 leagueRowId={league.id}
@@ -611,6 +642,53 @@ async function PulseFavoriteSection({
   const favorite = await loadPulseFavorite(supabase, leagueRowId, season);
   if (!favorite) return null;
   return <PulseFavoriteCard favorite={favorite} powerPulseHref={powerPulseHref} />;
+}
+
+/**
+ * The champion, or the most recent chop, at the top of the overview.
+ *
+ * ONE OR THE OTHER, NEVER BOTH. A finished chopped league has a champion and
+ * a last chop, and they are the same event described twice: the final
+ * elimination is what crowned the survivor. Showing both would report one
+ * result as two, so the champion wins.
+ *
+ * Renders nothing in an ordinary league mid-season, which is every league most
+ * of the time. An empty card at the top of the page is worse than no card.
+ */
+async function SeasonResultSection({
+  leagueRowId,
+  season,
+}: {
+  leagueRowId: string;
+  season: number | null;
+}) {
+  const supabase = await createClient();
+  const view = await loadLeagueSeasonView(supabase, leagueRowId);
+  if (!view) return null;
+
+  if (view.champion) {
+    return (
+      <ChampionCard
+        champion={view.champion}
+        runnerUp={view.runnerUp}
+        source={view.championSource}
+        season={season}
+      />
+    );
+  }
+
+  if (view.chopped && view.latestChop) {
+    return (
+      <ChopCard
+        chop={view.latestChop}
+        thisWeek={view.latestChop.thisWeek}
+        aliveCount={view.aliveCount}
+        choppedCount={view.choppedCount}
+      />
+    );
+  }
+
+  return null;
 }
 
 /**
@@ -1117,10 +1195,17 @@ async function PowerRankingsSection({
     );
   }
 
+  // A finished league's values are frozen (see powerRankingsAreStale in
+  // lib/league-pulse.ts), so the table says when they stopped. It needs only
+  // the format and the source already resolved above, so it rides in the wave
+  // below rather than costing a round trip after it, and for a live league it
+  // is not a query at all.
+  const seasonComplete = (leagueStatus ?? "").toLowerCase() === "complete";
+
   // Reuse the same loader the Teams tab uses. It already computes per-position
   // ranks across the league, so the table can render them directly without
   // re-fetching or re-deriving.
-  const [teams, pulseView] = await Promise.all([
+  const [teams, pulseView, frozenRow] = await Promise.all([
     loadLeagueTeamCards(
       supabase,
       leagueRowId,
@@ -1133,7 +1218,19 @@ async function PowerRankingsSection({
     leagueSeason
       ? loadPowerPulseView(supabase, leagueRowId, Number(leagueSeason), formatRow.id, sourceSlug)
       : Promise.resolve(null),
+    seasonComplete
+      ? supabase
+          .from("league_power_rankings_cache")
+          .select("generated_at")
+          .eq("league_id", leagueRowId)
+          .eq("format_config_id", formatRow.id)
+          .eq("source", sourceSlug)
+          .order("generated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+  const frozenAt = frozenRow.data?.generated_at ?? null;
 
   // Power Pulse, keyed by roster row id so it can decorate the value rows.
   const pulseByRoster = new Map(
@@ -1242,6 +1339,11 @@ async function PowerRankingsSection({
           <PicksToggle includePicks={includePicks} />
         )}
       </div>
+      {seasonComplete && (
+        <div className="border-b border-line px-4 py-3 sm:px-5">
+          <FrozenValuesNote generatedAt={frozenAt} />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">

@@ -145,7 +145,7 @@ export default async function SignalCheckPage({
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
       />
-      <PageBody>
+      <PageBody width="tool">
         <Masthead
           featureLabel={settings.publicLabel}
           resultLabel={settings.resultLabel}
@@ -157,12 +157,12 @@ export default async function SignalCheckPage({
           aria-labelledby="builder-heading"
           className="mt-8 scroll-mt-24"
         >
-          {/* The builder is two rosters side by side and a verdict between
-              them, so it reads better with room than centred in a narrow
-              column. Still capped rather than edge to edge: past about 90rem
-              the two sides drift far enough apart that comparing them means
-              moving your head. */}
-          <div className="mx-auto max-w-[90rem]">
+          {/* The 90rem cap that used to live here is now the page's column, so
+              the builder, the explainer and the methodology line below it share
+              one measure instead of three. The reason for the cap is unchanged:
+              past about 90rem the two sides of a trade drift far enough apart
+              that comparing them means moving your head. */}
+          <div>
             <h2 id="builder-heading" className="sr-only">
               Build a trade
             </h2>
@@ -190,7 +190,7 @@ export default async function SignalCheckPage({
 
         <WrittenSections settings={settings} />
 
-        <p className="mx-auto mt-10 max-w-5xl text-sm leading-relaxed text-ink-muted">
+        <p className="mt-10 text-sm leading-relaxed text-ink-muted">
           <Link
             href="/guides/how-ff-beacon-works"
             className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"

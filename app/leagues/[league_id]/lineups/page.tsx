@@ -10,6 +10,8 @@ import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resol
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { buildLeagueFormatTags, buildLeagueScoringTags } from "@/lib/league-format-tags";
 import { LeagueShell } from "@/components/league-shell";
+import { PostSeasonNotice } from "@/components/league-season/post-season-notice";
+import { loadLeagueSeasonView } from "@/lib/league-season/load";
 import type { LeagueMastheadProps } from "@/components/league-shell";
 import { Panel } from "@/components/dashboard-panel";
 import { formatRelative } from "@/lib/datetime";
@@ -184,7 +186,14 @@ export default async function LeagueLineupsPage({
   // WAVE TWO. The header actions need the viewer resolved above; the format
   // resolution needs the source slug resolved above. Neither needs the other's
   // result, so they run together rather than one after another.
-  const [{ otherLeagues }, context] = await Promise.all([
+  //
+  // The season view rides along for the same reason. This page is a lineup
+  // helper before the games and a report after them, and both of those are
+  // about a WEEK; with the season finished there is no next week to set and no
+  // last week that has not already been graded on the Decisions page. It needs
+  // nothing the other two produce, so it belongs in the wave rather than in a
+  // round trip of its own in front of it.
+  const [{ otherLeagues }, context, seasonView] = await Promise.all([
     loadLeagueHeaderActions(
       supabase,
       league.id,
@@ -193,7 +202,9 @@ export default async function LeagueLineupsPage({
       league.season != null ? String(league.season) : null,
     ),
     resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug),
+    loadLeagueSeasonView(supabase, league.id),
   ]);
+  const postSeason = seasonView?.phase === "complete";
   const coverageOk = context.coverage !== "none";
 
   const formatTags = buildLeagueFormatTags({
@@ -244,6 +255,32 @@ export default async function LeagueLineupsPage({
       otherLeagues={otherLeagues}
       masthead={mastheadProps}
     >
+      {postSeason ? (
+        <PostSeasonNotice
+          title="This league's season is over"
+          explanation="Lineups is about one week: who to start before the games, and what the week cost you after them. There is no next week to set, and every week that was played has already been graded, which is what the Decisions page is for. It comes back when the next season starts."
+          champion={seasonView?.champion ?? null}
+          season={league.season != null ? Number(league.season) : null}
+          links={[
+            {
+              href: withUsername(
+                `/leagues/${sleeperLeagueId}/decisions`,
+                linkUsername,
+              ),
+              label: "Decisions",
+              hint: "Every week graded, and the wins left on the bench",
+            },
+            {
+              href: withUsername(
+                `/leagues/${sleeperLeagueId}/schedules`,
+                linkUsername,
+              ),
+              label: "Schedules",
+              hint: "Every matchup and every final score",
+            },
+          ]}
+        />
+      ) : (
       <>
         {/* Feature intro. The masthead owns this page's h1 (the league name),
             so the section heading is an h2. */}
@@ -296,6 +333,7 @@ export default async function LeagueLineupsPage({
           />
         </Suspense>
       </>
+      )}
     </LeagueShell>
   );
 }

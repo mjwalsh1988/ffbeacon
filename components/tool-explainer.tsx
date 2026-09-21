@@ -122,7 +122,13 @@ export function ToolExplainer({
   const nextHeadingId = `${id}-next-heading`;
 
   return (
-    <div className="mx-auto mt-20 max-w-5xl space-y-16 sm:space-y-20">
+    // No width of its own. It fills the column its page is in, which is what
+    // keeps its left edge on the same line as the tool above it. It used to cap
+    // itself at max-w-5xl and centre, which put it 5rem inside a 90rem tool on
+    // one page and 8rem inside a 96rem one on another, for no reason a reader
+    // could see. Nothing in here is a long line of prose: the steps, notes and
+    // next-steps are card grids, and the intro paragraph sets its own measure.
+    <div className="mt-20 space-y-16 sm:space-y-20">
       <section
         aria-labelledby={headingId}
         className="relative overflow-hidden rounded-modal border border-line bg-surface/40 p-5 sm:p-8"

@@ -35,6 +35,7 @@ import { TransactionRow } from "@/components/transaction-row";
 import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { LeagueShell } from "@/components/league-shell";
+import { loadLeagueSeasonView } from "@/lib/league-season/load";
 import { Panel } from "@/components/dashboard-panel";
 import {
   buildLeagueFormatTags,
@@ -148,7 +149,13 @@ export default async function LeagueTransactionsPage({
   const sleeperLeague = league.metadata as unknown as Parameters<
     typeof resolveLeagueContext
   >[1];
-  const [{ otherLeagues }, context] = await Promise.all([
+  //
+  // The season view rides along. This page keeps its feed after the season
+  // ends, because a transaction log is a record rather than a forecast; what
+  // changes is one sentence above it. A sentence must not cost a round trip of
+  // its own in front of the shell, and it fails soft: if the read errors the
+  // note simply does not render (see the catch below).
+  const [{ otherLeagues }, context, seasonView] = await Promise.all([
     loadLeagueHeaderActions(
       supabase,
       league.id,
@@ -161,7 +168,11 @@ export default async function LeagueTransactionsPage({
     resolveSourceSlug(supabase, sp.source).then((resolved) =>
       resolveLeagueContext(adminClient, sleeperLeague, resolved.slug),
     ),
+    // Fails soft on purpose. Its only job here is one explanatory sentence, and
+    // a sentence must never be able to take the page down.
+    loadLeagueSeasonView(supabase, league.id).catch(() => null),
   ]);
+  const seasonComplete = seasonView?.phase === "complete";
 
   // Back-links carry the handle only for a reader who arrived on one, so the
   // switcher and overview context survive a shared link without a saved reader
@@ -244,6 +255,24 @@ export default async function LeagueTransactionsPage({
           which is why these panels no longer need to be hidden on mobile. */}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-6">
+          {/* Said out loud rather than left to be discovered. The trade grades
+              below are priced at TODAY's player values, which is fine while a
+              league is playing and misleading once it has finished: a deal that
+              looked even in October can read as a fleecing in May because a
+              rookie broke out, and nobody in that league had any way of knowing.
+              The rankings on the overview are frozen at the end of the season;
+              these grades are not, because pricing a trade as of the day it was
+              made needs a dated value lookup this page does not do yet. */}
+          {seasonComplete && (
+            <p className="rounded-card border border-dashed border-line bg-base/40 px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
+              <span className="font-medium text-ink">
+                This season is finished.
+              </span>{" "}
+              The trades below are graded at what the players are worth now, not
+              at what they were worth on the day of the deal, so a verdict can
+              read harsher or kinder than it did at the time.
+            </p>
+          )}
           <Suspense fallback={<FeedSkeleton />}>
             <TransactionsFeed
               leagueRowId={league.id}

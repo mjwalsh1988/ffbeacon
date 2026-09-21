@@ -503,8 +503,11 @@ function PositionSection({
         </div>
       </div>
 
+      {/* max-w-3xl on the paragraph, because the grid is only applied when
+          there are closest calls to sit beside it: a position with none left
+          this body running the whole page width. */}
       <div className={`mt-5 grid gap-6 ${closestCalls ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""}`}>
-        <p className="leading-relaxed text-ink-muted">{copy.body}</p>
+        <p className="max-w-3xl leading-relaxed text-ink-muted">{copy.body}</p>
         {closestCalls ? <div>{closestCalls}</div> : null}
       </div>
     </section>

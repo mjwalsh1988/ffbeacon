@@ -143,6 +143,10 @@ export default async function ManagerPulsePage() {
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
       />
+      {/* Deliberately the wide column, not the tool one. The other branch of
+          this page, the report, lays out as PageColumns with a rail and is wide
+          by construction, and a search box that sits in a narrower column than
+          the page it hands you to makes the width jump on submit. */}
       <PageBody>
         <PageMasthead
           eyebrow="Tools"
