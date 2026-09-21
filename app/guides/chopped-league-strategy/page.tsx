@@ -26,7 +26,17 @@ import {
   shareText,
   type MarketRead,
 } from "@/lib/guides/faab-market-figures";
-import { SurvivalFigure } from "./chopped-figures";
+import {
+  ByeClusterFigure,
+  ConsistencyFigure,
+  DangerLadderFigure,
+  EndgameFigure,
+  FieldShrinkFigure,
+  PaceFigure,
+  PriceDecayFigure,
+  SurvivalFigure,
+} from "./chopped-figures";
+import { SpendOrHold, SurvivalWorksheet, WeeklyChecklist } from "./chopped-classroom";
 
 /**
  * /guides/chopped-league-strategy
@@ -46,14 +56,29 @@ import { SurvivalFigure } from "./chopped-figures";
  *
  * HOW THE PAGE IS ASSEMBLED. Every lesson number is read from the LESSONS
  * array, so the six lessons renumber themselves if one is ever added or
- * moved. The survival figure in lesson 2 lives in chopped-figures.tsx
- * (FB-G02). The measured tables in lessons 4 and 5 (FB-G03) are read from
+ * moved. The eight diagrams live in chopped-figures.tsx and the three
+ * interactive panels in chopped-classroom.tsx, with the simulation setups and
+ * the shipped-default ladders behind them in lib/guides/chopped-examples.ts,
+ * which carries a test pinning every claim the prose below makes about them.
+ * The measured tables in lessons 4 and 5 (FB-G03) are read from
  * faab_market_priors at render through lib/faab/priors-read.ts, never
  * hardcoded, and a cell under the calculator's own publishing threshold
  * (priors.minCellSamples) prints "Not enough data yet" rather than a figure
  * nobody should stand behind.
  *
- * EVERY NUMBER IS SOURCED OR LABELLED. Platform rules come from each
+ * THE THREE INTERACTIVE PANELS. The survival worksheet in lesson 2 runs the
+ * product's own simulateSurvival in the reader's browser, because the lesson's
+ * central claim (spread matters more than scoring here) is one a reader can
+ * only really believe by moving the spread themselves. Spend or hold is four
+ * invented Tuesdays graded against the guide's own rules. The Tuesday
+ * checklist stores nothing. All three say in words what they are before they
+ * say a number.
+ *
+ * EVERY NUMBER IS SOURCED OR LABELLED. The price curve in lesson 4, the pace
+ * targets in lesson 5 and the danger ladder beside them are all read from
+ * DEFAULT_FAAB_SETTINGS.chopped at import rather than typed out, so a diagram
+ * cannot drift from the calculator it describes, and each one says "by
+ * default" because an admin can change it. Platform rules come from each
  * platform's own rules page, linked under the table in lesson 1. The Fantasy
  * Life bid medians and the NFFC Eliminator bands are published figures and are
  * attributed in the sentences that use them, as are Paul Charchian's pace
@@ -143,6 +168,7 @@ const TOC_ITEMS = [
   { id: "how-much-heading", label: "How much to bid" },
   { id: "endgame-heading", label: "The endgame" },
   { id: "mistakes-heading", label: "Mistakes that get you chopped" },
+  { id: "checklist-heading", label: "The Tuesday checklist" },
   { id: "faq-heading", label: "Questions, answered" },
 ];
 
@@ -317,6 +343,7 @@ export default async function ChoppedLeagueStrategyGuide() {
             <HowMuchSection />
             <EndgameSection />
             <MistakesSection />
+            <ChecklistSection />
             <FaqSection />
             <ClosingSection />
           </div>
@@ -646,6 +673,16 @@ function WhatSection() {
         no schedule luck to complain about, because you are not playing an opponent. You are playing
         the floor of the league, every week, and the floor rises as the weak teams are removed.
       </Para>
+      <div className="mt-6">
+        <FieldShrinkFigure />
+      </div>
+      <Para>
+        That picture is the format, and the two halves of it are the same eighteen rosters. Week 9
+        is the balance point: nine teams still playing and nine teams&apos; worth of players sitting
+        on the wire. From week 10 there is more talent available to buy than there is left in the
+        league. A budget spent in September buys from the first bar. A budget held until November
+        buys from the last one.
+      </Para>
 
       <GuideSubheading className="mt-8">The same format under seven names</GuideSubheading>
       <Para>
@@ -768,6 +805,33 @@ function SurviveSection() {
         roster can score more points than mine across the season and still be eliminated in week 4,
         because it is the variance that kills you, not the average.
       </Para>
+      <GuideSubheading className="mt-8">Same points, different spread</GuideSubheading>
+      <Para>
+        That last sentence is the whole format, so it is worth more than my word. Here is the same
+        simulator again, this time on eighteen rosters that all score exactly the same points per
+        week. The only thing separating them is how far a given Sunday strays from that average.
+      </Para>
+      <div className="mt-6">
+        <ConsistencyFigure />
+      </div>
+      <Para>
+        Nothing about scoring explains any of that gap, because there is no gap in scoring. The
+        steady roster is chopped in week 1 under one percent of the time and the boom-or-bust roster
+        about one time in nine, and by the end of the season the steady roster has won the league
+        roughly twelve times as often. Same points. Twelve times the titles.
+      </Para>
+      <Para>
+        Try it yourself below, and try the thing that surprised me when I first ran it: make the
+        roster steadier and then make it worse at scoring. A steady roster scoring eight points a
+        week below the rest of the league lasts about ten weeks. A boom-or-bust roster scoring
+        eight points above it lasts about seven. Sixteen points a week of scoring, handed over, and
+        the steady roster still survives three weeks longer and holds onto roughly the same title
+        odds. In a format that only asks whether you were last, a quiet 95 beats a coin flip
+        between 130 and 60.
+      </Para>
+      <div className="mt-6">
+        <SurvivalWorksheet />
+      </div>
       <Para>
         Then the arithmetic turns. Every week the league removes its worst team, so the field you
         are measured against gets better and the lowest score climbs. Average is a safe place to be
@@ -842,6 +906,16 @@ function DraftSection() {
         starters sharing one bye week is a scheduled disaster, and in this format a scheduled
         disaster is a scheduled elimination. Check the bye columns before you take your fifth and
         sixth picks, not after.
+      </Para>
+      <div className="mt-6">
+        <ByeClusterFigure />
+      </div>
+      <Para>
+        That is one week of scheduling, priced. Two rosters identical in all sixteen other weeks,
+        one of them thirty points lighter on a single Sunday because three starters are off at
+        once, and the chop risk in that week goes from about one in twelve to about two in five.
+        Draft day is the cheapest moment you will ever get to fix it, and it costs nothing but
+        looking at a column.
       </Para>
 
       <GuideSubheading className="mt-8">Kickers, defenses and the superflex case</GuideSubheading>
@@ -999,6 +1073,23 @@ function MoneySection({ market }: { market: ChoppedMarket }) {
         once between 30 and 50 percent of teams were left, and nothing at all below that, because
         by then the survivors had either spent their money or had no room to use him.
       </Para>
+      <div className="mt-6">
+        <PriceDecayFigure />
+      </div>
+      <Para>
+        The stepped line is our own calculator&apos;s default, and the diamonds are the NFFC&apos;s
+        published figures turned into the same kind of ratio. They were arrived at separately and
+        they land on top of each other: the NFFC&apos;s 12.8 percent against its own 28.9 percent
+        is a ratio of 0.44, and the number the calculator ships with for that band is 0.45. I did
+        not tune one to match the other, and finding that out is the most reassuring thing that
+        happened while I was writing this guide.
+      </Para>
+      <Para>
+        The one place they part company is the floor. The NFFC measured zero below 30 percent of
+        the field, and our default still pays 0.15. That is deliberate: a measured zero is a room
+        that had run out of money, not proof that a good player is worthless in week 14, and a
+        calculator that returns nothing has stopped answering the question.
+      </Para>
       <Para>
         Two different data sets, one lesson. The same player is worth less every week the league
         gets smaller, so the question is never only what he is worth. It is what he is worth
@@ -1128,6 +1219,16 @@ function HowMuchSection() {
         week 14. He spent almost nothing while the field was large, then nearly all of it
         between weeks 9 and 14.
       </Para>
+      <div className="mt-6">
+        <PaceFigure />
+      </div>
+      <Para>
+        Drawn together, the two lines say something neither number says alone. The champion was
+        ahead of the target for half the season, holding 90 percent of his budget after week 8
+        against a target of 75, and then he went past it in the other direction and spent almost
+        everything in six weeks. The plan is not hold. It is hold, then commit, and the cliff in
+        the middle of that line is where the season was won.
+      </Para>
       <Para>
         The logic is the one the table in the last lesson shows. Early prices are the highest of
         the season and the players on offer are the worst, because a week 2 chopped roster is the
@@ -1210,6 +1311,15 @@ function HowMuchSection() {
           </>,
         ]}
       />
+      <div className="mt-6">
+        <DangerLadderFigure />
+      </div>
+      <Para>
+        Those four multipliers are not advice, they are what the calculator actually does with your
+        answer. End to end it is twice the money for the identical player in the identical week,
+        which is the sharpest way I can put the point: in a chopped league, where you stand is a
+        bigger input to your bid than who you are bidding on.
+      </Para>
       <Para>
         The{" "}
         <Link href="/tools/faab" className={LINK_CLASS}>
@@ -1272,6 +1382,14 @@ function HowMuchSection() {
         upgrade into a bid worth 40 percent of a remaining budget, and a safe team looking at the
         identical player should have bid half as much and been pleased to lose him.
       </Para>
+      <GuideSubheading className="mt-8">Four Tuesdays, four calls</GuideSubheading>
+      <Para>
+        Every rule in this lesson comes down to one decision you make on a Tuesday. Here are four
+        of them.
+      </Para>
+      <div className="mt-6">
+        <SpendOrHold />
+      </div>
       <KeyIdea>
         Spend on the players who start for you until the end, and on the weeks you might not
         survive. Everything else is a reason to wait for next Tuesday.
@@ -1343,6 +1461,9 @@ function EndgameSection() {
           </>,
         ]}
       />
+      <div className="mt-6">
+        <EndgameFigure />
+      </div>
       <Para>
         The comfort is that prices fall with the field. Fewer teams left means fewer bidders on the
         same player, and several of the teams still alive spent their budgets in September working
@@ -1410,6 +1531,28 @@ function MistakesSection() {
           </>,
         ]}
       />
+    </section>
+  );
+}
+
+/* ---------- The weekly checklist ---------- */
+
+function ChecklistSection() {
+  return (
+    <section aria-labelledby="checklist-heading" className="mt-12">
+      <GuideSectionHeader
+        id="checklist-heading"
+        eyebrow="Before you bid"
+        heading="The Tuesday checklist"
+      />
+      <Para>
+        A chopped league gives you one decision a week and no way to take it back. This is the list
+        I run before I put a claim in, and the first three items are about my own lineup rather
+        than about the player, on purpose.
+      </Para>
+      <div className="mt-6">
+        <WeeklyChecklist />
+      </div>
     </section>
   );
 }

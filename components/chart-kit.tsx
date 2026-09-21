@@ -194,6 +194,13 @@ export function linePath(pts: { x: number; y: number }[]): string {
 /**
  * A linear scale with a tiny guard for flat series. A series where every value
  * is identical would otherwise divide by zero and collapse onto one edge.
+ *
+ * KEEP THE DOMAIN ASCENDING (min < max). The flat-series guard fires on any
+ * span at or below zero, so a DESCENDING domain (makeScale(100, 0, ...)) is
+ * read as a flat series and silently returns a constant, collapsing every
+ * point onto the middle of the range. To draw an axis that runs backwards,
+ * reverse the RANGE instead: makeScale(0, 100, right, left). That is already
+ * how every y axis here is built, since SVG y grows downward.
  */
 export function makeScale(min: number, max: number, from: number, to: number) {
   const span = max - min;
