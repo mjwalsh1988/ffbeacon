@@ -264,7 +264,7 @@ export async function RankingsView({
   const stats: MastheadStat[] = [
     {
       label: "Players ranked",
-      value: rows.length.toLocaleString(),
+      value: rows.length.toLocaleString("en-US"),
       accent: "cyan",
     },
   ];
@@ -418,7 +418,7 @@ export async function RankingsView({
               Every ranked player, in one sortable view.
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-              {rows.length.toLocaleString()} players in {format.display_name},
+              {rows.length.toLocaleString("en-US")} players in {format.display_name},
               sorted by current market value. Click any column header to
               re-sort, or open a player&apos;s row for the full breakdown.
             </p>

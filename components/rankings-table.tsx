@@ -458,7 +458,7 @@ export function RankingsTable({
                 <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
                   {row.value !== null ? (
                     <BeaconValue show={valueIsBeacon}>
-                      {row.value.toLocaleString()}
+                      {row.value.toLocaleString("en-US")}
                     </BeaconValue>
                   ) : (
                     "-"
@@ -601,7 +601,7 @@ function GapCell({ row }: { row: RankingsRow }) {
   const pctWords = pct === null ? "" : `, a ${pct.toFixed(1)} percent drop`;
   return (
     <span className={isCliff ? "font-semibold text-brand-cyan" : "text-ink-muted"}>
-      {Math.round(gap).toLocaleString()}
+      {Math.round(gap).toLocaleString("en-US")}
       <span className="sr-only">{` points clear of the next ${row.position}${pctWords}${isCliff ? ", the drop into the next tier" : ""}`}</span>
     </span>
   );
@@ -638,7 +638,7 @@ function MobileMetricCell({
     default:
       return row.value !== null ? (
         <BeaconValue show={valueIsBeacon}>
-          {row.value.toLocaleString()}
+          {row.value.toLocaleString("en-US")}
         </BeaconValue>
       ) : (
         <span>-</span>
@@ -724,7 +724,7 @@ function PlayerDetailSheet({
               value={
                 row.value !== null ? (
                   <BeaconValue show={valueIsBeacon}>
-                    {row.value.toLocaleString()}
+                    {row.value.toLocaleString("en-US")}
                   </BeaconValue>
                 ) : (
                   "-"
@@ -747,11 +747,11 @@ function PlayerDetailSheet({
                     30-day range
                   </p>
                   <p className="mt-1 font-mono text-base font-semibold tabular-nums text-ink">
-                    {Math.round(row.low_30d).toLocaleString()} to{" "}
-                    {Math.round(row.high_30d).toLocaleString()}
+                    {Math.round(row.low_30d).toLocaleString("en-US")} to{" "}
+                    {Math.round(row.high_30d).toLocaleString("en-US")}
                     {row.value !== null && (
                       <span className="ml-2 text-xs font-normal text-ink-muted">
-                        now {row.value.toLocaleString()}
+                        now {row.value.toLocaleString("en-US")}
                       </span>
                     )}
                   </p>

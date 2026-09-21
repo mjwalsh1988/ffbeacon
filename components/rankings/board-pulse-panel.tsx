@@ -61,24 +61,24 @@ export function BoardPulsePanel({ pulse }: { pulse: BoardPulse }) {
         <>
           <Tile
             label="Gained value, 30d"
-            detail={`of ${pulse.withWindow.toLocaleString()} with a full 30 days`}
+            detail={`of ${pulse.withWindow.toLocaleString("en-US")} with a full 30 days`}
           >
             <span className="inline-flex items-center gap-1.5 text-signal-positive">
               <ArrowUp aria-hidden="true" className="h-4 w-4" />
               <span className="font-mono tabular-nums">
-                {pulse.rising.toLocaleString()}
+                {pulse.rising.toLocaleString("en-US")}
               </span>
               <span className="sr-only">players</span>
             </span>
           </Tile>
           <Tile
             label="Lost value, 30d"
-            detail={`${pulse.holding.toLocaleString()} held roughly steady`}
+            detail={`${pulse.holding.toLocaleString("en-US")} held roughly steady`}
           >
             <span className="inline-flex items-center gap-1.5 text-signal-warning">
               <ArrowDown aria-hidden="true" className="h-4 w-4" />
               <span className="font-mono tabular-nums">
-                {pulse.falling.toLocaleString()}
+                {pulse.falling.toLocaleString("en-US")}
               </span>
               <span className="sr-only">players</span>
             </span>
@@ -124,7 +124,7 @@ export function BoardPulsePanel({ pulse }: { pulse: BoardPulse }) {
             <MoveDown aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
             <span>{pulse.cliff.position}</span>
             <span className="font-mono text-xs tabular-nums text-ink-muted">
-              -{Math.round(pulse.cliff.drop).toLocaleString()}
+              -{Math.round(pulse.cliff.drop).toLocaleString("en-US")}
             </span>
           </span>
         </Tile>

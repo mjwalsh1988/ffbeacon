@@ -93,7 +93,7 @@ export function buildRankingsFaq({
         : `Who is the number one ranked player in ${lower}?`,
       answer:
         `${top.name}${top.team ? ` (${top.team})` : ""} is ${scope} as of the latest update, ` +
-        `on a market value of ${top.value === null ? "no published figure" : top.value.toLocaleString()}` +
+        `on a market value of ${top.value === null ? "no published figure" : top.value.toLocaleString("en-US")}` +
         `${rest ? `. Behind him come ${rest}` : ""}. ` +
         `The order is set by ${sourceLabel} market value and re-sorts ${cadence === "weekly" ? "every week" : "every night"}, ` +
         `so it moves with the market rather than with one person's opinion.`,
@@ -111,7 +111,7 @@ export function buildRankingsFaq({
         `from the gaps between values, not by slicing the list into equal blocks, so a tier of two and a tier of ` +
         `eleven are both normal answers. The steepest drop on this board right now is at ${pulse.cliff.position}, ` +
         `where the fall from tier ${pulse.cliff.tier} to tier ${pulse.cliff.tier + 1} is ` +
-        `${Math.round(pulse.cliff.drop).toLocaleString()} points of value. That is the cliff worth reaching for ` +
+        `${Math.round(pulse.cliff.drop).toLocaleString("en-US")} points of value. That is the cliff worth reaching for ` +
         `a round early.`,
     });
   }
@@ -165,9 +165,9 @@ export function buildRankingsFaq({
     items.push({
       question: "Who is rising and falling in value right now?",
       answer:
-        `Of the ${pulse.withWindow.toLocaleString()} players on this board with a full 30 days of history, ` +
-        `${pulse.rising.toLocaleString()} gained value, ${pulse.falling.toLocaleString()} lost value and ` +
-        `${pulse.holding.toLocaleString()} held. ${pulse.biggestRiser.name} is the biggest climber at ` +
+        `Of the ${pulse.withWindow.toLocaleString("en-US")} players on this board with a full 30 days of history, ` +
+        `${pulse.rising.toLocaleString("en-US")} gained value, ${pulse.falling.toLocaleString("en-US")} lost value and ` +
+        `${pulse.holding.toLocaleString("en-US")} held. ${pulse.biggestRiser.name} is the biggest climber at ` +
         `${pulse.biggestRiser.pct > 0 ? "+" : ""}${pulse.biggestRiser.pct.toFixed(1)}%` +
         `${pulse.biggestFaller ? `, and ${pulse.biggestFaller.name} the biggest faller at ${pulse.biggestFaller.pct.toFixed(1)}%` : ""}. ` +
         `The board's movement columns are 30-day for the same reason: a week is whichever piece of news landed ` +
@@ -184,7 +184,7 @@ export function buildRankingsFaq({
       items.push({
         question: `How deep is ${positionWord(position)} in ${lower}?`,
         answer:
-          `${rows.length.toLocaleString()} ${positionWord(position)}s are ranked in this format, and ` +
+          `${rows.length.toLocaleString("en-US")} ${positionWord(position)}s are ranked in this format, and ` +
           `${tierOne === 1 ? "one sits" : `${tierOne} sit`} in the top tier. The Gap column on each row is the ` +
           `drop in value to the next ${positionWord(position)} down, which is the number that tells you whether ` +
           `waiting a round costs you anything. A run of small gaps means the position is deep and you can wait; ` +
