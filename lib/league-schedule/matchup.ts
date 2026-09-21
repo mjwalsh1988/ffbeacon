@@ -133,6 +133,13 @@ export type BuildMatchupInput = {
   scoringSettings: ScoringSettings | null;
   settings: PowerPulseSettings;
   /**
+   * A chopped (guillotine) league. Sleeper pairs its teams and the pairing
+   * decides nothing: the lowest score in the whole league goes out, whoever it
+   * played. Both lineups below are real and stay; the probability of one of
+   * them beating the other is a fact about nothing.
+   */
+  chopped?: boolean;
+  /**
    * Home and away for this season, keyed `${week}|${TEAM}`. Optional, and a
    * missing map means every player's venue reads as unknown rather than as home.
    */
@@ -577,9 +584,12 @@ export function buildMatchupView(input: BuildMatchupInput): MatchupView {
   const away = input.away ? buildSide(input, input.away, resultsVisible) : null;
 
   // A settled week has a score on the board, so a win probability for it is not
-  // a forecast, it is a distraction. An unpaired roster has nobody to beat.
+  // a forecast, it is a distraction. An unpaired roster has nobody to beat. And
+  // in a chopped league nobody is playing the person they were drawn against,
+  // whatever the bracket-shaped page says.
   let homeWinProb: number | null = null;
   if (
+    !input.chopped &&
     !input.isFinal &&
     away !== null &&
     home.projectedTotal !== null &&

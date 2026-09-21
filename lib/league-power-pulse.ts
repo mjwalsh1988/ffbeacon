@@ -22,6 +22,7 @@ import { resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
 import { computePowerPulse, type PowerPulseTeamResult } from "@/lib/power-pulse/engine";
 import {
   loadAccuracy,
+  loadAliveRosterIds,
   loadCompletedResults,
   loadDefenseSplits,
   loadLeague,
@@ -30,6 +31,7 @@ import {
   loadRosters,
   loadSchedule,
 } from "@/lib/power-pulse/load";
+import { choppedWeeks, resolveFinalWeek } from "@/lib/chopped/league";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
@@ -76,6 +78,7 @@ const SETTLED_REASON_TESTS: Array<(reason: string) => boolean> = [
   (r) => r === "no published schedule",
   (r) => r === "draft pending with empty rosters",
   (r) => r.startsWith("no regular season games remaining from week"),
+  (r) => r.startsWith("chopped league has no weeks left"),
 ];
 
 /**
@@ -580,24 +583,41 @@ export async function calculateLeaguePowerPulse(
     };
   }
 
+  // Who is still in, in a chopped league. Read before the slate check below,
+  // because there the number of teams left IS the remaining slate.
+  const aliveRosterIds = league.chopped
+    ? await loadAliveRosterIds(supabase, leagueRowId)
+    : null;
+
   // No games left to play means there is nothing to project. This covers the
   // league waiting on its draft, the league whose schedule Sleeper has not
   // published, and the season that is already over. All three used to fall
   // through and cache "0.0 expected wins out of 1 game" for every team, which
   // reads as a real answer and is not one. Store nothing instead; the UI has
   // honest empty states, and no row means the next view recomputes.
-  const remainingSlate = schedule.weeks.filter(
-    (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
-  );
-  if (remainingSlate.length === 0) {
+  //
+  // A chopped league is asked the same question in its own terms. Its
+  // published pairings decide nothing, so what it has left to play is the run
+  // of weeks between now and the one that leaves a single survivor, and a
+  // league already down to that survivor is over: choppedWeeks says so by
+  // coming back empty rather than by being clamped up to one more week.
+  const aliveCount = aliveRosterIds?.length ?? rosters.length;
+  const remainingWeekCount = league.chopped
+    ? choppedWeeks(currentWeek, resolveFinalWeek(currentWeek, aliveCount).finalWeek)
+        .length
+    : schedule.weeks.filter(
+        (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
+      ).length;
+  if (remainingWeekCount === 0) {
     await clearCache(supabase, leagueRowId, league.season);
     return {
       ok: true,
       teams: 0,
       season: league.season,
       currentWeek,
-      skipped:
-        schedule.weeks.length === 0
+      skipped: league.chopped
+        ? `chopped league has no weeks left to decide from week ${currentWeek}`
+        : schedule.weeks.length === 0
           ? "no published schedule"
           : `no regular season games remaining from week ${currentWeek}`,
     };
@@ -624,6 +644,7 @@ export async function calculateLeaguePowerPulse(
     setLineups: schedule.setLineups,
     results,
     lineupEfficiency,
+    aliveRosterIds,
     currentWeek,
     settings,
   });
@@ -641,6 +662,34 @@ export async function calculateLeaguePowerPulse(
     .from("league_power_pulse_cache")
     .upsert(rows, { onConflict: "league_id,roster_id,season" });
   if (error) return { ok: false, error: `power pulse upsert failed: ${error.message}` };
+
+  // Drop any row for a roster this run did NOT score. An upsert only touches
+  // the rows it writes, so a roster the model has stopped scoring keeps the
+  // last answer it was ever given, forever.
+  //
+  // A chopped league is where this bites: an eliminated team is left out of
+  // the run on purpose, and what stayed behind was its final row, which reads
+  // 0.0 projected points, 0% playoff odds and last place. That is the exact
+  // shape of degenerate row the guards above exist to keep out of the cache,
+  // and it was sitting in a table of live teams describing a team that is not
+  // in the league any more. It also applies to an ordinary league whose roster
+  // count shrank.
+  const scoredRosterIds = rows.map((r) => r.roster_id);
+  const { error: pruneError } = await supabase
+    .from("league_power_pulse_cache")
+    .delete()
+    .eq("league_id", leagueRowId)
+    .eq("season", league.season)
+    .not("roster_id", "in", `(${scoredRosterIds.join(",")})`);
+  if (pruneError) {
+    // Not fatal: the rows this run wrote are correct and are what nearly every
+    // surface reads. Logged rather than failed, the same way a failed cache
+    // clear is, because refusing the whole run over a leftover row would throw
+    // away the answer we just computed.
+    console.warn(
+      `[power-pulse] could not prune unscored rows for league ${leagueRowId}: ${pruneError.message}`,
+    );
+  }
 
   return { ok: true, teams: teams.length, season: league.season, currentWeek };
 }
@@ -714,6 +763,10 @@ function toCacheRow(
     lineup_points_lost: t.lineupPointsLost,
     reliability_score: t.reliabilityScore,
     reliability_rank: t.reliabilityRank,
+    chopped: t.chopped,
+    chop_odds_this_week: t.chopOddsThisWeek,
+    survive_all_odds: t.surviveAllOdds,
+    expected_weeks_alive: t.expectedWeeksAlive,
     weekly: t.weekly as unknown as Json,
     drivers: t.drivers as unknown as Json,
     components: t.components as unknown as Json,

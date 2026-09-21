@@ -15464,13 +15464,22 @@ FB-R01 | pending | Browser QA of the new result card at phone width
        that no data is hidden at any breakpoint, on every responsive utility
        in the new components.
      | verified: no
-FB-R02 | pending | IndexNow ping for the new guide, after deploy
+FB-R02 | completed | IndexNow ping for the new guide, after deploy
      | files: none (script run)
      | depends on: a deploy that makes the URL live
-     | notes: Recommended, costs nothing. Cannot run before the deploy: the
-       URL 404s until then, and submitting a 404 teaches the engines the wrong
-       thing. Command: npm run indexnow -- /guides/chopped-league-strategy
-     | verified: no
+     | notes: DONE 2026-09-20. Submitted and accepted with a 200. Checked
+       first that https://ffbeacon.com/guides/chopped-league-strategy returns
+       200 and that the key file at /be0374...txt does too, so the submission
+       carried a valid proof of ownership. Google does not participate in
+       IndexNow; the guide reaches it through the sitemap as usual.
+       TWO TRAPS FOR THE NEXT RUN, neither of them in the plan. .env.local sets
+       NEXT_PUBLIC_SITE_URL to http://localhost:3000, so lib/indexnow.ts treats
+       ffbeacon.com as a foreign host, drops the URL and reports "Not submitted
+       (status 0)" with no explanation; and Git Bash rewrites a leading-slash
+       argument into a Windows path. The command that works from this machine
+       is therefore, in one line:
+       NEXT_PUBLIC_SITE_URL=https://ffbeacon.com npm run indexnow -- https://ffbeacon.com/guides/chopped-league-strategy
+     | verified: yes (200 from api.indexnow.org)
 FB-R03 | pending | Finish the review coverage the final pass did not reach
      | files: app/tools/faab/{bid-hero,goal-toggle,impact-grid,drop-options,week-strip,signal-list,market-card,bid-actions,market-stats}.tsx, lib/faab/{replay,replay-load,priors-write,league-load}.ts, scripts/faab-replay.ts, app/admin/faab/*, app/guides/faab-strategy/page.tsx
      | depends on: FB-R01
@@ -15483,15 +15492,60 @@ FB-R03 | pending | Finish the review coverage the final pass did not reach
        against section 5 of the guide plan, which lists the exact passages
        that had to change because they described the old behaviour.
      | verified: no
-FB-R04 | pending | Power Pulse and Schedules still simulate playoffs on chopped leagues
-     | files: lib/power-pulse/*, lib/league-schedule/*, app/leagues/[league_id]/*
+FB-R04 | completed | Power Pulse and Schedules still simulate playoffs on chopped leagues
+     | files: supabase/migrations/0291_power_pulse_chopped_survival.sql,
+       lib/power-pulse/{engine,load,default-settings}.ts,
+       lib/power-pulse/chopped.test.ts, lib/league-power-pulse.ts,
+       lib/league-power-pulse.test.ts, lib/league-power-pulse-data.ts,
+       lib/league-pulse-favorite.ts, lib/league-schedule/{data,matchup,types}.ts,
+       components/power-pulse/{pulse-rankings-table,pulse-detail,projected-standings,projected-champion,how-power-pulse-works}.tsx,
+       components/league-rail/pulse-favorite-card.tsx,
+       components/league-schedule/schedule-empty.tsx,
+       app/leagues/[league_id]/power-pulse/page.tsx,
+       app/leagues/[league_id]/schedules/page.tsx
      | depends on: none
-     | notes: Plan finding D3, and out of scope for this build by plan section
-       12. A chopped league has no playoffs and no opponent, and those pages
-       still show head-to-head odds that mean nothing. Recommended as its own
-       piece of work rather than a quick fix: it touches models the FAAB build
-       deliberately did not.
-     | verified: no
+     | notes: DONE 2026-09-20. The bracket simulation no longer runs on a
+       chopped league at all. It runs lib/chopped/survival.ts instead, which
+       already existed for the FAAB build and takes exactly the weekly
+       distributions Power Pulse builds anyway.
+       WHAT CHANGED IN THE MODEL. LeagueRow carries `chopped` from
+       isChoppedLeague, so disable_elimination is honoured and a chopped league
+       with elimination switched off keeps the ordinary model. Every bracket
+       figure (playoff, bye, title and last-place odds, expected and projected
+       wins, losses, ties, SOS points and rank, the schedule component and its
+       rank) is written as NULL rather than as a precise meaningless number.
+       Four new nullable columns carry the answer it does have: chopped,
+       chop_odds_this_week, survive_all_odds, expected_weeks_alive. The
+       schedule component leaves the blend and its 25% is shared over the other
+       three by shareOutWeights, which returns an ordinary league's weights
+       untouched. Only teams still alive are scored. The week window runs to
+       the last chop from resolveFinalWeek rather than stopping at
+       playoff_week_start, and the preview weeks carry no opponent and no win
+       probability. modelVersion pp-7 to pp-8, so every league rescores.
+       WHAT CHANGED ON THE SURFACES. The rankings table swaps Proj. and
+       Playoffs for Weeks left and Chop risk; the detail panel drops the
+       Schedule component it no longer has and shows chop odds, last standing
+       and weeks left; Projected champion becomes Last one standing and ranks
+       on survival; the standings table becomes a survival order with no seeds
+       and no cut line; two new league leaders (Most likely last standing,
+       Closest to the chop); the rail card says Survival favourite; the
+       methodology panel states the chopped weights and the chopped model; the
+       Schedules board computes no win probability and carries a new
+       ScheduleEmpty kind saying the pairings decide nothing; the single
+       matchup page suppresses its win probability the same way.
+       FOUND BY RUNNING IT, not by a test. An upsert only touches the rows it
+       writes, so the eliminated team's row survived, leaving a 0.0-point,
+       0%-odds, last-place row in a table of live teams. calculateLeaguePowerPulse
+       now prunes rows for rosters the run did not score. That also fixes an
+       ordinary league whose roster count shrank.
+       VERIFIED ON PRODUCTION. League 1388340234948726784 (18 teams, one
+       eliminated): 17 rows, all chopped, every bracket column null, chop odds
+       summing to 1.0003 and survival odds to 1.0002, ranks 1 to 17 with the
+       stale row gone. League 1386144594009276416 (ordinary, 12 teams):
+       unchanged, playoff odds summing to 6.00 over 6 playoff spots and title
+       odds to 1.00, no chopped columns set.
+     | verified: yes (typecheck clean, 5,682 tests pass, both leagues checked
+       in production, migration 0291 applied and pg_policies re-read)
 FB-R05 | pending | Decide the zero-dollar bid on an uncontested claim
      | files: lib/faab/ladder.ts, lib/faab/ladder.test.ts
      | depends on: none
@@ -15500,15 +15554,20 @@ FB-R05 | pending | Decide the zero-dollar bid on an uncontested claim
        rule 7 and rule 2 can be read against each other. $0 is the honest
        answer when nobody else is bidding, and a test pins it deliberately.
      | verified: no
-FB-R06 | pending | The rivals reason clause that can never fire
-     | files: lib/faab/league-faab.ts, lib/faab/reasons.ts
+FB-R06 | completed | The rivals reason clause that can never fire
+     | files: lib/faab/league-faab.ts
      | depends on: none
-     | notes: Recommended to leave unless someone is already in that file.
-       reasons.ts implements ", k of them with a starter out" and nothing
-       populates rivalsWithStarterOut, so that clause is unreachable. Feeding
-       it means reading each rival's own injured starters during the rival
-       loop. Cosmetic.
-     | verified: no
+     | notes: DONE 2026-09-20. The clause fires now. The injured-starter test
+       that already ran over the reader's own roster was lifted into one
+       function, injuredStartersOn, and run over the rivals who would start the
+       candidate; the count of those with a starter out at his position feeds
+       rivalsWithStarterOut. reasons.ts is unchanged, so the sentence it prints
+       is the one that was already written and tested.
+       Only the INTERESTED rivals are checked, so the cost is one lineup fill
+       per interested team and nothing at all when the rival-need model is off,
+       in which case the count is null rather than zero.
+     | verified: typecheck clean, 5,682 tests pass. Not yet seen on screen in a
+       league where a rival actually has a starter out.
 FB-R07 | pending | The bid search scans every simulation run per dollar
      | files: lib/faab/ladder.ts, lib/faab/auction.ts
      | depends on: none

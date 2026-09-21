@@ -15,6 +15,12 @@
  * simulated seasons loses three of them, and a section that only lists
  * strengths reads as a prediction rather than an estimate.
  *
+ * A chopped (guillotine) league asks the same question with different
+ * machinery: there is no bracket, so the winner is whoever is still alive at
+ * the end, and the metric behind every figure here is the chance of being the
+ * last team standing rather than the chance of winning a title game. Only the
+ * metric and the wording change; the shape of the argument is the same one.
+ *
  * Server component: pure presentation over data resolved upstream.
  */
 
@@ -48,6 +54,15 @@ function pct(value: number | null): string {
 
 /** One line of the case: a short claim, then the figure behind it. */
 type Reason = { claim: string; evidence: string };
+
+/**
+ * The chance this team ends the season on top, whichever way its league
+ * decides that. One function so the ranking, the headline figure, the chasers
+ * and the case against can never be built on two different metrics.
+ */
+function winOdds(team: PulseTeam): number | null {
+  return team.chopped ? team.surviveAllOdds : team.titleOdds;
+}
 
 function positionLabel(position: string): string {
   if (position === "DEF") return "defense";
@@ -102,7 +117,18 @@ function buildCaseFor(
     });
   }
 
-  if (team.projectedWins !== null) {
+  if (team.chopped) {
+    if (team.chopOddsThisWeek !== null) {
+      reasons.push({
+        claim: "It is not the team going out this week",
+        evidence: `A ${pct(team.chopOddsThisWeek)} chance of being the lowest score in the league this week${
+          team.expectedWeeksAlive !== null
+            ? `, and it survives ${team.expectedWeeksAlive.toFixed(1)} more weeks on average`
+            : ""
+        }.`,
+      });
+    }
+  } else if (team.projectedWins !== null) {
     reasons.push({
       claim: "It is favored in most games it has left",
       evidence: `Projects to finish ${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)} and reaches the bracket in ${pct(team.playoffOdds)} of seasons${
@@ -181,18 +207,25 @@ function buildCaseAgainst(
 ): Reason[] {
   const reasons: Reason[] = [];
 
-  if (team.titleOdds !== null && team.titleOdds < 0.995) {
+  const odds = winOdds(team);
+  const runnerUpOdds = runnerUp ? winOdds(runnerUp) : null;
+
+  if (odds !== null && odds < 0.995) {
     reasons.push({
       claim: "The favorite usually still loses",
-      evidence: `${pct(1 - team.titleOdds)} of seasons end with somebody else holding the trophy.`,
+      evidence: team.chopped
+        ? `${pct(1 - odds)} of simulated seasons end with a different team the last one alive.`
+        : `${pct(1 - odds)} of seasons end with somebody else holding the trophy.`,
     });
   }
 
-  if (runnerUp && runnerUp.titleOdds !== null && team.titleOdds !== null) {
-    const close = team.titleOdds - runnerUp.titleOdds < 0.05;
+  if (runnerUp && runnerUpOdds !== null && odds !== null) {
+    const close = odds - runnerUpOdds < 0.05;
     reasons.push({
       claim: close ? "The top is close to a coin flip" : "It is not running away with it",
-      evidence: `${teamLabel(runnerUp.teamName, runnerUp.ownerHandle)} wins it ${pct(runnerUp.titleOdds)} of the time, ${
+      evidence: `${teamLabel(runnerUp.teamName, runnerUp.ownerHandle)} ${
+        team.chopped ? "outlasts everyone" : "wins it"
+      } ${pct(runnerUpOdds)} of the time, ${
         close ? "so a couple of bad weeks flips the order." : "a gap one injury can close."
       }`,
     });
@@ -254,13 +287,15 @@ export function ProjectedChampion({
   /** How many seasons the Monte Carlo played out. Stated so the odds mean something. */
   simulationRuns: number;
 }) {
+  const chopped = teams.some((t) => t.chopped);
+  const title = chopped ? "Last one standing" : "Projected champion";
   const ranked = [...teams]
-    .filter((t) => t.titleOdds !== null)
-    .sort((a, b) => (b.titleOdds ?? 0) - (a.titleOdds ?? 0));
+    .filter((t) => winOdds(t) !== null)
+    .sort((a, b) => (winOdds(b) ?? 0) - (winOdds(a) ?? 0));
 
   if (ranked.length === 0) {
     return (
-      <Panel eyebrow="Simulated season" title="Projected champion">
+      <Panel eyebrow="Simulated season" title={title}>
         <p className="text-sm text-ink-muted">
           This fills in once Sleeper publishes your league's full schedule.
         </p>
@@ -270,7 +305,7 @@ export function ProjectedChampion({
 
   const favorite = ranked[0];
   const runnerUp = ranked[1] ?? null;
-  const chasers = ranked.slice(1, 1 + MAX_CHASERS).filter((t) => (t.titleOdds ?? 0) > 0.001);
+  const chasers = ranked.slice(1, 1 + MAX_CHASERS).filter((t) => (winOdds(t) ?? 0) > 0.001);
 
   const scoring = teams
     .map((t) => t.expectedPointsPerWeek)
@@ -284,17 +319,26 @@ export function ProjectedChampion({
 
   const casesFor = buildCaseFor(favorite, teams, leagueAveragePoints);
   const casesAgainst = buildCaseAgainst(favorite, runnerUp, handleByRoster);
-  const oddsLabel = pct(favorite.titleOdds);
-  const record =
-    favorite.projectedWins !== null
-      ? `${favorite.projectedWins.toFixed(1)}-${(favorite.projectedLosses ?? 0).toFixed(1)}`
+  const oddsLabel = pct(winOdds(favorite));
+  // The line under the name: a record in a league that keeps one, and how long
+  // this roster is expected to last in a league that does not.
+  const record = chopped
+    ? favorite.expectedWeeksAlive !== null
+      ? `${favorite.expectedWeeksAlive.toFixed(1)} more weeks on average`
+      : null
+    : favorite.projectedWins !== null
+      ? `${favorite.projectedWins.toFixed(1)}-${(favorite.projectedLosses ?? 0).toFixed(1)} projected record`
       : null;
 
   return (
     <Panel
       eyebrow="Simulated season"
-      title="Projected champion"
-      helper={`${simulationRuns.toLocaleString("en-US")} simulated seasons on your real schedule and bracket.`}
+      title={title}
+      helper={
+        chopped
+          ? `${simulationRuns.toLocaleString("en-US")} simulated seasons of chops, one team out a week, on the teams still in.`
+          : `${simulationRuns.toLocaleString("en-US")} simulated seasons on your real schedule and bracket.`
+      }
       glow
     >
       {/* The answer, and the only thing on this panel that needs to be seen
@@ -336,9 +380,7 @@ export function ProjectedChampion({
               </p>
             )}
             {record && (
-              <p className="mt-0.5 truncate text-xs text-ink-muted">
-                {record} projected record
-              </p>
+              <p className="mt-0.5 truncate text-xs text-ink-muted">{record}</p>
             )}
           </div>
           <p className="shrink-0">
@@ -349,14 +391,17 @@ export function ProjectedChampion({
               {oddsLabel}
             </span>
             <span className="sr-only">
-              {teamLabel(favorite.teamName, favorite.ownerHandle)} wins the
-              championship in {oddsLabel} of simulated seasons.
+              {teamLabel(favorite.teamName, favorite.ownerHandle)}{" "}
+              {chopped
+                ? "is the last team standing"
+                : "wins the championship"}{" "}
+              in {oddsLabel} of simulated seasons.
             </span>
             <span
               aria-hidden="true"
               className="mt-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted"
             >
-              To win it all
+              {chopped ? "To outlast them all" : "To win it all"}
             </span>
           </p>
         </div>
@@ -394,11 +439,10 @@ export function ProjectedChampion({
             </h3>
             <ol className="mt-2 space-y-2">
               {chasers.map((team) => {
-                const odds = team.titleOdds ?? 0;
+                const odds = winOdds(team) ?? 0;
+                const favoriteOdds = winOdds(favorite) ?? 1;
                 const width =
-                  (favorite.titleOdds ?? 1) > 0
-                    ? Math.max(3, (odds / (favorite.titleOdds ?? 1)) * 100)
-                    : 3;
+                  favoriteOdds > 0 ? Math.max(3, (odds / favoriteOdds) * 100) : 3;
                 return (
                   <li key={team.rosterRowId} className="flex items-center gap-2.5">
                     <span className="min-w-0 flex-1">

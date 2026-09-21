@@ -66,14 +66,22 @@ export function PulseFavoriteCard({
   favorite: PulseFavorite;
   powerPulseHref: string;
 }) {
-  const title = pct(favorite.titleOdds);
+  // A chopped league has no title and no bracket, so the headline figure is
+  // the chance of being the last team alive and every word around it changes
+  // with it. Calling that team the "title favorite" would be naming a prize
+  // its league does not award.
+  const chopped = favorite.chopped;
+  const title = pct(chopped ? favorite.surviveAllOdds : favorite.titleOdds);
   const playoff = pct(favorite.playoffOdds);
+  const chopRisk = pct(favorite.chopOddsThisWeek);
   const projected = record(favorite.projectedWins, favorite.projectedLosses);
 
   // The headline claim, stated once, in words. The percentage below it is the
   // evidence; this sentence is what the percentage means.
   const claim = title
-    ? `Wins this league ${title} of the time across every simulated season.`
+    ? chopped
+      ? `Is the last team standing ${title} of the time across every simulated season.`
+      : `Wins this league ${title} of the time across every simulated season.`
     : `Ranks first in this league on expected performance.`;
 
   const tieNote =
@@ -82,8 +90,12 @@ export function PulseFavoriteCard({
       : "";
 
   const stats: Array<{ label: string; value: string }> = [];
-  if (projected) stats.push({ label: "Projected", value: projected });
-  if (playoff) stats.push({ label: "Playoffs", value: playoff });
+  if (chopped) {
+    if (chopRisk) stats.push({ label: "Chopped this week", value: chopRisk });
+  } else {
+    if (projected) stats.push({ label: "Projected", value: projected });
+    if (playoff) stats.push({ label: "Playoffs", value: playoff });
+  }
   if (stats.length === 0) {
     stats.push({ label: "Pulse", value: String(Math.round(favorite.powerPulse)) });
   }
@@ -99,7 +111,7 @@ export function PulseFavoriteCard({
             {/* Decorative: the words "Title favorite" beside it carry the
                 meaning, so the icon adds recognition rather than information. */}
             <Trophy aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            Title favorite
+            {chopped ? "Survival favorite" : "Title favorite"}
           </p>
           <p className="mt-0.5 truncate text-sm font-semibold text-ink" title={favorite.label}>
             {favorite.label}
@@ -119,7 +131,9 @@ export function PulseFavoriteCard({
               >
                 {title}
               </span>
-              <span className="text-[11px] font-medium text-ink-muted">to win it all</span>
+              <span className="text-[11px] font-medium text-ink-muted">
+                {chopped ? "to outlast them all" : "to win it all"}
+              </span>
             </p>
           )}
         </div>

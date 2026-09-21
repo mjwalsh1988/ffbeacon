@@ -466,6 +466,11 @@ async function ScheduleBody({
             <ScheduleEmpty kind="no-projections" season={season} />
           )}
 
+          {/* Above the board for the same reason as the incomplete slate: a
+              reader has to know what the pairings mean BEFORE reading a page
+              of them. In a chopped league they mean nothing. */}
+          {board.chopped && <ScheduleEmpty kind="chopped" season={season} />}
+
           {view === "team" ? (
             selectedTeam === null ? (
               <Panel

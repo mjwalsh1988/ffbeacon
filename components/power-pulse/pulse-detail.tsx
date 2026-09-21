@@ -142,17 +142,24 @@ export function PulseDetail({
             teamCount={teamCount}
             hint={`${num(team.expectedPointsPerWeek)} projected points per week in this league's scoring.`}
           />
-          <ComponentBar
-            label="Schedule"
-            score={team.scoreSchedule}
-            rank={team.scoreScheduleRank}
-            teamCount={teamCount}
-            hint={
-              team.sosRank !== null
-                ? `Opponents average ${num(team.sosPoints)} per week, ${ordinal(team.sosRank)} toughest.`
-                : "No remaining schedule to grade."
-            }
-          />
+          {/* A chopped league has no opponent, so there is no schedule to be
+              strong or weak in and the component is not in its score at all.
+              Its weight is shared over the other three (see shareOutWeights in
+              lib/power-pulse/engine.ts), so showing an empty bar here would
+              claim a fourth ingredient that is not in the recipe. */}
+          {!team.chopped && (
+            <ComponentBar
+              label="Schedule"
+              score={team.scoreSchedule}
+              rank={team.scoreScheduleRank}
+              teamCount={teamCount}
+              hint={
+                team.sosRank !== null
+                  ? `Opponents average ${num(team.sosPoints)} per week, ${ordinal(team.sosRank)} toughest.`
+                  : "No remaining schedule to grade."
+              }
+            />
+          )}
           <ComponentBar
             label="Depth"
             score={team.scoreDepth}
@@ -176,24 +183,56 @@ export function PulseDetail({
         </dl>
       </section>
 
-      {/* Season outlook. */}
-      <section aria-label="Season outlook">
+      {/* Season outlook. A chopped league is asked the only two questions it
+          has: do you go out this week, and are you the one left at the end.
+          The record and the bracket odds are not withheld from it, they do not
+          exist for it, which is why the labels change rather than the numbers
+          reading "--". */}
+      <section aria-label={team.chopped ? "Survival outlook" : "Season outlook"}>
         <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
-          Season outlook
+          {team.chopped ? "Survival outlook" : "Season outlook"}
         </h3>
         <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Tile
-            label="Proj. record"
-            value={`${num(team.projectedWins, 1)}-${num(team.projectedLosses, 1)}`}
-            accent="ink"
-          />
-          <Tile label="Playoffs" value={pct(team.playoffOdds)} accent="cyan" />
-          <Tile label="Title" value={pct(team.titleOdds)} accent="purple" />
-          <Tile
-            label="Points / wk"
-            value={num(team.expectedPointsPerWeek)}
-            accent="ink"
-          />
+          {team.chopped ? (
+            <>
+              <Tile
+                label="Chopped this week"
+                value={pct(team.chopOddsThisWeek)}
+                accent="purple"
+              />
+              <Tile
+                label="Last one standing"
+                value={pct(team.surviveAllOdds)}
+                accent="cyan"
+              />
+              <Tile
+                label="Weeks left"
+                value={num(team.expectedWeeksAlive)}
+                accent="ink"
+                sub="on average, from this week"
+              />
+              <Tile
+                label="Points / wk"
+                value={num(team.expectedPointsPerWeek)}
+                accent="ink"
+              />
+            </>
+          ) : (
+            <>
+              <Tile
+                label="Proj. record"
+                value={`${num(team.projectedWins, 1)}-${num(team.projectedLosses, 1)}`}
+                accent="ink"
+              />
+              <Tile label="Playoffs" value={pct(team.playoffOdds)} accent="cyan" />
+              <Tile label="Title" value={pct(team.titleOdds)} accent="purple" />
+              <Tile
+                label="Points / wk"
+                value={num(team.expectedPointsPerWeek)}
+                accent="ink"
+              />
+            </>
+          )}
         </dl>
       </section>
 
@@ -260,9 +299,15 @@ export function PulseDetail({
         </section>
       )}
 
-      {/* Next three opponents with win probability. */}
+      {/* Next three weeks. In a chopped league they carry no opponent and no
+          win probability: Sleeper pairs its teams for display and the pairing
+          decides nothing, so what matters is the score itself. */}
       {nextThree.length > 0 && (
-        <section aria-label="Next three matchups">
+        <section
+          aria-label={
+            team.chopped ? "Next three weeks" : "Next three matchups"
+          }
+        >
           <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
             Next three weeks
           </h3>
@@ -282,12 +327,22 @@ export function PulseDetail({
                     Wk {w.week}
                   </span>{" "}
                   <span className="truncate">
-                    vs {w.opponentName ?? "no opponent"}
-                    {opponentHandle ? ` (@${opponentHandle})` : ""}
+                    {team.chopped ? (
+                      "against the whole league"
+                    ) : (
+                      <>
+                        vs {w.opponentName ?? "no opponent"}
+                        {opponentHandle ? ` (@${opponentHandle})` : ""}
+                      </>
+                    )}
                   </span>
                 </span>
                 <span className="shrink-0 font-mono text-xs font-bold tabular-nums text-brand-cyan">
-                  {w.winProb === null ? "--" : `${Math.round(w.winProb * 100)}% win`}
+                  {team.chopped
+                    ? `${num(w.mean)} proj.`
+                    : w.winProb === null
+                      ? "--"
+                      : `${Math.round(w.winProb * 100)}% win`}
                 </span>
               </li>
               );

@@ -35,6 +35,8 @@ import {
   zToDisplay,
 } from "./math";
 import { simulateSeason, type SimTeam } from "./simulate";
+import { resolveFinalWeek } from "../chopped/league";
+import { simulateSurvival, type SurvivalTeam } from "../chopped/survival";
 import type {
   AccuracyRow,
   DefenseRow,
@@ -48,6 +50,7 @@ import {
   PULSE_SLOT_ELIGIBILITY,
   type PulsePosition,
   type ScheduleWeek,
+  type SimulationResult,
 } from "./types";
 
 export type PowerPulseInput = {
@@ -76,6 +79,17 @@ export type PowerPulseInput = {
    * why it is off by default.
    */
   lineupEfficiency?: Map<number, { efficiency: number; weeksGraded: number }>;
+  /**
+   * Chopped (guillotine) leagues only: the rosters still in the league.
+   *
+   * An eliminated roster is not a team having a bad season, it is a team that
+   * is gone. Sleeper empties its squad, so scoring it would rank a zero
+   * against the living and drag every z-score with it, and leaving it in the
+   * survival simulation would hand the field a corpse to finish above.
+   * Absent or empty means we do not know, and every roster is then treated as
+   * alive, which is the answer this model gave before it could tell.
+   */
+  aliveRosterIds?: number[] | null;
   /** First unplayed week. 1 during the preseason. */
   currentWeek: number;
   settings: PowerPulseSettings;
@@ -121,7 +135,8 @@ export type PowerPulseTeamResult = {
   pulseRank: number | null;
   scorePoints: number;
   scorePointsRank: number | null;
-  scoreSchedule: number;
+  /** Null in a chopped league: no opponent, so no schedule to be strong or weak. */
+  scoreSchedule: number | null;
   scoreScheduleRank: number | null;
   scoreDepth: number;
   scoreDepthRank: number | null;
@@ -129,21 +144,42 @@ export type PowerPulseTeamResult = {
   scoreFormRank: number | null;
   expectedPointsPerWeek: number;
   expectedPointsStdev: number;
-  expectedWins: number;
-  projectedWins: number;
-  projectedLosses: number;
-  projectedTies: number;
-  playoffOdds: number;
-  byeOdds: number;
-  titleOdds: number;
-  lastPlaceOdds: number;
-  sosPoints: number;
+  /**
+   * Every figure from here down to `sosRank` answers a question a chopped
+   * league does not ask, so all of them are null there. A guillotine league
+   * has no bracket to reach, no bye to earn, no title game and no last place:
+   * the lowest score in the whole league goes out each week and the last team
+   * alive wins. Sleeper still publishes a head to head pairing for one, and
+   * that pairing decides nothing, which is exactly why a win total computed
+   * off it is worse than no win total at all.
+   */
+  expectedWins: number | null;
+  projectedWins: number | null;
+  projectedLosses: number | null;
+  projectedTies: number | null;
+  playoffOdds: number | null;
+  byeOdds: number | null;
+  titleOdds: number | null;
+  lastPlaceOdds: number | null;
+  sosPoints: number | null;
   sosRank: number | null;
   lineupEfficiency: number | null;
   lineupEfficiencyRank: number | null;
   lineupPointsLost: number | null;
   reliabilityScore: number;
   reliabilityRank: number | null;
+  /**
+   * True when this row was scored as a chopped league. It is what tells a
+   * surface that the nulls above mean "this league does not have one" rather
+   * than "we have not worked it out yet", and the two must never read alike.
+   */
+  chopped: boolean;
+  /** Chopped only: chance of being the lowest score in the league this week. */
+  chopOddsThisWeek: number | null;
+  /** Chopped only: chance of being the last team standing. */
+  surviveAllOdds: number | null;
+  /** Chopped only: weeks this roster lasts from here, averaged over the runs. */
+  expectedWeeksAlive: number | null;
   weekly: Array<{
     week: number;
     opponentRosterId: number | null;
@@ -221,7 +257,34 @@ export function computePowerPulse(
   if (rosters.length === 0) return [];
 
   const slots = startingSlots(league.rosterPositions);
-  const lastRegularWeek = Math.max(currentWeek, league.playoffWeekStart - 1);
+
+  // ---------- chopped (guillotine) leagues ----------
+  // A chopped league keeps the head to head slate Sleeper publishes for it and
+  // decides nothing with it: the lowest score in the whole league goes out
+  // every week, and the last team alive wins. So the bracket simulation is not
+  // run here at all, because a precise answer to the wrong question is still
+  // the wrong question. lib/chopped/survival.ts answers the right one, and it
+  // takes exactly the weekly distributions this model already builds.
+  const chopped = league.chopped === true;
+  const aliveIds =
+    chopped && input.aliveRosterIds && input.aliveRosterIds.length > 0
+      ? new Set(input.aliveRosterIds)
+      : null;
+  const scoringRosters = aliveIds
+    ? rosters.filter((r) => aliveIds.has(r.sleeperRosterId))
+    : rosters;
+  if (scoringRosters.length === 0) return [];
+
+  // One team leaves per week, so the season ends when one is left, capped at
+  // week 17. See the header of lib/chopped/league.ts for why Sleeper's own
+  // `last_chopped_leg` is not read for this.
+  const choppedFinalWeek = chopped
+    ? resolveFinalWeek(currentWeek, scoringRosters.length).finalWeek
+    : null;
+  const lastRegularWeek =
+    choppedFinalWeek !== null
+      ? Math.max(currentWeek, choppedFinalWeek)
+      : Math.max(currentWeek, league.playoffWeekStart - 1);
 
   // Projections indexed for O(1) lookup.
   const projectionsByPlayer = new Map<string, Map<number, ProjectionRow>>();
@@ -240,7 +303,7 @@ export function computePowerPulse(
 
   const work: TeamWork[] = [];
 
-  for (const roster of rosters) {
+  for (const roster of scoringRosters) {
     const ineligible = new Set([
       ...roster.reserveSleeperIds,
       ...roster.taxiSleeperIds,
@@ -486,10 +549,23 @@ export function computePowerPulse(
   );
 
   // Only unplayed regular season weeks feed the simulation.
-  const upcomingSchedule = input.schedule.filter(
-    (w) =>
-      !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
-  );
+  //
+  // A chopped league previews every week it still has to play, with no
+  // opponent attached. Carrying Sleeper's display pairing in would put a win
+  // probability beside a game that cannot be won or lost, and a reader has no
+  // way to tell that number from the ones that mean something.
+  const upcomingSchedule: ScheduleWeek[] = chopped
+    ? remainingWeeks.map((week) => ({
+        week,
+        opponents: new Map<number, number>(),
+        isFinal: false,
+      }))
+    : input.schedule.filter(
+        (w) =>
+          !w.isFinal &&
+          w.week >= currentWeek &&
+          w.week < league.playoffWeekStart,
+      );
 
   const simTeams: SimTeam[] = work.map((team) => ({
     sleeperRosterId: team.roster.sleeperRosterId,
@@ -502,14 +578,31 @@ export function computePowerPulse(
     sigma: team.sigma,
   }));
 
-  const simResults = simulateSeason(simTeams, upcomingSchedule, {
-    runs: settings.simulation.runs,
-    seed: settings.simulation.seed,
-    playoffTeams: league.playoffTeams,
-    playoffWeekStart: league.playoffWeekStart,
-    playoffRoundType: league.playoffRoundType,
-    medianMatch: league.medianMatch,
-  });
+  const simResults: Map<number, SimulationResult> = chopped
+    ? new Map()
+    : simulateSeason(simTeams, upcomingSchedule, {
+        runs: settings.simulation.runs,
+        seed: settings.simulation.seed,
+        playoffTeams: league.playoffTeams,
+        playoffWeekStart: league.playoffWeekStart,
+        playoffRoundType: league.playoffRoundType,
+        medianMatch: league.medianMatch,
+      });
+
+  // The chopped answer, over the alive teams only. Same seeded generator and
+  // the same per week distributions the bracket would have used, so two runs
+  // over an unchanged league give the same odds rather than drifting.
+  const survivalResults = chopped
+    ? simulateSurvival(
+        work.map<SurvivalTeam>((team) => ({
+          rosterId: team.roster.sleeperRosterId,
+          seasonPoints: team.roster.pointsFor,
+          weeks: weeklyByRoster.get(team.roster.sleeperRosterId) ?? new Map(),
+        })),
+        remainingWeeks,
+        { runs: settings.simulation.runs, seed: settings.simulation.seed },
+      )
+    : null;
 
   // Strength of schedule and the per-week preview.
   const sosByRoster = new Map<number, number>();
@@ -603,21 +696,17 @@ export function computePowerPulse(
   const zDepth = zScores(rawDepth);
   const zForm = hasForm ? zScores(rawForm) : work.map(() => 0);
 
-  // Redistribute the form weight proportionally when no games have been played.
-  const w = settings.weights;
-  const activeWeights = hasForm
-    ? w
-    : (() => {
-        const remaining = w.points + w.schedule + w.depth;
-        if (remaining <= 0) return { ...w, form: 0 };
-        const scale = (w.points + w.schedule + w.depth + w.form) / remaining;
-        return {
-          points: w.points * scale,
-          schedule: w.schedule * scale,
-          depth: w.depth * scale,
-          form: 0,
-        };
-      })();
+  // Only the components this league can actually measure are blended, and the
+  // weight of one that cannot is shared out over the rest rather than left to
+  // drag every score toward the middle. Form is absent until some games have
+  // been played; the schedule component is absent all season in a chopped
+  // league, where there is no opponent to be lucky or unlucky in.
+  const activeWeights = shareOutWeights(settings.weights, {
+    points: true,
+    schedule: !chopped,
+    depth: true,
+    form: hasForm,
+  });
 
   const composite = work.map(
     (_, i) =>
@@ -674,6 +763,7 @@ export function computePowerPulse(
   return work.map((team, i) => {
     const rosterId = team.roster.sleeperRosterId;
     const sim = simResults.get(rosterId);
+    const survival = survivalResults?.get(rosterId) ?? null;
     const games = gamesTotal(team);
     const expectedWins = sim?.expectedWins ?? 0;
 
@@ -693,24 +783,26 @@ export function computePowerPulse(
       pulseRank: pulseRanks[i],
       scorePoints: zToDisplay(zPoints[i], settings.display),
       scorePointsRank: pointsRanks[i],
-      scoreSchedule: zToDisplay(zSchedule[i], settings.display),
-      scoreScheduleRank: scheduleRanks[i],
+      scoreSchedule: chopped ? null : zToDisplay(zSchedule[i], settings.display),
+      scoreScheduleRank: chopped ? null : scheduleRanks[i],
       scoreDepth: zToDisplay(zDepth[i], settings.display),
       scoreDepthRank: depthRanks[i],
       scoreForm: hasForm ? zToDisplay(zForm[i], settings.display) : null,
       scoreFormRank: formRanks[i],
       expectedPointsPerWeek: round(team.meanPoints, 2),
       expectedPointsStdev: round(team.sigma, 2),
-      expectedWins: round(expectedWins, 2),
-      projectedWins: round(expectedWins, 1),
-      projectedLosses: round(Math.max(0, games - expectedWins), 1),
-      projectedTies: 0,
-      playoffOdds: round(sim?.playoffOdds ?? 0, 4),
-      byeOdds: round(sim?.byeOdds ?? 0, 4),
-      titleOdds: round(sim?.titleOdds ?? 0, 4),
-      lastPlaceOdds: round(sim?.lastPlaceOdds ?? 0, 4),
-      sosPoints: round(sosByRoster.get(rosterId) ?? 0, 2),
-      sosRank: sosRanks[i],
+      expectedWins: chopped ? null : round(expectedWins, 2),
+      projectedWins: chopped ? null : round(expectedWins, 1),
+      projectedLosses: chopped
+        ? null
+        : round(Math.max(0, games - expectedWins), 1),
+      projectedTies: chopped ? null : 0,
+      playoffOdds: chopped ? null : round(sim?.playoffOdds ?? 0, 4),
+      byeOdds: chopped ? null : round(sim?.byeOdds ?? 0, 4),
+      titleOdds: chopped ? null : round(sim?.titleOdds ?? 0, 4),
+      lastPlaceOdds: chopped ? null : round(sim?.lastPlaceOdds ?? 0, 4),
+      sosPoints: chopped ? null : round(sosByRoster.get(rosterId) ?? 0, 2),
+      sosRank: chopped ? null : sosRanks[i],
       lineupEfficiency:
         team.lineupEfficiency === null ? null : round(team.lineupEfficiency, 4),
       lineupEfficiencyRank: efficiencyRanks[i],
@@ -718,6 +810,12 @@ export function computePowerPulse(
         team.lineupPointsLost === null ? null : round(team.lineupPointsLost, 2),
       reliabilityScore: round(team.reliability, 4),
       reliabilityRank: reliabilityRanks[i],
+      chopped,
+      chopOddsThisWeek: survival ? round(survival.pChoppedThisWeek, 4) : null,
+      surviveAllOdds: survival ? round(survival.pWin, 4) : null,
+      expectedWeeksAlive: survival
+        ? round(survival.expectedWeeksAlive, 2)
+        : null,
       weekly: weeklyDetail.get(rosterId) ?? [],
       drivers: [],
       components: {
@@ -737,6 +835,35 @@ export function computePowerPulse(
     return result;
   });
 }
+
+/**
+ * Zero the components this league cannot measure and scale the rest so the
+ * four still add up to what they did before. Returning the weights untouched
+ * when nothing is missing keeps an ordinary league on exactly the arithmetic
+ * it had before any of this existed.
+ */
+function shareOutWeights(
+  weights: PowerPulseSettings["weights"],
+  active: Record<keyof PowerPulseSettings["weights"], boolean>,
+): PowerPulseSettings["weights"] {
+  const keys = ["points", "schedule", "depth", "form"] as const;
+  if (keys.every((k) => active[k])) return weights;
+  const total = keys.reduce((sum, k) => sum + weights[k], 0);
+  const kept = keys.reduce((sum, k) => sum + (active[k] ? weights[k] : 0), 0);
+  if (kept <= 0) return { points: 0, schedule: 0, depth: 0, form: 0 };
+  const scale = total / kept;
+  return {
+    points: active.points ? weights.points * scale : 0,
+    schedule: active.schedule ? weights.schedule * scale : 0,
+    depth: active.depth ? weights.depth * scale : 0,
+    form: active.form ? weights.form * scale : 0,
+  };
+}
+
+/** Chop odds at or above this get called out as danger. Percent. */
+const CHOP_DANGER_PCT = 15;
+/** Chop odds at or below this get called out as safe. Percent. */
+const CHOP_SAFE_PCT = 2;
 
 /** Error function, for the win probability shown in the weekly preview. */
 /** Settled weeks the form ratio looks back over. */
@@ -803,7 +930,26 @@ function buildDrivers(
     });
   }
 
-  if (result.sosRank !== null) {
+  // A chopped league asks two questions and no others: do I go out this week,
+  // and am I the one left at the end.
+  if (result.chopped && result.chopOddsThisWeek !== null) {
+    const chance = result.chopOddsThisWeek * 100;
+    if (chance >= CHOP_DANGER_PCT) {
+      drivers.push({
+        label: "In real danger this week",
+        detail: `A ${chance.toFixed(0)}% chance of being the lowest score in the league and going out.`,
+        tone: "bad",
+      });
+    } else if (chance <= CHOP_SAFE_PCT) {
+      drivers.push({
+        label: "Safe this week",
+        detail: `A ${chance.toFixed(1)}% chance of being the lowest score in the league.`,
+        tone: "good",
+      });
+    }
+  }
+
+  if (result.sosRank !== null && result.sosPoints !== null) {
     if (result.sosRank >= bottom) {
       drivers.push({
         label: "Easy remaining schedule",

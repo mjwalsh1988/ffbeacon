@@ -25,6 +25,7 @@ vi.mock("@/lib/league-matchups", async (importOriginal) => {
 
 vi.mock("@/lib/power-pulse/load", () => ({
   loadLeague: vi.fn(),
+  loadAliveRosterIds: vi.fn(),
   loadRosters: vi.fn(),
   loadPlayers: vi.fn(),
   loadProjections: vi.fn(),
@@ -84,6 +85,7 @@ function fakeLeague(overrides: Partial<Record<string, unknown>> = {}) {
     playoffWeekStart: 15,
     playoffRoundType: 0,
     medianMatch: false,
+    chopped: false,
     ...overrides,
   };
 }
@@ -178,14 +180,24 @@ function makeFakeClient(
         calls.push("cache.upsert");
         return Promise.resolve({ error: null });
       },
-      delete: () => ({
-        eq: () => ({
-          eq: () => {
-            calls.push("cache.delete");
+      // Two different deletes reach this builder. clearCache awaits
+      // delete().eq().eq(); the post-upsert prune chains .not() on the end to
+      // drop rows for rosters the run did not score. So the second eq has to
+      // be both awaitable and chainable, which is what the real PostgREST
+      // builder is.
+      delete: () => {
+        const afterEqs = {
+          not: () => {
+            calls.push("cache.prune");
             return Promise.resolve({ error: null });
           },
-        }),
-      }),
+          then: (resolve: (value: { error: null }) => unknown) => {
+            calls.push("cache.delete");
+            return Promise.resolve({ error: null }).then(resolve);
+          },
+        };
+        return { eq: () => ({ eq: () => afterEqs }) };
+      },
     };
     return builder;
   };
@@ -331,6 +343,21 @@ describe("classifyPowerPulseResult", () => {
         season: 2026,
         currentWeek: 17,
         skipped: "no regular season games remaining from week 17",
+      },
+      "settled",
+    ],
+    [
+      // A chopped league down to its last survivor. Settled, not skipped: it
+      // is a statement about the league rather than a fetch that may come good
+      // in fifteen minutes, and retrying it hourly forever would be the same
+      // mistake the other settled reasons exist to avoid.
+      "chopped league with nothing left to decide",
+      {
+        ok: true,
+        teams: 0,
+        season: 2026,
+        currentWeek: 12,
+        skipped: "chopped league has no weeks left to decide from week 12",
       },
       "settled",
     ],
@@ -618,6 +645,30 @@ describe("refreshPowerPulse write ordering (E8-4)", () => {
       (u) => "power_pulse_succeeded_at" in u,
     );
     expect(verdictUpdate?.power_pulse_status).toBe("ok");
+  });
+
+  it("prunes rows for rosters this run did not score, after the upsert", async () => {
+    // An upsert only touches the rows it writes, so a roster the model has
+    // stopped scoring keeps the last answer it was ever given. In a chopped
+    // league that leftover is the eliminated team's final row: 0.0 points,
+    // 0% odds, last place, sitting in a table of teams still playing.
+    wireOkPipeline();
+    const { client, calls } = makeFakeClient({
+      leaguesRow: {
+        last_pulsed_at: null,
+        power_pulse_status: null,
+        power_pulse_detail: null,
+        power_pulse_attempted_at: null,
+      },
+      cacheRow: null,
+    });
+
+    await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
+
+    const upsertIdx = calls.indexOf("cache.upsert");
+    const pruneIdx = calls.indexOf("cache.prune");
+    expect(upsertIdx).toBeGreaterThanOrEqual(0);
+    expect(pruneIdx).toBeGreaterThan(upsertIdx);
   });
 
   it("does not stamp succeeded_at when the run ends in 'error'", async () => {

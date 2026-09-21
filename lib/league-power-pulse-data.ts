@@ -77,6 +77,21 @@ export type PulseTeam = {
   reliabilityScore: number | null;
   reliabilityRank: number | null;
 
+  /**
+   * Scored as a chopped (guillotine) league.
+   *
+   * It is the difference between "this league has no playoff odds" and "we
+   * have not worked its playoff odds out yet", and a surface that renders the
+   * nulls above without reading this says the second when it means the first.
+   */
+  chopped: boolean;
+  /** Chopped only: chance of being the lowest score in the league this week. */
+  chopOddsThisWeek: number | null;
+  /** Chopped only: chance of being the last team standing. */
+  surviveAllOdds: number | null;
+  /** Chopped only: weeks this roster lasts from here, on average. */
+  expectedWeeksAlive: number | null;
+
   positionPoints: Record<string, number>;
   positionRanks: Record<string, number | null>;
   starters: Array<{ playerId: string; name: string; position: string; points: number }>;
@@ -109,6 +124,14 @@ export type PowerPulseView = {
   modelVersion: string | null;
   /** True when the season has not started, which changes the copy. */
   preseason: boolean;
+  /**
+   * True when these rows came out of the chopped model. Read from the rows
+   * rather than from the league's Sleeper settings, so what a page renders and
+   * what was actually computed can never disagree: a league whose commissioner
+   * flipped elimination off yesterday still has yesterday's rows until it
+   * rescores, and the page must describe the rows it is holding.
+   */
+  chopped: boolean;
 };
 
 function num(v: unknown): number | null {
@@ -245,6 +268,11 @@ export async function loadPowerPulseView(
       reliabilityScore: num(row.reliability_score),
       reliabilityRank: num(row.reliability_rank),
 
+      chopped: row.chopped === true,
+      chopOddsThisWeek: num(row.chop_odds_this_week),
+      surviveAllOdds: num(row.survive_all_odds),
+      expectedWeeksAlive: num(row.expected_weeks_alive),
+
       positionPoints: components.positionPoints ?? {},
       positionRanks: components.positionRanks ?? {},
       starters: components.starters ?? [],
@@ -295,6 +323,7 @@ export async function loadPowerPulseView(
     generatedAt: first.generated_at ?? null,
     modelVersion: first.model_version ?? null,
     preseason: throughWeek === 0,
+    chopped: teams.some((t) => t.chopped),
   };
 }
 
@@ -349,6 +378,39 @@ export function buildPulseLeaders(teams: PulseTeam[]): PulseLeader[] {
       ),
       team: favorite.team,
       value: `${Math.round((favorite.team.titleOdds ?? 0) * 100)}%`,
+    });
+  }
+
+  // A chopped league has no title to be favorite for, so the card above never
+  // fires there. These two are its questions: who outlasts everyone, and who
+  // is closest to going out on Sunday. The second is a warning rather than an
+  // award, and it says so, because a league leaders list that hands somebody a
+  // trophy for being about to be eliminated reads as a bug.
+  const survivor = best((t) => t.surviveAllOdds);
+  if (survivor && (survivor.team.surviveAllOdds ?? 0) > 0) {
+    leaders.push({
+      id: "survival-favorite",
+      title: "Most likely last standing",
+      blurb: withTie(
+        "Outlasts the whole league most often across every simulated season.",
+        survivor.tiedWith,
+      ),
+      team: survivor.team,
+      value: `${Math.round((survivor.team.surviveAllOdds ?? 0) * 100)}%`,
+    });
+  }
+
+  const endangered = best((t) => t.chopOddsThisWeek);
+  if (endangered && (endangered.team.chopOddsThisWeek ?? 0) > 0) {
+    leaders.push({
+      id: "chop-risk",
+      title: "Closest to the chop",
+      blurb: withTie(
+        "The likeliest team to post the lowest score in the league this week.",
+        endangered.tiedWith,
+      ),
+      team: endangered.team,
+      value: `${Math.round((endangered.team.chopOddsThisWeek ?? 0) * 100)}%`,
     });
   }
 

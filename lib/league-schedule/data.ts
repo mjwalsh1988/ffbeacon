@@ -121,7 +121,7 @@ export async function loadScheduleBoard(
     supabase
       .from("league_power_pulse_cache")
       .select(
-        "roster_id, pulse_rank, sos_points, sos_rank, lineup_points_lost, weekly",
+        "roster_id, pulse_rank, sos_points, sos_rank, lineup_points_lost, weekly, chopped",
       )
       .eq("league_id", leagueRowId)
       .eq("season", season),
@@ -134,6 +134,11 @@ export async function loadScheduleBoard(
   const cacheByRosterRow = new Map(
     (cacheRes.data ?? []).map((row) => [row.roster_id, row] as const),
   );
+
+  // Read off the stored rows rather than the league's Sleeper settings, so the
+  // board and the model that produced its numbers can never disagree about
+  // which game this league is playing.
+  const chopped = (cacheRes.data ?? []).some((row) => row.chopped === true);
 
   const teams: ScheduleTeam[] = (rostersRes.data ?? []).map((r) => {
     const user = r.owner_user_id ? usersById.get(r.owner_user_id) : null;
@@ -294,7 +299,12 @@ export async function loadScheduleBoard(
         isFinal: Boolean(row.is_final),
         home,
         away,
+        // No win probability in a chopped league. Both projected totals below
+        // are real and stay on the board; what is not real is the contest
+        // between them, because nothing follows from one of these two teams
+        // outscoring the other.
         homeWinProb:
+          chopped ||
           row.is_final ||
           !away ||
           home.projectedOptimal === null ||
@@ -338,6 +348,7 @@ export async function loadScheduleBoard(
     missingWeeks,
     noScheduleYet: weeks.length === 0,
     projectionsUnavailable: projectedByRosterWeek.size === 0,
+    chopped,
   };
 }
 
@@ -554,6 +565,7 @@ export async function loadMatchupDetail(
       defenseSeasons,
       scoringSettings: league.scoringSettings,
       settings,
+      chopped: league.chopped,
       homeAwayByTeamWeek,
     }),
   };

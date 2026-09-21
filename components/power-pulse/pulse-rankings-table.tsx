@@ -100,6 +100,12 @@ export function PulseRankingsTable({
    */
   emphasis: LeagueEmphasis;
 }) {
+  // A chopped league answers different questions in the same two columns:
+  // there is no record to project and no bracket to reach, so "Proj." becomes
+  // the weeks a roster is expected to last and "Playoffs" becomes the chance
+  // of going out this week. Read off the rows rather than passed down, so the
+  // header can never describe a column the cells beneath it are not filling.
+  const chopped = teams.some((t) => t.chopped);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sheetTeam, setSheetTeam] = useState<PulseTeam | null>(null);
   const sheetHeadingId = useId();
@@ -136,9 +142,11 @@ export function PulseRankingsTable({
             Power Pulse rankings, ordered by Power Pulse score. Columns: rank,
             team, Power Pulse score, outlook (competing, mid-table, or
             rebuilding), {emphasis.winsFirst ? "leverage" : "value"} rank with
-            the difference between the two rankings, projected record, playoff
-            odds, and lineup efficiency. Activate a team to open its full
-            breakdown.
+            the difference between the two rankings,{" "}
+            {chopped
+              ? "weeks expected to last, chance of being chopped this week,"
+              : "projected record, playoff odds,"}{" "}
+            and lineup efficiency. Activate a team to open its full breakdown.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
@@ -171,13 +179,13 @@ export function PulseRankingsTable({
                 scope="col"
                 className="hidden px-3 py-3 text-center lg:table-cell"
               >
-                Proj.
+                {chopped ? "Weeks left" : "Proj."}
               </th>
               <th
                 scope="col"
                 className="hidden px-3 py-3 text-center md:table-cell"
               >
-                Playoffs
+                {chopped ? "Chop risk" : "Playoffs"}
               </th>
               <th
                 scope="col"
@@ -247,13 +255,21 @@ export function PulseRankingsTable({
                     </td>
 
                     <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink-muted lg:table-cell">
-                      {team.projectedWins !== null
-                        ? `${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)}`
-                        : "--"}
+                      {chopped
+                        ? team.expectedWeeksAlive !== null
+                          ? team.expectedWeeksAlive.toFixed(1)
+                          : "--"
+                        : team.projectedWins !== null
+                          ? `${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)}`
+                          : "--"}
                     </td>
 
                     <td className="hidden px-3 py-2.5 text-center md:table-cell">
-                      <PlayoffCell odds={team.playoffOdds} />
+                      {chopped ? (
+                        <ChopRiskCell odds={team.chopOddsThisWeek} />
+                      ) : (
+                        <PlayoffCell odds={team.playoffOdds} />
+                      )}
                     </td>
 
                     <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink-muted lg:table-cell">
@@ -433,6 +449,41 @@ function PlayoffCell({ odds }: { odds: number | null }) {
       >
         <span
           className="block h-full rounded-full bg-beacon"
+          style={{ width: `${Math.max(2, percent)}%` }}
+        />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The chance of being the lowest score in the league this week.
+ *
+ * The same cell as PlayoffCell and the opposite reading: there, more is
+ * better. Here a high number is the bad one, so the tone runs the other way
+ * and the bar fills toward danger. Neither is carried by colour alone: the
+ * number is the number, and the column header says which question it answers.
+ */
+function ChopRiskCell({ odds }: { odds: number | null }) {
+  if (odds === null) return <span className="text-xs text-ink-subtle">--</span>;
+  const percent = Math.round(odds * 100);
+  const tone =
+    percent >= 20
+      ? "text-signal-danger"
+      : percent >= 8
+        ? "text-ink"
+        : "text-ink-subtle";
+  return (
+    <span className="inline-flex flex-col items-center gap-1">
+      <span className={`font-mono text-xs font-bold tabular-nums ${tone}`}>
+        {percent}%
+      </span>
+      <span
+        aria-hidden="true"
+        className="h-1 w-12 overflow-hidden rounded-full bg-base"
+      >
+        <span
+          className="block h-full rounded-full bg-brand-purple"
           style={{ width: `${Math.max(2, percent)}%` }}
         />
       </span>

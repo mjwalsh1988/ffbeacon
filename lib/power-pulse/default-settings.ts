@@ -235,6 +235,17 @@ export type PowerPulseSettings = {
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
+  // pp-8 (2026-09-20): chopped (guillotine) leagues stop being simulated as
+  // though they had a bracket. Sleeper publishes a head to head pairing for
+  // one and that pairing decides nothing: the lowest score in the league goes
+  // out each week and the last team alive wins. Such a league now runs
+  // lib/chopped/survival.ts instead, writes null into every bracket figure
+  // rather than a precise meaningless one, drops the schedule component out of
+  // the blend and shares its weight over the other three, and scores only the
+  // rosters still in. Every cached chopped row is wrong by definition, and the
+  // component reweighting moves the score in those leagues, so they rescore on
+  // next view.
+  //
   // pp-7 (2026-09-15): two corrections that landed with the first settled week.
   //
   // Median-game leagues (Sleeper's league_average_match) are simulated as
@@ -307,7 +318,7 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   //
   // Both change what a score means, so cached pp-2 rows are stale by definition
   // and every league rescores on next view.
-  modelVersion: "pp-7",
+  modelVersion: "pp-8",
 
   weights: {
     points: 0.55,

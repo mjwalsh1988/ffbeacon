@@ -521,7 +521,11 @@ async function PowerPulseBody({
             <Panel
               eyebrow="The ranking"
               title="Power Pulse rankings"
-              helper="Ranked by expected performance. The value column compares that to each team's trade-value rank."
+              helper={
+                view.chopped
+                  ? "Ranked by expected performance. This league has no playoffs, so the score is built from scoring, depth and form, and the columns report survival instead of a record."
+                  : "Ranked by expected performance. The value column compares that to each team's trade-value rank."
+              }
               bodyClassName="p-0"
               glow
             >
@@ -573,11 +577,24 @@ async function PowerPulseBody({
                     not be the favorite, because the playoffs only pit it against
                     the other qualifiers. Without the qualifier a reader sees
                     themselves first here, somebody else named champion above,
-                    and no way to tell which one is wrong. Neither is. */}
+                    and no way to tell which one is wrong. Neither is.
+
+                    A chopped league has neither a regular season nor a bracket
+                    to distinguish, and the two orders there are the same
+                    question asked twice, so the title says what the table
+                    actually is. */}
             <Panel
               eyebrow="Where this ends up"
-              title="Projected final regular season standings"
-              helper={`Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
+              title={
+                view.chopped
+                  ? "Projected survival order"
+                  : "Projected final regular season standings"
+              }
+              helper={
+                view.chopped
+                  ? "Ordered by the chance of being the last team standing. One team is chopped every week, so there is no cut line and no bracket."
+                  : `Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`
+              }
               bodyClassName="p-0"
             >
               <ProjectedStandings
@@ -604,6 +621,7 @@ async function PowerPulseBody({
             <HowPowerPulseWorks
               scoringDescription={scoringDescription}
               preseason={view.preseason}
+              chopped={view.chopped}
             />
           </aside>
         </div>

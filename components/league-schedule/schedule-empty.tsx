@@ -1,10 +1,16 @@
-import { CalendarClock, CalendarOff, TriangleAlert, UserMinus } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarOff,
+  Scissors,
+  TriangleAlert,
+  UserMinus,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Panel } from "@/components/dashboard-panel";
 import { listWords } from "./format";
 
 /**
- * The four ways this page can have nothing to show, each named.
+ * The ways this page can have nothing, or nothing trustworthy, to show.
  *
  * Server component. Written in the voice of
  * components/power-pulse/pre-draft-notice.tsx: say what is missing, say WHY it
@@ -26,7 +32,12 @@ export function ScheduleEmpty({
   season,
   missingWeeks = [],
 }: {
-  kind: "no-schedule" | "no-projections" | "missing-weeks" | "unpaired";
+  kind:
+    | "no-schedule"
+    | "no-projections"
+    | "missing-weeks"
+    | "unpaired"
+    | "chopped";
   season: number | null;
   /** Only read for the "missing-weeks" case. Named in the copy, never counted. */
   missingWeeks?: number[];
@@ -49,6 +60,34 @@ export function ScheduleEmpty({
         <p>
           Once the commissioner rolls the league over, every week appears together and this
           page fills in on the next load.
+        </p>
+      </EmptyPanel>
+    );
+  }
+
+  // Not an empty state: the board below it is full. It is here because a
+  // column of dashes where a win probability used to be reads as data we
+  // failed to load, and the truth is the opposite. We have the numbers and the
+  // contest is not real.
+  if (kind === "chopped") {
+    return (
+      <EmptyPanel
+        eyebrow="Schedule"
+        title="These pairings do not decide anything"
+        helper="A chopped league eliminates the lowest score in the whole league each week."
+        icon={<Scissors aria-hidden="true" className="h-5 w-5" />}
+      >
+        <p>
+          Sleeper pairs the teams in a chopped league and shows a head to head
+          result for each pair, the same as any other league. Nothing follows
+          from it. Beating the team you were drawn against does not keep you in,
+          and losing to them does not put you out: the one lowest score in the
+          league goes, whoever it played.
+        </p>
+        <p>
+          So the board carries every projected total and every final score, and
+          no win probability. What that number would have measured is a contest
+          this league is not running.
         </p>
       </EmptyPanel>
     );

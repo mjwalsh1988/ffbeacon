@@ -14,6 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
+import { isAliveRoster, isChoppedLeague } from "@/lib/chopped/league";
 import {
   DEFAULT_PLAYOFF_TEAMS,
   DEFAULT_PLAYOFF_WEEK_START,
@@ -89,6 +90,18 @@ export type LeagueRow = {
    * result a week and the projected record never adds up.
    */
   medianMatch: boolean;
+  /**
+   * A chopped (guillotine) league: the lowest score in the whole league is
+   * eliminated every week and the last team alive wins.
+   *
+   * It changes which model runs rather than a parameter inside one, because
+   * such a league has no bracket, no bye and no last place, and Sleeper's
+   * `disable_elimination` switch is checked too: a league carrying chopped's
+   * type with elimination turned off is an ordinary scoring league wearing
+   * chopped's interface, and telling its managers they are in danger of
+   * elimination would be the loudest possible wrong answer.
+   */
+  chopped: boolean;
 };
 
 export type RosterRow = {
@@ -245,7 +258,38 @@ export async function loadLeague(
     // so intOrNull, not positiveIntOrNull.
     playoffRoundType: intOrNull(settings.playoff_round_type) ?? 0,
     medianMatch: intOrNull(settings.league_average_match) === 1,
+    chopped: isChoppedLeague(settings),
   };
+}
+
+/**
+ * Chopped leagues only: the rosters still in the league.
+ *
+ * Its own query rather than one more column on loadRosters, because
+ * `metadata` is a fat jsonb blob that every ordinary league would pay to
+ * fetch and nothing else in this model reads. lib/faab/league-chopped.ts
+ * keeps a reader of the same shape for the same reason. The part that must
+ * not be duplicated is the RULE, and that lives in `isAliveRoster`: Sleeper
+ * writes 0 into `eliminated` on every roster at league creation, so a falsy
+ * zero is a live team rather than one chopped in week zero, and reading it
+ * the other way reports a whole league dead before a snap is played.
+ */
+export async function loadAliveRosterIds(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<number[]> {
+  const { data } = await supabase
+    .from("rosters")
+    .select("sleeper_roster_id, metadata")
+    .eq("league_id", leagueRowId);
+  const out: number[] = [];
+  for (const row of data ?? []) {
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    if (isAliveRoster(meta.settings ?? null)) {
+      out.push(Number(row.sleeper_roster_id));
+    }
+  }
+  return out;
 }
 
 export async function loadRosters(

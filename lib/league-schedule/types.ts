@@ -283,6 +283,17 @@ export type ScheduleBoard = {
   noScheduleYet: boolean;
   /** True when no Power Pulse row exists, so projections are unavailable. */
   projectionsUnavailable: boolean;
+  /**
+   * A chopped (guillotine) league.
+   *
+   * Sleeper publishes a full paired slate for one and the pairing decides
+   * nothing: the lowest score in the whole league goes out each week, whoever
+   * it was drawn against. Every projected point on the board is still real and
+   * still worth reading; the win probability against a nominal opponent is
+   * not, so it is not computed, and the page says why rather than leaving a
+   * column of dashes to be read as missing data.
+   */
+  chopped: boolean;
 };
 
 /** One row of the strength-of-schedule panel. */

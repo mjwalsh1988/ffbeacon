@@ -8,6 +8,20 @@ Plans: docs/faab/faab-calculator-overhaul-plan.md (FB-T) and
 docs/faab/chopped-guillotine-guide-seo-plan.md (FB-G). Every task and its
 notes are at the end of progress.md.
 
+### SESSION OF 2026-09-20
+
+Half the list below is now closed. FB-R01 (browser QA at phone width) was done
+by the owner. FB-R02 (the IndexNow ping) was run and accepted. FB-R04 (playoff
+odds on chopped leagues) and FB-R06 (the unfed reason clause) were built this
+session, are NOT COMMITTED, and are written up in full at the end of
+progress.md. Migration 0291 IS applied to production and
+lib/database.types.ts is regenerated, so the tree and the database agree.
+
+What is left: FB-R03 (finish the review coverage) and the three judgement
+calls, FB-R05, FB-R07 and FB-R08, all still recommended to leave. The FB-R04
+work is itself unreviewed by anyone but its author and is the newest code in
+the tree, so if one reviewer gets scoped at anything, scope it at that diff.
+
 ### NEXT SESSION: START HERE
 
 The build is DONE and COMMITTED. Every task in both plans is built, the full
@@ -27,17 +41,19 @@ Where everything lives:
 
 THE PRIORITY LIST
 
-1. FB-R01, browser QA at phone width. HIGHEST RISK LEFT, and I recommend
-   doing it before anything else ships to readers. Nobody has opened the new
-   result card at 400px, checked the screen-reader announcements against plan
-   7.14, or checked prefers-reduced-motion. The card is entirely new and the
-   owner reads by screen reader, so this is the gap most likely to hide a
-   real problem. About twenty minutes in a browser.
+1. FB-R01, browser QA at phone width. DONE by the owner, 2026-09-20. What it
+   covered was the original note: the new result card at 400px, the
+   screen-reader announcements against plan 7.14, and prefers-reduced-motion.
+   It was the highest risk item on this list because the card is entirely new
+   and the owner reads by screen reader.
 
-2. FB-R02, IndexNow after deploy. One command, tells the search engines the
-   new guide exists. It cannot run before the deploy because the URL 404s
-   until then. Recommended, it costs nothing:
-       npm run indexnow -- /guides/chopped-league-strategy
+2. FB-R02, IndexNow after deploy. DONE 2026-09-20, accepted with a 200. The
+   command written here does NOT work from this machine, and neither failure
+   says so out loud. .env.local pins NEXT_PUBLIC_SITE_URL to localhost, so
+   lib/indexnow.ts treats an ffbeacon.com URL as a foreign host, drops it, and
+   reports only "Not submitted (status 0)"; and Git Bash rewrites a leading
+   slash argument into a Windows path. What worked, in one line:
+       NEXT_PUBLIC_SITE_URL=https://ffbeacon.com npm run indexnow -- https://ffbeacon.com/guides/chopped-league-strategy
 
 3. FB-R03, finish the review coverage. The final reviewer ran out of road.
    Unreviewed, meaning unknown rather than known bad: bid-hero, goal-toggle,
@@ -49,12 +65,23 @@ THE PRIORITY LIST
    FB-R01, because the browser pass catches the same class of problem more
    directly. Scope one reviewer to the UI components only.
 
-4. FB-R04, Power Pulse on chopped leagues (plan finding D3). Power Pulse,
-   Schedules and the League Pulse pages still run a head-to-head playoff
-   simulation on leagues that have no playoffs, and show odds that mean
-   nothing. Both plans put this out of scope on purpose. It is a real wart,
-   it predates this build, and it lives on other pages. Recommended as its
-   own piece of work, not a quick fix.
+4. FB-R04, Power Pulse on chopped leagues (plan finding D3). DONE
+   2026-09-20, NOT COMMITTED. A chopped league now runs
+   lib/chopped/survival.ts instead of the bracket, writes null into every
+   bracket figure rather than a precise meaningless one, drops the schedule
+   component out of the score and shares its weight over the other three, and
+   scores only the teams still alive. Four new columns (migration 0291,
+   APPLIED to production) carry the chop odds, the chance of being last
+   standing and the expected weeks alive, and eleven surfaces were changed to
+   render them. modelVersion is pp-8, so every league in the product rescores
+   on next view.
+
+   Running it against production turned up one thing no test had: an upsert
+   leaves behind the row of a roster the run has stopped scoring, which in a
+   chopped league is the eliminated team's 0.0 point, 0 percent, last place
+   row sitting in a table of live teams. The calc prunes those now, which also
+   covers an ordinary league whose roster count shrank. Full write-up in the
+   FB-R04 note at the end of progress.md.
 
 5. FB-R05, the zero-dollar bid question. In a league with no minimum bid an
    uncontested claim prices at $0, even for a player who will start. Plan 7.8
@@ -63,10 +90,13 @@ THE PRIORITY LIST
    lib/faab/ladder.test.ts pins it deliberately. Change it only if it reads
    wrong to you.
 
-6. FB-R06, the unfed reason clause. reasons.ts implements ", k of them with a
-   starter out" and nothing populates rivalsWithStarterOut, so that half of
-   the sentence can never appear. Small, cosmetic, low value. Recommended to
-   leave unless someone is already in that file.
+6. FB-R06, the unfed reason clause. DONE 2026-09-20, NOT COMMITTED. The
+   injured-starter test that already ran over the reader's own roster is now
+   one function and runs over the interested rivals too, so
+   rivalsWithStarterOut is fed and the clause can fire. reasons.ts is
+   untouched, so the sentence printed is the one already written and tested.
+   Not yet seen on screen in a league where a rival really does have a starter
+   out at the candidate's position.
 
 7. FB-R07, the bid search cost. bidForTarget calls the simulation once per
    whole dollar and each call scans every run, so a $1,000 budget at 3,000
@@ -94,9 +124,12 @@ TWO THINGS A NEW SESSION SHOULD NOT UNDO
 
 All 51 FB-T and 14 FB-G tasks are complete. The engine, the chopped model,
 the result card, the manual form, the admin panel, the OG route, the replay
-and both guides are built, checked and committed. What remains is FB-R01 to
-FB-R08 above: browser QA, the IndexNow ping, the unfinished review coverage
-and four judgement calls.
+and both guides are built, checked and committed.
+
+Of the eight follow-ups, four are closed: FB-R01, FB-R02, FB-R04 and FB-R06,
+the last two in the 2026-09-20 session and NOT COMMITTED. What remains is
+FB-R03, the unfinished review coverage, and the three judgement calls FB-R05,
+FB-R07 and FB-R08.
 
 ### VERIFY FIRST results
 

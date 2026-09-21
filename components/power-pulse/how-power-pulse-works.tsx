@@ -12,10 +12,19 @@
 export function HowPowerPulseWorks({
   scoringDescription,
   preseason,
+  chopped = false,
 }: {
   /** Plain-language summary of the league's own scoring rules. */
   scoringDescription: string;
   preseason: boolean;
+  /**
+   * A chopped (guillotine) league. It changes which model ran, not just the
+   * wording: no bracket is simulated, the schedule component is not in the
+   * score, and the odds below the table are about survival. A methodology
+   * panel that described the other model would be the worst place on the page
+   * to be wrong.
+   */
+  chopped?: boolean;
 }) {
   return (
     <details className="group rounded-card border border-line bg-base/40">
@@ -72,11 +81,22 @@ export function HowPowerPulseWorks({
               Current designations suppress the coming week, season-long ones the
               rest of the year, and the next player up takes the slot.
             </li>
-            <li>
-              <span className="font-semibold text-ink">The actual schedule.</span>{" "}
-              Your real slate from Sleeper, simulated thousands of times for
-              playoff and title odds.
-            </li>
+            {chopped ? (
+              <li>
+                <span className="font-semibold text-ink">The chop, not a schedule.</span>{" "}
+                This league eliminates the lowest score every week, so the
+                pairings Sleeper shows decide nothing and no bracket is
+                simulated. The rest of the season is played out thousands of
+                times to get each team's chance of going out this week and of
+                being the last one standing.
+              </li>
+            ) : (
+              <li>
+                <span className="font-semibold text-ink">The actual schedule.</span>{" "}
+                Your real slate from Sleeper, simulated thousands of times for
+                playoff and title odds.
+              </li>
+            )}
           </ul>
         </div>
 
@@ -84,15 +104,34 @@ export function HowPowerPulseWorks({
           <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-cyan">
             How the score is weighted
           </h3>
-          <ul className="mt-2 space-y-1">
-            <li>Scoring, meaning projected points per week: 55%</li>
-            <li>Schedule-adjusted win rate: 25%</li>
-            <li>Depth and bye coverage: 10%</li>
-            <li>
-              Recent form against expectation: 10%
-              {preseason && " (redistributed until games are played)"}
-            </li>
-          </ul>
+          {chopped ? (
+            <>
+              <ul className="mt-2 space-y-1">
+                <li>Scoring, meaning projected points per week: 73%</li>
+                <li>Depth and bye coverage: 13%</li>
+                <li>
+                  Recent form against expectation: 13%
+                  {preseason && " (redistributed until games are played)"}
+                </li>
+              </ul>
+              <p className="mt-2">
+                There is no schedule component in a chopped league. Nobody has
+                an opponent to be lucky or unlucky in, so the quarter of the
+                score that would have measured one is shared over the other
+                three rather than left sitting at zero for everybody.
+              </p>
+            </>
+          ) : (
+            <ul className="mt-2 space-y-1">
+              <li>Scoring, meaning projected points per week: 55%</li>
+              <li>Schedule-adjusted win rate: 25%</li>
+              <li>Depth and bye coverage: 10%</li>
+              <li>
+                Recent form against expectation: 10%
+                {preseason && " (redistributed until games are played)"}
+              </li>
+            </ul>
+          )}
         </div>
 
         <div>
@@ -108,8 +147,11 @@ export function HowPowerPulseWorks({
 
         <p className="text-ink-subtle">
           Limits: projections are one source's opinion, weekly outcomes are
-          modeled as independent, and the bracket reseeds each round. The odds
-          are a guide, not a promise.
+          modeled as independent, and{" "}
+          {chopped
+            ? "the last week of the season is worked out from how many teams are left rather than from a date Sleeper publishes"
+            : "the bracket reseeds each round"}
+          . The odds are a guide, not a promise.
         </p>
       </div>
     </details>

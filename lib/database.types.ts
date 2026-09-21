@@ -2404,10 +2404,13 @@ export type Database = {
       league_power_pulse_cache: {
         Row: {
           bye_odds: number | null;
+          chop_odds_this_week: number | null;
+          chopped: boolean;
           components: Json;
           drivers: Json;
           expected_points_per_week: number | null;
           expected_points_stdev: number | null;
+          expected_weeks_alive: number | null;
           expected_wins: number | null;
           generated_at: string;
           id: string;
@@ -2437,16 +2440,20 @@ export type Database = {
           season: number;
           sos_points: number | null;
           sos_rank: number | null;
+          survive_all_odds: number | null;
           through_week: number;
           title_odds: number | null;
           weekly: Json;
         };
         Insert: {
           bye_odds?: number | null;
+          chop_odds_this_week?: number | null;
+          chopped?: boolean;
           components?: Json;
           drivers?: Json;
           expected_points_per_week?: number | null;
           expected_points_stdev?: number | null;
+          expected_weeks_alive?: number | null;
           expected_wins?: number | null;
           generated_at?: string;
           id?: string;
@@ -2476,16 +2483,20 @@ export type Database = {
           season: number;
           sos_points?: number | null;
           sos_rank?: number | null;
+          survive_all_odds?: number | null;
           through_week?: number;
           title_odds?: number | null;
           weekly?: Json;
         };
         Update: {
           bye_odds?: number | null;
+          chop_odds_this_week?: number | null;
+          chopped?: boolean;
           components?: Json;
           drivers?: Json;
           expected_points_per_week?: number | null;
           expected_points_stdev?: number | null;
+          expected_weeks_alive?: number | null;
           expected_wins?: number | null;
           generated_at?: string;
           id?: string;
@@ -2515,6 +2526,7 @@ export type Database = {
           season?: number;
           sos_points?: number | null;
           sos_rank?: number | null;
+          survive_all_odds?: number | null;
           through_week?: number;
           title_odds?: number | null;
           weekly?: Json;

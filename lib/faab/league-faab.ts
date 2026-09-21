@@ -1138,22 +1138,47 @@ export async function calculateLeagueFaab(
   // reserve is not the reason to spend, and listing him would bury the one
   // name that is. Read from what the projection source published, so the
   // status shown here is the same one the projection was built from.
-  const injuredStarters: Array<{ name: string; status: string; position: string }> = [];
-  {
-    const thisWeek = rosterWeeksById.get(mine.sleeperRosterId)?.get(currentWeek) ?? [];
+  //
+  // ONE definition, used for the reader's own roster and for the rivals'
+  // below, for the same reason there is one definition of "would start him":
+  // two of them is how a card ends up disagreeing with itself.
+  const injuredStartersOn = (roster: {
+    sleeperRosterId: number;
+    playerSleeperIds: readonly string[];
+  }): Array<{ name: string; status: string; position: string }> => {
+    const thisWeek = rosterWeeksById.get(roster.sleeperRosterId)?.get(currentWeek) ?? [];
     const starters = new Set(
       buildOptimalLineup(slots, thisWeek)
         .slots.map((s) => s.playerId)
         .filter((id): id is string => Boolean(id)),
     );
-    for (const sid of mine.playerSleeperIds) {
+    const out: Array<{ name: string; status: string; position: string }> = [];
+    for (const sid of roster.playerSleeperIds) {
       const player = players.get(sid);
       if (!player || !starters.has(player.playerId)) continue;
       const status = (player.injuryStatus ?? "").toUpperCase();
       if (!status || status === "ACTIVE" || status === "QUESTIONABLE") continue;
-      injuredStarters.push({ name: player.name, status, position: player.position });
+      out.push({ name: player.name, status, position: player.position });
     }
-  }
+    return out;
+  };
+
+  const injuredStarters = injuredStartersOn(mine);
+
+  // ---- how many of those rivals are short at his position -----------------
+  // A rival who would start him AND has a starter out at his position is
+  // bidding this week rather than holding his money, which is what makes the
+  // count worth a clause of its own. Only the interested rivals are checked,
+  // so this costs one lineup fill per interested team and nothing at all when
+  // the rival-need model is switched off.
+  const rivalsWithStarterOut =
+    interestedRivals === null
+      ? null
+      : rosters.filter(
+          (roster) =>
+            interestedSet.has(roster.sleeperRosterId) &&
+            injuredStartersOn(roster).some((s) => s.position === candidate.position),
+        ).length;
 
   // In superflex, a starting quarterback going out is the one injury that
   // cannot be streamed around, and the replacement is usually gone by
@@ -1305,7 +1330,7 @@ export async function calculateLeagueFaab(
 
   const reasons = buildReasons({
     interestedRivals,
-    rivalsWithStarterOut: null,
+    rivalsWithStarterOut,
     netPointsPerWeek: marginal.netPointsPerWeek,
     dropName: marginal.dropCost?.name ?? null,
     // True when the playoff weeks actually entered the average, which needs

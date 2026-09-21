@@ -51,6 +51,17 @@ export type PulseFavorite = {
   playoffOdds: number | null;
   projectedWins: number | null;
   projectedLosses: number | null;
+  /**
+   * A chopped (guillotine) league, where the four figures above do not exist.
+   * There is no bracket to reach and no title game to win: the lowest score
+   * goes out each week, so the card names the team likeliest to be the last
+   * one alive and says that is what it is doing.
+   */
+  chopped: boolean;
+  /** Chopped only: chance of being the last team standing. */
+  surviveAllOdds: number | null;
+  /** Chopped only: the named team's chance of going out this week. */
+  chopOddsThisWeek: number | null;
   /** How many other teams share the top title odds. 0 when the favorite is alone. */
   tiedWith: number;
   /** The week the stored run scored through, for the card's footnote. */
@@ -66,9 +77,22 @@ type CacheRow = {
   playoff_odds: number | null;
   projected_wins: number | null;
   projected_losses: number | null;
+  chopped?: boolean | null;
+  survive_all_odds?: number | null;
+  chop_odds_this_week?: number | null;
   through_week: number;
   generated_at: string;
 };
+
+/**
+ * The column that answers "who wins this league" for the league this row came
+ * from. A chopped league has no title odds at all, and ranking it on the
+ * absent column would fall through to pulse rank and quietly name a different
+ * team than the page it links to.
+ */
+function winMetric(row: CacheRow): number | null {
+  return num(row.chopped ? row.survive_all_odds : row.title_odds);
+}
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined) return null;
@@ -81,19 +105,21 @@ function num(v: unknown): number | null {
  *
  * Title odds first, because "who wins this league" is the question the card
  * answers and title odds is the only column that answers it: a team can lead
- * the pulse score and still be an underdog once the bracket is simulated.
- * Falls back to pulse rank when no row carries title odds at all, which is the
- * shape a run produces before a playoff bracket exists.
+ * the pulse score and still be an underdog once the bracket is simulated. In a
+ * chopped league the same job is done by the chance of being the last team
+ * standing, which is what winMetric picks.
+ * Falls back to pulse rank when no row carries either, which is the shape a
+ * run produces before a playoff bracket exists.
  *
  * Exported for its own test. Pure.
  */
 export function pickFavorite(rows: CacheRow[]): { row: CacheRow; tiedWith: number } | null {
   if (rows.length === 0) return null;
 
-  const withOdds = rows.filter((r) => num(r.title_odds) !== null && Number(r.title_odds) > 0);
+  const withOdds = rows.filter((r) => (winMetric(r) ?? 0) > 0);
   if (withOdds.length > 0) {
     const sorted = [...withOdds].sort((a, b) => {
-      const byOdds = Number(b.title_odds) - Number(a.title_odds);
+      const byOdds = (winMetric(b) ?? 0) - (winMetric(a) ?? 0);
       if (byOdds !== 0) return byOdds;
       // A tie on odds falls to the pulse rank, then to the roster id, so two
       // identical rows always resolve the same way across renders.
@@ -101,14 +127,14 @@ export function pickFavorite(rows: CacheRow[]): { row: CacheRow; tiedWith: numbe
       if (byRank !== 0) return byRank;
       return a.roster_id < b.roster_id ? -1 : 1;
     });
-    const top = Number(sorted[0].title_odds);
+    const top = winMetric(sorted[0]) ?? 0;
     // Counted on the ROUNDED percentage the card prints, not on the raw float.
     // Two teams at 0.2413 and 0.2409 both read "24%", and a card that shows a
     // sole favorite next to a number another team also has is the kind of small
     // lie a reader catches immediately.
     const topPct = Math.round(top * 100);
     const tiedWith =
-      sorted.filter((r) => Math.round(Number(r.title_odds) * 100) === topPct).length - 1;
+      sorted.filter((r) => Math.round((winMetric(r) ?? 0) * 100) === topPct).length - 1;
     return { row: sorted[0], tiedWith };
   }
 
@@ -130,7 +156,7 @@ export const loadPulseFavorite = cache(async function loadPulseFavorite(
   const { data, error } = await supabase
     .from("league_power_pulse_cache")
     .select(
-      "roster_id, power_pulse, pulse_rank, title_odds, playoff_odds, projected_wins, projected_losses, through_week, generated_at",
+      "roster_id, power_pulse, pulse_rank, title_odds, playoff_odds, projected_wins, projected_losses, chopped, survive_all_odds, chop_odds_this_week, through_week, generated_at",
     )
     .eq("league_id", leagueRowId)
     .eq("season", season);
@@ -172,6 +198,9 @@ export const loadPulseFavorite = cache(async function loadPulseFavorite(
     playoffOdds: num(picked.row.playoff_odds),
     projectedWins: num(picked.row.projected_wins),
     projectedLosses: num(picked.row.projected_losses),
+    chopped: picked.row.chopped === true,
+    surviveAllOdds: num(picked.row.survive_all_odds),
+    chopOddsThisWeek: num(picked.row.chop_odds_this_week),
     tiedWith: picked.tiedWith,
     throughWeek: Number(picked.row.through_week),
     generatedAt: picked.row.generated_at ?? null,
