@@ -1372,6 +1372,17 @@ function ClosingSection() {
         </Link>
         .
       </Para>
+      <Para>
+        Two neighbours worth knowing about. This guide is about HOW MUCH to bid; the{" "}
+        <Link href="/waiver-wire" className={LINK_CLASS}>
+          waiver wire page
+        </Link>{" "}
+        covers how claims actually work and lists who is worth one this week, and{" "}
+        <Link href="/guides/faab-settings-by-platform" className={LINK_CLASS}>
+          FAAB settings by platform
+        </Link>{" "}
+        is the one to send a commissioner who is trying to turn any of it on.
+      </Para>
     </section>
   );
 }

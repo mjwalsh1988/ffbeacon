@@ -24,6 +24,7 @@ import {
   Scale,
   Scissors,
   Search,
+  ListChecks,
   ShieldCheck,
   SlidersHorizontal,
   Swords,
@@ -245,6 +246,16 @@ export function WrittenSections({ market = null }: { market?: MarketFacts | null
       faqTitle="FAAB questions, answered"
       next={[
         {
+          // First on the list on purpose. A reader who arrived on "faab
+          // calculator" has already decided WHO they are bidding on; a reader
+          // who has not is one click from the board that answers it.
+          href: "/waiver-wire",
+          icon: ListChecks,
+          title: "This week's waiver wire",
+          body: "Who is actually still available, whose role just changed, and a bid range for each.",
+          accent: "cyan",
+        },
+        {
           href: "/guides/faab-strategy",
           icon: BookOpen,
           title: "FAAB strategy guide",
@@ -269,6 +280,12 @@ export function WrittenSections({ market = null }: { market?: MarketFacts | null
           title: "Who should I start this week",
           body: "Put in your players and get a start/sit verdict with a confidence figure.",
           accent: "purple",
+        },
+        {
+          href: "/guides/faab-settings-by-platform",
+          icon: SlidersHorizontal,
+          title: "FAAB settings by platform",
+          body: "Budgets, minimum bids and waiver types on Sleeper, Yahoo, ESPN and NFL.com.",
         },
         {
           href: "/tools/trade-calculator",

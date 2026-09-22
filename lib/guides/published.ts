@@ -148,6 +148,19 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     priority: 0.8,
   },
   {
+    slug: "faab-settings-by-platform",
+    navLabel: "FAAB Settings",
+    title: "FAAB and waiver settings on Sleeper, Yahoo and ESPN",
+    summary:
+      "What every waiver setting actually does: the three systems, budgets and minimum bids, when claims process, what you can still change mid-season, and a commissioner's short list",
+    // The setup half of the waiver cluster. /guides/faab-strategy keeps the
+    // bidding and /waiver-wire keeps the mechanics, so none of the three
+    // competes with the others for the same query.
+    publishedAt: "2026-09-22T09:00:00-04:00",
+    updatedAt: "2026-09-22T09:00:00-04:00",
+    priority: 0.7,
+  },
+  {
     slug: "chopped-league-strategy",
     navLabel: "Chopped Leagues",
     title: "Chopped and guillotine league strategy",

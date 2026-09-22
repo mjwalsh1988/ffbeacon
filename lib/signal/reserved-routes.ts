@@ -54,6 +54,7 @@ export const RESERVED_ROUTE_SEGMENTS = [
   "terms",
   "tools",
   "u",
+  "waiver-wire",
 ] as const;
 
 const RESERVED_ROUTE_SEGMENT_SET: ReadonlySet<string> = new Set(

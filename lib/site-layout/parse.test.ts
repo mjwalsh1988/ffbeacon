@@ -50,6 +50,36 @@ const LAYOUT_2026_09_14 = {
   },
 };
 
+/**
+ * The layout the site ships TODAY.
+ *
+ * Deliberately built from the frozen 2026-09-14 one rather than written out
+ * again, so this constant can only ever differ from the seed by the changes
+ * named here. Add a line per change, with a date and a reason.
+ *
+ *   2026-09-22: the Waiver Wire section, a new top level between Rankings and
+ *   Games. The stored row is migrated to match (migration 0293); a row that is
+ *   not gets the id appended by normalizeOrder, which is safe but puts it last.
+ */
+const LAYOUT_TODAY = {
+  ...LAYOUT_2026_09_14,
+  menu: {
+    ...LAYOUT_2026_09_14.menu,
+    sectionOrder: [
+      "home",
+      "tools",
+      "rankings",
+      "waiver-wire",
+      "games",
+      "brief",
+      "guides",
+      "my-beacon",
+      "about",
+      "admin",
+    ],
+  },
+};
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -96,13 +126,39 @@ describe("the defaults", () => {
     expect(seed).toBeTruthy();
     const parsed = JSON.parse(seed as string);
     expect(parsed).toEqual(LAYOUT_2026_09_14);
-    expect(validateSiteLayout(parsed).ok).toBe(true);
+
+    // What has to hold about the seed is that the READ path still turns it
+    // into a complete, current layout. It is deliberately NOT checked against
+    // validateSiteLayout: that is the admin SAVE gate, which requires a full
+    // permutation of today's sections, and a row written before a section
+    // existed is one short by definition. Treating that as a failure would
+    // mean every new section broke this test and, worse, would suggest the
+    // stored row needed rewriting when it does not.
+    const merged = mergeSiteLayout(parsed);
+    // Every section, exactly once, and a section the row predates APPENDED
+    // rather than slotted into its default position. That is normalizeOrder's
+    // documented behaviour and it is the safe one: a stored order is somebody's
+    // deliberate arrangement, so a new entry goes at the end rather than
+    // pushing their choices around. The consequence is cosmetic and is why
+    // migration 0293 updates the stored row to put Waiver Wire where the code
+    // default has it.
+    expect([...merged.menu.sectionOrder].sort()).toEqual([...NAV_SECTION_IDS].sort());
+    expect(merged.menu.sectionOrder.at(-1)).toBe("waiver-wire");
+    expect(validateSiteLayout(merged).ok).toBe(true);
   });
 
-  it("are, today, the layout 0282 seeded", () => {
+  it("appends a section the stored row predates rather than losing it", () => {
+    // The 2026-09-14 row knows nothing about waiver-wire. A reader on that row
+    // must still get every section, and must not get a duplicate or a gap.
+    const merged = mergeSiteLayout(clone(LAYOUT_2026_09_14));
+    expect([...merged.menu.sectionOrder].sort()).toEqual([...NAV_SECTION_IDS].sort());
+    expect(new Set(merged.menu.sectionOrder).size).toBe(NAV_SECTION_IDS.length);
+  });
+
+  it("are, today, the shipped layout", () => {
     // Expected to change when the shipped layout does. Update the defaults and
-    // this expectation together; the seed test above stays pinned.
-    expect(DEFAULT_SITE_LAYOUT).toEqual(LAYOUT_2026_09_14);
+    // LAYOUT_TODAY together; the seed test above stays pinned to 0282.
+    expect(DEFAULT_SITE_LAYOUT).toEqual(LAYOUT_TODAY);
   });
 
   it("pass the strict validation", () => {

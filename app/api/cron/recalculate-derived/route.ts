@@ -12,6 +12,7 @@ import { getActiveFormats } from "@/lib/source";
 import { submitIndexNow } from "@/lib/indexnow";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { priorsBuiltAt, rebuildFaabMarketPriors } from "@/lib/faab/priors-write";
+import { refreshRosterRates } from "@/lib/waiver-wire/roster-rates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ export const maxDuration = 300;
  *   1. seed-rankings (rebuild rankings table from latest player_value_history)
  *   2. calculate-trends (rebuild player_value_trends pre-calc)
  *   3. player_roster_exposure (how commonly each player is rostered anywhere)
+ *   3b. player_roster_rates (what share of this season's leagues roster each
+ *      player, which is the waiver board's availability column)
  *   4. faab_market_priors (what a waiver claim clears at, by situation), and
  *      only when the existing cells are older than the admin's staleness
  *      setting
@@ -102,6 +105,30 @@ export async function GET(req: Request) {
           err instanceof Error ? err.message : err,
         );
         rosterExposure = { rebuilt: false, reason: "error" };
+      }
+
+      // The waiver board's availability column: what share of this season's
+      // synced LEAGUES already roster each player, split dynasty and redraft.
+      //
+      // A different question from the exposure rebuild above, and deliberately
+      // a different table (see the header of migration 0292). That one is a
+      // share of roster ROWS across every season, which tops out near 8 percent
+      // and normalises a favourites list. This one is a share of LEAGUES in one
+      // season, which is what "rostered in 41 percent" means on a waiver page.
+      //
+      // Same shape as its neighbours: ONE AGGREGATE OVER ROSTER ROWS, ITERATING
+      // NO LEAGUE and making no Sleeper request, which is what keeps it on a
+      // global cron rather than on demand. Non-fatal: a failed rebuild leaves
+      // the previous counts in place, which are a day old rather than wrong.
+      let rosterRates: unknown = null;
+      try {
+        rosterRates = await refreshRosterRates(supabase);
+      } catch (err) {
+        console.error(
+          "[recalculate-derived] player_roster_rates rebuild failed:",
+          err instanceof Error ? err.message : err,
+        );
+        rosterRates = { rebuilt: false, reason: "error" };
       }
 
       // Fresh values/trends -> bust the profile value caches.
@@ -242,6 +269,7 @@ export async function GET(req: Request) {
         rankings,
         trends,
         rosterExposure,
+        rosterRates,
         faabPriors,
         rateLimitLedgerRowsDeleted,
         onTheClockCacheRowsDeleted,

@@ -58,6 +58,7 @@
     "measure:manager-pulse": "tsx --env-file=.env.local scripts/measure-manager-pulse.ts",
     "measure:bundle": "tsx scripts/measure-bundle.ts",
     "calculate:defense-splits": "tsx --env-file=.env.local scripts/calculate-defense-splits.ts",
+    "calculate:roster-rates": "tsx --env-file=.env.local scripts/calculate-roster-rates.ts",
     "calculate:projection-accuracy": "tsx --env-file=.env.local scripts/calculate-projection-accuracy.ts",
     "calculate:draft-value": "tsx --env-file=.env.local scripts/calculate-draft-value.ts",
     "wyr:pool": "tsx --env-file=.env.local scripts/would-you-rather-pool.ts",

@@ -208,6 +208,28 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["faab", "waiver", "bid", "budget", "add"],
   },
   {
+    label: "Waiver Wire",
+    href: "/waiver-wire",
+    description: "Who to add this week, and what to bid",
+    keywords: [
+      "waiver",
+      "waivers",
+      "waiver wire",
+      "wire",
+      "adds",
+      "pickups",
+      "free agents",
+      "claim",
+      "priority",
+    ],
+  },
+  {
+    label: "Free Agent Finder",
+    href: "/tools/free-agent-finder",
+    description: "Is he free in any of your leagues?",
+    keywords: ["free agent", "finder", "available", "unowned", "leagues", "search"],
+  },
+  {
     label: "Signal Scout",
     href: "/games/signal-scout",
     description: "Decode the profile. Find the player.",

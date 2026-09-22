@@ -130,6 +130,26 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/tools/faab",
     badge: "FAAB Calculator",
   },
+  "waiver-wire": {
+    eyebrow: "Fantasy football waiver wire",
+    headlineTop: "Who to add,",
+    headlineBottom: "and what to bid",
+    subhead:
+      "Every week: who is actually still free, whose role just changed, and a bid range from the same engine our FAAB calculator runs.",
+    facts: ["Free", "No signup", "Measured, not guessed"],
+    path: "/waiver-wire",
+    badge: "Waiver Wire",
+  },
+  "free-agent-finder": {
+    eyebrow: "Free agent finder",
+    headlineTop: "Is he free in",
+    headlineBottom: "any of my leagues?",
+    subhead:
+      "One name, every league you have connected, and the ones where he is still sitting there unowned.",
+    facts: ["Free", "All your leagues at once", "Sleeper"],
+    path: "/tools/free-agent-finder",
+    badge: "Free Agent Finder",
+  },
   "beacon-breakdown": {
     eyebrow: "Start / Sit",
     headlineTop: "Who should",

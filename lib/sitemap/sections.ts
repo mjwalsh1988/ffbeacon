@@ -69,6 +69,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { memoTtl } from "@/lib/memo-ttl";
 import { SITE } from "@/lib/site";
 import { PUBLISHED_GUIDES } from "@/lib/guides/published";
+import { resolveSeasonClock } from "@/lib/start-sit/clock";
+import { boardWeeks, weekPath } from "@/lib/waiver-wire/weeks";
 import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -116,6 +118,7 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/tools/on-the-clock", priority: 0.6 },
   { path: "/tools/manager-pulse", priority: 0.6 },
   { path: "/tools/trade-calculator", priority: 0.6 },
+  { path: "/tools/free-agent-finder", priority: 0.5 },
   { path: "/games", priority: 0.4 },
   { path: "/games/signal-scout", priority: 0.4 },
   { path: "/games/would-you-rather", priority: 0.4 },
@@ -335,6 +338,32 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
         lastModified: newest([guide.updatedAt]),
         priority: guide.priority,
       });
+    }
+  }
+
+  // The waiver wire hub and one URL per publishable week.
+  //
+  // WHY THE WEEKS ARE LISTED INDIVIDUALLY. Each one is a real page with its own
+  // title, its own board and its own FAQ, and the searches behind them are
+  // per-week ("waiver wire week 4"), so listing only the hub would hide the
+  // fifteen pages that the section actually exists for.
+  //
+  // WHY ONLY THE PUBLISHABLE ONES. `boardWeeks` stops one week past the live
+  // week because Sleeper publishes projections about a week out, and the route
+  // itself 404s past that. Rule 1 of this file: never advertise a URL that does
+  // not serve a page. The list grows by one each week on its own.
+  //
+  // NO lastModified. The boards genuinely change every week, but they also
+  // change whenever a value sync lands, and a date that moved nightly without
+  // the page meaningfully changing is what teaches a crawler to ignore this
+  // file's dates. Rule 2: a lastmod is true or it is absent.
+  {
+    const clock = await resolveSeasonClock(supabase);
+    if (clock.season != null) {
+      urls.push({ loc: `${SITE.url}/waiver-wire`, priority: 0.8 });
+      for (const week of boardWeeks(clock.currentWeek)) {
+        urls.push({ loc: `${SITE.url}${weekPath(week)}`, priority: 0.7 });
+      }
     }
   }
 

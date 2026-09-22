@@ -101,6 +101,17 @@ const ALL_SECTIONS: SiteNavNode[] = [
     icon: "listOrdered",
   },
   {
+    // Its own top-level section rather than a child of Tools, because it is a
+    // content area with eighteen weekly pages under it rather than one thing
+    // you run against your league. The hub is the head term the section exists
+    // for; the weekly boards are reached from it and from each other.
+    id: "waiver-wire",
+    label: "Waiver Wire",
+    href: "/waiver-wire",
+    hint: "Who to add this week, and what to bid",
+    icon: "listChecks",
+  },
+  {
     id: "games",
     label: "Games",
     href: "/games",
@@ -151,6 +162,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         href: "/guides/faab-strategy",
         hint: "How much to bid on waivers",
         icon: "calculator",
+      },
+      {
+        id: "/guides/faab-settings-by-platform",
+        label: "FAAB Settings",
+        href: "/guides/faab-settings-by-platform",
+        hint: "Waiver settings on every platform",
+        icon: "settings",
       },
       {
         id: "/guides/chopped-league-strategy",

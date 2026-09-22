@@ -4436,6 +4436,53 @@ export type Database = {
         };
         Relationships: [];
       };
+      player_roster_rates: {
+        Row: {
+          computed_at: string;
+          dynasty_rostered: number;
+          dynasty_total: number;
+          leagues_rostered: number;
+          leagues_total: number;
+          player_id: string | null;
+          redraft_rostered: number;
+          redraft_total: number;
+          season: number;
+          sleeper_player_id: string;
+        };
+        Insert: {
+          computed_at?: string;
+          dynasty_rostered?: number;
+          dynasty_total?: number;
+          leagues_rostered?: number;
+          leagues_total?: number;
+          player_id?: string | null;
+          redraft_rostered?: number;
+          redraft_total?: number;
+          season: number;
+          sleeper_player_id: string;
+        };
+        Update: {
+          computed_at?: string;
+          dynasty_rostered?: number;
+          dynasty_total?: number;
+          leagues_rostered?: number;
+          leagues_total?: number;
+          player_id?: string | null;
+          redraft_rostered?: number;
+          redraft_total?: number;
+          season?: number;
+          sleeper_player_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_roster_rates_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       player_stats: {
         Row: {
           blk_kick: number;
@@ -7530,6 +7577,10 @@ export type Database = {
       };
       rebuild_player_roster_exposure: { Args: never; Returns: Json };
       rebuild_positional_finishes: { Args: never; Returns: number };
+      refresh_player_roster_rates: {
+        Args: { p_season: number };
+        Returns: number;
+      };
       release_league_sync: {
         Args: { p_actor_key: string };
         Returns: undefined;
