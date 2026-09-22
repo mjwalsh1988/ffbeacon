@@ -49,6 +49,28 @@ export type WeeklyGameRow = GameRow & {
   proj_line: StatLine | null;
 };
 
+/**
+ * A week the player's team has not produced a stat line for yet.
+ *
+ * The game log used to render only the weeks it held stats for, so in week 4 a
+ * current season showed three rows and the fourteen still to come were simply
+ * absent. A reader could not tell a bye from a week that had not happened from
+ * a week we had failed to sync. These fill the gap: the opponent comes from the
+ * weekly projections, which cover the full slate, and the kickoff comes from
+ * `lib/season-schedule.ts` when a book has priced the game.
+ *
+ * `kickoffAt` is null far more often than not, and that is a known time rather
+ * than a known absence: the odds feed covers the near future, not all eighteen
+ * weeks. A null means "we do not know when", never "there is no game".
+ */
+export type PendingWeekRow = {
+  week: number;
+  opponent: string | null;
+  team: string | null;
+  /** ISO kickoff, or null when no book has priced the game yet. */
+  kickoffAt: string | null;
+};
+
 /** One week of projected-vs-actual points for the accuracy chart. `actual` is
  *  null for weeks not yet played (so a current-season chart can show just the
  *  projection line until games happen). `prior` is the previous season's actual

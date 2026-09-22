@@ -18,6 +18,7 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { Panel } from "@/components/dashboard-panel";
 import { SeasonFinishesRail } from "@/components/player-profile/positional-finishes";
 import { WeeklyStats } from "@/components/player-profile/weekly-stats";
+import { kickoffKey, loadSeasonKickoffsCached } from "@/lib/season-schedule";
 import { WeeklyProjections } from "@/components/player-profile/weekly-projections";
 import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import {
@@ -29,6 +30,7 @@ import {
   computeStatAccuracy,
   lineFromGame,
   type WeeklyGameRow,
+  type PendingWeekRow,
   type AccuracyPoint,
   type BeatRate,
   type BeatRateWeek,
@@ -79,6 +81,14 @@ export async function StatsTab({
     loadProjectionsMapCached(player.id),
     getNflState(),
   ]);
+
+  // Kickoff times for the current season, so a week being played TODAY can be
+  // marked as such rather than rendered as an empty future week. One cached
+  // read; a season with no priced games just yields an empty map.
+  const kickoffs =
+    projections.season != null
+      ? await loadSeasonKickoffsCached(projections.season)
+      : {};
   // Upcoming weeks become clickable cards; points carry any TE premium already.
   const upcomingProjections = projections.rows.filter((r) => !r.played);
   const hasProjections = upcomingProjections.length > 0;
@@ -132,6 +142,44 @@ export async function StatsTab({
   const weeklySeasons = Object.keys(rowsBySeason)
     .map(Number)
     .sort((a, b) => b - a);
+
+  /**
+   * Every remaining week of the current season, so the game log is the whole
+   * season rather than only the part that has happened.
+   *
+   * The opponent comes from the weekly projections, which cover the full slate
+   * from week one; the kickoff comes from the odds feed, which covers only the
+   * games a book has priced, so it is frequently null and that means "we do not
+   * know when", never "there is no game".
+   *
+   * Only the CURRENT season gets these. A finished season already has a row for
+   * every game its team played, and a week missing from one of those is a bye.
+   * Manufacturing placeholder rows for 2021 would invent fourteen empty weeks
+   * for a player who was not in the league.
+   */
+  const pendingBySeason: Record<number, PendingWeekRow[]> = {};
+  if (projections.season != null) {
+    const season = projections.season;
+    const played = new Set((rowsBySeason[season] ?? []).map((r) => r.week));
+    const pending = projections.rows
+      .filter((r) => !played.has(r.week))
+      .map((r) => ({
+        week: r.week,
+        opponent: r.opponent,
+        team: r.team,
+        kickoffAt: kickoffs[kickoffKey(r.week, r.team) ?? ""] ?? null,
+      }))
+      .sort((a, b) => a.week - b.week);
+    if (pending.length > 0) pendingBySeason[season] = pending;
+  }
+
+  // A season the player has no stat line in at all, but which we hold a slate
+  // for, still deserves its tab: that is a rookie before week one, or anybody
+  // in the preseason, and an empty picker is a worse answer than an empty
+  // table with the schedule in it.
+  const allSeasons = Array.from(
+    new Set([...weeklySeasons, ...Object.keys(pendingBySeason).map(Number)]),
+  ).sort((a, b) => b - a);
 
   // Accuracy series for the projections section: ALWAYS the current projection
   // season (2026). The projection line spans every week; the actual line fills in
@@ -314,11 +362,16 @@ export async function StatsTab({
             title="Weekly stats"
             helper="Week by week, earliest to latest. Choose a season to view actuals against projection."
           >
-            {weeklySeasons.length > 0 ? (
+            {allSeasons.length > 0 ? (
               <WeeklyStats
                 position={player.position}
                 rowsBySeason={rowsBySeason}
-                seasons={weeklySeasons}
+                pendingBySeason={pendingBySeason}
+                // Stamped on the server so "is this game today" is decided
+                // once, in Eastern, rather than read off each reader's clock
+                // and disagreeing with the HTML on hydration.
+                nowIso={new Date().toISOString()}
+                seasons={allSeasons}
                 scoringLabel={scoringLabel}
                 beatRateBySeason={beatRateBySeason}
                 statAccuracyBySeason={statAccuracyBySeason}
