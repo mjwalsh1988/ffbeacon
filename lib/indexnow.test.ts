@@ -35,13 +35,13 @@ describe("submitIndexNow", () => {
   it("returns ok:false status:0 and makes no request when INDEXNOW_KEY is missing", async () => {
     delete process.env.INDEXNOW_KEY;
     const result = await submitIndexNow(["/brief"]);
-    expect(result).toEqual({ ok: false, status: 0 });
+    expect(result).toEqual({ ok: false, status: 0, reason: "no-key" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns ok:false status:0 and makes no request for an empty list", async () => {
     const result = await submitIndexNow([]);
-    expect(result).toEqual({ ok: false, status: 0 });
+    expect(result).toEqual({ ok: false, status: 0, reason: "nothing-to-submit" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -90,8 +90,32 @@ describe("submitIndexNow", () => {
 
   it("returns ok:false with only the foreign URL dropped, so an all-foreign list makes no request", async () => {
     const result = await submitIndexNow(["https://example.com/x"]);
-    expect(result).toEqual({ ok: false, status: 0 });
+    expect(result).toEqual({ ok: false, status: 0, reason: "nothing-to-submit" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A host no crawler can fetch is refused rather than submitted.
+   *
+   * .env.local on a developer machine points NEXT_PUBLIC_SITE_URL at
+   * localhost, which used to mean every public URL was dropped as "a
+   * different host" and the run reported a bare status 0 that read like a
+   * network problem. Nine waiver-wire pages looked submitted and were not.
+   */
+  it("refuses a local host and names the reason", async () => {
+    vi.resetModules();
+    const previous = process.env.NEXT_PUBLIC_SITE_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
+    try {
+      const fresh = await import("./indexnow");
+      const result = await fresh.submitIndexNow(["/waiver-wire"]);
+      expect(result).toEqual({ ok: false, status: 0, reason: "local-host" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+      else process.env.NEXT_PUBLIC_SITE_URL = previous;
+      vi.resetModules();
+    }
   });
 
   it("returns ok:false with the response status on a non-2xx response, and never throws", async () => {
@@ -109,7 +133,7 @@ describe("submitIndexNow", () => {
   it("returns ok:false status:0 without throwing when the request rejects", async () => {
     fetchMock.mockRejectedValueOnce(new Error("network down"));
     const result = await submitIndexNow(["/brief"]);
-    expect(result).toEqual({ ok: false, status: 0 });
+    expect(result).toEqual({ ok: false, status: 0, reason: "request-failed" });
   });
 
   it("returns ok:false status:0 without throwing when the 20 second timeout aborts the request", async () => {
@@ -128,7 +152,7 @@ describe("submitIndexNow", () => {
     const promise = submitIndexNow(["/brief"]);
     await vi.advanceTimersByTimeAsync(20_000);
     const result = await promise;
-    expect(result).toEqual({ ok: false, status: 0 });
+    expect(result).toEqual({ ok: false, status: 0, reason: "request-failed" });
     vi.useRealTimers();
   });
 });

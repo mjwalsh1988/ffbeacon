@@ -26,7 +26,43 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 /** IndexNow accepts at most 10,000 URLs per submission. */
 const MAX_URLS = 10_000;
 
-export type SubmitIndexNowResult = { ok: boolean; status: number };
+/**
+ * Why a submission did not happen, when `status` is 0 and so says nothing.
+ *
+ * Every one of these used to be the same silent `{ ok: false, status: 0 }`,
+ * and one of them is the normal state of a developer machine: `.env.local`
+ * points NEXT_PUBLIC_SITE_URL at localhost, so `resolveOwnUrl` drops every
+ * ffbeacon.com URL as "a different host" and the run reports nothing at all.
+ * A push that quietly does nothing is worse than one that fails, because the
+ * pages look submitted.
+ */
+export type IndexNowSkipReason =
+  | "no-key"
+  | "local-host"
+  | "nothing-to-submit"
+  | "request-failed";
+
+export type SubmitIndexNowResult = {
+  ok: boolean;
+  status: number;
+  reason?: IndexNowSkipReason;
+};
+
+/**
+ * True for a host no search engine can fetch. IndexNow would take the payload
+ * and the URLs would never be crawlable, so this is refused rather than sent.
+ */
+function isLocalHost(host: string): boolean {
+  const name = host.split(":")[0].toLowerCase();
+  return (
+    name === "localhost" ||
+    name === "127.0.0.1" ||
+    name === "::1" ||
+    name === "0.0.0.0" ||
+    name.endsWith(".local") ||
+    name.endsWith(".localhost")
+  );
+}
 
 /** The host our URLs are submitted under, derived from SITE.url. */
 function siteHost(): string {
@@ -59,17 +95,25 @@ function resolveOwnUrl(input: string, host: string): string | null {
  *
  * Relative paths ("/brief") expand against SITE.url; absolute URLs on any
  * other host are dropped. Results are de-duplicated and capped at 10,000.
- * With no key configured or nothing left to submit, this returns
- * { ok: false, status: 0 } without making a request. There is no retry loop:
- * a 429 is logged and dropped, not retried.
+ * With no key configured, a non-public host, or nothing left to submit, this
+ * returns { ok: false, status: 0 } and a `reason` naming which, without making
+ * a request. There is no retry loop: a 429 is logged and dropped, not
+ * retried.
  */
 export async function submitIndexNow(urls: string[]): Promise<SubmitIndexNowResult> {
   const key = process.env.INDEXNOW_KEY;
   if (!key) {
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, reason: "no-key" };
   }
 
   const host = siteHost();
+  if (isLocalHost(host)) {
+    console.error(
+      `[indexnow] refusing to submit for host "${host}". Set NEXT_PUBLIC_SITE_URL to the public site before running this.`,
+    );
+    return { ok: false, status: 0, reason: "local-host" };
+  }
+
   const deduped = new Set<string>();
   for (const url of urls) {
     const resolved = resolveOwnUrl(url, host);
@@ -77,7 +121,12 @@ export async function submitIndexNow(urls: string[]): Promise<SubmitIndexNowResu
   }
   const urlList = Array.from(deduped).slice(0, MAX_URLS);
   if (urlList.length === 0) {
-    return { ok: false, status: 0 };
+    if (urls.length > 0) {
+      console.error(
+        `[indexnow] every URL was dropped: none of the ${urls.length} given resolved to host "${host}".`,
+      );
+    }
+    return { ok: false, status: 0, reason: "nothing-to-submit" };
   }
 
   const controller = new AbortController();
@@ -102,7 +151,7 @@ export async function submitIndexNow(urls: string[]): Promise<SubmitIndexNowResu
     return { ok: true, status: response.status };
   } catch (err) {
     console.error("[indexnow] submit failed", err);
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, reason: "request-failed" };
   } finally {
     clearTimeout(timer);
   }

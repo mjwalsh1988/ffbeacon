@@ -14,6 +14,14 @@
  * host; submitIndexNow resolves relative paths against SITE.url and drops
  * anything on a different host. Running with no arguments is refused rather
  * than silently doing nothing.
+ *
+ * NEXT_PUBLIC_SITE_URL DECIDES WHICH HOST THIS SUBMITS FOR, and .env.local on
+ * a developer machine points it at localhost. Override it for the run:
+ *
+ *   NEXT_PUBLIC_SITE_URL=https://ffbeacon.com npm run indexnow -- /waiver-wire
+ *
+ * Without that, every public URL is dropped as "a different host" and the run
+ * now says so rather than reporting a bare status 0.
  */
 
 import { submitIndexNow } from "../lib/indexnow";
@@ -36,10 +44,24 @@ async function main() {
 
   if (result.ok) {
     console.log(`Submitted (status ${result.status}).`);
-  } else {
-    console.error(`Not submitted (status ${result.status}).`);
-    process.exit(1);
+    return;
   }
+
+  // Say WHY. The common one on a developer machine is `local-host`: .env.local
+  // points NEXT_PUBLIC_SITE_URL at localhost, so every public URL is dropped
+  // as "a different host" and the run used to print a bare status 0.
+  const explain: Record<string, string> = {
+    "no-key": "INDEXNOW_KEY is not set in the environment.",
+    "local-host":
+      "NEXT_PUBLIC_SITE_URL points at a local host, so no public URL could be submitted. Re-run with NEXT_PUBLIC_SITE_URL set to the public site.",
+    "nothing-to-submit":
+      "No URL resolved to our own host. Pass paths starting with a slash, or absolute URLs on the public site.",
+    "request-failed": "The request to IndexNow failed. See the error above.",
+  };
+  const why = result.reason ? (explain[result.reason] ?? result.reason) : null;
+  console.error(`Not submitted (status ${result.status}).`);
+  if (why) console.error(why);
+  process.exit(1);
 }
 
 main().catch((err) => {
