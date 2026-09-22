@@ -3,6 +3,11 @@
 import { useId, useMemo, useState } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { simulateSurvival, type SurvivalTeam } from "@/lib/chopped/survival";
+import {
+  NFL_LAST_WEEK,
+  knownCountFor,
+  seasonLengthFor,
+} from "@/lib/guides/chopped-season-length";
 
 /**
  * The interactive pieces of the chopped league guide.
@@ -32,11 +37,19 @@ import { simulateSurvival, type SurvivalTeam } from "@/lib/chopped/survival";
  * to spend or a week to wait. The situations are invented and the reasons are
  * the guide's own rules.
  *
+ * SeasonLengthPicker is the only one of the four that runs no simulation at
+ * all, because its answer is a subtraction: one roster leaves a week, so a
+ * league of N has N minus 1 chops in it. It is interactive anyway because the
+ * question a reader actually has ("my league has twelve teams, when does this
+ * end?") has a different answer for every one of them, and because the point
+ * only lands when they see their own number and then see which real platform
+ * picked it.
+ *
  * WeeklyChecklist is the format's weekly questions as real checkboxes.
  * Nothing is stored: it is a scratchpad for one Tuesday, and a persisted
  * checklist would carry last week's ticks into this week's.
  *
- * All three are native form controls inside fieldsets, so keyboard movement,
+ * All four are native form controls inside fieldsets, so keyboard movement,
  * checked state and each group's name come from the platform. Results sit in
  * short polite live regions so a screen reader hears the change without the
  * focus moving, and no region repeats a whole paragraph on every change.
@@ -485,5 +498,142 @@ export function WeeklyChecklist() {
         {done === CHECKLIST.length ? ". Put the bid in." : ""}
       </p>
     </fieldset>
+  );
+}
+
+/* ---------- Lesson 2: how long will this league last ---------- */
+
+/**
+ * Sizes a reader might actually be in, spanning the three shapes: finishing
+ * early, finishing exactly, and too big to chop its way to one winner.
+ */
+const TEAM_COUNTS = [10, 12, 14, 17, 18, 19, 20, 24];
+
+/**
+ * "an 18-team league", not "a 18-team league".
+ *
+ * The article follows how a number is SPOKEN rather than how it is spelled,
+ * and eighteen is the only count in the list that needs it. Eight and eleven
+ * are handled too, so adding a size later cannot quietly reintroduce this.
+ */
+function article(n: number): string {
+  const spoken = String(n);
+  const needsAn = spoken === "8" || spoken === "11" || spoken === "18" || spoken.startsWith("8");
+  return needsAn ? "An" : "A";
+}
+
+export function SeasonLengthPicker() {
+  const groupId = useId();
+  const [teams, setTeams] = useState(18);
+
+  const out = seasonLengthFor(teams);
+  const known = knownCountFor(teams);
+
+  // One sentence, and it is the whole answer. The tiles under it are the same
+  // fact broken into parts, which is why only this is live: a region holding
+  // the tiles as well would re-read three numbers every time a radio moved.
+  const verdict =
+    out.shape === "needs-a-decider"
+      ? `${article(teams)} ${teams}-team league still has ${out.survivorsAtSeasonEnd} teams alive when the NFL season ends, so it cannot chop its way to one winner.`
+      : `${article(teams)} ${teams}-team league takes its last chop in week ${out.lastChopWeek}, and the team left is the champion.`;
+
+  return (
+    <div
+      className="rounded-card p-px"
+      style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
+    >
+      <div className="rounded-card bg-surface-elevated p-4 sm:p-5">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cyan">
+          Try it: when does my league end?
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-ink-subtle">
+          No simulation here, just the subtraction the format runs on: one
+          roster is chopped a week, so a league of N teams has N minus 1 chops
+          in it. Pick your size and see the week it finishes. Nothing is saved.
+        </p>
+
+        <div className="mt-4">
+          <RadioChips<number>
+            legend="Teams your league started with"
+            hint="The number that drafted, before anyone was chopped."
+            name={`${groupId}-teams`}
+            value={teams}
+            options={TEAM_COUNTS.map((n) => ({ value: n, label: String(n) }))}
+            onChange={setTeams}
+          />
+        </div>
+
+        <div className="mt-4 rounded-card border-l-4 border-brand-cyan/60 bg-base/60 p-3 sm:p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+            What that size means
+          </p>
+          <p aria-live="polite" aria-atomic="true" className="mt-1 text-base font-semibold text-ink">
+            {verdict}
+          </p>
+          <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="rounded-card border border-line bg-surface/60 px-3 py-2">
+              <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-subtle">
+                Weeks of chopping
+              </dt>
+              <dd className="font-mono text-base font-semibold tabular-nums text-brand-cyan">
+                {out.chopsToOneLeft}
+              </dd>
+            </div>
+            <div className="rounded-card border border-line bg-surface/60 px-3 py-2">
+              <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-subtle">
+                {out.shape === "needs-a-decider" ? "Alive at the end" : "Last chop"}
+              </dt>
+              <dd className="font-mono text-base font-semibold tabular-nums text-ink">
+                {out.shape === "needs-a-decider"
+                  ? out.survivorsAtSeasonEnd
+                  : `Week ${out.lastChopWeek}`}
+              </dd>
+            </div>
+            <div className="rounded-card border border-line bg-surface/60 px-3 py-2">
+              <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-subtle">
+                NFL weeks unused
+              </dt>
+              <dd className="font-mono text-base font-semibold tabular-nums text-brand-purple">
+                {out.unusedWeeks}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+            {out.shape === "needs-a-decider" ? (
+              <>
+                There are only {NFL_LAST_WEEK} weeks to remove {out.chopsToOneLeft}{" "}
+                teams in, so a league this size has to end some other way. The
+                two published answers are deciding it on the final week&apos;s
+                higher score, and stopping the chopping early to play a
+                total-points final. Ask your commissioner which yours does
+                before you plan a budget around week 17.
+              </>
+            ) : out.unusedWeeks === 0 ? (
+              <>
+                The only size that uses the whole regular season and still
+                produces one winner. Every team count above this one needs a
+                decider, and every one below finishes early.
+              </>
+            ) : out.unusedWeeks <= 2 ? (
+              <>
+                That uses almost the whole season, which is why this size is the
+                one most formats settle on. Your budget still has to be gone by
+                week {out.lastChopWeek}: money held past the last chop is money
+                you never spent.
+              </>
+            ) : (
+              <>
+                Your league is over with {out.unusedWeeks} NFL weeks still to
+                play, and that is the real cost of a small field here. The
+                budget you were saving for a late run has fewer weeks to be
+                spent in, and holding money past week {out.lastChopWeek} means
+                holding it forever.
+              </>
+            )}
+            {known && <> At this size you are in the same shape as {known.who}.</>}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

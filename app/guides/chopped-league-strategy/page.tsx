@@ -36,7 +36,12 @@ import {
   PriceDecayFigure,
   SurvivalFigure,
 } from "./chopped-figures";
-import { SpendOrHold, SurvivalWorksheet, WeeklyChecklist } from "./chopped-classroom";
+import {
+  SeasonLengthPicker,
+  SpendOrHold,
+  SurvivalWorksheet,
+  WeeklyChecklist,
+} from "./chopped-classroom";
 
 /**
  * /guides/chopped-league-strategy
@@ -55,8 +60,9 @@ import { SpendOrHold, SurvivalWorksheet, WeeklyChecklist } from "./chopped-class
  * strategy.
  *
  * HOW THE PAGE IS ASSEMBLED. Every lesson number is read from the LESSONS
- * array, so the six lessons renumber themselves if one is ever added or
- * moved. The eight diagrams live in chopped-figures.tsx and the three
+ * array, so the seven lessons renumber themselves if one is ever added or
+ * moved, which is exactly what happened when the rules lesson was inserted at
+ * position two. The eight diagrams live in chopped-figures.tsx and the four
  * interactive panels in chopped-classroom.tsx, with the simulation setups and
  * the shipped-default ladders behind them in lib/guides/chopped-examples.ts,
  * which carries a test pinning every claim the prose below makes about them.
@@ -66,7 +72,15 @@ import { SpendOrHold, SurvivalWorksheet, WeeklyChecklist } from "./chopped-class
  * (priors.minCellSamples) prints "Not enough data yet" rather than a figure
  * nobody should stand behind.
  *
- * THE THREE INTERACTIVE PANELS. The survival worksheet in lesson 2 runs the
+ * THE RULES LESSON carries the one claim on this page that is pure arithmetic
+ * and that nobody else writes down: a team count IS a season length. One
+ * roster leaves a week, so a league of N has N minus 1 chops in it, and every
+ * published team count falls out of that subtraction (Yahoo's 13-week public
+ * season is its 14 teams; ESPN's 20-team example ends with two alive because
+ * 20 minus 18 is 2). lib/guides/chopped-season-length.ts holds it, and its
+ * test pins each of those claims against the platform that published them.
+ *
+ * THE FOUR INTERACTIVE PANELS. The survival worksheet in lesson 3 runs the
  * product's own simulateSurvival in the reader's browser, because the lesson's
  * central claim (spread matters more than scoring here) is one a reader can
  * only really believe by moving the spread themselves. Spend or hold is four
@@ -110,7 +124,7 @@ const UPDATED_AT = GUIDE?.updatedAt ?? PUBLISHED_AT;
 
 const TITLE = "Chopped and Guillotine League Strategy: Draft and FAAB";
 const DESCRIPTION =
-  "How to survive a chopped league on Sleeper, a Yahoo death league or an ESPN knockout league: what to draft, when to spend FAAB, and how much to bid when a roster is cut.";
+  "The rules of a chopped, guillotine, death or knockout league, and how to survive one: what your team count does to the season, what to draft, and how much FAAB to bid when a roster is cut.";
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
@@ -127,6 +141,9 @@ export const metadata: Metadata = {
     "knockout league fantasy football",
     "guillotine league draft strategy",
     "guillotine league waiver strategy",
+    "guillotine league rules",
+    "chopped league rules",
+    "how long does a guillotine league last",
   ],
   robots: {
     index: true,
@@ -162,6 +179,7 @@ export const dynamic = "force-dynamic";
 
 const TOC_ITEMS = [
   { id: "what-heading", label: "What a chopped league is" },
+  { id: "rules-heading", label: "The rules, in one place" },
   { id: "survive-heading", label: "The only goal each week" },
   { id: "draft-heading", label: "Drafting for it" },
   { id: "money-heading", label: "When rosters drop in bulk" },
@@ -179,6 +197,16 @@ const FAQ: FaqAccordionItem[] = [
       "It is a redraft league where the lowest scorer each week is eliminated and their whole roster goes back to waivers. Sleeper recommends 18 teams and a $1,000 FAAB budget, trades are off by default, and the last team left wins.",
   },
   {
+    question: "What are the rules of a guillotine league?",
+    answer:
+      "Four things are true in every version. The lowest scorer in the whole league is eliminated each week, not the loser of a matchup. The chopped team's entire roster goes back on the waiver wire. There are no playoffs and no bracket, so the last manager standing wins. And your FAAB budget never resets, with trades usually switched off, so it is the only currency you have. Everything else is your commissioner's choice: the tiebreak on the lowest score, the last week chopped players are released, the minimum bid, and how the final weeks are decided.",
+  },
+  {
+    question: "How long does a guillotine league last?",
+    answer:
+      "One team is chopped a week, so a league that starts with N teams has N minus 1 chops in it and finishes in week N minus 1. Eighteen teams finish in week 17, fourteen finish in week 13, and twelve are done in week 11 with seven NFL weeks still to play. Nineteen is the largest league that can chop its way to a single winner inside an 18-week season. Anything bigger has to end another way: ESPN's 20-team example finishes with two teams alive and the higher score in the final week taking it.",
+  },
+  {
     question: "Is a chopped league the same as a guillotine league?",
     answer:
       "Yes. Guillotine league is the older name. Yahoo now calls it a death league, ESPN calls it a knockout league, and the FFPC runs a Chop Classic. The rules differ in the details that matter: the minimum bid, the week chopped players stop being released, and how the final weeks are played.",
@@ -191,7 +219,7 @@ const FAQ: FaqAccordionItem[] = [
   {
     question: "How many teams should be in a guillotine league?",
     answer:
-      "Eighteen is the most common, because 17 eliminations fill a 17-week season and leave one manager holding the trophy. Sleeper allows up to 32, and Yahoo public death leagues run 14 teams over 13 weeks.",
+      "Eighteen is the most common, because 17 eliminations take you to week 17 with one manager holding the trophy and only one NFL week unused. Nineteen is the only size that uses the full 18-week season and still produces a single winner. Sleeper allows up to 32, which cannot reach one winner by chopping at all, and Yahoo public death leagues run 14 teams over 13 weeks.",
   },
   {
     question: "What happens on a tie for lowest score?",
@@ -337,6 +365,7 @@ export default async function ChoppedLeagueStrategyGuide() {
 
           <div className="text-[15px] sm:text-base">
             <WhatSection />
+            <RulesSection />
             <SurviveSection />
             <DraftSection />
             <MoneySection market={market} />
@@ -532,6 +561,11 @@ const LESSONS: { title: string; href: string; takeaway: string }[] = [
     title: "What a chopped league is",
     href: "#what-heading",
     takeaway: "One format, seven names.",
+  },
+  {
+    title: "The rules, and the four your commissioner picks",
+    href: "#rules-heading",
+    takeaway: "Your team count is your season length.",
   },
   {
     title: "The only goal each week",
@@ -769,7 +803,139 @@ function WhatSection() {
   );
 }
 
-/* ---------- Lesson 2: survival ---------- */
+/* ---------- Lesson 2: the rules ---------- */
+
+/**
+ * The rules lesson.
+ *
+ * Lesson 1 lists what each platform does. This one says what is fixed in every
+ * elimination league, what your commissioner actually decides, and the one
+ * piece of arithmetic that turns out to explain all of it.
+ *
+ * THE TEAM COUNT IS THE SEASON LENGTH, and it is the best thing on this page
+ * because it is checkable and nobody writes it down. One roster leaves a week,
+ * so a league of N has N minus 1 chops in it. Yahoo advertises a 13-week
+ * public season and runs 14 teams. ESPN's own example is 20 teams ending with
+ * two alive and the final week deciding, and 20 minus 18 is 2. The numbers
+ * every platform publishes are not house style, they are this subtraction.
+ * lib/guides/chopped-season-length.ts holds the maths and its test pins each
+ * of those claims.
+ *
+ * Every platform behaviour named below is from the rules pages linked under
+ * the table in lesson 1, read at the source, not from a summary of them.
+ */
+function RulesSection() {
+  return (
+    <section aria-labelledby="rules-heading" className="mt-12">
+      <GuideSectionHeader
+        id="rules-heading"
+        eyebrow={lessonEyebrow("#rules-heading")}
+        heading="The rules of a guillotine league, in one place"
+        tone="cyan"
+      />
+      <Para>
+        Most of this format is four sentences long, and the rest is choices your
+        commissioner made before you joined. Here is the whole thing, then the
+        four settings that actually change how you play.
+      </Para>
+
+      <GuideSubheading className="mt-8">The four that never change</GuideSubheading>
+      <BulletList
+        items={[
+          <>
+            <span className="font-medium text-ink">One team goes out every week.</span> The lowest
+            score in the entire league, not the loser of a matchup. There is no schedule to blame
+            and no opponent to scout.
+          </>,
+          <>
+            <span className="font-medium text-ink">The chopped roster goes back in the pool.</span>{" "}
+            Every player on it, at once, onto the waiver wire. That is why week 2 has startable
+            players on it and week 10 has a whole team&apos;s worth.
+          </>,
+          <>
+            <span className="font-medium text-ink">There is no bracket and no playoffs.</span> No
+            seeding, no bye, no championship game in most formats. The last manager standing wins,
+            and finishing second-last is worth exactly what finishing last is worth.
+          </>,
+          <>
+            <span className="font-medium text-ink">Your budget never comes back.</span> One FAAB
+            allowance, usually $1,000, for as long as you survive. Nothing you spend in September
+            returns in November, and trades are usually switched off, so it is the only currency
+            you have.
+          </>,
+        ]}
+      />
+
+      <GuideSubheading className="mt-8">Your team count is your season length</GuideSubheading>
+      <Para>
+        This is the rule nobody tells you and the one that decides most of your season. One roster
+        leaves a week, so a league that starts with eighteen teams has seventeen chops in it and
+        finishes in week 17. A league that starts with twelve is over in week 11, with seven NFL
+        weeks still to play.
+      </Para>
+      <Para>
+        Every published team count is that subtraction. Yahoo advertises a thirteen-week public
+        death league and runs fourteen teams. The NFFC Eliminator runs seventeen and deliberately
+        stops chopping at week 13, so four teams are left for a total-points final. ESPN&apos;s own
+        worked example is a twenty-team knockout league that ends with two teams alive and the
+        higher score in the final week taking it, because twenty teams and eighteen weeks leaves
+        exactly two. Nineteen is the largest league that can chop its way to a single winner inside
+        a season.
+      </Para>
+      <div className="mt-6">
+        <SeasonLengthPicker />
+      </div>
+
+      <GuideSubheading className="mt-8">The four your commissioner picks</GuideSubheading>
+      <Para>
+        These are the settings that differ between the leagues in lesson one&apos;s table, and each
+        one changes something you would do differently if you knew about it.
+      </Para>
+      <GuideTable
+        caption="The four settings that vary between elimination leagues, and what each one changes about how you play. Platform behaviour is from the rules pages linked in lesson one."
+        head={["The setting", "What it varies between", "Why it changes your week"]}
+        rows={[
+          [
+            "The tiebreak on the lowest score",
+            "Fewest season points on Sleeper, Yahoo and Fantasy Life. Sleeper breaks a week 1 tie on draft position instead.",
+            "It decides whether a slow start is merely bad or actively dangerous. When two teams tie for last, the one that has scored less all year is the one that goes.",
+          ],
+          [
+            "The week chopped players stop being released",
+            "Week 14 at Fantasy Life in 2024, week 15 at the FFPC. Some leagues never stop.",
+            "It is the last date your budget can buy anything. Money held past it is money you set on fire, and this is the most commonly missed rule in the format.",
+          ],
+          [
+            "Minimum bid, and whether a $0 bid is allowed",
+            "$0 bids at Fantasy Life, a $1 minimum at the FFPC and the NFFC.",
+            "Where $0 is allowed you can claim depth for nothing and the wire is picked clean early. Where there is a minimum, every speculative add costs real budget.",
+          ],
+          [
+            "How the last weeks are decided",
+            "Last team standing on Sleeper. A total-points final over weeks 14 to 17 at the NFFC. The final week's higher score in ESPN's example.",
+            "It decides whether your endgame is survival or scoring. A total-points final rewards a roster built to score; last man standing rewards one built not to crater.",
+          ],
+        ]}
+      />
+
+      <Para>
+        Two more worth checking before you draft, because most advice you will read quietly assumes
+        them: whether trades are on (usually not), and whether the league starts a kicker and a
+        defence (several do not, including the FFPC Chop Classic). Sleeper&apos;s own published
+        recommendations are eighteen teams, PPR scoring, a $1,000 budget and two injured reserve
+        slots, with trades off by default.
+      </Para>
+
+      <KeyIdea>
+        Find two numbers before your draft: how many teams started, and the last week chopped
+        players are released. The first is when your season ends. The second is when your money
+        stops being worth anything.
+      </KeyIdea>
+    </section>
+  );
+}
+
+/* ---------- Lesson 3: survival ---------- */
 
 function SurviveSection() {
   return (

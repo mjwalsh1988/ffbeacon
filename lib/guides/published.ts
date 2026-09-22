@@ -170,7 +170,11 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // it is Sleeper's own name, while "guillotine" carries the title and the
     // H1. The plan is docs/faab/chopped-guillotine-guide-seo-plan.md 4.1.
     publishedAt: "2026-09-19T09:00:00-04:00",
-    updatedAt: "2026-09-19T09:00:00-04:00",
+    // 2026-09-22: added the rules lesson (the fixed rules, the four settings a
+    // commissioner picks, and the team-count arithmetic that sets the season
+    // length). A new lesson is a real change, so the modified date moves with
+    // it rather than staying at first publish.
+    updatedAt: "2026-09-22T17:00:00-04:00",
     priority: 0.8,
   },
 ];
