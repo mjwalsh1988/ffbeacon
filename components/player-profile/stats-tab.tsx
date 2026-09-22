@@ -18,7 +18,8 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { Panel } from "@/components/dashboard-panel";
 import { SeasonFinishesRail } from "@/components/player-profile/positional-finishes";
 import { WeeklyStats } from "@/components/player-profile/weekly-stats";
-import { kickoffKey, loadSeasonKickoffsCached } from "@/lib/season-schedule";
+import { loadSeasonScheduleCached } from "@/lib/season-schedule";
+import { buildPendingWeeks, toGameRow } from "@/lib/player-profile/game-log";
 import { WeeklyProjections } from "@/components/player-profile/weekly-projections";
 import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import {
@@ -82,13 +83,13 @@ export async function StatsTab({
     getNflState(),
   ]);
 
-  // Kickoff times for the current season, so a week being played TODAY can be
-  // marked as such rather than rendered as an empty future week. One cached
-  // read; a season with no priced games just yields an empty map.
-  const kickoffs =
+  // The current season's slate: kickoff times, so a week being played TODAY is
+  // marked rather than rendered as an empty future week, and the weeks the
+  // feed covers, which is what makes a bye distinguishable from a gap.
+  const schedule =
     projections.season != null
-      ? await loadSeasonKickoffsCached(projections.season)
-      : {};
+      ? await loadSeasonScheduleCached(projections.season)
+      : { kickoffs: {}, weeksCovered: [] };
   // Upcoming weeks become clickable cards; points carry any TE premium already.
   const upcomingProjections = projections.rows.filter((r) => !r.played);
   const hasProjections = upcomingProjections.length > 0;
@@ -104,33 +105,9 @@ export async function StatsTab({
   // Enrich each played week with actual + projected points in the active scoring
   // (TE premium applied to both). pts_ppr stays the career baseline; pts_active
   // and proj_active drive the weekly game log and the accuracy charts.
-  const gameRows: WeeklyGameRow[] = weeklyRaw.map((r) => ({
-    season: r.season,
-    week: r.week,
-    opponent: r.opponent,
-    snap_pct: r.snap_pct,
-    gp: r.gp,
-    pass_cmp: r.pass_cmp ?? 0,
-    pass_att: r.pass_att ?? 0,
-    pass_yd: r.pass_yd ?? 0,
-    pass_td: r.pass_td ?? 0,
-    pass_int: r.pass_int ?? 0,
-    rush_att: r.rush_att ?? 0,
-    rush_yd: r.rush_yd ?? 0,
-    rush_td: r.rush_td ?? 0,
-    rec: r.rec ?? 0,
-    rec_tgt: r.rec_tgt ?? 0,
-    rec_yd: r.rec_yd ?? 0,
-    rec_td: r.rec_td ?? 0,
-    pts_ppr: r.pts_ppr ?? 0,
-    pts_active: activePointsFromStatRow(r, r.rec, scoringKey, tePremiumBonus),
-    proj_active: pointsFromProjectedSet(
-      projMap.get(`${r.season}-${r.week}`),
-      scoringKey,
-      tePremiumBonus,
-    ),
-    proj_line: projMap.get(`${r.season}-${r.week}`)?.line ?? null,
-  }));
+  const gameRows: WeeklyGameRow[] = weeklyRaw.map((r) =>
+    toGameRow(r, projMap, scoringKey, tePremiumBonus),
+  );
   const seasonAggs = aggregateSeasons(gameRows);
   const cols = statColumns(player.position);
 
@@ -160,16 +137,12 @@ export async function StatsTab({
   const pendingBySeason: Record<number, PendingWeekRow[]> = {};
   if (projections.season != null) {
     const season = projections.season;
-    const played = new Set((rowsBySeason[season] ?? []).map((r) => r.week));
-    const pending = projections.rows
-      .filter((r) => !played.has(r.week))
-      .map((r) => ({
-        week: r.week,
-        opponent: r.opponent,
-        team: r.team,
-        kickoffAt: kickoffs[kickoffKey(r.week, r.team) ?? ""] ?? null,
-      }))
-      .sort((a, b) => a.week - b.week);
+    const pending = buildPendingWeeks({
+      playedWeeks: new Set((rowsBySeason[season] ?? []).map((r) => r.week)),
+      projectionWeeks: projections.rows,
+      schedule,
+      team: player.team,
+    });
     if (pending.length > 0) pendingBySeason[season] = pending;
   }
 

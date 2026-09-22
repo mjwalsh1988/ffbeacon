@@ -19,6 +19,7 @@ import { QuickNews } from "@/components/player-profile/quick-news";
 import { InjuryStatus } from "@/components/player-profile/injury-status";
 import { PlayerBioOverview } from "@/components/player-profile/player-bio-overview";
 import { DepthChartCard } from "@/components/player-profile/depth-chart-card";
+import { OverviewGameLog } from "@/components/player-profile/overview-game-log";
 import { OverviewSidebar } from "@/components/player-profile/overview-sidebar";
 import {
   summarizeProjections,
@@ -152,6 +153,17 @@ export async function OverviewTab({
               playerName={playerName}
             />
           )}
+          {/* Under the depth chart: the depth chart says what his ROLE is and
+              this says what the role has produced, week by week, which is the
+              natural next question rather than a separate tab. */}
+          <OverviewGameLog
+            player={player}
+            playerName={playerName}
+            scoringKey={context.scoringKey}
+            scoringLabel={scoringLabel}
+            tePremiumBonus={tePremiumBonus}
+            projections={projections}
+          />
         </div>
         <aside
           aria-label="Player highlights"

@@ -69,6 +69,15 @@ export type PendingWeekRow = {
   team: string | null;
   /** ISO kickoff, or null when no book has priced the game yet. */
   kickoffAt: string | null;
+  /**
+   * The team has no game this week.
+   *
+   * A BYE IS A ROW, NOT AN ABSENCE. Leaving week 10 out of the table made the
+   * log look like it had a hole in it, and a reader could not tell a bye from
+   * a week we had failed to sync. The row renders dimmed with BYE WEEK where
+   * the opponent goes, which says the same thing and says it on purpose.
+   */
+  isBye: boolean;
 };
 
 /** One week of projected-vs-actual points for the accuracy chart. `actual` is

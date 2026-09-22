@@ -31,13 +31,28 @@ import { ODDS_SOURCE_SLUG } from "@/lib/nfl-game-environment";
 /** Kickoff times for one season, keyed `${week}|${TEAM}`. */
 export type SeasonKickoffs = Record<string, string>;
 
+/**
+ * One season's slate: when each team plays, and which weeks we hold at all.
+ *
+ * `weeksCovered` is what makes a BYE distinguishable from a hole in the data.
+ * A team missing from week 7 means a bye only if we hold week 7 for OTHER
+ * teams; if the feed has not reached that week yet, the same absence means
+ * nothing. Without the second list the two are identical and a page would
+ * confidently label an unsynced week as a bye.
+ */
+export type SeasonSchedule = {
+  kickoffs: SeasonKickoffs;
+  /** Weeks the feed holds at least one game for, ascending. */
+  weeksCovered: number[];
+};
+
 export function kickoffKey(week: number, team: string | null | undefined): string | null {
   const code = (team ?? "").trim().toUpperCase();
   if (!code) return null;
   return `${week}|${code}`;
 }
 
-async function loadSeasonKickoffs(season: number): Promise<SeasonKickoffs> {
+async function loadSeasonSchedule(season: number): Promise<SeasonSchedule> {
   const supabase = createCachedReadClient();
   const { data, error } = await supabase
     .from("nfl_game_odds")
@@ -50,13 +65,15 @@ async function loadSeasonKickoffs(season: number): Promise<SeasonKickoffs> {
   // A plain object rather than a Map, because this crosses the server to
   // client boundary as a prop and a Map does not survive serialization.
   const out: SeasonKickoffs = {};
-  if (error || !data) return out;
+  const weeks = new Set<number>();
+  if (error || !data) return { kickoffs: out, weeksCovered: [] };
 
   for (const row of data) {
     const kickoff = row.kickoff_at;
     if (!kickoff) continue;
     const week = Number(row.week);
     if (!Number.isInteger(week)) continue;
+    weeks.add(week);
     // Both sides of the same game share the one kickoff.
     for (const team of [row.home_team, row.away_team]) {
       const key = kickoffKey(week, team);
@@ -65,14 +82,40 @@ async function loadSeasonKickoffs(season: number): Promise<SeasonKickoffs> {
       if (key && !out[key]) out[key] = kickoff;
     }
   }
+  return {
+    kickoffs: out,
+    weeksCovered: [...weeks].sort((a, b) => a - b),
+  };
+}
+
+/**
+ * The weeks this team is on bye, as far as the slate can say.
+ *
+ * A week counts only when the feed HOLDS that week and the team is not in it.
+ * An unreached week yields nothing rather than a bye, which is the whole
+ * reason `weeksCovered` exists.
+ *
+ * Returns an empty set for a team we cannot name. A profile with no team is
+ * a free agent, and a free agent has no bye.
+ */
+export function byeWeeksFor(
+  schedule: SeasonSchedule,
+  team: string | null | undefined,
+): Set<number> {
+  const out = new Set<number>();
+  const code = (team ?? "").trim().toUpperCase();
+  if (!code) return out;
+  for (const week of schedule.weeksCovered) {
+    if (!schedule.kickoffs[`${week}|${code}`]) out.add(week);
+  }
   return out;
 }
 
 /** Memoized per season. The odds sync revalidates the tag it shares. */
-export function loadSeasonKickoffsCached(season: number): Promise<SeasonKickoffs> {
+export function loadSeasonScheduleCached(season: number): Promise<SeasonSchedule> {
   return unstable_cache(
-    () => loadSeasonKickoffs(season),
-    ["season-kickoffs", String(season)],
+    () => loadSeasonSchedule(season),
+    ["season-schedule", String(season)],
     { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerProjections] },
   )();
 }
