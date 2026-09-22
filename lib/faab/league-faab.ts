@@ -988,6 +988,38 @@ export async function calculateLeagueFaab(
       };
     });
 
+  // ---- how scarce is he, on the open market -------------------------------
+  // Read ONCE here, before the auction, because it moves what the room will
+  // bid and it is the same lookup the dynasty branch needs later. "Elite" is
+  // the market value at the rank a league this size actually starts, scaled
+  // down: a top-quarter starter is the bar, not the single best player alive.
+  //
+  // This is deliberately the player's MARKET value rather than his lineup
+  // upgrade. The upgrade already enters through every rival's own swap; what
+  // this adds is the part of a price that has nothing to do with arithmetic,
+  // which is that a player of this quality will not reach a wire again.
+  const candidateMarketValue = playerValues.get(candidate.playerId) ?? null;
+  const eliteRank = Math.max(
+    1,
+    Math.round(rosters.length * slots.length * settings.dynastyValue.eliteRankFactor),
+  );
+  const eliteValue =
+    candidateMarketValue === null
+      ? null
+      : await loadEliteValue(
+          supabase,
+          valueContext.formatConfigId,
+          eliteRank,
+          input.sourceSlug ?? null,
+        );
+  // Null rather than zero when we hold no value for him: "we do not know how
+  // scarce he is" is not the same statement as "he is not scarce", and the
+  // premium is simply not applied.
+  const scarcityShare =
+    candidateMarketValue !== null && eliteValue && eliteValue > 0
+      ? Math.min(1, Math.max(0, candidateMarketValue / eliteValue))
+      : null;
+
   const strayCell = pickCell(
     priorCells,
     {
@@ -1026,6 +1058,7 @@ export async function calculateLeagueFaab(
           // context is assembled), but the wiring is here so the count is the
           // only thing left to add.
           participationScale: choppedOutcome?.participationScale ?? 1,
+          scarcityShare,
         })
       : null;
 
@@ -1218,26 +1251,13 @@ export async function calculateLeagueFaab(
         key as keyof typeof settings.dynastyValue.blendByStatus
       ] ?? settings.dynastyValue.blendByStatus.middle;
 
-    const candidateValue = playerValues.get(candidate.playerId) ?? null;
-    if (candidateValue !== null) {
-      // Elite is the value at the rank a league this size actually starts,
-      // scaled down: a top-quarter starter is the bar a claim is measured
-      // against, not the single best player in the game.
-      const eliteRank = Math.max(
-        1,
-        Math.round(rosters.length * slots.length * settings.dynastyValue.eliteRankFactor),
-      );
-      const eliteValue = await loadEliteValue(
-        supabase,
-        valueContext.formatConfigId,
-        eliteRank,
-        input.sourceSlug ?? null,
-      );
+    // The same market value and the same elite bar the scarcity premium above
+    // already read. One lookup, so the two cannot disagree about how good he
+    // is, and one fewer query on the critical path.
+    if (candidateMarketValue !== null && eliteValue && eliteValue > 0) {
       const dropValue = swap.dropCost ? (playerValues.get(swap.dropCost.playerId) ?? 0) : 0;
-      if (eliteValue && eliteValue > 0) {
-        const share = Math.min(1.25, Math.max(0, (candidateValue - dropValue) / eliteValue));
-        dynastyValuePct = share * settings.marginal.maxPctFromUpgrade;
-      }
+      const share = Math.min(1.25, Math.max(0, (candidateMarketValue - dropValue) / eliteValue));
+      dynastyValuePct = share * settings.marginal.maxPctFromUpgrade;
     }
   }
 
@@ -1259,11 +1279,14 @@ export async function calculateLeagueFaab(
     confidence,
     goal: input.goal ?? goalDefault,
     winChanceAt: curve ? (dollars: number) => curve.winChanceAt(dollars) : null,
-    rivalTop: curve ? { p50: curve.rivalTop.p50, p75: curve.rivalTop.p75 } : null,
+    rivalTop: curve
+      ? { p50: curve.rivalTop.p50, p75: curve.rivalTop.p75, p90: curve.rivalTop.p90 }
+      : null,
     noRivalShare: curve?.noRivalShare ?? null,
     interestedRivals,
     superflexQbEmergency,
     worthPctOverride: choppedOutcome?.worthPct ?? null,
+    scarcityShare,
     dynastyValuePct,
     dynastyBlendWeight,
     choppedHeadline:

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildMarket,
+  calendarMultiplier,
   summarizeComparableBids,
   urgencyMultiplier,
   type MarketInput,
@@ -165,5 +166,48 @@ describe("market read", () => {
     const { read, signals } = buildMarket(baseInput({ rivalBudgets: [] }));
     expect(read.richestRivalBudget).toBeNull();
     expect(signals.find((s) => s.id === "rival-budget")).toBeUndefined();
+  });
+});
+
+/**
+ * The calendar bands, pinned to the market they were measured from.
+ *
+ * Re-measured 2026-09-22 over 3,578 priced winning bids in our own leagues,
+ * weeks 2 to 17, chopped excluded, as a share of each league's full budget.
+ * Against the weeks 7 to 10 baseline the p75 ratios are 1.33 (weeks 2 to 6),
+ * 1.00, 1.10 (weeks 11 to 13) and 1.64 (week 14 on). Managers spend harder in
+ * September and again when leftover budget is about to be worth nothing, and
+ * the previous bands flattened both by about half.
+ *
+ * This asserts the SHAPE rather than the absolute values, so an admin who
+ * scales the whole curve does not fail the suite, but one who flattens the
+ * season back out does.
+ */
+describe("the calendar bands against the market they came from", () => {
+  const cal = DEFAULT_FAAB_SETTINGS.market.calendar;
+  const at = (week: number) => calendarMultiplier(week, cal);
+  const baseline = at(8);
+
+  it("prices early season above mid season, by about a third", () => {
+    expect(at(3) / baseline).toBeGreaterThan(1.25);
+    expect(at(3) / baseline).toBeLessThan(1.45);
+  });
+
+  it("prices the run-in highest of all", () => {
+    expect(at(15) / baseline).toBeGreaterThan(1.5);
+    expect(at(15)).toBeGreaterThan(at(3));
+  });
+
+  it("puts weeks 7 to 10 at the bottom of the season", () => {
+    for (const week of [1, 3, 12, 15]) {
+      expect(at(week)).toBeGreaterThanOrEqual(baseline);
+    }
+  });
+
+  it("keeps week 1 off the early-season peak", () => {
+    // Our week 1 bucket is 5,526 claims and most of them are offseason and
+    // preseason dynasty rookie claims rather than an in-season market, so its
+    // level says nothing about the Tuesday after the opener.
+    expect(at(1)).toBeLessThan(at(3));
   });
 });

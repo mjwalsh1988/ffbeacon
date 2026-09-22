@@ -74,7 +74,7 @@ function baseInput(overrides: Partial<LadderInput> = {}): LadderInput {
     confidence: "high",
     goal: "value",
     winChanceAt: linearCurve(20),
-    rivalTop: { p50: 20, p75: 30 },
+    rivalTop: { p50: 20, p75: 30, p90: 45 },
     noRivalShare: 0,
     ...overrides,
   };
@@ -273,6 +273,124 @@ describe("budget arithmetic", () => {
   });
 });
 
+/**
+ * The cheapest bid that reaches a goal is found by BINARY SEARCH, because
+ * `winChanceAt` is monotone non-decreasing in dollars. The scan it replaces
+ * called the curve once per dollar, which in a $1,000 league was a thousand
+ * passes over four thousand simulated auctions, twice, per recommendation.
+ * These pin the boundary: the answer must be the exact cheapest dollar, and a
+ * target nothing reaches must fall back rather than return a wrong number.
+ */
+describe("finding the cheapest bid for a goal", () => {
+  /** A step curve: nothing wins below `at`, everything wins from it. */
+  function stepCurve(at: number) {
+    return (dollars: number) => (dollars >= at ? 1 : 0);
+  }
+
+  it("lands on the exact cheapest dollar that reaches the value target", () => {
+    const out = buildLadder(
+      baseInput({
+        winChanceAt: stepCurve(37),
+        marginal: marginal({ netPointsPerWeek: 12, playoffOddsAfter: 75 }),
+      }),
+    );
+    // 37 is not a multiple of five, so the odd-number nudge leaves it alone.
+    expect(out.ladder.bidsByGoal.value.dollars).toBe(37);
+  });
+
+  it("agrees with a dollar-by-dollar scan across every goal target", () => {
+    for (const at of [1, 2, 13, 50, 99, 100]) {
+      const curve = stepCurve(at);
+      let scanned: number | null = null;
+      for (let d = 0; d <= 100; d += 1) {
+        if (curve(d) >= 0.6) {
+          scanned = d;
+          break;
+        }
+      }
+      const out = buildLadder(
+        baseInput({
+          winChanceAt: curve,
+          marginal: marginal({ netPointsPerWeek: 12, playoffOddsAfter: 75 }),
+        }),
+      );
+      const worth = out.ladder.walkAway.dollars;
+      const capped = Math.min(scanned ?? worth, worth);
+      // The odd-number nudge runs after the search: ties on round numbers are
+      // common and one dollar is the cheapest edge in FAAB.
+      const nudged = capped >= 10 && capped % 5 === 0 && capped + 1 <= worth ? capped + 1 : capped;
+      expect(out.ladder.bidsByGoal.value.dollars).toBe(nudged);
+    }
+  });
+
+  it("falls back to the walk-away when no bid reaches the target", () => {
+    const out = buildLadder(baseInput({ winChanceAt: () => 0.1 }));
+    expect(out.ladder.bidsByGoal.value.dollars).toBe(out.ladder.walkAway.dollars);
+  });
+});
+
+/**
+ * The overbid warning.
+ *
+ * A player who does not normally reach a wire is one the room bids on for a
+ * reason that is not arithmetic. The tool computes that (it is in the win
+ * curve and the rival-top quantiles) and used to leave the reader to infer it
+ * from a chart, which is the one place a disciplined bid quietly loses.
+ */
+describe("warning about a player the room will chase", () => {
+  const scarceMarginal = marginal({ netPointsPerWeek: 11, playoffOddsAfter: 70 });
+
+  it("says the price will run past his worth when it will", () => {
+    const out = buildLadder(
+      baseInput({
+        scarcityShare: 0.95,
+        marginal: scarceMarginal,
+        // Nothing under the full budget reaches the value target, so the price
+        // is above his worth by construction.
+        winChanceAt: (d: number) => (d >= 95 ? 1 : 0),
+        rivalTop: { p50: 70, p75: 95, p90: 99 },
+      }),
+    );
+    expect(out.ladder.priceAboveWorth).toBe(true);
+    expect(out.notices.join(" ")).toContain("chases rather than prices");
+  });
+
+  it("names the long tail even when the bid is comfortably inside his worth", () => {
+    const out = buildLadder(
+      baseInput({
+        scarcityShare: 0.95,
+        marginal: scarceMarginal,
+        winChanceAt: linearCurve(12),
+        rivalTop: { p50: 12, p75: 20, p90: 40 },
+      }),
+    );
+    expect(out.ladder.priceAboveWorth).toBe(false);
+    expect(out.notices.join(" ")).toContain("scatter a long way");
+    expect(out.notices.join(" ")).toContain("40");
+  });
+
+  it("stays quiet for an ordinary waiver add", () => {
+    const out = buildLadder(baseInput({ scarcityShare: 0.2 }));
+    expect(out.notices.join(" ")).not.toContain("scatter a long way");
+    expect(out.notices.join(" ")).not.toContain("chases rather than prices");
+  });
+
+  it("stays quiet when nobody else is bidding, however good he is", () => {
+    const out = buildLadder(
+      baseInput({ scarcityShare: 1, marginal: scarceMarginal, noRivalShare: 1 }),
+    );
+    expect(out.notices.join(" ")).not.toContain("scatter a long way");
+    expect(out.notices.join(" ")).not.toContain("chases rather than prices");
+  });
+
+  it("stays quiet when we hold no market value for him", () => {
+    const out = buildLadder(
+      baseInput({ scarcityShare: null, marginal: scarceMarginal, winChanceAt: linearCurve(12) }),
+    );
+    expect(out.notices.join(" ")).not.toContain("scatter a long way");
+  });
+});
+
 describe("empty the clip", () => {
   it("fires on a genuine playoff-odds swing", () => {
     const out = buildLadder(
@@ -284,19 +402,92 @@ describe("empty the clip", () => {
     expect(out.aggressionLabel).toBe("Empty the Clip");
   });
 
-  it("fires when four rivals would start him", () => {
-    const out = buildLadder(baseInput({ interestedRivals: 4 }));
+  it("fires when a crowded wire wants a player who is a real upgrade for you", () => {
+    const out = buildLadder(
+      baseInput({ interestedRivals: 6, marginal: marginal({ netPointsPerWeek: 6.5 }) }),
+    );
     expect(out.isDumpCandidate).toBe(true);
   });
 
-  it("does not fire on four rivals for a player who never starts for you", () => {
+  /**
+   * The crowd does not make a small add big.
+   *
+   * A flat count of four rivals used to be enough on its own, and with
+   * "would start him" set at a one-point bar it cleared on nearly every usable
+   * player. The dump then replaced the computed worth with the top of the
+   * range, so a fringe starter and a league winner came out at the same share
+   * of budget and no reader could tell them apart.
+   */
+  it("does not fire on a crowd alone when he is a small upgrade for you", () => {
+    const out = buildLadder(
+      baseInput({ interestedRivals: 8, marginal: marginal({ netPointsPerWeek: 3 }) }),
+    );
+    expect(out.isDumpCandidate).toBe(false);
+  });
+
+  /** Four out of eleven is a crowd; four out of thirty is not. */
+  it("reads the crowd as a share of the league, not a flat count", () => {
+    const big = market({ rivalsChecked: 31, interestedRivals: 5 });
     const out = buildLadder(
       baseInput({
-        interestedRivals: 6,
-        marginal: marginal({ weeksStarting: 0, isBenchOnly: true }),
+        market: big,
+        interestedRivals: 5,
+        marginal: marginal({ netPointsPerWeek: 6.5 }),
       }),
     );
     expect(out.isDumpCandidate).toBe(false);
+  });
+
+  it("does not fire on a crowd for a player who never starts for you", () => {
+    const out = buildLadder(
+      baseInput({
+        interestedRivals: 6,
+        marginal: marginal({ weeksStarting: 0, isBenchOnly: true, netPointsPerWeek: 6.5 }),
+      }),
+    );
+    expect(out.isDumpCandidate).toBe(false);
+  });
+
+  /**
+   * The dump is a sliding floor, not a constant.
+   *
+   * It used to raise the walk-away to the top of the range whatever tripped
+   * it, so every player who cleared the bar was priced identically.
+   */
+  it("prices a bigger upgrade above a smaller one even when both dump", () => {
+    const smaller = buildLadder(
+      baseInput({
+        marginal: marginal({ playoffOddsBefore: 40, playoffOddsAfter: 53, netPointsPerWeek: 3 }),
+      }),
+    );
+    const bigger = buildLadder(
+      baseInput({
+        marginal: marginal({ playoffOddsBefore: 40, playoffOddsAfter: 75, netPointsPerWeek: 12 }),
+      }),
+    );
+    expect(smaller.isDumpCandidate).toBe(true);
+    expect(bigger.isDumpCandidate).toBe(true);
+    expect(bigger.ladder.walkAway.dollars).toBeGreaterThan(smaller.ladder.walkAway.dollars);
+  });
+
+  /**
+   * A mode that computes its own worth computes its own urgency.
+   *
+   * Chopped is the one such mode: it prices survival under its own ceiling and
+   * its own discount for a shrinking field, and says "spend" through the
+   * danger boost and the default goal instead. Layering this dump on top threw
+   * both away and printed 90% of budget in a format whose p99 is 70%.
+   */
+  it("stands down when the caller supplied its own worth", () => {
+    const out = buildLadder(
+      baseInput({
+        worthPctOverride: 24,
+        marginal: marginal({ playoffOddsBefore: 40, playoffOddsAfter: 75, netPointsPerWeek: 12 }),
+      }),
+    );
+    expect(out.isDumpCandidate).toBe(false);
+    expect(out.worthPct).toBe(24);
+    expect(out.ladder.walkAway.dollars).toBe(24);
   });
 
   it("fires in superflex when one of your starting quarterbacks is out", () => {

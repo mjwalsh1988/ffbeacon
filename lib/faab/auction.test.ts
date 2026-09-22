@@ -139,12 +139,102 @@ describe("rival budgets", () => {
   });
 });
 
+describe("bid discipline", () => {
+  it("bids a share of worth rather than worth itself", () => {
+    const settings = { ...SETTINGS, bidSigma: 0.0001, participation: 1, strayBidRate: 0 };
+    const full = simulateAuction(
+      input({
+        settings: { ...settings, worthToBidRatio: 1 },
+        rivals: [rival({ centerPct: 60 })],
+      }),
+    );
+    const disciplined = simulateAuction(
+      input({
+        settings: { ...settings, worthToBidRatio: 0.3 },
+        rivals: [rival({ centerPct: 60 })],
+      }),
+    );
+    expect(full.rivalTop.p50).toBe(60);
+    expect(disciplined.rivalTop.p50).toBe(18);
+  });
+
+  /**
+   * The scarcity premium pulls the opposite way to the discipline, on purpose.
+   * A rival bids well under their valuation on an ordinary add and well over
+   * their lineup arithmetic on a player who will not reach a wire again.
+   */
+  it("raises rival bids for a player who does not normally reach a wire", () => {
+    const settings = {
+      ...SETTINGS,
+      bidSigma: 0.0001,
+      participation: 1,
+      strayBidRate: 0,
+      worthToBidRatio: 0.5,
+      scarcityPremiumPct: 40,
+    };
+    const ordinary = simulateAuction(
+      input({ settings, rivals: [rival({ centerPct: 40 })], scarcityShare: 0 }),
+    );
+    const scarce = simulateAuction(
+      input({ settings, rivals: [rival({ centerPct: 40 })], scarcityShare: 1 }),
+    );
+    expect(ordinary.rivalTop.p50).toBe(20);
+    expect(scarce.rivalTop.p50).toBe(28);
+  });
+
+  /**
+   * "We do not know how scarce he is" is not the same statement as "he is not
+   * scarce", so an unpriced player gets no premium rather than a guessed one.
+   */
+  it("applies no premium when we hold no market value for him", () => {
+    const settings = {
+      ...SETTINGS,
+      bidSigma: 0.0001,
+      participation: 1,
+      strayBidRate: 0,
+      worthToBidRatio: 0.5,
+      scarcityPremiumPct: 40,
+    };
+    const unknown = simulateAuction(
+      input({ settings, rivals: [rival({ centerPct: 40 })], scarcityShare: null }),
+    );
+    expect(unknown.rivalTop.p50).toBe(20);
+  });
+
+  it("leaves a stray bidder alone: they bid the market, not a valuation", () => {
+    const settings = {
+      ...SETTINGS,
+      bidSigma: 0.0001,
+      participation: 0,
+      strayBidRate: 1,
+      worthToBidRatio: 0.1,
+    };
+    const curve = simulateAuction(
+      input({
+        settings,
+        strayCell: cell(),
+        rivals: [rival({ interested: false, centerPct: 60 })],
+      }),
+    );
+    // The cell's own median, untouched by the ratio.
+    expect(curve.rivalTop.p50).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("ties", () => {
   it("splits a tie down the middle when waiver order is unknown", () => {
     // One rival who always bids, with no spread, so every run ties at 20.
+    // The ratio is pinned at 1 here so `centerPct` is the bid: this is a test
+    // of the tie rule, not of how hard a rival bids.
     const curve = simulateAuction(
       input({
-        settings: { ...SETTINGS, bidSigma: 0.1, participation: 1, strayBidRate: 0 },
+        settings: {
+          ...SETTINGS,
+          bidSigma: 0.1,
+          participation: 1,
+          strayBidRate: 0,
+          worthToBidRatio: 1,
+        },
         rivals: [rival({ centerPct: 20, waiverPosition: null })],
         yourWaiverPosition: null,
       }),
@@ -155,16 +245,23 @@ describe("ties", () => {
   });
 
   it("wins every tie when the reader has the earlier waiver position", () => {
+    const tieSettings = {
+      ...SETTINGS,
+      bidSigma: 0.0001,
+      participation: 1,
+      strayBidRate: 0,
+      worthToBidRatio: 1,
+    };
     const ahead = simulateAuction(
       input({
-        settings: { ...SETTINGS, bidSigma: 0.0001, participation: 1, strayBidRate: 0 },
+        settings: tieSettings,
         rivals: [rival({ centerPct: 20, waiverPosition: 8 })],
         yourWaiverPosition: 2,
       }),
     );
     const behind = simulateAuction(
       input({
-        settings: { ...SETTINGS, bidSigma: 0.0001, participation: 1, strayBidRate: 0 },
+        settings: tieSettings,
         rivals: [rival({ centerPct: 20, waiverPosition: 2 })],
         yourWaiverPosition: 8,
       }),

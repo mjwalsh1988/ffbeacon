@@ -14,6 +14,13 @@
  * of runs a bid of b clears is the reader's chance of winning at b, which is
  * the one figure the tool was missing and no competitor publishes.
  *
+ * TWO THINGS BEND A RIVAL'S BID AWAY FROM THEIR OWN VALUATION, in opposite
+ * directions, and both are measured rather than assumed. `worthToBidRatio`
+ * pulls it down, because FAAB is one budget for a whole season and nobody
+ * spends their reservation price on an ordinary add. `scarcityPremiumPct`
+ * pushes it up for a player who will not reach a wire again, because that is
+ * what our own settled auctions show the room doing.
+ *
  * SEEDED. The same league and the same player give the same curve every time.
  * A win chance that drifted by two points on a page refresh would be read as
  * the model changing its mind.
@@ -31,7 +38,12 @@ export type AuctionRival = {
   budgetPct: number;
   /** Would this player crack their starting lineup? */
   interested: boolean;
-  /** Where their bid centres if they file one, as a share of full budget. */
+  /**
+   * What he is WORTH to them, as a share of the full budget. Not what they
+   * bid: `settings.worthToBidRatio` turns the one into the other, inside
+   * `rivalBid`, so the discipline lives in one place and the league's measured
+   * heat and this manager's own habit still multiply a calibrated base.
+   */
   centerPct: number;
   /** Lower means earlier in the waiver order. Null when we do not know. */
   waiverPosition: number | null;
@@ -54,6 +66,18 @@ export type AuctionInput = {
    * chasing this player has somewhere else to spend. Scales participation.
    */
   participationScale?: number;
+  /**
+   * How close this player is to a genuine starter on the open market, 0 to 1,
+   * where 1 is a player who does not normally reach a wire at all.
+   *
+   * Drives `settings.scarcityPremiumPct`. A rival's lineup arithmetic is the
+   * right first answer to "what will they bid" and an incomplete one: when a
+   * top-round player is available the room bids because he will not come round
+   * again, not because of the 6 points he adds to their flex. Null when we hold
+   * no market value for him, and then no premium is applied rather than a
+   * guessed one.
+   */
+  scarcityShare?: number | null;
 };
 
 export type AuctionCurve = {
@@ -129,9 +153,25 @@ function rivalBid(
 
   let pct: number;
   if (rival.interested) {
+    // NOBODY BIDS WHAT A PLAYER IS WORTH TO THEM. FAAB is one budget for a
+    // whole season, so a dollar spent here is a dollar not available for the
+    // next injury, and a manager bidding their reservation price on every
+    // claim is broke by week 6. Treating `centerPct` as the bid itself put
+    // the simulated top rival at the p90 of every real auction we hold, which
+    // is what made the reader's recommendation the whole budget on any player
+    // two teams wanted.
+    // The scarcity premium sits beside the discipline, and they pull opposite
+    // ways on purpose: a rival bids well under their valuation on an ordinary
+    // add, and well over their lineup arithmetic on a player who will not be
+    // available again.
+    const scarcity =
+      input.scarcityShare == null
+        ? 1
+        : 1 + (Math.max(0, settings.scarcityPremiumPct) / 100) * clamp(input.scarcityShare, 0, 1);
+    const centre = rival.centerPct * clamp(settings.worthToBidRatio, 0, 1) * scarcity;
     // Lognormal around the centre: a bid can be a multiple of the expected
     // price but never negative, which is how overbids actually look.
-    pct = rival.centerPct * Math.exp(settings.bidSigma * standardNormal(rng));
+    pct = centre * Math.exp(settings.bidSigma * standardNormal(rng));
   } else if (input.strayCell) {
     pct = drawFromCell(input.strayCell, rng());
   } else {

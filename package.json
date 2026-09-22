@@ -70,6 +70,7 @@
     "backtest:brief-relevance": "tsx --env-file=.env.local scripts/backtest-brief-relevance.ts",
     "faab:priors": "tsx --env-file=.env.local scripts/build-faab-priors.ts",
     "faab:replay": "tsx --env-file=.env.local scripts/faab-replay.ts",
+    "faab:calibrate": "tsx --tsconfig tsconfig.scripts.json --env-file=.env.local scripts/faab-calibrate.ts",
     "remove:brief-articles": "tsx --env-file=.env.local scripts/remove-brief-articles.ts",
     "backfill:relays": "tsx --env-file=.env.local scripts/backfill-relays.ts",
     "archive:legacy-articles": "tsx --env-file=.env.local scripts/archive-legacy-articles.ts",

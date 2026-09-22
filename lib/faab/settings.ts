@@ -316,6 +316,8 @@ export const faabSettingsSchema = z.object({
         })
         .default(d.leagueDump.ranges),
       contestedRivals: z.number().int().min(1).max(32).default(d.leagueDump.contestedRivals),
+      contestedRivalShare: unitInterval.default(d.leagueDump.contestedRivalShare),
+      contestedMinPointsPerWeek: nonNegative.default(d.leagueDump.contestedMinPointsPerWeek),
       superflexQbStarterOut: z.boolean().default(d.leagueDump.superflexQbStarterOut),
     })
     .default(d.leagueDump),
@@ -327,6 +329,12 @@ export const faabSettingsSchema = z.object({
       participation: unitInterval.default(d.auction.participation),
       strayBidRate: unitInterval.default(d.auction.strayBidRate),
       bidSigma: z.number().min(0.1).max(1.5).default(d.auction.bidSigma),
+      worthToBidRatio: unitInterval.default(d.auction.worthToBidRatio),
+      scarcityPremiumPct: z
+        .number()
+        .min(0)
+        .max(200)
+        .default(d.auction.scarcityPremiumPct),
       heatShrink: nonNegative.default(d.auction.heatShrink),
       tendencyShrink: nonNegative.default(d.auction.tendencyShrink),
       heatClamp: clampPair.default(d.auction.heatClamp),
@@ -342,6 +350,7 @@ export const faabSettingsSchema = z.object({
       valueTarget: unitInterval.default(d.goal.valueTarget),
       sureTarget: unitInterval.default(d.goal.sureTarget),
       sureMaxOverWorthPct: z.number().min(0).max(200).default(d.goal.sureMaxOverWorthPct),
+      scarceShare: unitInterval.default(d.goal.scarceShare),
     })
     .default(d.goal)
     .refine((g) => g.valueTarget < g.sureTarget, {

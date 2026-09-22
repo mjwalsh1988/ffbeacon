@@ -1488,6 +1488,33 @@ export function FaabSettingsManager({
                   max={32}
                 />
               </Field>
+              <Field
+                label="Or this share of the rivals we checked"
+                htmlFor={`${ids}-lds-contested-share`}
+                hint="The same trigger as a share of the league, so it means the same thing in a 10-team league and an 18-team chopped one. The higher of the two bars applies. 0 to 1."
+              >
+                <NumberInput
+                  id={`${ids}-lds-contested-share`}
+                  value={settings.leagueDump.contestedRivalShare}
+                  onChange={(n) => patchLeagueDump({ contestedRivalShare: n })}
+                  step="0.05"
+                  min={0}
+                  max={1}
+                />
+              </Field>
+              <Field
+                label="Points a week the crowd route also needs"
+                htmlFor={`${ids}-lds-contested-points`}
+                hint="How big the upgrade has to be for the reader before a crowded wire is a reason to spend. A player half the room wants but who adds a point a week to your own lineup is one to let go."
+              >
+                <NumberInput
+                  id={`${ids}-lds-contested-points`}
+                  value={settings.leagueDump.contestedMinPointsPerWeek}
+                  onChange={(n) => patchLeagueDump({ contestedMinPointsPerWeek: n })}
+                  step="0.5"
+                  min={0}
+                />
+              </Field>
             </div>
             <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-ink">
               <input
@@ -1888,6 +1915,34 @@ export function FaabSettingsManager({
               />
             </Field>
             <Field
+              label="Share of worth a rival actually bids"
+              htmlFor={`${ids}-auc-worthratio`}
+              hint="Nobody bids what a player is worth to them: FAAB is one budget for a whole season. At 1 the simulated room bids its full valuation, which puts the top rival at the p90 of every real auction we hold. Calibrated against the market table by npm run faab:calibrate. 0 to 1."
+            >
+              <NumberInput
+                id={`${ids}-auc-worthratio`}
+                value={settings.auction.worthToBidRatio}
+                onChange={(n) => patchAuction({ worthToBidRatio: n })}
+                step="0.05"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Scarcity premium (percent)"
+              htmlFor={`${ids}-auc-scarcity`}
+              hint="How much more the room bids for a player who will not reach a wire again, over and above what he adds to their lineup. Scaled by how close his market value is to a genuine starter's, so it is zero for a streamer. Measured at 35 from our own settled auctions. 0 to 200."
+            >
+              <NumberInput
+                id={`${ids}-auc-scarcity`}
+                value={settings.auction.scarcityPremiumPct}
+                onChange={(n) => patchAuction({ scarcityPremiumPct: n })}
+                step="5"
+                min={0}
+                max={200}
+              />
+            </Field>
+            <Field
               label="Samples before league heat is trusted"
               htmlFor={`${ids}-auc-heatshrink`}
               hint="A league's own price level gets half weight at this many past auctions. Higher means we lean on the wider market for longer."
@@ -2046,6 +2101,20 @@ export function FaabSettingsManager({
               step="1"
               min={0}
               max={200}
+            />
+          </Field>
+          <Field
+            label="How scarce before the page warns about overbidding"
+            htmlFor={`${ids}-goal-scarce`}
+            hint="0 to 1, as a share of a genuine starter's market value. Above this the result says out loud that the room will chase him and that winning may mean paying over his worth. 0 to 1."
+          >
+            <NumberInput
+              id={`${ids}-goal-scarce`}
+              value={settings.goal.scarceShare}
+              onChange={(n) => patchGoal({ scarceShare: n })}
+              step="0.02"
+              min={0}
+              max={1}
             />
           </Field>
           <Field

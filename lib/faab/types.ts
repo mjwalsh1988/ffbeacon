@@ -323,6 +323,20 @@ export interface LeagueDumpSettings {
   ranges: Record<NeedLevel, PctRange>;
   /** This many rivals who would start him is itself a reason to spend. */
   contestedRivals: number;
+  /**
+   * The same trigger as a SHARE of the rivals we checked, so it means the same
+   * thing in a 10-team league and an 18-team chopped one. The trigger needs
+   * both, so four rivals out of eleven is contested and four out of thirty is
+   * not.
+   */
+  contestedRivalShare: number;
+  /**
+   * How big the upgrade has to be FOR THE READER before a crowded wire is a
+   * reason to empty the budget. A player half the room would start but who
+   * adds a point a week to your own lineup is a player to let go, and without
+   * this the crowd alone was enough.
+   */
+  contestedMinPointsPerWeek: number;
   /** In superflex, a starting quarterback going out is an emergency. */
   superflexQbStarterOut: boolean;
 }
@@ -348,6 +362,38 @@ export interface AuctionSettings {
   strayBidRate: number;
   /** Lognormal spread of a rival's bid around its centre. */
   bidSigma: number;
+  /**
+   * What share of a rival's RESERVATION PRICE they actually bid.
+   *
+   * A rival's `centerPct` is what the player is worth to them, and nobody bids
+   * their worth. FAAB is one budget for a whole season, so every dollar spent
+   * here is a dollar not available for the next injury, and a manager who bids
+   * their full valuation on every claim is broke by week 6. Modelling rivals
+   * as bidding their reservation price put the simulated top rival at the p90
+   * of every real auction we hold and pushed the reader's recommendation to
+   * the whole budget on any player two teams wanted.
+   *
+   * Calibrated against `faab_market_priors`: see `scripts/faab-calibrate.ts`.
+   */
+  worthToBidRatio: number;
+  /**
+   * THE PREMIUM A GENUINELY SCARCE PLAYER DRAWS, on top of what he is worth
+   * to any one rival, as a percent.
+   *
+   * The rest of this model prices a rival's bid off their own lineup upgrade,
+   * which is the right first answer and an incomplete one. When a top-round
+   * player reaches waivers the room does not bid its lineup arithmetic: it
+   * bids because he will not come round again. Our own settled auctions carry
+   * it. Joining winning bids to a current ranking, a top-24 player clears at
+   * 8% of budget at the median and 45% at the ninetieth against 5% and 25%
+   * for a player outside the top 120, on the same weeks and the same leagues.
+   *
+   * Scaled by how close the candidate's market value is to a genuine starter's
+   * (see `dynastyValue.eliteRankFactor`), so it is zero for the streamer this
+   * mostly gets pointed at and full only for the player who does not normally
+   * appear on a wire at all.
+   */
+  scarcityPremiumPct: number;
   /** Samples at which a league's own price level gets half weight. */
   heatShrink: number;
   /** The same, for one manager's own habit. */
@@ -368,6 +414,16 @@ export interface GoalSettings {
   sureTarget: number;
   /** The most the sure bid may exceed his worth, as a percent. Labelled when it does. */
   sureMaxOverWorthPct: number;
+  /**
+   * How close to a genuine starter a player has to be, 0 to 1, before the page
+   * warns that winning him will mean paying over his worth.
+   *
+   * The same share the scarcity premium is scaled by. Kept as its own number
+   * because the point at which a premium starts to apply and the point at
+   * which it is worth a sentence are different judgements: the premium fades
+   * in smoothly and the warning either appears or does not.
+   */
+  scarceShare: number;
 }
 
 /** One stretch of the season and what it does to prices. */
@@ -721,8 +777,14 @@ export interface BidLadder {
   walkAway: BidRung;
   /** True when winning him is likely to cost more than he is worth to you. */
   priceAboveWorth: boolean;
-  /** The highest rival bid we expect, in dollars. Null without a simulation. */
-  rivalTop: { p50: number; p75: number } | null;
+  /**
+   * The highest rival bid we expect, in dollars. Null without a simulation.
+   *
+   * p90 is carried as well as p50 and p75 because the TAIL is the message on a
+   * scarce player: the difference between "expect about this" and "one in ten
+   * rooms pays that" is the whole reason a disciplined bid loses.
+   */
+  rivalTop: { p50: number; p75: number; p90: number } | null;
   budgetAfterBid: number;
   bidsByGoal: { value: BidRung; sure: BidRung };
   /**

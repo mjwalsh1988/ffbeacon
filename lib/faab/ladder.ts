@@ -76,7 +76,7 @@ export type LadderInput = {
    */
   winChanceAt?: ((dollars: number) => number) | null;
   /** The highest rival bid we expect, in dollars. */
-  rivalTop?: { p50: number; p75: number } | null;
+  rivalTop?: { p50: number; p75: number; p90: number } | null;
   /** Share of simulated runs where nobody else bid at all, 0 to 1. */
   noRivalShare?: number | null;
   /**
@@ -90,6 +90,15 @@ export type LadderInput = {
   superflexQbEmergency?: boolean;
   /** Chopped leagues get their own headline and their own reasons. */
   choppedHeadline?: string | null;
+  /**
+   * How close he is to a genuine starter on the open market, 0 to 1, or null
+   * when we hold no value for him.
+   *
+   * Used only for the WORDS here. It has already moved the price, inside the
+   * auction simulation, and multiplying it in again would charge the reader
+   * twice for the same fact.
+   */
+  scarcityShare?: number | null;
   /**
    * Dynasty and keeper leagues only: what he is worth as an ASSET, as a share
    * of the full budget, and how much of the answer that should be.
@@ -277,14 +286,34 @@ export function buildLadder(input: LadderInput): LadderOutput {
   // Two new triggers beside the original two. A player four rivals would start
   // is a player the room is about to fight over, and in superflex a starting
   // quarterback going out is the one injury that cannot be streamed around.
+  // A crowded wire is a reason to spend only when the player is also a real
+  // upgrade FOR THE READER, and only when the crowd is big relative to the
+  // league. A flat count of four fires on nearly every usable player in a
+  // 12-team league and on every one of them in an 18-team chopped league,
+  // which is how two players a season apart in quality came out at the same
+  // price: the dump replaced both of their worths with the same constant.
+  const contestedBar = Math.max(
+    dumpCfg.contestedRivals,
+    Math.ceil(clamp(dumpCfg.contestedRivalShare, 0, 1) * Math.max(0, market.rivalsChecked ?? 0)),
+  );
   const contested =
     input.interestedRivals != null &&
-    input.interestedRivals >= dumpCfg.contestedRivals &&
+    input.interestedRivals >= contestedBar &&
+    (marginal?.netPointsPerWeek ?? 0) >= dumpCfg.contestedMinPointsPerWeek &&
     startsSomewhere;
   const qbEmergency = dumpCfg.superflexQbStarterOut && input.superflexQbEmergency === true;
 
+  // THE STANDARD DUMP IS THE STANDARD MODEL'S URGENCY LEVER, so a mode that
+  // computed worth its own way does not get it. Chopped is the one such mode
+  // today: it prices survival rather than playoff odds, under its own ceiling
+  // (`chopped.maxPctFromUpgrade`) and its own discount for a shrinking field
+  // (`priceByAliveFraction`), and it carries its own way of saying "spend" in
+  // the danger boost and in flipping the default goal to "make sure I win".
+  // Layering this dump on top threw both disciplines away and printed 90% of
+  // budget in a format whose p99 is 70%.
   const isDumpCandidate =
     dumpCfg.enabled &&
+    input.worthPctOverride == null &&
     !alreadyCooked &&
     ((oddsGain !== null && oddsGain >= dumpCfg.oddsPointsThreshold) ||
       (marginal !== null && marginal.netPointsPerWeek >= dumpCfg.pointsPerWeekThreshold) ||
@@ -305,7 +334,19 @@ export function buildLadder(input: LadderInput): LadderOutput {
       input.mode === "league"
         ? dumpCfg.ranges.medium
         : (dumpCfg.ranges[input.needLevel] ?? dumpCfg.ranges.medium);
-    walkAwayPct = Math.max(walkAwayPct, clamp(range.maxPct, 0, 100));
+    // THE DUMP IS A SLIDING FLOOR, NOT A CONSTANT. It used to raise the
+    // walk-away to the top of the range whatever tripped it, so every player
+    // who cleared the bar was priced identically: an elite back and a fringe
+    // starter both came out at 90% of budget, and no reader could tell the
+    // difference between them on the card. The floor now slides across the
+    // range with how big the upgrade actually is, so clearing the bar buys a
+    // higher price rather than the same price.
+    const floorPct = clamp(
+      range.minPct + (range.maxPct - range.minPct) * clamp(upgradeStrength, 0, 1),
+      0,
+      100,
+    );
+    walkAwayPct = Math.max(walkAwayPct, floorPct);
     notices.push(settings.copy.dumpNote);
   }
 
@@ -324,12 +365,24 @@ export function buildLadder(input: LadderInput): LadderOutput {
   }
 
   // ---- PRICE: the cheapest bid that reaches each goal ----------------------
+  // BINARY SEARCH, not a scan. `winChanceAt` is monotone non-decreasing in
+  // dollars (a bigger bid never beats fewer rivals), so the cheapest bid
+  // reaching a target is a boundary search. The scan this replaces called it
+  // once per dollar: in a $1,000 league that was a thousand passes over four
+  // thousand simulated auctions, twice, for one recommendation.
   function bidForTarget(target: number): number | null {
     if (!winChanceAt || budget <= 0) return null;
-    for (let dollars = Math.max(0, minBid); dollars <= budget; dollars += 1) {
-      if (winChanceAt(dollars) >= target) return dollars;
+    const floor = Math.max(0, minBid);
+    if (floor > budget) return null;
+    if (winChanceAt(budget) < target) return null;
+    let low = floor;
+    let high = budget;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (winChanceAt(mid) >= target) high = mid;
+      else low = mid + 1;
     }
-    return null;
+    return low;
   }
 
   const goalCfg = settings.goal;
@@ -419,6 +472,47 @@ export function buildLadder(input: LadderInput): LadderOutput {
     overWorth: Math.max(0, bid.dollars - walkAwayRung.dollars),
     choppedHeadline: input.choppedHeadline ?? null,
   });
+
+  // THE OVERBID WARNING.
+  //
+  // A player who does not normally reach a wire is one the room bids on for a
+  // reason that is not arithmetic, and the reader deserves to be told that
+  // before they file a disciplined bid and lose. Everything in this sentence
+  // is a figure already on the screen: his worth to this roster, and the top
+  // rival bid the simulation expects.
+  //
+  // It fires only when all three are true: he really is that good, somebody
+  // else really is bidding, and the price really is above his worth here. A
+  // warning that fired on every claim would be read as decoration.
+  const scarce = (input.scarcityShare ?? 0) >= settings.goal.scarceShare;
+  if (scarce && !nobodyElseBids && budget > 0) {
+    const p75 = input.rivalTop?.p75 ?? null;
+    const p90 = input.rivalTop?.p90 ?? null;
+    const bidWinPct =
+      bid.winChance !== null ? Math.round(clamp(bid.winChance, 0, 1) * 100) : null;
+    if (priceAboveWorth) {
+      // The hard case: the room is expected to go past what he is worth here.
+      notices.push(
+        p75 !== null && p75 > walkAwayRung.dollars
+          ? `He is one of the few players a whole room chases rather than prices. He is worth ${walkAwayRung.dollars} to your lineup, and the top rival bid is more likely to land near ${p75}. Winning him means paying over his worth on purpose. That is a real choice rather than a mistake, and "Make sure I win" is the number for it.`
+          : `He is one of the few players a whole room chases rather than prices, and bids on him run past what he adds to anyone's lineup. He is worth ${walkAwayRung.dollars} here, and you should expect to pay over that to win him.`,
+      );
+    } else if (p90 !== null && p90 > bid.dollars) {
+      // The softer case. The recommended bid is inside his worth, so nothing
+      // here is a warning about overpaying. The point is the TAIL: on a player
+      // this good the bids scatter, and a reader who files the disciplined
+      // number and loses should have seen how that happens.
+      //
+      // NOT keyed on the sure bid, which is circular: the sure bid targets a
+      // 90% win chance and therefore sits at the p90 of the rival top almost
+      // by definition, so the condition could never fire.
+      notices.push(
+        `Bids on a player this good scatter a long way. ${bid.dollars}${
+          bidWinPct !== null ? ` wins about ${bidWinPct}% of the time` : " is the value play"
+        }, but roughly one room in ten pays more than ${p90} for him. If losing him is the worse outcome, "Make sure I win" prices that at ${sureRung.dollars}.`,
+      );
+    }
+  }
 
   if (input.confidence === "low") notices.push(settings.copy.thinDataNote);
 
