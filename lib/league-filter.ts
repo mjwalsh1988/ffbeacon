@@ -109,8 +109,13 @@ export function describeLeagueFilter(
 /**
  * Below this many rows a filter is clutter: a reader can see the whole list.
  *
- * Not zero, because an always-present search box on a three-league list is one
+ * Not zero, because an always-present search box on a two-league list is one
  * more thing to tab past on the way to the leagues themselves, which is the
  * problem this whole change set is about.
+ *
+ * Lowered from 6 to 4 on 2026-09-22. Six was set from the shape of a typical
+ * list and it left the readers between four and six leagues, who do have
+ * enough rows to scan for one, with nothing to scan with. Four is the point
+ * where a list stops fitting in one glance.
  */
-export const LEAGUE_FILTER_MIN_ROWS = 6;
+export const LEAGUE_FILTER_MIN_ROWS = 4;

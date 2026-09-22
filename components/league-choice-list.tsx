@@ -94,6 +94,7 @@ export function LeagueChoiceList({
   onChange,
   logoSize = 40,
   filterLabel = "Filter your leagues",
+  maxRows = 5,
   className = "",
 }: {
   /** Accessible name of the group. "Your leagues". */
@@ -105,6 +106,18 @@ export function LeagueChoiceList({
   logoSize?: 32 | 40 | 48;
   /** The filter's accessible name, when the list is long enough to get one. */
   filterLabel?: string;
+  /**
+   * How many rows are visible before the list scrolls inside itself.
+   *
+   * WHY THERE IS A CAP AT ALL. This list sits in one column of a two-column
+   * step on the FAAB calculator, beside "pick your player". A reader in twenty
+   * leagues got a left column twenty rows tall next to a right column three
+   * rows tall, and the thing they were supposed to do next was somewhere off
+   * the bottom of the other one. Capping the list keeps the two halves of the
+   * step the same size and keeps the filter above it permanently on screen
+   * instead of scrolling away with the rows.
+   */
+  maxRows?: number;
   className?: string;
 }) {
   const groupName = useId();
@@ -133,6 +146,14 @@ export function LeagueChoiceList({
     );
   }, [choices, query, type, showFilter]);
 
+  // Only once there is enough to be worth scrolling. A cap on four rows just
+  // puts a scrollbar next to a list that already fits.
+  const scrolls = visible.length > maxRows;
+  // Row height is the padding plus whichever is taller, the tap target or the
+  // logo, plus the gap. The extra half row is the overhang described above.
+  const rowPx = 24 + Math.max(44, logoSize) + 8;
+  const maxHeight = Math.round(rowPx * (maxRows + 0.5));
+
   return (
     <div className={`grid gap-2 ${className}`}>
       {showFilter && (
@@ -153,13 +174,29 @@ export function LeagueChoiceList({
         />
       )}
 
+      {/* The scroll container is NOT given tabIndex, unlike the table wrappers
+          elsewhere in this codebase. Those hold no focusable content, so
+          without a tab stop a keyboard reader cannot scroll them at all. This
+          one is full of radios: arrow keys move between them and the browser
+          scrolls to follow focus, so a tab stop here would add a landing spot
+          in front of the list that does nothing. */}
       {visible.length === 0 ? (
         <p className="rounded-card border border-dashed border-line bg-base/40 p-4 text-sm text-ink-muted">
           No leagues match that. Clear the filter to see all {choices.length}{" "}
           again.
         </p>
       ) : (
-        <div role="radiogroup" aria-label={label} className="grid gap-2">
+        <div
+          role="radiogroup"
+          aria-label={label}
+          className={`grid gap-2 ${scrolls ? "beacon-scroll overflow-y-auto pr-1" : ""}`}
+          // A hard pixel cap rather than a row count in CSS, because the rows
+          // are not all one height: a league with a meta line is taller than
+          // one without. The half row of overhang is deliberate, so the list
+          // visibly continues past the fold rather than ending on a clean edge
+          // that looks like the end of it.
+          style={scrolls ? { maxHeight: `${maxHeight}px` } : undefined}
+        >
           {visible.map((choice) => {
             const disabled = Boolean(choice.disabledReason);
             const selected = value === choice.sleeperLeagueId;
