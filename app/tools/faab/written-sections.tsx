@@ -104,8 +104,7 @@ export function buildFaabFaq(market: MarketFacts | null): FaqAccordionItem[] {
     },
     {
       question: "How does FAAB work in dynasty?",
-      answer:
-        "Budgets usually do not roll over or reset on Sleeper unless the commissioner does it, and a young player's long-term value counts. With a dynasty league connected the calculator blends his market value into the bid, more for a rebuilding team than for a contender.",
+      answer: dynastyAnswer(market),
     },
     {
       question: "How is superflex different?",
@@ -118,6 +117,33 @@ export function buildFaabFaq(market: MarketFacts | null): FaqAccordionItem[] {
         "The lowest scorer is eliminated each week and the whole roster goes to waivers, so budgets are big and the goal is surviving the week. Prices fall as teams are eliminated because fewer rivals chase a pool full of starters. Connect a Sleeper chopped league or pick Chopped or guillotine in the setup, and read our chopped league strategy guide, linked under Where to go next.",
     },
   ];
+}
+
+/**
+ * The dynasty answer, with the comparison in it when we can make one.
+ *
+ * This used to be four sentences of mechanics with no number in them, which is
+ * why the page ranked several positions worse for "dynasty faab calculator"
+ * than for the chopped equivalent: the chopped answer had a table behind it and
+ * this one did not. The figures come from the same cells the section below
+ * draws, so the FAQ and the chart can never disagree.
+ */
+function dynastyAnswer(market: MarketFacts | null): string {
+  const mechanics =
+    "Budgets do not roll over or reset on Sleeper unless the commissioner does it by hand, waivers often run through the offseason, and a young player's long-term value counts as well as his next start. With a dynasty league connected the calculator blends his market value into the bid, more for a rebuilding team than for a contender.";
+
+  const dynasty = market?.dynastyByBidders.filter((row) => row.enough) ?? [];
+  const redraft = new Map(
+    (market?.redraftByBidders ?? []).filter((row) => row.enough).map((row) => [row.label, row]),
+  );
+  // The most contested pair we can publish both halves of. Without one the
+  // answer is the mechanics alone rather than an invented comparison.
+  const contested = [...dynasty].reverse().find((row) => redraft.has(row.label));
+  const against = contested ? redraft.get(contested.label) : undefined;
+  if (!contested || !against || against.median <= 0) return mechanics;
+
+  const ratio = Math.round((contested.median / against.median) * 10) / 10;
+  return `It costs more, but only when somebody else wants the player. With ${contested.label.toLowerCase()} bidding, the median winning claim in our synced dynasty and keeper leagues is ${pct(contested.median)} of budget against ${pct(against.median)} in redraft, about ${ratio} times the price. Unopposed claims go for nothing in both. ${mechanics}`;
 }
 
 /**

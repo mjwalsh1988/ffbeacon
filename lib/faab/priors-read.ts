@@ -20,20 +20,54 @@ export type {
 } from "./priors-math";
 export { bidForTargetFromCell, pickCell, priorCdf } from "./priors-math";
 
+const CELL_COLUMNS =
+  "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at";
+
+/** PostgREST caps a response at 1,000 rows whatever `limit` asks for. */
+const PAGE_SIZE = 1000;
+
+/**
+ * Every cell, PAGED.
+ *
+ * THE `.limit(5000)` THIS REPLACES DID NOT WORK AND FAILED SILENTLY, which is
+ * the worst shape a data bug can have. PostgREST enforces its own max-rows of
+ * 1,000 regardless of what `limit` asks for, so the read returned the first
+ * 1,000 cells by `cell_key` and no error. Cell keys begin with the league kind,
+ * so alphabetical order decided which half of the market the calculator could
+ * see: all 224 chopped cells and all 727 pooled "any" cells loaded, 49 of 453
+ * dynasty cells loaded, and every one of the 551 redraft cells was dropped.
+ *
+ * The consequence was not a missing table. `pickCell` falls back to a broader
+ * cell when the exact one is absent, and the broadest cell is `any|...`, which
+ * always loaded. So a redraft reader was priced off a distribution pooled with
+ * dynasty, including its offseason rookie claims, and the page had no way to
+ * say so because nothing had failed. Chopped was correct throughout purely
+ * because "chopped" sorts before "dynasty".
+ *
+ * Page until a short page arrives. See the memory note on this exact trap:
+ * a `select()` without `range()` truncates at 1,000 rows and says nothing.
+ */
 async function readAllCells(): Promise<PriorCell[]> {
   // The publishable-key client, on purpose: these cells are public by policy
   // (anon SELECT), they carry no identifier, and a cached read that needs the
   // service role would be a cached read holding a secret-key client open.
   const supabase = createCachedReadClient();
-  const { data, error } = await supabase
-    .from("faab_market_priors")
-    .select(
-      "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at",
-    )
-    .order("cell_key", { ascending: true })
-    .limit(5000);
-  if (error || !data) return [];
-  return data.map((row) => toPriorCell(row as unknown as Record<string, unknown>));
+  const out: PriorCell[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("faab_market_priors")
+      .select(CELL_COLUMNS)
+      .order("cell_key", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    // A failed page mid-read would leave a PARTIAL market, which is the same
+    // silent half-answer this function exists to stop. Return nothing instead:
+    // every consumer already handles an empty list by saying so on the page.
+    if (error) return [];
+    if (!data || data.length === 0) break;
+    for (const row of data) out.push(toPriorCell(row as unknown as Record<string, unknown>));
+    if (data.length < PAGE_SIZE) break;
+  }
+  return out;
 }
 
 const cachedRead = unstable_cache(readAllCells, ["faab-market-priors"], {

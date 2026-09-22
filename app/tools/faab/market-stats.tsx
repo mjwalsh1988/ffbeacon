@@ -54,6 +54,27 @@ export type MarketFacts = {
   byPhase: MarketRow[];
   byPosition: MarketRow[];
   chopped: MarketRow[];
+  /**
+   * The dynasty half of the market, and the redraft rows it is read against.
+   *
+   * Kept as its own three lists rather than folded into the tables above,
+   * because the dynasty story is a COMPARISON. "Contested dynasty auctions
+   * clear at 25% of budget" is a number; "25% against redraft's 14%, from the
+   * same weeks in the same seasons" is the finding.
+   */
+  dynastyByBidders: MarketRow[];
+  redraftByBidders: MarketRow[];
+  dynastyByPosition: MarketRow[];
+  /**
+   * Share of our priced dynasty claims that came from a superflex league,
+   * 0 to 1, or null when we cannot tell.
+   *
+   * The reason the position table reads the way it does. Asserting "most
+   * dynasty leagues start two quarterbacks" would be a claim about the hobby;
+   * this is a claim about the rooms these figures came out of, which is the
+   * only one the table can actually support.
+   */
+  dynastySuperflexShare: number | null;
 };
 
 const BIDDER_ROWS: Array<[string, string]> = [
@@ -77,6 +98,34 @@ const POSITION_ROWS: Array<[string, string]> = [
   ["any|any|RB|any|3", "RB"],
   ["any|any|WR|any|3", "WR"],
   ["any|any|TE|any|3", "TE"],
+];
+
+/**
+ * The same four bidder counts on both boards, in the same order, so the two
+ * lists can be zipped into one comparison without either side having to be
+ * looked up by label.
+ */
+const DYNASTY_BIDDER_ROWS: Array<[string, string]> = [
+  ["dynasty|any|any|any|1", "1 team"],
+  ["dynasty|any|any|any|2", "2 teams"],
+  ["dynasty|any|any|any|3", "3 teams"],
+  ["dynasty|any|any|any|4p", "4 or more teams"],
+];
+
+const REDRAFT_BIDDER_ROWS: Array<[string, string]> = [
+  ["redraft|any|any|any|1", "1 team"],
+  ["redraft|any|any|any|2", "2 teams"],
+  ["redraft|any|any|any|3", "3 teams"],
+  ["redraft|any|any|any|4p", "4 or more teams"],
+];
+
+// Three or more bidders, because an uncontested claim prices at nothing in
+// every format and a table of zeroes says nothing about position scarcity.
+const DYNASTY_POSITION_ROWS: Array<[string, string]> = [
+  ["dynasty|any|QB|any|3", "QB"],
+  ["dynasty|any|RB|any|3", "RB"],
+  ["dynasty|any|WR|any|3", "WR"],
+  ["dynasty|any|TE|any|3", "TE"],
 ];
 
 const CHOPPED_ROWS: Array<[string, string]> = [
@@ -136,11 +185,29 @@ export async function loadMarketFacts(
     byPhase: rowsFor(byKey, PHASE_ROWS, minCellSamples),
     byPosition: rowsFor(byKey, POSITION_ROWS, minCellSamples),
     chopped: rowsFor(byKey, CHOPPED_ROWS, minCellSamples),
+    dynastyByBidders: rowsFor(byKey, DYNASTY_BIDDER_ROWS, minCellSamples),
+    redraftByBidders: rowsFor(byKey, REDRAFT_BIDDER_ROWS, minCellSamples),
+    dynastyByPosition: rowsFor(byKey, DYNASTY_POSITION_ROWS, minCellSamples),
+    dynastySuperflexShare: superflexShare(byKey),
   };
 }
 
-/** A share of the budget, without the float noise a quantile can carry. */
-function pct(value: number): string {
+/** How much of the dynasty market is superflex, read off the two cells. */
+function superflexShare(byKey: Map<string, PriorCell>): number | null {
+  const all = byKey.get("dynasty|any|any|any|any");
+  const superflex = byKey.get("dynasty|yes|any|any|any");
+  if (!all || !superflex || all.sampleSize <= 0) return null;
+  return superflex.sampleSize / all.sampleSize;
+}
+
+/**
+ * A share of the budget, without the float noise a quantile can carry.
+ *
+ * Exported so the dynasty section rounds identically. Two roundings of the
+ * same cell printing 12% in one table and 12.0% in another is the kind of
+ * difference a reader reads as two different measurements.
+ */
+export function pct(value: number): string {
   return `${Math.round(value * 10) / 10}%`;
 }
 
@@ -352,7 +419,7 @@ function TableBlock({
  * width with the label column wrapping. A row we cannot publish keeps its
  * sample size and says why in the space the numbers would have used.
  */
-function MarketTable({
+export function MarketTable({
   caption,
   firstColumn,
   rows,

@@ -21,6 +21,7 @@ import { FaabForm, type FaabPlayer } from "./faab-form";
 import { parseManualSeed } from "./manual-setup";
 import { WrittenSections } from "./written-sections";
 import { MarketStats, loadMarketFacts } from "./market-stats";
+import { DynastySection } from "./dynasty-section";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -28,8 +29,12 @@ import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-mas
 import { isDiscordMember } from "@/lib/discord-membership";
 
 const META_TITLE = "FAAB Calculator for Fantasy Football: What to Bid";
+// The title is left alone deliberately: it is what ranks today and a rewrite
+// resets a snippet Google has already learned. The description gains "dynasty"
+// only, which the page had covered in one FAQ line and now covers with a
+// section, a chart and two tables.
 const META_DESCRIPTION =
-  "Free FAAB calculator: how much to bid on any waiver claim, your chance to win it, and when to walk away. Chopped and guillotine leagues too.";
+  "Free FAAB calculator: how much to bid on any waiver claim, your chance to win it, and when to walk away. Dynasty, chopped and guillotine leagues too.";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/faab" },
@@ -265,6 +270,11 @@ export default async function FaabPage({
             one block with no slot between them. */}
         <WrittenSections market={marketFacts} />
         <MarketStats facts={marketFacts} />
+        {/* After the market tables on purpose. Those establish what a claim
+            costs across every league we hold; this one splits the largest
+            division inside that number and needs the general figure to have
+            been made first. */}
+        <DynastySection facts={marketFacts} />
       </PageBody>
       <DiscordCtaSection
         eyebrow="Waivers are stressful"
