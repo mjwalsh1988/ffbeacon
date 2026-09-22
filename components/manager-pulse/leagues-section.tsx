@@ -30,6 +30,7 @@ import type { ManagerLeagueCategory, ManagerLeagueRow } from "@/lib/manager-puls
 const CATEGORY_LABEL: Record<ManagerLeagueCategory, string> = {
   dynasty: "Dynasty",
   redraft: "Redraft",
+  chopped: "Chopped",
   "best-ball-dynasty": "Best Ball Dynasty",
   "best-ball-redraft": "Best Ball Redraft",
 };
@@ -38,11 +39,15 @@ const CATEGORY_LABEL: Record<ManagerLeagueCategory, string> = {
  * One tint per league type, and it is decorative: the label sits in text on
  * every chip, so nothing here is carried by colour alone. Dynasty takes the
  * brand purple and redraft the brand cyan, matching how the lens switch above
- * already separates the two.
+ * already separates the two. Chopped takes the warning amber, which is the one
+ * remaining tone that is not already spoken for and reads as "this one plays
+ * by different rules" rather than as a third position on the dynasty-redraft
+ * axis, which is exactly what an elimination league is.
  */
 const CATEGORY_CHIP: Record<ManagerLeagueCategory, string> = {
   dynasty: "bg-brand-purple/15 text-brand-purple",
   redraft: "bg-brand-cyan/15 text-brand-cyan",
+  chopped: "bg-signal-warning/15 text-signal-warning",
   "best-ball-dynasty": "bg-brand-purple/10 text-brand-purple/90",
   "best-ball-redraft": "bg-brand-cyan/10 text-brand-cyan/90",
 };

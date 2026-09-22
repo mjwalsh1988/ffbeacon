@@ -28,10 +28,13 @@ describe("categoryForLeagueMetadata", () => {
     expect(categoryForLeagueMetadata({ settings: { type: 2 } })).toBe("dynasty");
   });
 
-  it("files keeper and guillotine leagues as redraft, which is how they price", () => {
+  it("files keeper leagues as redraft, which is how they price", () => {
     expect(categoryForLeagueMetadata({ settings: { type: 1 } })).toBe("redraft");
-    expect(categoryForLeagueMetadata({ settings: { type: 3 } })).toBe("redraft");
     expect(categoryForLeagueMetadata({ settings: { type: 0 } })).toBe("redraft");
+  });
+
+  it("routes a guillotine league to its own room rather than the redraft one", () => {
+    expect(categoryForLeagueMetadata({ settings: { type: 3 } })).toBe("chopped");
   });
 
   it("splits best ball by whether it carries rosters forward", () => {
@@ -118,7 +121,7 @@ describe("unroutedCategories", () => {
       unroutedCategories(
         settings({ webhook_id: null, routes: { ...DEFAULT_ROUTES, dynasty: DYNASTY } }),
       ),
-    ).toEqual(["redraft", "best-ball-dynasty", "best-ball-redraft"]);
+    ).toEqual(["redraft", "chopped", "best-ball-dynasty", "best-ball-redraft"]);
   });
 });
 
@@ -143,7 +146,7 @@ describe("describeRouting", () => {
         settings({ webhook_id: null, routes: { ...DEFAULT_ROUTES, dynasty: DYNASTY } }),
       ),
     ).toBe(
-      "Every scheduled time posts one trade, to whichever channel matches that trade's league type. Redraft, Best Ball Dynasty and Best Ball Redraft have no webhook, so those trades are not picked at all.",
+      "Every scheduled time posts one trade, to whichever channel matches that trade's league type. Redraft, Chopped, Best Ball Dynasty and Best Ball Redraft have no webhook, so those trades are not picked at all.",
     );
   });
 

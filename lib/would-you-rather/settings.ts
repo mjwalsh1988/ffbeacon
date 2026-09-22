@@ -101,6 +101,7 @@ export const wouldYouRatherSettingsSchema = z.object({
         .object({
           dynasty: webhookId.default(d.discord.routes.dynasty),
           redraft: webhookId.default(d.discord.routes.redraft),
+          chopped: webhookId.default(d.discord.routes.chopped),
           "best-ball-dynasty": webhookId.default(d.discord.routes["best-ball-dynasty"]),
           "best-ball-redraft": webhookId.default(d.discord.routes["best-ball-redraft"]),
         })

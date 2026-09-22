@@ -137,6 +137,7 @@ export const DEFAULT_WOULD_YOU_RATHER_SETTINGS: WouldYouRatherSettings = {
     routes: {
       dynasty: null,
       redraft: null,
+      chopped: null,
       "best-ball-dynasty": null,
       "best-ball-redraft": null,
     },

@@ -954,10 +954,13 @@ Discord poll:
   `GET /webhooks/{id}/{token}/messages/{id}` returns that poll's results
   authenticated by the token already in the URL. No bot permission, channel id
   or gateway connection is involved.
-- ONE CHANNEL PER LEAGUE TYPE. `settings.discord.routes` maps each of the four
-  `lib/league-category.ts` buckets (dynasty, redraft, best-ball-dynasty,
-  best-ball-redraft) to a webhook, with `settings.discord.webhook_id` as the
-  fallback for any bucket left unset.
+- ONE CHANNEL PER LEAGUE TYPE. `settings.discord.routes` maps each of the five
+  `lib/league-category.ts` buckets (dynasty, redraft, chopped,
+  best-ball-dynasty, best-ball-redraft) to a webhook, with
+  `settings.discord.webhook_id` as the fallback for any bucket left unset.
+  Chopped became its own bucket on 2026-09-22; a room that has never set a
+  chopped webhook behaves exactly as before, falling back or being excluded
+  from the pick like any other unrouted bucket.
 - ABSOLUTE RULE: THE TRADE IS PICKED FIRST AND THE CHANNEL FOLLOWS FROM IT. A
   scheduled hour posts exactly ONE trade, chosen on its own merits, and the
   channel is then read off the league that trade came out of. The channels are

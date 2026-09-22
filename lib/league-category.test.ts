@@ -37,9 +37,18 @@ describe("categorizeLeague", () => {
     ).toBe("redraft");
   });
 
-  it("groups keeper (type 1) and chopped (type 3) leagues into redraft", () => {
+  it("groups keeper (type 1) into redraft, because it prices and plays the same", () => {
     expect(categorizeLeague(league({ settings: { type: 1 } }))).toBe("redraft");
-    expect(categorizeLeague(league({ settings: { type: 3 } }))).toBe("redraft");
+  });
+
+  it("gives chopped (type 3) its own bucket", () => {
+    expect(categorizeLeague(league({ settings: { type: 3 } }))).toBe("chopped");
+  });
+
+  it("files a best-ball chopped league as chopped, because elimination is the bigger fact", () => {
+    expect(
+      categorizeLeague(league({ settings: { type: 3, best_ball: 1 } })),
+    ).toBe("chopped");
   });
 
   it("classifies best ball dynasty (best_ball=1 + dynasty)", () => {

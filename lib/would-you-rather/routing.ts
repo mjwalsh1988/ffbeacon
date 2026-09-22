@@ -15,12 +15,14 @@
  * honest reflection of what the pool held.
  *
  * THE CATEGORIES ARE THE SITE'S CATEGORIES. `lib/league-category.ts` already
- * classifies a Sleeper league into dynasty, redraft, best ball dynasty and best
- * ball redraft, and the league-pulse results list groups by exactly those four.
+ * classifies a Sleeper league into dynasty, redraft, chopped, best ball dynasty
+ * and best ball redraft, and every league list groups by exactly those.
  * This reuses that function rather than inventing a second rule, so a league
  * filed under Best Ball Dynasty on the entry list posts to the best ball
- * dynasty channel. Keeper and chopped leagues fall into redraft, which is how
- * they play and how they price.
+ * dynasty channel. Keeper leagues fall into redraft, which is how they play
+ * and how they price. Chopped has its own bucket as of 2026-09-22, because a
+ * redraft room reading an elimination-league trade is in the same position a
+ * redraft manager was in reading a dynasty one.
  *
  * A CATEGORY WITH NO WEBHOOK ANYWHERE IS NOT POSTED. Not to a default channel,
  * not to whichever one happens to be first. Such a trade is left out of the
@@ -34,10 +36,19 @@ import type { WouldYouRatherSettings } from "./default-settings";
 
 export type { LeagueCategoryKey };
 
-/** The four buckets, in the order the admin form and the run log list them. */
+/**
+ * Every bucket, in the order the admin form and the run log list them.
+ *
+ * Chopped joined on 2026-09-22 when it became its own category (see
+ * `lib/league-category.ts`). A room that has never configured a chopped
+ * webhook is unchanged in behaviour: the bucket simply has no channel, so it
+ * falls to the fallback webhook if one is set and is excluded from the pick
+ * if not, which is the same rule every other bucket has always followed.
+ */
 export const WYR_ROUTE_CATEGORIES: readonly LeagueCategoryKey[] = [
   "dynasty",
   "redraft",
+  "chopped",
   "best-ball-dynasty",
   "best-ball-redraft",
 ] as const;
@@ -46,6 +57,7 @@ export const WYR_ROUTE_CATEGORIES: readonly LeagueCategoryKey[] = [
 export const WYR_CATEGORY_LABEL: Record<LeagueCategoryKey, string> = {
   dynasty: "Dynasty",
   redraft: "Redraft",
+  chopped: "Chopped",
   "best-ball-dynasty": "Best Ball Dynasty",
   "best-ball-redraft": "Best Ball Redraft",
 };
@@ -53,8 +65,9 @@ export const WYR_CATEGORY_LABEL: Record<LeagueCategoryKey, string> = {
 /** What each admin choice actually covers, said out loud on the form. */
 export const WYR_CATEGORY_HINT: Record<LeagueCategoryKey, string> = {
   dynasty: "Sleeper dynasty leagues, the ones that carry rosters forward.",
-  redraft:
-    "One-year leagues, plus keeper and guillotine leagues, which price the same way.",
+  redraft: "One-year leagues, plus keeper leagues, which price the same way.",
+  chopped:
+    "Chopped, guillotine, death and knockout leagues, where the lowest score each week is eliminated.",
   "best-ball-dynasty": "Best ball rooms that carry rosters forward.",
   "best-ball-redraft": "One-year best ball rooms.",
 };
