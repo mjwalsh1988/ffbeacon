@@ -34,6 +34,25 @@ import { SITE } from "@/lib/site";
  * /my-beacon to that one crawler. If a crawler ever needs different treatment, give
  * it a group that repeats the full disallow list.
  *
+ * THE ONE EXCEPTION IS AMAZONBOT, blocked from the whole site since 2026-09-22.
+ * On that day it made 11.8k of the site's 45k requests in 24 hours, much of it
+ * walking the /leagues/ pages one every four seconds, and each of those pages
+ * refreshes a league and makes about 50 database reads. It sent no readers in
+ * return: the 30-day referrer list had Google, Bing, DuckDuckGo, Yahoo and
+ * ChatGPT on it and nothing from Amazon. Amazon says the crawl feeds its own
+ * products and "may be used to train Amazon AI models", so the answer-engine
+ * reasoning above does not reach it. The owner chose to block it outright.
+ * Amazon documents that Amazonbot honors robots.txt
+ * (developer.amazon.com/amazonbot) but not crawl-delay, so slowing it down was
+ * not an option. If Amazon ever starts sending readers, delete the group.
+ *
+ * Its group is `Disallow: /`, so it does not need the repeated disallow list the
+ * paragraph above warns about: there is nothing left for it to drift from. Every
+ * other crawler, Googlebot, Bingbot, GPTBot, OAI-SearchBot, ClaudeBot,
+ * PerplexityBot and Applebot included, still reads only the wildcard group. A
+ * crawler obeys the group that names it and ignores the rest, and none of the
+ * others match the token "Amazonbot".
+ *
  * Vercel's Firewall and Bot Protection settings can block AI crawlers regardless of
  * this file. Those live in the Vercel dashboard, not the repo.
  */
@@ -59,6 +78,11 @@ export default function robots(): MetadataRoute.Robots {
           "/my-beacon",
           "/login",
         ],
+      },
+      {
+        // Blocked from everything. See the header for why and when.
+        userAgent: "Amazonbot",
+        disallow: "/",
       },
     ],
     sitemap: `${SITE.url}/sitemap.xml`,

@@ -15722,3 +15722,9 @@ LS-T05 | completed | A finished league's trade values stop moving
        and confirmed generated_at did not move (2026-09-18 05:34, unchanged),
        while Power Pulse and Positional WAR skipped as designed and the Manager
        Ledger recomputed. 5 unit tests on the gate itself.
+
+T729 | completed | Amazonbot blocked site-wide in robots.txt, Singapore traffic challenged at the Vercel Firewall
+     | files: app/robots.ts, lib/llms/crawlability.test.ts
+     | depends on: none
+     | notes: 2026-09-22. Amazonbot made 11.8k of 45k requests in 24 hours, much of it walking /leagues/ pages one every 4 seconds, and sent no readers. robots.ts gained a named `Amazonbot` group with `Disallow: /`; every other crawler still reads only the wildcard group. The owner's 2026-09-11 decision to allow AI crawlers stands for everyone else, and the robots.ts header records the exception and why. Separately, a Vercel Firewall custom rule "Challenge Singapore traffic" (Country equals Singapore, then Challenge) was published from the dashboard. It lives in Vercel, not the repo. Custom rules have no verified-bot exemption, so a genuine crawler request from a Singapore IP would also be challenged. Bot Protection stays off and the AI Bots managed rule stays at Allow. Not committed; the robots.txt change reaches Amazonbot only after the next deploy.
+     | verified: yes. robots.txt rendered through Next.js's own resolveRobots shows the wildcard group unchanged plus "User-Agent: Amazonbot / Disallow: /". lib/llms/crawlability.test.ts 20 of 20 pass, including one asserting Googlebot, Bingbot, GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot, Applebot and Mediapartners-Google have no group of their own. Firewall rules page shows the rule published with action Challenge.

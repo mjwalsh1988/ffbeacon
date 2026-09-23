@@ -13,10 +13,15 @@ import { RESERVED_ROUTE_SEGMENTS } from "@/lib/signal/reserved-routes";
  * the segment out from under the route. Each is checked here.
  *
  * There are deliberately no per-crawler Allow rules to test. robots.ts publishes
- * exactly one `User-agent: *` group, so Googlebot, Bingbot, GPTBot,
- * OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot, Applebot
- * and everything else fall through to it. Naming them individually would only
- * create a second group that could drift from the first.
+ * one `User-agent: *` group, so Googlebot, Bingbot, GPTBot, OAI-SearchBot,
+ * ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot, Applebot and everything
+ * else fall through to it. Naming them individually would only create a second
+ * group that could drift from the first.
+ *
+ * The one named group is Amazonbot's, and it is `Disallow: /` (see the header
+ * of app/robots.ts for why). The tests below pin it to exactly that, so the
+ * exception cannot quietly grow into a second rule set, or a block, for any
+ * crawler the site wants.
  */
 
 const MACHINE_READABLE = ["/llms.txt", "/llms-full.txt"] as const;
@@ -36,11 +41,41 @@ function asArray(value: string | string[] | undefined): string[] {
 }
 
 describe("robots.txt", () => {
-  it("publishes one group, so every crawler reads the same rules", () => {
+  it("publishes the wildcard group plus Amazonbot's, and nothing else", () => {
     const rules = robots().rules;
     const list = Array.isArray(rules) ? rules : [rules];
-    expect(list).toHaveLength(1);
-    expect(list[0].userAgent).toBe("*");
+    expect(list.map((r) => r.userAgent)).toEqual(["*", "Amazonbot"]);
+  });
+
+  it("blocks Amazonbot from the whole site and allows it nothing", () => {
+    const rules = robots().rules;
+    const list = Array.isArray(rules) ? rules : [rules];
+    const amazon = list.find((r) => r.userAgent === "Amazonbot");
+    expect(asArray(amazon?.disallow)).toEqual(["/"]);
+    expect(asArray(amazon?.allow)).toEqual([]);
+  });
+
+  it.each([
+    "Googlebot",
+    "Bingbot",
+    "GPTBot",
+    "OAI-SearchBot",
+    "ChatGPT-User",
+    "ClaudeBot",
+    "Claude-User",
+    "PerplexityBot",
+    "Applebot",
+    "Mediapartners-Google",
+  ])("gives %s no group of its own, so it reads the wildcard rules", (agent) => {
+    const rules = robots().rules;
+    const list = Array.isArray(rules) ? rules : [rules];
+    for (const rule of list) {
+      for (const named of asArray(rule.userAgent)) {
+        if (named === "*") continue;
+        // Robots matching is a case-insensitive token match on the product name.
+        expect(agent.toLowerCase().includes(named.toLowerCase())).toBe(false);
+      }
+    }
   });
 
   it.each(MACHINE_READABLE)("does not disallow %s", (path) => {
