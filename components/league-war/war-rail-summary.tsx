@@ -26,6 +26,7 @@
  * of the same curve issues one query rather than two.
  */
 
+import { positionNoun } from "@/lib/site";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -67,14 +68,10 @@ const RAIL_BOX = {
   padding: { t: 8, r: 6, b: 8, l: 6 },
 };
 
-const POSITION_NAME: Record<string, string> = {
-  QB: "Quarterback",
-  RB: "Running back",
-  WR: "Wide receiver",
-  TE: "Tight end",
-  K: "Kicker",
-  DEF: "Team defense",
-};
+function positionName(position: string): string {
+  const noun = positionNoun(position);
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
 
 /**
  * The rows, ordered by what the best player at each position is worth.
@@ -165,8 +162,8 @@ export async function WarRailSummary({
   }
 
   const headline = deepest
-    ? `${POSITION_NAME[scarcest.position]} is hardest to replace here, ${POSITION_NAME[deepest.position].toLowerCase()} easiest.`
-    : `${POSITION_NAME[scarcest.position]} is hardest to replace here.`;
+    ? `${positionName(scarcest.position)} is hardest to replace here, ${positionName(deepest.position).toLowerCase()} easiest.`
+    : `${positionName(scarcest.position)} is hardest to replace here.`;
 
   return (
     // The heading names the CARD, not the metric, so a reader scanning the

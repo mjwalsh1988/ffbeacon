@@ -68,6 +68,9 @@
  * Derived from internal data, so no metadata column. Run after the stats sync.
  */
 
+import { isDefender } from "./site";
+import { IDP_PRESETS } from "./idp/scoring-presets";
+import { scoreIdpLine } from "./idp/stat-line";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import {
@@ -86,11 +89,16 @@ type ServiceClient = SupabaseClient<Database>;
 
 const PAGE = 1000;
 
-/** The scoring bases we publish splits for. */
-const SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std"] as const;
+/**
+ * The scoring bases we publish splits for. idp123 (Sleeper's default IDP
+ * scoring) is the defenders' base and ONLY theirs: a defender has no PPR
+ * figure worth reading and an offensive player has no idp123 one, so each
+ * cross case scores null and never enters a bucket (plan IDP-118).
+ */
+const SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std", "idp123"] as const;
 type ScoringBase = (typeof SCORING_BASES)[number];
 
-const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
+const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"] as const;
 type Position = (typeof POSITIONS)[number];
 
 /**
@@ -104,6 +112,11 @@ const STARTABLE_PER_TEAM: Record<Position, number> = {
   TE: 2,
   K: 1,
   DEF: 1,
+  // Defenders: a defensive front and secondary field more players than an IDP
+  // lineup starts, so the cap is the starters an offense typically faces.
+  DL: 4,
+  LB: 3,
+  DB: 4,
 };
 
 /** Multiplier bounds. A defense cannot swing a projection more than this. */
@@ -136,6 +149,8 @@ type StatRow = {
   pts_ppr: number | null;
   pts_half_ppr: number | null;
   pts_std: number | null;
+  /** idp123 points from the typed IDP columns. Null for anyone without them. */
+  idp123: number | null;
   position: string | null;
 };
 
@@ -144,6 +159,21 @@ export type DefenseSplitsResult = {
   rowsWritten: number;
   durationMs: number;
 };
+
+/** idp123 from a row's typed IDP columns, or null when it carries none. */
+export function idp123FromColumns(row: Record<string, unknown>): number | null {
+  const line: Record<string, number> = {};
+  let any = false;
+  for (const key of Object.keys(IDP_PRESETS.idp123)) {
+    const value = row[key];
+    const n = typeof value === "number" ? value : value === null || value === undefined ? NaN : Number(value);
+    if (Number.isFinite(n)) {
+      line[key] = n;
+      any = true;
+    }
+  }
+  return any ? scoreIdpLine(line, IDP_PRESETS.idp123) : null;
+}
 
 export async function runCalculateDefenseSplits(
   supabase: ServiceClient,
@@ -211,7 +241,9 @@ async function recentSeasons(supabase: ServiceClient): Promise<number[]> {
 
 async function loadSeasonStats(supabase: ServiceClient, season: number): Promise<StatRow[]> {
   const out: StatRow[] = [];
-  for (let from = 0; ; from += PAGE) {
+  // Keyset paging (id > last), not offset: the typed IDP columns make every page
+  // wider, and a deep offset over a 50,000-row season is what times out.
+  for (let lastId = ""; ; ) {
     // `offense_team:metadata->>team` pulls one key out of the preserved Sleeper
     // payload rather than the whole object. Selecting `metadata` outright would
     // drag roughly a kilobyte of stat lines per row across 40,000 rows a season
@@ -219,14 +251,16 @@ async function loadSeasonStats(supabase: ServiceClient, season: number): Promise
     const { data, error } = await supabase
       .from("player_stats")
       .select(
-        "player_id, season, week, opponent, offense_team:metadata->>team, gp, pts_ppr, pts_half_ppr, pts_std, players(position)",
+        "id, player_id, season, week, opponent, offense_team:metadata->>team, gp, pts_ppr, pts_half_ppr, pts_std, idp_tkl_solo, idp_tkl_ast, idp_tkl_loss, idp_sack, idp_qb_hit, idp_pass_def, idp_ff, idp_fum_rec, idp_safe, idp_blk_kick, idp_int, idp_def_td, players(position)",
       )
       .eq("season", season)
       .eq("season_type", "regular")
+      .gt("id", lastId || "00000000-0000-0000-0000-000000000000")
       .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
+      .limit(PAGE);
     if (error) throw new Error(`defense splits stat load failed: ${error.message}`);
     if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
     for (const row of data) {
       const joined = (row as unknown as { players?: { position?: string } | null }).players;
       const offense = (row as unknown as { offense_team?: string | null }).offense_team;
@@ -240,6 +274,7 @@ async function loadSeasonStats(supabase: ServiceClient, season: number): Promise
         pts_ppr: row.pts_ppr === null ? null : Number(row.pts_ppr),
         pts_half_ppr: row.pts_half_ppr === null ? null : Number(row.pts_half_ppr),
         pts_std: row.pts_std === null ? null : Number(row.pts_std),
+        idp123: idp123FromColumns(row as unknown as Record<string, unknown>),
         position: joined?.position ?? null,
       });
     }
@@ -248,26 +283,37 @@ async function loadSeasonStats(supabase: ServiceClient, season: number): Promise
   return out;
 }
 
-function pointsFor(row: StatRow, scoring: ScoringBase): number | null {
+/**
+ * One performance's points under one base. A defender is scored on idp123 and
+ * nothing else; an offensive player on the three PPR bases and never idp123.
+ * For a defender row, `opponent` is the OFFENSE he faced, so the bucket this
+ * lands in reads "what this offense gives up to linebackers", which is exactly
+ * the key lib/power-pulse/project.ts looks up for him.
+ */
+export function pointsFor(
+  row: Pick<StatRow, "position" | "pts_ppr" | "pts_half_ppr" | "pts_std" | "idp123">,
+  scoring: ScoringBase,
+): number | null {
+  const defender = isDefender(row.position);
+  if (scoring === "idp123") {
+    if (!defender) return null;
+    return row.idp123 === null || !Number.isFinite(row.idp123) ? null : row.idp123;
+  }
+  if (defender) return null;
   const value =
     scoring === "pts_half_ppr" ? row.pts_half_ppr : scoring === "pts_std" ? row.pts_std : row.pts_ppr;
   return value === null || !Number.isFinite(value) ? null : value;
 }
 
-async function buildSeasonScoring(
-  supabase: ServiceClient,
-  season: number,
-  scoring: ScoringBase,
+/**
+ * Group performances by (opposing team, week, position), the key every split is
+ * built from. Pure, exported for the tests.
+ */
+export function groupPerformances(
   rows: StatRow[],
-  settings: PowerPulseSettings,
-): Promise<number> {
-  // Group performances by (defense, week, position) so we can keep only the
-  // startable ones per game. The offense is carried alongside, because every
-  // row in one bucket comes from the single team that played that defense in
-  // that week, so the first non-null value describes the whole bucket.
-  type Bucket = { points: number[]; offense: string | null };
-  const byGame = new Map<string, Bucket>();
-
+  scoring: ScoringBase,
+): Map<string, { points: number[]; offense: string | null }> {
+  const byGame = new Map<string, { points: number[]; offense: string | null }>();
   for (const row of rows) {
     if (!row.opponent || !row.position) continue;
     const position = row.position.toUpperCase() as Position;
@@ -282,6 +328,21 @@ async function buildSeasonScoring(
     if (bucket.offense === null && row.offense_team) bucket.offense = row.offense_team;
     byGame.set(key, bucket);
   }
+  return byGame;
+}
+
+async function buildSeasonScoring(
+  supabase: ServiceClient,
+  season: number,
+  scoring: ScoringBase,
+  rows: StatRow[],
+  settings: PowerPulseSettings,
+): Promise<number> {
+  // Group performances by (defense, week, position) so we can keep only the
+  // startable ones per game. The offense is carried alongside, because every
+  // row in one bucket comes from the single team that played that defense in
+  // that week, so the first non-null value describes the whole bucket.
+  const byGame = groupPerformances(rows, scoring);
 
   // Sum the startable performances each defense allowed per game, and keep the
   // per-game record rather than only the running total. The opponent adjustment

@@ -295,3 +295,33 @@ describe("an empty starting slot, which is not worth zero", () => {
     expect(short.startersFilled).toBeCloseTo(4, 2);
   });
 });
+
+describe("unprojected picks split by why (IDP-131)", () => {
+  it("counts a drafted defender apart from an unprojected rookie, and the two sum", () => {
+    const qb = player("qb", "QB", 20, ALL);
+    const result = computeDraftPulse({
+      teams: [{ rosterId: 1, playerIds: ["qb", "lb-1", "rookie-1"] }],
+      rosterPositions: SLOTS,
+      fallbackSlots: [],
+      board: board([qb], ALL),
+      display: DISPLAY,
+      idpPlayerIds: new Set(["lb-1"]),
+    });
+    const team = result.teams[0];
+    expect(team.unprojectedCount).toBe(2);
+    expect(team.unprojectedIdpCount).toBe(1);
+    expect(team.unprojectedOtherCount).toBe(1);
+  });
+
+  it("counts everything as other when the caller names no defenders", () => {
+    const result = computeDraftPulse({
+      teams: [{ rosterId: 1, playerIds: ["qb", "lb-1"] }],
+      rosterPositions: SLOTS,
+      fallbackSlots: [],
+      board: board([player("qb", "QB", 20, ALL)], ALL),
+      display: DISPLAY,
+    });
+    expect(result.teams[0].unprojectedIdpCount).toBe(0);
+    expect(result.teams[0].unprojectedOtherCount).toBe(1);
+  });
+});

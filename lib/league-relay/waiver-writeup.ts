@@ -28,6 +28,7 @@
  * Pure: takes plain data, returns a Writeup.
  */
 
+import { isDefender } from "@/lib/site";
 import type { RelayLeague, RelayTeam, Writeup, WriteupField } from "./types";
 import {
   Voice,
@@ -202,8 +203,15 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
     } ${Math.abs(p.change30dPct).toFixed(0)}% over thirty days`;
   })();
 
+  // A missing projection is never a judgement (plan IDP-129). For a defender it
+  // is the product's gap, not the player's: no value source prices defenders and
+  // League Pulse does not project them yet. For anyone else it is a plain fact
+  // about this week, not a verdict on the claim.
   if (p.projectedPoints === null) {
-    const base = `Nobody publishes a weekly projection for ${p.name}, which is itself a review`;
+    if (isDefender(p.position)) {
+      return `${p.name} plays a position no value source prices, so there is no number to hold this claim against.`;
+    }
+    const base = `${p.name} has no projection this week`;
     return market ? `${base}, though ${market}.` : `${base}.`;
   }
 

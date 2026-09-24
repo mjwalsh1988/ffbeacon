@@ -223,6 +223,34 @@ describe("computeBeaconProjections", () => {
     expect(result.mirrored.notProjectable).toBe(1);
   });
 
+  it("mirrors a defender's row with his stat line intact and no points (IDP-116, decision D-3)", () => {
+    const subjects: EngineSubject[] = [
+      { playerId: "DL1", sleeperPlayerId: "sdl", position: "DL", team: "CLE" },
+    ];
+    const line = { idp_tkl: 4.1, idp_tkl_solo: 2.6, idp_tkl_ast: 1.5, idp_sack: 0.6, idp_qb_hit: 1.2 };
+    const sleeper = new Map<string, SleeperProjectionRow>([
+      [
+        "DL1|1",
+        sleeperRow({
+          playerId: "DL1",
+          week: 1,
+          statLine: line,
+          points: { ppr: null, halfPpr: null, std: null },
+        }),
+      ],
+    ]);
+    const result = computeBeaconProjections(baseInput({ subjects, sleeper }));
+
+    expect(result.projections).toHaveLength(1);
+    const row = result.projections[0];
+    expect(row.statLine).toEqual(line);
+    expect(row.pointsPpr).toBeNull();
+    expect(row.pointsHalfPpr).toBeNull();
+    expect(row.pointsStd).toBeNull();
+    expect(row.blendWeight).toBe(0);
+    expect(result.mirrored.notProjectable).toBe(1);
+  });
+
   it("carries a modelled player's published points through at blend weight zero", () => {
     // No current-season games means blendWeight 0, so our line contributes
     // nothing and the row must be byte-identical to Sleeper's in every base.

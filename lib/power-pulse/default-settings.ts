@@ -9,6 +9,7 @@
  * cached rows are identifiable.
  */
 
+import type { IdpPosition } from "@/lib/site";
 import type { PulsePosition } from "./types";
 import {
   DEFAULT_WAR_SETTINGS,
@@ -130,7 +131,7 @@ export type PowerPulseSettings = {
      * here: opponentMultiplier in ./project.ts reads the already-shrunk value
      * off the row and does not repeat the shrink.
      */
-    positionReliability: Record<PulsePosition, number>;
+    positionReliability: Record<PulsePosition | IdpPosition, number>;
   };
 
   /**
@@ -138,7 +139,7 @@ export type PowerPulseSettings = {
    * over mean). Used when a player has no measured ratio spread of their own.
    */
   variance: {
-    defaultCv: Record<PulsePosition, number>;
+    defaultCv: Record<PulsePosition | IdpPosition, number>;
     /** Graded games needed before a player's own measured spread is trusted. */
     minGamesForMeasured: number;
     /** Floor and ceiling on any single player's coefficient of variation. */
@@ -469,6 +470,12 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
       K: 0.09,
       QB: 0.0,
       WR: 0.0,
+      // Defenders start at 0: no matchup adjustment until a calibrated
+      // measurement earns one (plan R-7, IDP-403). Their splits exist under
+      // idp123 already; this number decides how much of them survives.
+      DL: 0.0,
+      LB: 0.0,
+      DB: 0.0,
     },
   },
 
@@ -497,6 +504,12 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
       TE: 0.573,
       K: 0.507,
       DEF: 0.718,
+      // Defenders, measured the same way on idp123 points (2023 to 2025, 10+
+      // games), over the startable range: top 48 defensive linemen and
+      // defensive backs, top 36 linebackers. See lib/power-pulse/variance-curve.ts.
+      DL: 0.659,
+      LB: 0.414,
+      DB: 0.494,
     },
     minGamesForMeasured: 8,
     minCv: 0.15,

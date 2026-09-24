@@ -36,6 +36,7 @@
  * rather than served from the old engine.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -54,7 +55,7 @@ import {
   projectPlayerWeek,
   reliabilityMultiplier,
 } from "@/lib/power-pulse/project";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
@@ -199,7 +200,8 @@ async function loadPlayerFacts(
     string,
     { position: PulsePosition; injuryStatus: string | null }
   >();
-  const valid = new Set<string>(PULSE_POSITIONS);
+  // Draft tools stay offense-only (plan R-11).
+  const valid = new Set<string>(OFFENSE_POSITIONS);
   const CHUNK = 300;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);

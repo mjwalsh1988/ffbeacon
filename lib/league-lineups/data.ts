@@ -6,6 +6,8 @@ import {
   loadDefenseSplits,
   loadLeague,
   loadPlayers,
+  NAMING_POSITIONS,
+  projectablePlayerIds,
   loadProjections,
   loadRosters,
   type ProjectionRow,
@@ -123,7 +125,14 @@ export type LineupViewParams = {
 };
 
 export type LineupViewResult =
-  | { ok: true; view: LineupView; dropNote: string | null; teams: LineupTeamOption[] }
+  | {
+      ok: true;
+      view: LineupView;
+      dropNote: string | null;
+      /** Who the cut list left off without judging, and why (IDP-123). */
+      dropUnjudged: string | null;
+      teams: LineupTeamOption[];
+    }
   | { ok: false; reason: "no-league" | "no-roster"; teams: LineupTeamOption[] };
 
 function finiteOrNull(value: unknown): number | null {
@@ -300,7 +309,8 @@ export async function loadLineupView(
   // opponent's own Power Pulse row is read, and running it afterwards spent a
   // whole round trip on four small columns.
   const [players, weekMatchupsRes] = await Promise.all([
-    loadPlayers(admin, sleeperIds),
+    // Named, not projected (plan IDP-122): see projectablePlayerIds below.
+    loadPlayers(admin, sleeperIds, { positions: NAMING_POSITIONS }),
     matchupRow?.matchup_id === null || matchupRow?.matchup_id === undefined
       ? Promise.resolve({ data: null })
       : supabase
@@ -311,7 +321,7 @@ export async function loadLineupView(
           .eq("week", week)
           .eq("matchup_id", matchupRow.matchup_id),
   ]);
-  const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
+  const playerIds = projectablePlayerIds(players);
 
   const opponentRow = (
     (weekMatchupsRes.data ?? []) as Array<{
@@ -626,7 +636,7 @@ export async function loadLineupView(
       : null,
   };
 
-  return { ok: true, view, dropNote: drops.note, teams };
+  return { ok: true, view, dropNote: drops.note, dropUnjudged: drops.unjudged, teams };
 }
 
 /**

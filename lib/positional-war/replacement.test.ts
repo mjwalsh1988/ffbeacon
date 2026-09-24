@@ -6,7 +6,7 @@ import {
   structuralCandidates,
   type MergedFill,
 } from "./replacement";
-import { PULSE_SLOT_ELIGIBILITY, type PulsePosition } from "@/lib/power-pulse/types";
+import { PULSE_SLOT_ELIGIBILITY, slotEligibility, type PulsePosition } from "@/lib/power-pulse/types";
 import type { LineupCandidate } from "@/lib/power-pulse/lineup";
 import type { WarPlayerInput } from "./types";
 
@@ -640,5 +640,18 @@ describe("startablePositions", () => {
       "TE",
       "DEF",
     ]);
+  });
+});
+
+describe("startablePositions with the IDP map (IDP-120)", () => {
+  const IDP_SLOTS = ["QB", "RB", "WR", "DL", "LB", "DB", "IDP_FLEX"];
+
+  it("ignores IDP tokens under the OFF map, as every league reads it today", () => {
+    expect(startablePositions(IDP_SLOTS)).toEqual(["QB", "RB", "WR"]);
+    expect(startablePositions(IDP_SLOTS, slotEligibility(false))).toEqual(["QB", "RB", "WR"]);
+  });
+
+  it("adds DL, LB and DB under the ON map, in position order", () => {
+    expect(startablePositions(IDP_SLOTS, slotEligibility(true))).toEqual(["QB", "RB", "WR", "DL", "LB", "DB"]);
   });
 });

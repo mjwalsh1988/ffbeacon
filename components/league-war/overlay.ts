@@ -14,9 +14,9 @@
  * testable without rendering anything.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import type { PlottableCurve, WarCurvePoint } from "@/lib/positional-war/types";
 import type { PulsePosition } from "@/lib/power-pulse/types";
-import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import type { UnmatchedOwnerInfo } from "@/lib/league-positional-war-data";
 
 export type OwnershipMatch = {
@@ -91,7 +91,8 @@ export function splitUnmatchedOwners(
 ): UnmatchedSplit {
   const pastDepth: Array<{ sleeperId: string; name: string; position: PulsePosition }> = [];
   let noProjectionCount = 0;
-  const plottable = new Set<string>(PULSE_POSITIONS);
+  // The offense chart; the defense chart arrives in phase 3 (plan R-10, IDP-309).
+  const plottable = new Set<string>(OFFENSE_POSITIONS);
 
   for (const id of unmatchedOwnedIds) {
     const entry = info.get(id);

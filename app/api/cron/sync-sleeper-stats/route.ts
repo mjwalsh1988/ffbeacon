@@ -6,6 +6,7 @@ import { runSleeperStatsSync } from "@/lib/sync-sleeper-stats";
 import { runCalculatePositionalFinishes } from "@/lib/calculate-positional-finishes";
 import { runCalculateDefenseSplits } from "@/lib/calculate-defense-splits";
 import { runCalculateProjectionAccuracy } from "@/lib/calculate-projection-accuracy";
+import { runCalculateIdpSeasons } from "@/lib/calculate-idp-seasons";
 import { recordCronRun } from "@/lib/cron-runs";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
@@ -76,6 +77,9 @@ export async function GET(req: Request) {
             ["finishes", () => runCalculatePositionalFinishes(supabase)],
             ["defenseSplits", () => runCalculateDefenseSplits(supabase)],
             ["projectionAccuracy", () => runCalculateProjectionAccuracy(supabase)],
+            // The current season's defender totals (plan IDP-117). Reads only
+            // the typed player_stats columns this sync just wrote.
+            ["idpSeasons", () => runCalculateIdpSeasons(supabase)],
           ] as const
         ).map(async ([name, run]) => {
           try {

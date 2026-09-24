@@ -55,6 +55,24 @@ const NULLABLE_NUMERIC_COLUMNS = ["rec_air_yd", "target_share", "off_snp", "tm_o
 // Nullable integer columns: absent key -> NULL (never 0).
 const NULLABLE_INT_COLUMNS = ["rec_tgt", "pts_allow", "yds_allow"] as const;
 
+/**
+ * Individual defensive player columns (migration 0296). Nullable, absent key ->
+ * NULL, never 0: the same rule as the snap columns above. An offensive player
+ * leaves every one null, and a defender who did not record a stat leaves that
+ * one null, so a null always means "Sleeper emitted nothing" rather than a
+ * zero somebody could sum. Kept as the raw numbers Sleeper sends (a half sack
+ * is 0.5), not truncated.
+ */
+export const NULLABLE_IDP_COLUMNS = [
+  "def_snp", "tm_def_snp",
+  "idp_tkl", "idp_tkl_solo", "idp_tkl_ast", "idp_tkl_loss",
+  "idp_sack", "idp_sack_yd", "idp_qb_hit",
+  "idp_int", "idp_int_ret_yd", "idp_pass_def", "idp_pass_def_3p",
+  "idp_ff", "idp_fum_rec", "idp_fum_ret_yd",
+  "idp_def_td", "idp_safe", "idp_blk_kick",
+  "bonus_tkl_10p", "bonus_sack_2p",
+] as const;
+
 export type StatRow = Record<string, number | string | null>;
 
 function num(value: unknown): number | null {
@@ -91,12 +109,20 @@ export function mapStatPayloadToRow(payload: Record<string, unknown>): StatRow {
     const v = num(stats[col]);
     row[col] = v === null ? null : Math.trunc(v);
   }
+  for (const col of NULLABLE_IDP_COLUMNS) {
+    row[col] = num(stats[col]);
+  }
 
   // snap_pct: derived, NULL-safe. Missing snap data (common pre-2019) or a zero
   // team-snap denominator yields NULL, not 0, and never divides by zero.
   const offSnp = num(stats.off_snp);
   const tmOffSnp = num(stats.tm_off_snp);
   row.snap_pct = offSnp !== null && tmOffSnp !== null && tmOffSnp > 0 ? offSnp / tmOffSnp : null;
+
+  // def_snap_pct: the defensive twin, under exactly the same guard.
+  const defSnp = num(stats.def_snp);
+  const tmDefSnp = num(stats.tm_def_snp);
+  row.def_snap_pct = defSnp !== null && tmDefSnp !== null && tmDefSnp > 0 ? defSnp / tmDefSnp : null;
 
   // Denormalized fantasy points (migration 0141): copy the three scoring bases
   // out of the same stat map readPoints() uses, so the profile reads columns

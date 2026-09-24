@@ -34,6 +34,7 @@
  *   round pick's worth of player to stream a kicker.
  */
 
+import { isDefender } from "@/lib/site";
 import type { TeamStatus } from "@/lib/league-team-status";
 import type { DropOption, LineupPlayer, WaiverFit, WaiverSuggestion } from "./types";
 
@@ -83,7 +84,7 @@ function dropNote(
     return "On the taxi squad, so he is not taking a bench spot right now.";
   }
   if (restOfSeasonPerWeek === null) {
-    return "No projection left this season, so he adds nothing to a lineup as things stand.";
+    return "No projection for the rest of the season, so this list cannot weigh him.";
   }
   if (restOfSeasonPerWeek < 1) {
     return "Projected under a point a week for the rest of the season.";
@@ -114,7 +115,41 @@ export type DropResult = {
    * there are options. Never both.
    */
   note: string | null;
+  /**
+   * Who was left off the list without being judged, and why, in one sentence.
+   * Null when everybody was considered. Rendered whether or not there are
+   * options, because a list that silently skips players reads as complete.
+   */
+  unjudged: string | null;
 };
+
+/**
+ * The sentence for players the cut list would not judge (plan IDP-123).
+ *
+ * A player with no players row cannot be named, so he cannot be offered. A
+ * defender is named but not projected until the IDP switch is on, so this
+ * list has nothing to weigh him by; offering him first (as the emptiest seat)
+ * would tell an IDP manager to cut a starting linebacker.
+ */
+export function unjudgedSentence(unknown: number, defenders: number): string | null {
+  const parts: string[] = [];
+  if (defenders > 0) {
+    parts.push(
+      defenders === 1
+        ? "1 defensive player is not listed: League Pulse does not project defenders yet, so it cannot say whether your lineup would miss him"
+        : `${defenders} defensive players are not listed: League Pulse does not project defenders yet, so it cannot say which of them your lineup would miss`,
+    );
+  }
+  if (unknown > 0) {
+    parts.push(
+      unknown === 1
+        ? "1 player is not listed because we could not match him to a player record"
+        : `${unknown} players are not listed because we could not match them to a player record`,
+    );
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join(". ")}.`;
+}
 
 /**
  * The players this roster would miss least, cheapest first.
@@ -127,9 +162,21 @@ export type DropResult = {
 export function buildDropOptions(input: DropInput): DropResult {
   const kept: string[] = [];
   const scored: Array<{ option: DropOption; sort: number }> = [];
+  let unknown = 0;
+  let defenders = 0;
 
   for (const player of input.benchable) {
     if (input.seatedSleeperIds.has(player.sleeperId)) continue;
+    // Never offered: a player we cannot name, and a defender we cannot yet
+    // project. Both are counted and said out loud (see unjudgedSentence).
+    if (player.playerId === null) {
+      unknown += 1;
+      continue;
+    }
+    if (isDefender(player.position)) {
+      defenders += 1;
+      continue;
+    }
 
     const perWeek = input.restOfSeasonPerWeek.get(player.sleeperId) ?? null;
     const value = input.valueBySleeperId.get(player.sleeperId) ?? null;
@@ -149,10 +196,11 @@ export function buildDropOptions(input: DropInput): DropResult {
         value,
         note: dropNote(player, perWeek, input.isKeeperLeague),
       },
-      // A player with nothing projected sorts first, as -1: he is the emptiest
-      // seat on the roster. Never treated as a zero elsewhere; this is a sort
-      // key inside one function, not a number shown to anyone.
-      sort: perWeek ?? -1,
+      // A player with nothing projected sorts LAST (plan IDP-123). "No
+      // projection" is the absence of an opinion, not an opinion of zero, and
+      // ranking it as the emptiest seat is how an unprojectable player used to
+      // top this list. Never a number shown to anyone.
+      sort: perWeek ?? Number.POSITIVE_INFINITY,
     });
   }
 
@@ -163,10 +211,12 @@ export function buildDropOptions(input: DropInput): DropResult {
 
   const options = scored.slice(0, DROP_OPTION_LIMIT).map((s) => s.option);
 
-  if (options.length > 0) return { options, note: null };
+  const unjudged = unjudgedSentence(unknown, defenders);
+  if (options.length > 0) return { options, note: null, unjudged };
 
   if (kept.length > 0) {
     return {
+      unjudged,
       options: [],
       note:
         kept.length === 1
@@ -176,8 +226,12 @@ export function buildDropOptions(input: DropInput): DropResult {
   }
 
   return {
+    unjudged,
     options: [],
-    note: "Every player on this roster is either starting or projected to matter. Nothing to cut.",
+    note:
+      unjudged === null
+        ? "Every player on this roster is either starting or projected to matter. Nothing to cut."
+        : "Nobody else on this roster is a clear cut.",
   };
 }
 

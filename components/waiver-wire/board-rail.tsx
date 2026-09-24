@@ -20,6 +20,7 @@
  * Presentational server components.
  */
 
+import type { IdpPosition } from "@/lib/site";
 import Link from "next/link";
 import { CalendarDays, Info, ListFilter, Wallet } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
@@ -36,13 +37,16 @@ const POSITION_WORD: Record<BoardPosition, string> = {
   DEF: "defenses",
 };
 
-const POSITION_TEXT: Record<BoardPosition, string> = {
+const POSITION_TEXT: Record<BoardPosition | IdpPosition, string> = {
   QB: "text-position-qb",
   RB: "text-position-rb",
   WR: "text-position-wr",
   TE: "text-position-te",
   K: "text-position-k",
   DEF: "text-position-def",
+  DL: "text-position-dl",
+  LB: "text-position-lb",
+  DB: "text-position-db",
 };
 
 /**

@@ -23,6 +23,7 @@
  * key and silently turn every shared read back into two.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -87,8 +88,13 @@ function decodeCurvePoints(json: Json): WarCurvePoint[] {
   return json as unknown as WarCurvePoint[];
 }
 
+/**
+ * The page reads the offense curve only until the Offense and Defense charts
+ * land (plan R-10, IDP-309). A cache row at DL, LB or DB cannot exist while
+ * the IDP switch is off; pinning it here keeps the page six-wide either way.
+ */
 function isPulsePosition(value: string): value is PulsePosition {
-  return (PULSE_POSITIONS as string[]).includes(value);
+  return (OFFENSE_POSITIONS as readonly string[]).includes(value);
 }
 
 type WarCacheRow = Database["public"]["Tables"]["league_positional_war_cache"]["Row"];

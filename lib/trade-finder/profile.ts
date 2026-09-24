@@ -48,13 +48,15 @@
  * one per position, each over a roster-sized candidate list.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import { buildOptimalLineup } from "@/lib/power-pulse/lineup";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import type { LineupCandidate } from "@/lib/power-pulse/lineup";
 import type { FinderPlayer, FinderTeam, TeamDirection } from "./types";
 
 /** Positions the lineup math can speak about at all. */
-const LINEUP_POSITIONS = new Set<string>(PULSE_POSITIONS);
+// Offense only: Trade Ideas never builds a defender into a suggestion (plan R-5).
+const LINEUP_POSITIONS = new Set<string>(OFFENSE_POSITIONS);
 
 export type TeamProfile = {
   team: FinderTeam;

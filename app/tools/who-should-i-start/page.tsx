@@ -1,3 +1,4 @@
+import { OFFENSE_POSITIONS, SITE, isDefender } from "@/lib/site";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { cache, Suspense } from "react";
@@ -36,7 +37,6 @@ import {
 } from "@/lib/source";
 import { currentNflSeason } from "@/lib/sleeper";
 import { resolveHandleGate } from "@/lib/sleeper-handle/resolve";
-import { SITE } from "@/lib/site";
 import { formatEastern } from "@/lib/datetime";
 import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import { searchFantasyPlayers } from "@/lib/player-search";
@@ -64,7 +64,6 @@ import {
   MIN_START_SIT_PLAYERS,
   type PulsePosition,
 } from "@/lib/start-sit/types";
-import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -163,8 +162,8 @@ const resolveStartSitEntriesOnce = cache(async (entriesKey: string) =>
 async function resolveStartSitEntries(
   supabase: AnySupabase,
   rawEntries: string[],
-): Promise<{ slugs: string[]; players: StartSitPickedPlayer[] }> {
-  if (rawEntries.length === 0) return { slugs: [], players: [] };
+): Promise<{ slugs: string[]; players: StartSitPickedPlayer[]; defenderSlugs: string[] }> {
+  if (rawEntries.length === 0) return { slugs: [], players: [], defenderSlugs: [] };
 
   const db = supabase as SupabaseClient<Database>;
   const { data } = await db
@@ -220,11 +219,17 @@ async function resolveStartSitEntries(
   );
 
   const slugs = normalizeStartSitSlugs(resolved.map((r) => r.slug));
+  // A defender keeps his slug, so the board refuses him in its own sentence,
+  // but gets no picker chip: a chip says "this player is in the comparison",
+  // and he is not (plan R-23, IDP-127).
   const players = slugs
     .map((slug) => resolved.find((r) => r.slug === slug)?.player ?? null)
-    .filter((p): p is StartSitPickedPlayer => p !== null);
+    .filter((p): p is StartSitPickedPlayer => p !== null && !isDefender(p.position));
+  const defenderSlugs = slugs.filter((slug) =>
+    isDefender(resolved.find((r) => r.slug === slug)?.player?.position),
+  );
 
-  return { slugs, players };
+  return { slugs, players, defenderSlugs };
 }
 
 /* ------------------------------------------------------------------ */
@@ -339,7 +344,15 @@ export default async function WhoShouldIStartPage({
     : null;
   const rankingsSource = rankingsResolution?.source ?? null;
 
-  const { slugs: finalSlugs, players: initialPlayers } = await resolveStartSitEntriesOnce(JSON.stringify(rawEntries));
+  const {
+    slugs: finalSlugs,
+    players: initialPlayers,
+    defenderSlugs,
+  } = await resolveStartSitEntriesOnce(JSON.stringify(rawEntries));
+  // The breakdown compares offensive players only and refuses a whole group
+  // that holds a defender, so it is handed the others (IDP-127 review): one
+  // linebacker in a shared link must not take the receivers' tabs with him.
+  const breakdownSlugs = finalSlugs.filter((slug) => !defenderSlugs.includes(slug));
   const hasPlayers = finalSlugs.length >= MIN_START_SIT_PLAYERS;
   const initialStart = clampStartCount(parseStartCountParam(params.start), finalSlugs.length);
 
@@ -466,6 +479,7 @@ export default async function WhoShouldIStartPage({
                 <Suspense fallback={<AnalysisSkeleton />}>
                   <BoardSection
                     finalSlugs={finalSlugs}
+                    breakdownSlugs={breakdownSlugs}
                     params={params}
                     pulseSettings={pulseSettings}
                     basePath={TOOL_PATH}
@@ -508,7 +522,7 @@ export default async function WhoShouldIStartPage({
 
 function emptyToughestCallsResult(): ToughestCallsResult {
   const byPosition = {} as Record<PulsePosition, ToughestCallsPair[]>;
-  for (const position of PULSE_POSITIONS) byPosition[position] = [];
+  for (const position of OFFENSE_POSITIONS) byPosition[position] = [];
   return { grid: [], byPosition };
 }
 
@@ -584,11 +598,14 @@ async function loadLeagueAvatar(sleeperLeagueId: string): Promise<string | null>
  */
 async function BoardSection({
   finalSlugs,
+  breakdownSlugs,
   params,
   pulseSettings,
   basePath,
 }: {
   finalSlugs: string[];
+  /** finalSlugs without defenders: the breakdown compares offense only. */
+  breakdownSlugs: string[];
   params: StartSitSearchParams;
   pulseSettings: Awaited<ReturnType<typeof loadPowerPulseSettings>>;
   basePath: string;
@@ -604,11 +621,13 @@ async function BoardSection({
       formatParam: params.format,
       sourceParam: params.source,
     }),
-    loadBreakdown(supabase, finalSlugs, {
-      formatParam: firstParamValue(params.format),
-      sourceParam: firstParamValue(params.source),
-      pulseSettings,
-    }),
+    breakdownSlugs.length >= MIN_START_SIT_PLAYERS
+      ? loadBreakdown(supabase, breakdownSlugs, {
+          formatParam: firstParamValue(params.format),
+          sourceParam: firstParamValue(params.source),
+          pulseSettings,
+        })
+      : Promise.resolve({ ok: false as const, missing: [] as string[] }),
   ]);
 
   const verdict = computeStartSit({

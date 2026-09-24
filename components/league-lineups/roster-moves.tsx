@@ -149,11 +149,14 @@ export function WaiverPanel({
 export function DropPanel({
   options,
   note,
+  unjudged = null,
   isKeeperLeague,
 }: {
   options: DropOption[];
   /** Set when the search declined to name anybody, with the reason. */
   note: string | null;
+  /** Who was left off without being judged, and why. Rendered either way. */
+  unjudged?: string | null;
   isKeeperLeague: boolean;
 }) {
   return (
@@ -213,6 +216,10 @@ export function DropPanel({
             </li>
           ))}
         </ul>
+      )}
+
+      {unjudged && (
+        <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">{unjudged}</p>
       )}
 
       <p className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-ink-subtle">

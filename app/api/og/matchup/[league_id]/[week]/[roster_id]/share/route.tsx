@@ -76,7 +76,8 @@ const GROUP_COLOR: Record<SlotGroup, string> = {
   TE: "#FBBF24",
   FLEX: "#C084FC",
   SUPERFLEX: "#F472B6",
-  IDP: "#94A3B8",
+  // One group, one colour, until the IDP group is split: the linebacker hue.
+  IDP: "#E879F9",
   K: "#A3E635",
   DEF: "#FB923C",
 };

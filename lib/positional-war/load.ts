@@ -120,6 +120,7 @@
  * every league until the tag was busted or the TTL expired.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import { createHash } from "node:crypto";
 import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -455,7 +456,10 @@ async function readUniversePlayers(
   const out = new Map<string, WarUniversePlayer>();
   if (playerIds.length === 0) return { players: [], dropped: 0 };
 
-  const valid = new Set<string>(PULSE_POSITIONS);
+  // Pinned to the six offensive positions until the IDP switch threads through
+  // the Positional WAR universe (phase 3, IDP-308). Widening it here alone
+  // would change the cached universe with nothing to seat a defender.
+  const valid = new Set<string>(OFFENSE_POSITIONS);
 
   const chunks: string[][] = [];
   for (let i = 0; i < playerIds.length; i += PLAYER_RESOLVE_CHUNK) {
@@ -661,9 +665,11 @@ async function assembleUniverse(
   // readUniversePlayers drops anyone outside PULSE_POSITIONS, so the rows are
   // narrowed to the resolved players here rather than by a second query. This
   // keeps `projections` exactly the set the previous id-filtered read
-  // returned. Today every projected player is already a pulse position, so
-  // this drops nothing; it stays because a future source that publishes an
-  // IDP projection must not put an unscoreable row into the engine.
+  // returned. Since IDP-114 the table holds defender rows (about half of each
+  // week), and this is what keeps them out of the engine until IDP-308. A
+  // query-level filter would halve the cached week slices; it was tried in the
+  // phase 1 review round and left for IDP-308, which rewrites this loader and
+  // its test fakes anyway.
   const projections = windowProjections.filter((row) => playersMap.has(row.playerId));
 
   // Accuracy is read for every projected id rather than only the resolved

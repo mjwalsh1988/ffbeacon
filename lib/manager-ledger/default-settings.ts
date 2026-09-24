@@ -45,7 +45,10 @@ export const MANAGER_LEDGER_RETRY_MS = 15 * 60 * 1000;
 // ungradedSlots. Rows written under ledger-3 have weeks without them, and a
 // chart built from those would silently plot nothing, so the version moves and
 // every league rebuilds on its next view.
-export const MANAGER_LEDGER_MODEL_VERSION = "ledger-4";
+// ledger-5 (2026-09-24, IDP-122): the ledger now NAMES claimed and drafted
+// defenders instead of "Player 12345". Names live inside the stored rows, so the
+// version moves and every IDP league's cached detail is rebuilt on next view.
+export const MANAGER_LEDGER_MODEL_VERSION = "ledger-5";
 
 /** How many waiver moves are kept per roster in the stored detail. */
 export const MAX_STORED_WAIVER_MOVES = 12;

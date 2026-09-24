@@ -237,3 +237,35 @@ describe("currentSeasonWeekWeight", () => {
     expect(currentSeasonWeekWeight(1, 2, 0)).toBeCloseTo(0.5, 10);
   });
 });
+
+describe("defenders graded on idp123 (IDP-115, hazard H)", () => {
+  it("grades a defender on idp123 only and an offensive player never on it", async () => {
+    const { scoringKeysFor } = await import("./calculate-projection-accuracy");
+    expect(scoringKeysFor("LB")).toEqual(["idp123"]);
+    expect(scoringKeysFor("DB")).toEqual(["idp123"]);
+    expect(scoringKeysFor("WR")).toEqual(["pts_ppr", "pts_half_ppr", "pts_std"]);
+    expect(scoringKeysFor("DEF")).toEqual(["pts_ppr", "pts_half_ppr", "pts_std"]);
+  });
+
+  it("scores Roquan Smith's typed 2025 week 2 columns at 40", async () => {
+    const { actualIdp123 } = await import("./calculate-projection-accuracy");
+    const typed = { idp_tkl: 15, idp_tkl_solo: 8, idp_tkl_ast: 7, idp_tkl_loss: 3, idp_qb_hit: 2, idp_fum_rec: 1, idp_def_td: 1, idp_fum_ret_yd: 63, pts_ppr: 8 };
+    expect(actualIdp123(typed)).toBe(40);
+    expect(actualIdp123({ pts_ppr: 12 })).toBeNull();
+  });
+
+  it("scores a projected line without its team-defense keys", async () => {
+    const { projectedIdp123 } = await import("./calculate-projection-accuracy");
+    expect(projectedIdp123({ idp_tkl_solo: 3, idp_tkl_ast: 2, idp_sack: 0.5, def_pr_yd: 40, pts_ppr: 9 })).toBe(11);
+    expect(projectedIdp123(null)).toBeNull();
+  });
+
+  it("reads every idp column the preset weights", async () => {
+    const { ACTUAL_SELECT } = await import("./calculate-projection-accuracy");
+    const { IDP_PRESETS } = await import("./idp/scoring-presets");
+    const cols = ACTUAL_SELECT.split(",").map((c) => c.trim());
+    for (const key of Object.keys(IDP_PRESETS.idp123)) {
+      if (key.startsWith("idp_")) expect(cols).toContain(key);
+    }
+  });
+});

@@ -49,6 +49,9 @@
  * brutal in a superflex dynasty where no startable quarterback is available.
  */
 
+// Draft tools stay offense-only (plan R-11): every per-position map here is keyed
+// by the six offensive positions, never the widened PulsePosition.
+import { OFFENSE_POSITIONS, isOffensePosition, type OffensePosition } from "@/lib/site";
 import {
   buildOptimalLineup,
   lineupSigma,
@@ -62,13 +65,15 @@ import {
   zScores,
   zToDisplay,
 } from "@/lib/power-pulse/math";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import type { PlayerProjection, ProjectionBoard } from "./projection-board";
 import { weekFor } from "./week-index";
 import { buildWaiverPool, fillFromWaivers } from "./waiver-replacement";
 
 /** Bump when the meaning of a Draft Pulse score changes. */
-export const DRAFT_PULSE_VERSION = "otc-pulse-3";
+// otc-pulse-4: every team carries unprojectedIdpCount and unprojectedOtherCount
+// (plan IDP-131), so a cached otc-pulse-3 payload lacks two fields the room reads.
+export const DRAFT_PULSE_VERSION = "otc-pulse-4";
 
 /** One team's roster as the draft currently stands. */
 export interface DraftPulseTeamInput {
@@ -88,7 +93,7 @@ export interface DraftPulseTeam {
   /** Within-league 1 to 99 display score, same scale as Power Pulse. */
   score: number;
   /** Projected starter points per week by position. */
-  positionPoints: Record<PulsePosition, number>;
+  positionPoints: Record<OffensePosition, number>;
   /** The still-empty or weakest starting slot, named by its Sleeper token. */
   weakestSlot: string | null;
   /** Points-weighted beat rate of the projected starters. Null when no sample. */
@@ -105,6 +110,14 @@ export interface DraftPulseTeam {
   projectedCount: number;
   /** How many did not, so the UI can say "based on 14 of 16". */
   unprojectedCount: number;
+  /**
+   * unprojectedCount split in two (plan IDP-131). A defender is unprojected
+   * because Draft Pulse is offense-only (R-11), which is a different sentence
+   * from "we have no projection for this rookie". The two always sum to
+   * unprojectedCount.
+   */
+  unprojectedIdpCount: number;
+  unprojectedOtherCount: number;
   /** Starting slots filled in the average week, from the roster or the wire. */
   startersFilled: number;
   /**
@@ -176,9 +189,15 @@ export interface DraftPulseInput {
    * the old behaviour, which a caller with no view of the wider league should.
    */
   rosteredPlayerIds?: ReadonlySet<string>;
+  /**
+   * FF Beacon ids of the drafted players who are defenders, from the picks'
+   * own position. Only used to split the unprojected count; omit and every
+   * unprojected player counts as "other".
+   */
+  idpPlayerIds?: ReadonlySet<string>;
 }
 
-const ZERO_POSITION_POINTS: Record<PulsePosition, number> = {
+const ZERO_POSITION_POINTS: Record<OffensePosition, number> = {
   QB: 0,
   RB: 0,
   WR: 0,
@@ -249,10 +268,14 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
   const teams: DraftPulseTeam[] = input.teams.map((team) => {
     const known: PlayerProjection[] = [];
     let unprojected = 0;
+    let unprojectedIdp = 0;
     for (const id of team.playerIds) {
       const p = input.board.players[id];
       if (p) known.push(p);
-      else unprojected += 1;
+      else {
+        unprojected += 1;
+        if (input.idpPlayerIds?.has(id)) unprojectedIdp += 1;
+      }
     }
 
     if (slots.length === 0 || weeks.length === 0 || known.length === 0) {
@@ -270,6 +293,8 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
         starterWeeksPlayed: null,
         projectedCount: known.length,
         unprojectedCount: unprojected,
+        unprojectedIdpCount: unprojectedIdp,
+        unprojectedOtherCount: unprojected - unprojectedIdp,
         startersFilled: 0,
         waiverFilledSlots: 0,
         waiverPointsShare: 0,
@@ -281,7 +306,7 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
 
     const weeklyTotals: number[] = [];
     const weeklySigmas: number[] = [];
-    const positionTotals: Record<PulsePosition, number[]> = {
+    const positionTotals: Record<OffensePosition, number[]> = {
       QB: [],
       RB: [],
       WR: [],
@@ -357,7 +382,7 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
         oppWeight += s.points;
       }
 
-      const perPosition: Record<PulsePosition, number> = {
+      const perPosition: Record<OffensePosition, number> = {
         ...ZERO_POSITION_POINTS,
       };
       let filled = 0;
@@ -367,7 +392,7 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
         filled += 1;
         const p = input.board.players[slot.playerId];
         if (!p) return;
-        perPosition[p.position] += slot.points;
+        if (isOffensePosition(p.position)) perPosition[p.position] += slot.points;
         if (p.beatRate !== null) {
           beatWeighted += p.beatRate * slot.points;
           beatWeight += slot.points;
@@ -384,10 +409,10 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
       // team's waiver dependence, and the awards built on those shares then
       // rewarded the roster with the biggest hole.
       for (const signing of wire?.signings ?? []) {
-        perPosition[signing.position] += signing.points;
+        if (isOffensePosition(signing.position)) perPosition[signing.position] += signing.points;
       }
       filledCounts.push(filled + (wire?.slotsFilled ?? 0));
-      for (const pos of PULSE_POSITIONS)
+      for (const pos of OFFENSE_POSITIONS)
         positionTotals[pos].push(perPosition[pos]);
     }
 
@@ -403,10 +428,10 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
       }
     });
 
-    const positionPoints: Record<PulsePosition, number> = {
+    const positionPoints: Record<OffensePosition, number> = {
       ...ZERO_POSITION_POINTS,
     };
-    for (const pos of PULSE_POSITIONS)
+    for (const pos of OFFENSE_POSITIONS)
       positionPoints[pos] = round(mean(positionTotals[pos]), 1);
 
     rawMeans.push(mean(weeklyTotals));
@@ -426,6 +451,8 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
         weeksWeight > 0 ? round(weeksWeighted / weeksWeight, 1) : null,
       projectedCount: known.length,
       unprojectedCount: unprojected,
+      unprojectedIdpCount: unprojectedIdp,
+      unprojectedOtherCount: unprojected - unprojectedIdp,
       // Two decimals, not one. The grade's roster-construction component is a
       // curve over this number divided by the slot count, and at one decimal a
       // twelve-team league lands on exactly two values, 9.9 and 10.0. That is a

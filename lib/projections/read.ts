@@ -14,6 +14,7 @@
  * gets" and Part 4.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { closestScoringBase, type ScoringSettings } from "@/lib/league-scoring";
@@ -72,7 +73,8 @@ export type AdjustedProjectionSummary = {
  */
 function toPulsePosition(position: string | undefined | null): PulsePosition | null {
   const upper = (position ?? "").toUpperCase();
-  return (PULSE_POSITIONS as readonly string[]).includes(upper)
+  // Pinned to the six offensive positions until IDP-303 threads defenders in.
+  return (OFFENSE_POSITIONS as readonly string[]).includes(upper)
     ? (upper as PulsePosition)
     : null;
 }

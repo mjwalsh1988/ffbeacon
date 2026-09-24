@@ -19,6 +19,9 @@ import type { Database } from "@/lib/database.types";
 import {
   loadSchedule,
   loadAccuracy,
+  loadPlayers,
+  NAMING_POSITIONS,
+  projectablePlayerIds,
   loadDefenseRanks,
   rankDefenseRows,
   type DefenseRankInput,
@@ -110,12 +113,13 @@ describe("loadAccuracy source scoping", () => {
 
   /**
    * The smallest client that satisfies loadAccuracy's call chain:
-   * from().select().eq(scoring).eq(source).is(season, null).in(player_id).
+   * from().select().in(scoring).eq(source).is(season, null).in(player_id),
+   * awaited at the end. Filters may arrive in any order, as with the real client.
    */
   function fakeAccuracyClient(rows: AccuracyDbRow[]): SupabaseClient<Database> {
     const eqFilters: Record<string, unknown> = {};
+    const inFilters: Record<string, unknown[]> = {};
     let isSeasonNull = false;
-    let inIds: string[] = [];
     const builder = {
       select: () => builder,
       eq(col: string, val: unknown) {
@@ -126,17 +130,20 @@ describe("loadAccuracy source scoping", () => {
         if (col === "season" && val === null) isSeasonNull = true;
         return builder;
       },
-      in(_col: string, vals: string[]) {
-        inIds = vals;
+      in(col: string, vals: unknown[]) {
+        inFilters[col] = vals;
+        return builder;
+      },
+      then(resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) {
         return Promise.resolve({
           data: rows.filter(
             (r) =>
               Object.entries(eqFilters).every(([k, v]) => (r as Record<string, unknown>)[k] === v) &&
-              (!isSeasonNull || r.season === null) &&
-              inIds.includes(r.player_id),
+              Object.entries(inFilters).every(([k, vs]) => vs.includes((r as Record<string, unknown>)[k])) &&
+              (!isSeasonNull || r.season === null),
           ),
           error: null,
-        });
+        }).then(resolve, reject);
       },
     };
     return { from: () => builder } as unknown as SupabaseClient<Database>;
@@ -283,5 +290,75 @@ describe("loadDefenseRanks", () => {
     const client = fakeDefenseClient([], "connection reset");
     const out = await loadDefenseRanks(client, "pts_ppr", 2026);
     expect(out).toEqual(new Map());
+  });
+});
+
+describe("loadAccuracy and loadDefenseSplits under two scoring keys (IDP-118)", () => {
+  it("merges an offense base and idp123 by player, earlier key winning a tie", async () => {
+    const rows = [
+      { player_id: "wr", scoring: "pts_ppr", source: "sleeper", season: null, shrunk_multiplier: 1.1, beat_rate: 0.5, availability_rate: 1, ratio_stdev: 0.3, weeks_played: 10 },
+      { player_id: "lb", scoring: "idp123", source: "sleeper", season: null, shrunk_multiplier: 0.9, beat_rate: 0.4, availability_rate: 1, ratio_stdev: 0.2, weeks_played: 12 },
+      { player_id: "two", scoring: "idp123", source: "sleeper", season: null, shrunk_multiplier: 0.5, beat_rate: 0.1, availability_rate: 1, ratio_stdev: 0.2, weeks_played: 2 },
+      { player_id: "two", scoring: "pts_ppr", source: "sleeper", season: null, shrunk_multiplier: 1.2, beat_rate: 0.6, availability_rate: 1, ratio_stdev: 0.2, weeks_played: 8 },
+    ];
+    const filters: Record<string, unknown[]> = {};
+    const eqs: Record<string, unknown> = {};
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      eq: (c: string, v: unknown) => ((eqs[c] = v), builder),
+      is: () => builder,
+      in: (c: string, v: unknown[]) => ((filters[c] = v), builder),
+      then: (resolve: (v: unknown) => unknown) =>
+        Promise.resolve({
+          data: rows.filter(
+            (r) =>
+              Object.entries(filters).every(([k, vs]) => vs.includes((r as Record<string, unknown>)[k])) &&
+              Object.entries(eqs).every(([k, v]) => (r as Record<string, unknown>)[k] === v),
+          ),
+          error: null,
+        }).then(resolve),
+    };
+    const client = { from: () => builder } as never;
+    const out = await loadAccuracy(client, ["wr", "lb", "two"], ["pts_ppr", "idp123"]);
+    expect(out.get("wr")?.shrunkMultiplier).toBe(1.1);
+    expect(out.get("lb")?.shrunkMultiplier).toBe(0.9);
+    expect(out.get("two")?.shrunkMultiplier).toBe(1.2);
+  });
+});
+
+describe("loadPlayers positions option (IDP-122)", () => {
+  function playersClient(rows: Record<string, unknown>[]) {
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      in: () => Promise.resolve({ data: rows, error: null }),
+    };
+    return { from: () => builder } as never;
+  }
+  const LB = {
+    id: "p-lb", slug: "roquan-smith-4881", first_name: "Roquan", last_name: "Smith", full_name: "Roquan Smith",
+    position: "LB", eligible_positions: ["LB"], team: "BAL", external_ids: { sleeper: "4881" }, metadata: {},
+  };
+  const WR = {
+    id: "p-wr", slug: "a-receiver-1", first_name: "A", last_name: "Receiver", full_name: "A Receiver",
+    position: "WR", eligible_positions: [], team: "DET", external_ids: { sleeper: "1" }, metadata: {},
+  };
+
+  it("drops a linebacker by default, the way every candidate list needs", async () => {
+    const out = await loadPlayers(playersClient([LB, WR]), ["4881", "1"]);
+    expect(out.has("4881")).toBe(false);
+    expect(out.has("1")).toBe(true);
+  });
+
+  it("keeps him, named, with the wide list the naming loaders pass", async () => {
+    const out = await loadPlayers(playersClient([LB, WR]), ["4881", "1"], { positions: NAMING_POSITIONS });
+    expect(out.get("4881")?.name).toBe("Roquan Smith");
+    expect(out.get("4881")?.eligible).toEqual(["LB"]);
+    // An empty eligibility list falls back to the primary.
+    expect(out.get("1")?.eligible).toEqual(["WR"]);
+  });
+
+  it("gives a named defender no projection id", async () => {
+    const out = await loadPlayers(playersClient([LB, WR]), ["4881", "1"], { positions: NAMING_POSITIONS });
+    expect(projectablePlayerIds(out)).toEqual(["p-wr"]);
   });
 });

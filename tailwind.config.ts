@@ -90,6 +90,12 @@ const config: Config = {
           te: "#FBBF24",
           k: "#F472B6",
           def: "#94A3B8",
+          // Individual defensive players (IDP). Lime, fuchsia and indigo: clear of
+          // the six above and of the reserved brand purple and cyan, and the same
+          // three hues POSITION_SERIES uses for the defensive curves.
+          dl: "#A3E635",
+          lb: "#E879F9",
+          db: "#818CF8",
         },
       },
       fontFamily: {

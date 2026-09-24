@@ -10,6 +10,7 @@
  * well past that, so every multi-row read here pages explicitly.
  */
 
+import { IDP_POSITIONS, OFFENSE_POSITIONS, isDefender } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { ScoringSettings } from "@/lib/league-scoring";
@@ -20,7 +21,6 @@ import {
   DEFAULT_PLAYOFF_WEEK_START,
 } from "./playoff-defaults";
 import type { PulsePosition, ScheduleWeek } from "./types";
-import { PULSE_POSITIONS } from "./types";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -132,11 +132,39 @@ export type PlayerRow = {
   playerId: string;
   sleeperId: string;
   name: string;
+  /** The primary position (players.position). */
   position: PulsePosition;
   team: string | null;
   injuryStatus: string | null;
   depthOrder: number | null;
+  /**
+   * Every position Sleeper lets him start at (players.eligible_positions,
+   * migration 0297). Optional so hand-built rows keep compiling; loadPlayers
+   * always fills it. Read by the optimiser only once the IDP switch is on.
+   */
+  eligible?: readonly string[];
 };
+
+/**
+ * Every position a League Pulse page may NAME a player at: the six plus the
+ * three defender positions. Passed to loadPlayers only by the loaders that
+ * resolve names (Schedules, Lineups, the Manager Ledger), never by one that
+ * builds a candidate list, so a defender stops rendering as "Unknown player"
+ * without being seated or projected anywhere (plan IDP-122).
+ */
+export const NAMING_POSITIONS: readonly string[] = [...OFFENSE_POSITIONS, ...IDP_POSITIONS];
+
+/**
+ * The FF Beacon ids whose projections a page should load: the offensive
+ * players only, until the IDP switch threads defenders in (phase 3). A loader
+ * that named defenders with NAMING_POSITIONS uses this so a defender carries a
+ * name and no number, rather than a projection nothing else on the page uses.
+ */
+export function projectablePlayerIds(players: Map<string, PlayerRow>): string[] {
+  const ids = new Set<string>();
+  for (const p of players.values()) if (!isDefender(p.position)) ids.add(p.playerId);
+  return [...ids];
+}
 
 export type ProjectionRow = {
   playerId: string;
@@ -346,11 +374,20 @@ export async function loadRosters(
 export async function loadPlayers(
   supabase: ServiceClient,
   sleeperIds: string[],
+  opts: {
+    /**
+     * Which primary positions to keep. Defaults to the six offensive ones,
+     * which is what every candidate list must use until the IDP switch
+     * threads through (phase 3, IDP-301). NAMING_POSITIONS for a loader that
+     * only resolves names.
+     */
+    positions?: readonly string[];
+  } = {},
 ): Promise<Map<string, PlayerRow>> {
   const out = new Map<string, PlayerRow>();
   if (sleeperIds.length === 0) return out;
 
-  const valid = new Set<string>(PULSE_POSITIONS);
+  const valid = new Set<string>(opts.positions ?? OFFENSE_POSITIONS);
 
   // PostgREST `.or()` takes a comma-separated filter string, so an id carrying a
   // comma or a parenthesis would rewrite the filter rather than be matched by
@@ -361,7 +398,7 @@ export async function loadPlayers(
   if (safeIds.length === 0) return out;
 
   const SELECT =
-    "id, slug, first_name, last_name, full_name, position, team, external_ids, metadata";
+    "id, slug, first_name, last_name, full_name, position, eligible_positions, team, external_ids, metadata";
 
   /** One row as the two queries below return it. */
   type PlayerQueryRow = {
@@ -371,6 +408,7 @@ export async function loadPlayers(
     last_name: string | null;
     full_name: string | null;
     position: string | null;
+    eligible_positions: string[] | null;
     team: string | null;
     external_ids: unknown;
     metadata: unknown;
@@ -455,6 +493,10 @@ export async function loadPlayers(
             ? meta.injury_status
             : null,
         depthOrder: intOrNull(meta.depth_chart_order),
+        eligible:
+          Array.isArray(p.eligible_positions) && p.eligible_positions.length > 0
+            ? p.eligible_positions
+            : [position],
       });
     }
   }
@@ -642,11 +684,20 @@ export async function loadProjections(
 export async function loadAccuracy(
   supabase: ServiceClient,
   playerIds: string[],
-  scoring: string,
+  /**
+   * One scoring key, or several merged by player. Defenders are graded on
+   * idp123 and nothing else, so an IDP league reads [its own base, "idp123"]
+   * and every player still resolves to exactly one row (plan IDP-118). When a
+   * player somehow holds rows under two of the keys, the EARLIER key wins.
+   */
+  scoring: string | readonly string[],
   source: string = SLEEPER_SOURCE,
 ): Promise<Map<string, AccuracyRow>> {
   const out = new Map<string, AccuracyRow>();
   if (playerIds.length === 0) return out;
+  const keys = typeof scoring === "string" ? [scoring] : [...scoring];
+  const priority = new Map(keys.map((k, i) => [k, i]));
+  const chosen = new Map<string, number>();
 
   const CHUNK = 300;
   const chunks: string[][] = [];
@@ -665,9 +716,9 @@ export async function loadAccuracy(
       const { data, error } = await supabase
         .from("player_projection_accuracy")
         .select(
-          "player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played",
+          "player_id, scoring, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played",
         )
-        .eq("scoring", scoring)
+        .in("scoring", keys)
         .eq("source", source)
         .is("season", null)
         .in("player_id", chunk);
@@ -679,6 +730,10 @@ export async function loadAccuracy(
 
   for (const data of perChunk) {
     for (const row of data) {
+      const rank = priority.get(row.scoring) ?? keys.length;
+      const held = chosen.get(row.player_id);
+      if (held !== undefined && held <= rank) continue;
+      chosen.set(row.player_id, rank);
       out.set(row.player_id, {
         playerId: row.player_id,
         shrunkMultiplier: numOrNull(row.shrunk_multiplier),
@@ -700,18 +755,24 @@ export async function loadAccuracy(
  */
 export async function loadDefenseSplits(
   supabase: ServiceClient,
-  scoring: string,
+  /**
+   * One scoring key, or several merged. The map is keyed team|season|position
+   * and the defender positions exist only under idp123, so [the league's base,
+   * "idp123"] fills both halves without a collision (plan IDP-118).
+   */
+  scoring: string | readonly string[],
   seasons: number[],
 ): Promise<Map<string, DefenseRow>> {
   const out = new Map<string, DefenseRow>();
   if (seasons.length === 0) return out;
+  const keys = typeof scoring === "string" ? [scoring] : [...scoring];
 
   const { data, error } = await supabase
     .from("nfl_defense_vs_position")
     .select(
       "team, season, position, multiplier, adjusted_multiplier, shrunk_multiplier, games_sampled",
     )
-    .eq("scoring", scoring)
+    .in("scoring", keys)
     .in("season", seasons);
   if (error)
     throw new Error(`power pulse defense split load failed: ${error.message}`);

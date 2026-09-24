@@ -324,9 +324,14 @@ function SideCard({ side }: { side: HistorySide }) {
                   <span className="block truncate text-[11px] text-ink-subtle">{asset.detail}</span>
                 )}
               </span>
-              <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-brand-purple">
-                {asset.noValue ? "n/a" : asset.value.toLocaleString()}
-              </span>
+              {asset.noValue ? (
+                // Words, never "n/a" (plan IDP-126).
+                <span className="shrink-0 text-xs text-ink-subtle">No market value</span>
+              ) : (
+                <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-brand-purple">
+                  {asset.value.toLocaleString()}
+                </span>
+              )}
             </li>
           ))}
           {side.faabIn > 0 && (

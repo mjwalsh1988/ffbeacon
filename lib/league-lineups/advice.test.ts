@@ -117,7 +117,10 @@ describe("buildDropOptions", () => {
     expect(result.note).toBeNull();
   });
 
-  it("puts a player with no projection left at the very top, without calling it zero", () => {
+  // Reversed by plan IDP-123. A player with no projection used to sort FIRST as
+  // "the emptiest seat", which treated Sleeper's silence as a forecast of zero
+  // and is how an unmatched "Unknown player" topped this list in IDP leagues.
+  it("puts a player with no projection left at the bottom, without calling it zero", () => {
     const result = buildDropOptions({
       benchable: [lineupPlayer("a"), lineupPlayer("b")],
       restOfSeasonPerWeek: new Map([["a", 3]]),
@@ -125,9 +128,47 @@ describe("buildDropOptions", () => {
       isKeeperLeague: false,
       seatedSleeperIds: new Set(),
     });
-    expect(result.options[0].player.sleeperId).toBe("b");
-    expect(result.options[0].restOfSeasonPerWeek).toBeNull();
-    expect(result.options[0].note).toContain("No projection left");
+    expect(result.options.map((o) => o.player.sleeperId)).toEqual(["a", "b"]);
+    expect(result.options[1].restOfSeasonPerWeek).toBeNull();
+    expect(result.options[1].note).toContain("No projection");
+  });
+
+  it("never offers a player with no player record, and says so (IDP-123)", () => {
+    const unknown = lineupPlayer("x", { playerId: null, name: "Unknown player", position: "" });
+    const result = buildDropOptions({
+      benchable: [unknown, lineupPlayer("a")],
+      restOfSeasonPerWeek: new Map([["a", 3]]),
+      valueBySleeperId: new Map(),
+      isKeeperLeague: true,
+      seatedSleeperIds: new Set(),
+    });
+    expect(result.options.map((o) => o.player.sleeperId)).toEqual(["a"]);
+    expect(result.unjudged).toContain("could not match him to a player record");
+  });
+
+  it("never offers a defender before League Pulse can project one, and says why", () => {
+    const lb = lineupPlayer("lb", { position: "LB", name: "A Linebacker", projected: null });
+    const result = buildDropOptions({
+      benchable: [lb],
+      restOfSeasonPerWeek: new Map(),
+      valueBySleeperId: new Map(),
+      isKeeperLeague: true,
+      seatedSleeperIds: new Set(),
+    });
+    expect(result.options).toEqual([]);
+    expect(result.unjudged).toContain("1 defensive player is not listed");
+    expect(result.note).not.toContain("Nothing to cut");
+  });
+
+  it("reports nothing unjudged when everyone was considered", () => {
+    const result = buildDropOptions({
+      benchable: [lineupPlayer("a")],
+      restOfSeasonPerWeek: new Map([["a", 3]]),
+      valueBySleeperId: new Map(),
+      isKeeperLeague: false,
+      seatedSleeperIds: new Set(),
+    });
+    expect(result.unjudged).toBeNull();
   });
 
   it("never offers somebody the optimiser is seating this week", () => {

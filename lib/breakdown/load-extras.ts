@@ -40,6 +40,7 @@
  * onto our own engine the day an admin turns it on.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ScoringKey } from "@/lib/player-profile";
@@ -47,7 +48,7 @@ import { scoringSettingsForFormat, type ScoringSettings } from "@/lib/league-sco
 import { loadDefenseSplits, type DefenseRow, type ProjectionRow } from "@/lib/power-pulse/load";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { DEFAULT_POWER_PULSE_SETTINGS, type PowerPulseSettings } from "@/lib/power-pulse/default-settings";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
@@ -540,7 +541,8 @@ export async function loadBreakdownExtras(
     /* ---- projection ---- */
     let projection: BreakdownProjection | null = null;
     const position = (subject.position ?? "").toUpperCase();
-    const isProjectable = (PULSE_POSITIONS as readonly string[]).includes(position);
+    // The breakdown compares offensive players only (plan R-23, IDP-127).
+    const isProjectable = (OFFENSE_POSITIONS as readonly string[]).includes(position);
     const byWeek = projections.get(subject.id);
 
     if (clock.season != null && isProjectable && byWeek && byWeek.size > 0) {

@@ -1,0 +1,487 @@
+[
+  {
+    "byeOdds": null,
+    "chopOddsThisWeek": 0.5233,
+    "chopped": true,
+    "components": {
+      "depthDropoffPct": 0.25,
+      "formRatio": null,
+      "formWeeks": 0,
+      "positionPoints": {
+        "QB": 12,
+        "RB": 12,
+        "TE": 12,
+        "WR": 12
+      },
+      "positionRanks": {
+        "QB": 4,
+        "RB": 4,
+        "TE": 4,
+        "WR": 4
+      },
+      "starters": [
+        {
+          "name": "Player 1 QB",
+          "playerId": "p-1-QB",
+          "points": 12,
+          "position": "QB"
+        },
+        {
+          "name": "Player 1 RB",
+          "playerId": "p-1-RB",
+          "points": 12,
+          "position": "RB"
+        },
+        {
+          "name": "Player 1 WR",
+          "playerId": "p-1-WR",
+          "points": 12,
+          "position": "WR"
+        },
+        {
+          "name": "Player 1 TE",
+          "playerId": "p-1-TE",
+          "points": 12,
+          "position": "TE"
+        }
+      ],
+      "unfilledSlotRate": 0,
+      "usedLeagueScoring": false,
+      "weeksProjected": 3
+    },
+    "drivers": [
+      {
+        "detail": "4th of 4 at 48.0 projected points per week.",
+        "label": "Not enough weekly scoring",
+        "tone": "bad"
+      },
+      {
+        "detail": "A 52% chance of being the lowest score in the league and going out.",
+        "label": "In real danger this week",
+        "tone": "bad"
+      },
+      {
+        "detail": "Loses 25% of weekly output when a position's best starter misses time.",
+        "label": "Top heavy",
+        "tone": "bad"
+      }
+    ],
+    "expectedPointsPerWeek": 48,
+    "expectedPointsStdev": 13.79,
+    "expectedWeeksAlive": 0.67,
+    "expectedWins": null,
+    "lastPlaceOdds": null,
+    "lineupEfficiency": 1,
+    "lineupEfficiencyRank": 1,
+    "lineupPointsLost": 0,
+    "playoffOdds": null,
+    "powerPulse": 13,
+    "projectedLosses": null,
+    "projectedTies": null,
+    "projectedWins": null,
+    "pulseRank": 4,
+    "reliabilityRank": 1,
+    "reliabilityScore": 1,
+    "rosterRowId": "roster-row-1",
+    "scoreDepth": 50,
+    "scoreDepthRank": 1,
+    "scoreForm": null,
+    "scoreFormRank": null,
+    "scorePoints": 13,
+    "scorePointsRank": 4,
+    "scoreSchedule": null,
+    "scoreScheduleRank": null,
+    "sleeperRosterId": 1,
+    "sosPoints": null,
+    "sosRank": null,
+    "surviveAllOdds": 0.0265,
+    "teamName": "Team 1",
+    "titleOdds": null,
+    "weekly": [
+      {
+        "mean": 48,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 13.79,
+        "week": 5,
+        "winProb": null
+      },
+      {
+        "mean": 48,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 13.79,
+        "week": 6,
+        "winProb": null
+      },
+      {
+        "mean": 48,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 13.79,
+        "week": 7,
+        "winProb": null
+      }
+    ]
+  },
+  {
+    "byeOdds": null,
+    "chopOddsThisWeek": 0.2643,
+    "chopped": true,
+    "components": {
+      "depthDropoffPct": 0.25,
+      "formRatio": null,
+      "formWeeks": 0,
+      "positionPoints": {
+        "QB": 14,
+        "RB": 14,
+        "TE": 14,
+        "WR": 14
+      },
+      "positionRanks": {
+        "QB": 3,
+        "RB": 3,
+        "TE": 3,
+        "WR": 3
+      },
+      "starters": [
+        {
+          "name": "Player 2 QB",
+          "playerId": "p-2-QB",
+          "points": 14,
+          "position": "QB"
+        },
+        {
+          "name": "Player 2 RB",
+          "playerId": "p-2-RB",
+          "points": 14,
+          "position": "RB"
+        },
+        {
+          "name": "Player 2 WR",
+          "playerId": "p-2-WR",
+          "points": 14,
+          "position": "WR"
+        },
+        {
+          "name": "Player 2 TE",
+          "playerId": "p-2-TE",
+          "points": 14,
+          "position": "TE"
+        }
+      ],
+      "unfilledSlotRate": 0,
+      "usedLeagueScoring": false,
+      "weeksProjected": 3
+    },
+    "drivers": [
+      {
+        "detail": "A 26% chance of being the lowest score in the league and going out.",
+        "label": "In real danger this week",
+        "tone": "bad"
+      },
+      {
+        "detail": "Loses 25% of weekly output when a position's best starter misses time.",
+        "label": "Top heavy",
+        "tone": "bad"
+      }
+    ],
+    "expectedPointsPerWeek": 56,
+    "expectedPointsStdev": 14.92,
+    "expectedWeeksAlive": 1.24,
+    "expectedWins": null,
+    "lastPlaceOdds": null,
+    "lineupEfficiency": 1,
+    "lineupEfficiencyRank": 1,
+    "lineupPointsLost": 0,
+    "playoffOdds": null,
+    "powerPulse": 35,
+    "projectedLosses": null,
+    "projectedTies": null,
+    "projectedWins": null,
+    "pulseRank": 3,
+    "reliabilityRank": 1,
+    "reliabilityScore": 1,
+    "rosterRowId": "roster-row-2",
+    "scoreDepth": 50,
+    "scoreDepthRank": 1,
+    "scoreForm": null,
+    "scoreFormRank": null,
+    "scorePoints": 35,
+    "scorePointsRank": 3,
+    "scoreSchedule": null,
+    "scoreScheduleRank": null,
+    "sleeperRosterId": 2,
+    "sosPoints": null,
+    "sosRank": null,
+    "surviveAllOdds": 0.116,
+    "teamName": "Team 2",
+    "titleOdds": null,
+    "weekly": [
+      {
+        "mean": 56,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 14.92,
+        "week": 5,
+        "winProb": null
+      },
+      {
+        "mean": 56,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 14.92,
+        "week": 6,
+        "winProb": null
+      },
+      {
+        "mean": 56,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 14.92,
+        "week": 7,
+        "winProb": null
+      }
+    ]
+  },
+  {
+    "byeOdds": null,
+    "chopOddsThisWeek": 0.14,
+    "chopped": true,
+    "components": {
+      "depthDropoffPct": 0.25,
+      "formRatio": null,
+      "formWeeks": 0,
+      "positionPoints": {
+        "QB": 16,
+        "RB": 16,
+        "TE": 16,
+        "WR": 16
+      },
+      "positionRanks": {
+        "QB": 2,
+        "RB": 2,
+        "TE": 2,
+        "WR": 2
+      },
+      "starters": [
+        {
+          "name": "Player 3 QB",
+          "playerId": "p-3-QB",
+          "points": 16,
+          "position": "QB"
+        },
+        {
+          "name": "Player 3 RB",
+          "playerId": "p-3-RB",
+          "points": 16,
+          "position": "RB"
+        },
+        {
+          "name": "Player 3 WR",
+          "playerId": "p-3-WR",
+          "points": 16,
+          "position": "WR"
+        },
+        {
+          "name": "Player 3 TE",
+          "playerId": "p-3-TE",
+          "points": 16,
+          "position": "TE"
+        }
+      ],
+      "unfilledSlotRate": 0,
+      "usedLeagueScoring": false,
+      "weeksProjected": 3
+    },
+    "drivers": [
+      {
+        "detail": "Loses 25% of weekly output when a position's best starter misses time.",
+        "label": "Top heavy",
+        "tone": "bad"
+      }
+    ],
+    "expectedPointsPerWeek": 64,
+    "expectedPointsStdev": 15.84,
+    "expectedWeeksAlive": 1.8,
+    "expectedWins": null,
+    "lastPlaceOdds": null,
+    "lineupEfficiency": 1,
+    "lineupEfficiencyRank": 1,
+    "lineupPointsLost": 0,
+    "playoffOdds": null,
+    "powerPulse": 65,
+    "projectedLosses": null,
+    "projectedTies": null,
+    "projectedWins": null,
+    "pulseRank": 2,
+    "reliabilityRank": 1,
+    "reliabilityScore": 1,
+    "rosterRowId": "roster-row-3",
+    "scoreDepth": 50,
+    "scoreDepthRank": 1,
+    "scoreForm": null,
+    "scoreFormRank": null,
+    "scorePoints": 65,
+    "scorePointsRank": 2,
+    "scoreSchedule": null,
+    "scoreScheduleRank": null,
+    "sleeperRosterId": 3,
+    "sosPoints": null,
+    "sosRank": null,
+    "surviveAllOdds": 0.2935,
+    "teamName": "Team 3",
+    "titleOdds": null,
+    "weekly": [
+      {
+        "mean": 64,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 15.84,
+        "week": 5,
+        "winProb": null
+      },
+      {
+        "mean": 64,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 15.84,
+        "week": 6,
+        "winProb": null
+      },
+      {
+        "mean": 64,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 15.84,
+        "week": 7,
+        "winProb": null
+      }
+    ]
+  },
+  {
+    "byeOdds": null,
+    "chopOddsThisWeek": 0.0725,
+    "chopped": true,
+    "components": {
+      "depthDropoffPct": 0.25,
+      "formRatio": null,
+      "formWeeks": 0,
+      "positionPoints": {
+        "QB": 18,
+        "RB": 18,
+        "TE": 18,
+        "WR": 18
+      },
+      "positionRanks": {
+        "QB": 1,
+        "RB": 1,
+        "TE": 1,
+        "WR": 1
+      },
+      "starters": [
+        {
+          "name": "Player 4 QB",
+          "playerId": "p-4-QB",
+          "points": 18,
+          "position": "QB"
+        },
+        {
+          "name": "Player 4 RB",
+          "playerId": "p-4-RB",
+          "points": 18,
+          "position": "RB"
+        },
+        {
+          "name": "Player 4 WR",
+          "playerId": "p-4-WR",
+          "points": 18,
+          "position": "WR"
+        },
+        {
+          "name": "Player 4 TE",
+          "playerId": "p-4-TE",
+          "points": 18,
+          "position": "TE"
+        }
+      ],
+      "unfilledSlotRate": 0,
+      "usedLeagueScoring": false,
+      "weeksProjected": 3
+    },
+    "drivers": [
+      {
+        "detail": "1st in projected points per week at 72.0.",
+        "label": "Scores more than almost anyone",
+        "tone": "good"
+      },
+      {
+        "detail": "1st in weekly QB output at 18.0 points per week.",
+        "label": "QB room carries this team",
+        "tone": "good"
+      },
+      {
+        "detail": "Loses 25% of weekly output when a position's best starter misses time.",
+        "label": "Top heavy",
+        "tone": "bad"
+      }
+    ],
+    "expectedPointsPerWeek": 72,
+    "expectedPointsStdev": 17.37,
+    "expectedWeeksAlive": 2.29,
+    "expectedWins": null,
+    "lastPlaceOdds": null,
+    "lineupEfficiency": 1,
+    "lineupEfficiencyRank": 1,
+    "lineupPointsLost": 0,
+    "playoffOdds": null,
+    "powerPulse": 87,
+    "projectedLosses": null,
+    "projectedTies": null,
+    "projectedWins": null,
+    "pulseRank": 1,
+    "reliabilityRank": 1,
+    "reliabilityScore": 1,
+    "rosterRowId": "roster-row-4",
+    "scoreDepth": 50,
+    "scoreDepthRank": 1,
+    "scoreForm": null,
+    "scoreFormRank": null,
+    "scorePoints": 87,
+    "scorePointsRank": 1,
+    "scoreSchedule": null,
+    "scoreScheduleRank": null,
+    "sleeperRosterId": 4,
+    "sosPoints": null,
+    "sosRank": null,
+    "surviveAllOdds": 0.564,
+    "teamName": "Team 4",
+    "titleOdds": null,
+    "weekly": [
+      {
+        "mean": 72,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 17.37,
+        "week": 5,
+        "winProb": null
+      },
+      {
+        "mean": 72,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 17.37,
+        "week": 6,
+        "winProb": null
+      },
+      {
+        "mean": 72,
+        "opponentName": null,
+        "opponentRosterId": null,
+        "sigma": 17.37,
+        "week": 7,
+        "winProb": null
+      }
+    ]
+  }
+]

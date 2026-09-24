@@ -25,12 +25,14 @@
  * Sleeper, Supabase, or any API.
  */
 
+// Draft Pulse stays offense-only (plan R-11).
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import { ArrowDown, ArrowUp, Gauge } from "lucide-react";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
 import type { TeamRollup } from "@/lib/on-the-clock/rosters";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
 import { ARCHETYPE_REASON, ARCHETYPE_TONE } from "./archetype";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import { EmptyCard, LoadingCard, NotStartedCard } from "./states";
 
@@ -416,6 +418,9 @@ function YourPulseCard({
               mine.pulse.projectedCount + mine.pulse.unprojectedCount
             } players carry a weekly projection; the rest are judged on value alone.`
           : ""}
+        {(mine.pulse.unprojectedIdpCount ?? 0) > 0
+          ? ` ${mine.pulse.unprojectedIdpCount === 1 ? "Your defensive pick sits" : `Your ${mine.pulse.unprojectedIdpCount} defensive picks sit`} outside both: Draft Pulse covers offense only and no value source prices defenders.`
+          : ""}
       </p>
     </section>
   );
@@ -729,7 +734,7 @@ function PositionBreakdown({
   // best position look like the league's best.
   const peak = Math.max(
     1,
-    ...rows.flatMap((r) => PULSE_POSITIONS.map((p) => r.pulse.positionPoints[p] ?? 0)),
+    ...rows.flatMap((r) => OFFENSE_POSITIONS.map((p) => r.pulse.positionPoints[p] ?? 0)),
   );
 
   return (
@@ -755,7 +760,7 @@ function PositionBreakdown({
                 </span>
               </h4>
               <ul role="list" className="mt-2.5 space-y-1.5">
-                {PULSE_POSITIONS.map((position) => (
+                {OFFENSE_POSITIONS.map((position) => (
                   <PositionBar
                     key={position}
                     position={position}

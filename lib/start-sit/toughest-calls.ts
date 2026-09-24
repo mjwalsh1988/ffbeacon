@@ -84,6 +84,9 @@
  * this in.
  */
 
+// The start/sit board refuses defenders (lib/start-sit/load.ts), so every
+// per-position loop here is pinned to the six offensive positions.
+import { OFFENSE_POSITIONS, isOffensePosition, type OffensePosition } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import type { Database } from "@/lib/database.types";
@@ -111,7 +114,7 @@ import type { StartSitCandidate, StartSitProjection, PulsePosition } from "@/lib
  * Top N by positional rank, per position: who counts as "startable" for the
  * purposes of this block. Section 2.8's own figures.
  */
-export const TOUGHEST_CALLS_STARTABLE_CUT: Record<PulsePosition, number> = {
+export const TOUGHEST_CALLS_STARTABLE_CUT: Record<OffensePosition, number> = {
   QB: 16,
   RB: 30,
   WR: 36,
@@ -358,12 +361,13 @@ export function selectToughestCalls(input: SelectToughestCallsInput): ToughestCa
   const eligible = universe.filter(
     (entry) =>
       entry.projection.points !== null &&
+      isOffensePosition(entry.candidate.position) &&
       entry.positionRank <= TOUGHEST_CALLS_STARTABLE_CUT[entry.candidate.position] &&
       !isUnavailable(entry),
   );
 
   const grouped = new Map<PulsePosition, ToughestCallsUniversePlayer[]>();
-  for (const position of PULSE_POSITIONS) grouped.set(position, []);
+  for (const position of OFFENSE_POSITIONS) grouped.set(position, []);
   for (const entry of eligible) {
     grouped.get(entry.candidate.position)!.push(entry);
   }
@@ -372,7 +376,7 @@ export function selectToughestCalls(input: SelectToughestCallsInput): ToughestCa
   }
 
   const pairsByPosition = new Map<PulsePosition, ToughestCallsPair[]>();
-  for (const position of PULSE_POSITIONS) {
+  for (const position of OFFENSE_POSITIONS) {
     const list = grouped.get(position)!;
     const pairs: ToughestCallsPair[] = [];
     for (let i = 0; i < list.length; i += 1) {
@@ -388,7 +392,7 @@ export function selectToughestCalls(input: SelectToughestCallsInput): ToughestCa
   }
 
   const byPosition = {} as Record<PulsePosition, ToughestCallsPair[]>;
-  for (const position of PULSE_POSITIONS) {
+  for (const position of OFFENSE_POSITIONS) {
     byPosition[position] = pairsByPosition.get(position)!.slice(0, TOUGHEST_CALLS_BY_POSITION_SIZE);
   }
 
@@ -396,7 +400,7 @@ export function selectToughestCalls(input: SelectToughestCallsInput): ToughestCa
   const grid: ToughestCallsPair[] = [];
 
   // Pass 1: guarantee one pair per position that has any, in a fixed order.
-  for (const position of PULSE_POSITIONS) {
+  for (const position of OFFENSE_POSITIONS) {
     const pairs = pairsByPosition.get(position)!;
     const pick = pairs.find((p) => !usedSlugs.has(p.a.slug) && !usedSlugs.has(p.b.slug));
     if (pick) {
@@ -407,7 +411,7 @@ export function selectToughestCalls(input: SelectToughestCallsInput): ToughestCa
   }
 
   // Pass 2: fill the remainder, globally closest first, skipping anyone already on the grid.
-  const allPairs = PULSE_POSITIONS.flatMap((position) => pairsByPosition.get(position)!);
+  const allPairs = OFFENSE_POSITIONS.flatMap((position) => pairsByPosition.get(position)!);
   allPairs.sort(comparePairsByCloseness);
   for (const pair of allPairs) {
     if (grid.length >= TOUGHEST_CALLS_GRID_MAX) break;

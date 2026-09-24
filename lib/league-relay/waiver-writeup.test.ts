@@ -233,3 +233,34 @@ describe("buildWaiverWriteup", () => {
     expect(buildWaiverWriteup({ ...base, ...move() })?.poll).toBeNull();
   });
 });
+
+describe("a missing projection is never a judgement (IDP-129)", () => {
+  const base = {
+    league,
+    faabBudget: 100,
+    faabMedian: 8,
+    weakestPosition: null,
+    snark: 0.8,
+    showNumbers: true,
+    url: null,
+  };
+  const text = (w: ReturnType<typeof buildWaiverWriteup>) => (w?.sections ?? []).map((s) => s.text).join("\n\n");
+
+  it("says a defender plays a position no value source prices", () => {
+    const w = buildWaiverWriteup({
+      ...base,
+      ...move({ added: [player("Some Linebacker", { position: "LB", projectedPoints: null, value: null })] }),
+    });
+    expect(text(w)).toContain("plays a position no value source prices");
+    expect(text(w)).not.toContain("itself a review");
+  });
+
+  it("says anyone else simply has no projection this week", () => {
+    const w = buildWaiverWriteup({
+      ...base,
+      ...move({ added: [player("Backup Back", { projectedPoints: null })] }),
+    });
+    expect(text(w)).toContain("has no projection this week");
+    expect(text(w)).not.toContain("itself a review");
+  });
+});

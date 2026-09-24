@@ -29,6 +29,7 @@
  * Presentational server component.
  */
 
+import type { IdpPosition } from "@/lib/site";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
@@ -64,22 +65,28 @@ const POSITION_WORD: Record<BoardPosition, string> = {
  * would make the colour read as a signal about the claim instead of a label for
  * the position.
  */
-const POSITION_BORDER: Record<BoardPosition, string> = {
+const POSITION_BORDER: Record<BoardPosition | IdpPosition, string> = {
   QB: "border-position-qb/40",
   RB: "border-position-rb/40",
   WR: "border-position-wr/40",
   TE: "border-position-te/40",
   K: "border-position-k/40",
   DEF: "border-position-def/40",
+  DL: "border-position-dl/40",
+  LB: "border-position-lb/40",
+  DB: "border-position-db/40",
 };
 
-const POSITION_TEXT: Record<BoardPosition, string> = {
+const POSITION_TEXT: Record<BoardPosition | IdpPosition, string> = {
   QB: "text-position-qb",
   RB: "text-position-rb",
   WR: "text-position-wr",
   TE: "text-position-te",
   K: "text-position-k",
   DEF: "text-position-def",
+  DL: "text-position-dl",
+  LB: "text-position-lb",
+  DB: "text-position-db",
 };
 
 function one(n: number): string {

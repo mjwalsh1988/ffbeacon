@@ -292,9 +292,17 @@ export async function GET(
                           </span>
                         ) : null}
                       </p>
-                      <p style={{ margin: 0, color: INK_MUTED, fontFamily: "monospace" }}>
-                        {formatNumber(p.value)}
-                      </p>
+                      {p.noValue ? (
+                        // Words, never a "0" (plan IDP-126): no value source
+                        // prices this player.
+                        // #8A8A9C is the site's current ink-subtle, which passes
+                        // AA; the INK_SUBTLE constant above predates it.
+                        <p style={{ margin: 0, color: "#8A8A9C" }}>No market value</p>
+                      ) : (
+                        <p style={{ margin: 0, color: INK_MUTED, fontFamily: "monospace" }}>
+                          {formatNumber(p.value)}
+                        </p>
+                      )}
                     </div>
                   ))}
                   {side.picks.slice(0, 4).map((pick, pi) => (

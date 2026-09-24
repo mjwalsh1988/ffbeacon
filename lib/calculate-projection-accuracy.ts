@@ -74,6 +74,9 @@
  * better" and "is this source biased" actually need answered.
  */
 
+import { isDefender } from "./site";
+import { IDP_PRESETS } from "./idp/scoring-presets";
+import { normalizeProjectedIdpLine, scoreIdpLine } from "./idp/stat-line";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { DEFAULT_POWER_PULSE_SETTINGS, mergePowerPulseSettings } from "./power-pulse/default-settings";
@@ -83,8 +86,50 @@ type ServiceClient = SupabaseClient<Database>;
 
 const PAGE = 1000;
 
+/**
+ * Paging is by id keyset (id > the last id seen), never by offset: the graded
+ * window reaches back to 2020 once defender history is in, and a deep offset
+ * over hundreds of thousands of rows hits the statement timeout.
+ */
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+
 const SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std"] as const;
-type ScoringBase = (typeof SCORING_BASES)[number];
+/**
+ * The three offensive bases plus idp123, Sleeper's default IDP scoring (plan
+ * D-1). A defender is graded on idp123 ONLY: his stored pts_* are Sleeper's
+ * offensive-only figures, and grading him on them is the PPR garbage plan
+ * hazard H describes. An offensive player is never graded on idp123.
+ */
+type ScoringBase = (typeof SCORING_BASES)[number] | "idp123";
+
+/** The scoring bases a player at this position is graded under. */
+export function scoringKeysFor(position: string | null | undefined): readonly ScoringBase[] {
+  return isDefender(position) ? ["idp123"] : SCORING_BASES;
+}
+
+const IDP123 = IDP_PRESETS.idp123;
+
+/** A defender's actual idp123 points from the typed player_stats columns. */
+export function actualIdp123(row: Record<string, unknown>): number | null {
+  const line: Record<string, number> = {};
+  let any = false;
+  for (const key of Object.keys(IDP123)) {
+    const n = numOrNull(row[key]);
+    if (n !== null) {
+      line[key] = n;
+      any = true;
+    }
+  }
+  return any ? scoreIdpLine(line, IDP123) : null;
+}
+
+/** A defender's projected idp123 points from his stored projected stat line. */
+export function projectedIdp123(statLine: unknown): number | null {
+  if (!statLine || typeof statLine !== "object") return null;
+  const line = normalizeProjectedIdpLine(statLine as Record<string, unknown>);
+  if (Object.keys(line).length === 0) return null;
+  return scoreIdpLine(line, IDP123);
+}
 
 /**
  * Minimum projected points before a week contributes a ratio. Below this, the
@@ -202,6 +247,8 @@ type ProjectionRow = {
   ppr: number | null;
   halfPpr: number | null;
   std: number | null;
+  /** Defenders only: idp123 points from the projected stat line. Null otherwise. */
+  idp123: number | null;
 };
 
 type ActualRow = {
@@ -212,6 +259,8 @@ type ActualRow = {
   ppr: number | null;
   halfPpr: number | null;
   std: number | null;
+  /** idp123 points from the typed IDP columns; null when the row has none. */
+  idp123: number | null;
 };
 
 /**
@@ -282,7 +331,19 @@ export async function runCalculateProjectionAccuracy(
   // Actuals and positions are not source-specific either: a player's real
   // stat line and his position do not depend on whose projection is being
   // graded against them, so both are loaded once and shared by every source.
-  const actuals = await loadActuals(supabase, seasons);
+  // Offensive actuals only for seasons with an offensive projection; seasons
+  // that only defender history reaches read defender weeks alone (the partial
+  // index on def_snp). Reading every position for 2020 on would roughly triple
+  // this load for rows nothing grades.
+  const offenseSeasons = [...new Set(projections.filter((p) => p.ppr !== null).map((p) => p.season))];
+  const idpOnlySeasons = [
+    ...new Set(projections.filter((p) => p.idp123 !== null).map((p) => p.season)),
+  ].filter((s) => !offenseSeasons.includes(s));
+  // Every row for every graded season, as before. A defender-only read of the
+  // idp-only seasons (def_snp not null) was tried and reverted: it saved no
+  // time (144 s against 142 s) and changed grading, because a special-teams
+  // week with no defensive snap stopped counting as a game played.
+  const actuals = await loadActuals(supabase, [...new Set([...offenseSeasons, ...idpOnlySeasons])]);
   const positions = await loadPositions(supabase);
 
   // Index actuals for O(1) join.
@@ -353,7 +414,7 @@ export async function runCalculateProjectionAccuracy(
     for (const [playerId, rows] of byPlayer) {
       const position = positions.get(playerId) ?? null;
 
-      for (const scoring of SCORING_BASES) {
+      for (const scoring of scoringKeysFor(position)) {
         // Per-season rows.
         const bySeason = new Map<number, ProjectionRow[]>();
         for (const row of rows) {
@@ -469,6 +530,11 @@ export async function runCalculateProjectionAccuracy(
  * emphasize recent games on purpose. This summary answers a different
  * question, "how has this source actually done", and an honest answer to that
  * counts every graded week once, not decayed by how long ago it happened.
+ *
+ * Defenders are SKIPPED here, by construction: their rows carry no PPR figure
+ * (row.ppr is null for every defender), so the PPR scoreboard never sees them.
+ * Their record is graded on idp123 and lives in the per-player rows above;
+ * mixing an idp123 error into a PPR mean would blend two scales into one number.
  */
 function summarizeSource(
   source: string,
@@ -704,7 +770,11 @@ function toInsert(
   };
 }
 
-function pick(row: { ppr: number | null; halfPpr: number | null; std: number | null }, scoring: ScoringBase): number | null {
+function pick(
+  row: { ppr: number | null; halfPpr: number | null; std: number | null; idp123: number | null },
+  scoring: ScoringBase,
+): number | null {
+  if (scoring === "idp123") return row.idp123;
   if (scoring === "pts_half_ppr") return row.halfPpr;
   if (scoring === "pts_std") return row.std;
   return row.ppr;
@@ -726,25 +796,30 @@ async function loadSettings(supabase: ServiceClient) {
 
 async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]> {
   const out: ProjectionRow[] = [];
-  for (let from = 0; ; from += PAGE) {
+  for (let lastId = ""; ; ) {
     const { data, error } = await withRetry(
       async () =>
         await supabase
           .from("player_weekly_projections")
-      .select("player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
+      .select("id, player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
       .eq("season_type", "regular")
       .not("player_id", "is", null)
+      // A row with no PPR figure grades on no offensive base (accumulate skips
+      // it): defenders, read with their stat line below, and unprojected weeks.
+      .not("projected_pts_ppr", "is", null)
       // Ordered, because Postgres promises nothing about row order without one
       // and .range() pages over whatever order it happens to give. On a table
       // the projection sync rewrites daily that handed back 8,771 rows twice
       // across forty pages and skipped as many, which graded some players on
       // the same week two or three times and others on no week at all.
       .order("id", { ascending: true })
-      .range(from, from + PAGE - 1),
-      { label: `accuracy projections page ${from}` },
+      .gt("id", lastId || ZERO_UUID)
+          .limit(PAGE),
+      { label: `accuracy projections after ${lastId || "start"}` },
     );
     if (error) throw new Error(`accuracy projection load failed: ${error.message}`);
     if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
     for (const row of data) {
       if (!row.player_id) continue;
       out.push({
@@ -755,6 +830,44 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]
         ppr: numOrNull(row.projected_pts_ppr),
         halfPpr: numOrNull(row.projected_pts_half_ppr),
         std: numOrNull(row.projected_pts_std),
+        idp123: null,
+      });
+    }
+    if (data.length < PAGE) break;
+  }
+
+  // Defenders, in a second read joined to their position. Their rows above
+  // carry null in every offensive column and grade on nothing; the same rows
+  // here carry the projected stat line, scored under idp123. Every source, like
+  // the read above, because the grader runs once per source.
+  for (let lastId = ""; ; ) {
+    const { data, error } = await withRetry(
+      async () =>
+        await supabase
+          .from("player_weekly_projections")
+          .select("id, player_id, season, week, source, stat_line, players!inner(position)")
+          .eq("season_type", "regular")
+          .not("player_id", "is", null)
+          .in("players.position", ["DL", "LB", "DB"])
+          .order("id", { ascending: true })
+          .gt("id", lastId || ZERO_UUID)
+          .limit(PAGE),
+      { label: `accuracy defender projections after ${lastId || "start"}` },
+    );
+    if (error) throw new Error(`accuracy defender projection load failed: ${error.message}`);
+    if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
+    for (const row of data) {
+      if (!row.player_id) continue;
+      out.push({
+        playerId: row.player_id,
+        season: Number(row.season),
+        week: Number(row.week),
+        source: row.source,
+        ppr: null,
+        halfPpr: null,
+        std: null,
+        idp123: projectedIdp123(row.stat_line),
       });
     }
     if (data.length < PAGE) break;
@@ -762,23 +875,38 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]
   return out;
 }
 
-async function loadActuals(supabase: ServiceClient, seasons: number[]): Promise<ActualRow[]> {
+/**
+ * The offensive columns plus the typed IDP columns idp123 weights (migration
+ * 0296). A literal so the client types the row; the IDP list must match
+ * IDP_PRESETS.idp123's idp keys, which the test holds.
+ */
+export const ACTUAL_SELECT =
+  "id, player_id, season, week, gp, pts_ppr, pts_half_ppr, pts_std, idp_tkl, idp_tkl_solo, idp_tkl_ast, idp_tkl_loss, idp_sack, idp_sack_yd, idp_qb_hit, idp_int, idp_int_ret_yd, idp_pass_def, idp_pass_def_3p, idp_ff, idp_fum_rec, idp_fum_ret_yd, idp_def_td, idp_safe, idp_blk_kick";
+
+async function loadActuals(
+  supabase: ServiceClient,
+  seasons: number[],
+  opts: { defendersOnly?: boolean } = {},
+): Promise<ActualRow[]> {
   const out: ActualRow[] = [];
   if (seasons.length === 0) return out;
-  for (let from = 0; ; from += PAGE) {
+  for (let lastId = ""; ; ) {
     const { data, error } = await withRetry(
-      async () =>
-        await supabase
+      async () => {
+        let q = supabase
           .from("player_stats")
-      .select("player_id, season, week, gp, pts_ppr, pts_half_ppr, pts_std")
-      .eq("season_type", "regular")
-      .in("season", seasons)
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1),
-      { label: `accuracy actuals page ${from}` },
+          .select(ACTUAL_SELECT)
+          .eq("season_type", "regular")
+          .in("season", seasons);
+        // Defender weeks only: served by the partial index on def_snp.
+        if (opts.defendersOnly) q = q.not("def_snp", "is", null);
+        return await q.order("id", { ascending: true }).gt("id", lastId || ZERO_UUID).limit(PAGE);
+      },
+      { label: `accuracy actuals after ${lastId || "start"}` },
     );
     if (error) throw new Error(`accuracy actual load failed: ${error.message}`);
     if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
     for (const row of data) {
       if (!row.player_id) continue;
       out.push({
@@ -789,6 +917,7 @@ async function loadActuals(supabase: ServiceClient, seasons: number[]): Promise<
         ppr: numOrNull(row.pts_ppr),
         halfPpr: numOrNull(row.pts_half_ppr),
         std: numOrNull(row.pts_std),
+        idp123: actualIdp123(row as unknown as Record<string, unknown>),
       });
     }
     if (data.length < PAGE) break;
@@ -798,18 +927,20 @@ async function loadActuals(supabase: ServiceClient, seasons: number[]): Promise<
 
 async function loadPositions(supabase: ServiceClient): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (let from = 0; ; from += PAGE) {
+  for (let lastId = ""; ; ) {
     const { data, error } = await withRetry(
       async () =>
         await supabase
           .from("players")
           .select("id, position")
           .order("id", { ascending: true })
-          .range(from, from + PAGE - 1),
-      { label: `accuracy positions page ${from}` },
+          .gt("id", lastId || ZERO_UUID)
+          .limit(PAGE),
+      { label: `accuracy positions after ${lastId || "start"}` },
     );
     if (error) throw new Error(`accuracy position load failed: ${error.message}`);
     if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
     for (const row of data) out.set(row.id, row.position);
     if (data.length < PAGE) break;
   }

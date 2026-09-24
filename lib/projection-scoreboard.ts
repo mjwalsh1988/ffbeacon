@@ -34,6 +34,7 @@ import { CACHE_TAGS, CACHE_TTL } from "./cache-tags";
 type ServiceClient = SupabaseClient<Database>;
 
 const PAGE = 1000;
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 export const SCOREBOARD_SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std"] as const;
 export type ScoreboardScoringBase = (typeof SCOREBOARD_SCORING_BASES)[number];
@@ -300,24 +301,34 @@ function summarizeSource(
   };
 }
 
+/**
+ * Keyset paging (id > last), not offset: the table holds every season's
+ * defender rows since IDP-116, and a deep offset over it times out. Rows with
+ * no PPR figure (defenders, whose points columns are always null, and
+ * unprojected weeks) grade on nothing here and are not read at all, which also
+ * keeps the season list to seasons this scoreboard can actually grade.
+ */
 async function loadProjections(supabase: ServiceClient): Promise<ProjRow[]> {
   const out: ProjRow[] = [];
-  for (let from = 0; ; from += PAGE) {
+  for (let lastId = ""; ; ) {
     const { data, error } = await withRetry(
       async () =>
         await supabase
           .from("player_weekly_projections")
           .select(
-            "player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
+            "id, player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
           )
           .eq("season_type", "regular")
           .not("player_id", "is", null)
+          .not("projected_pts_ppr", "is", null)
+          .gt("id", lastId || ZERO_UUID)
           .order("id", { ascending: true })
-          .range(from, from + PAGE - 1),
-      { label: `scoreboard projections page ${from}` },
+          .limit(PAGE),
+      { label: `scoreboard projections after ${lastId || "start"}` },
     );
     if (error) throw new Error(`scoreboard projection load failed: ${error.message}`);
     if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
     for (const row of data) {
       if (!row.player_id) continue;
       out.push({
@@ -338,20 +349,22 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjRow[]> {
 async function loadActuals(supabase: ServiceClient, seasons: number[]): Promise<ActualRow[]> {
   const out: ActualRow[] = [];
   if (seasons.length === 0) return out;
-  for (let from = 0; ; from += PAGE) {
+  for (let lastId = ""; ; ) {
     const { data, error } = await withRetry(
       async () =>
         await supabase
           .from("player_stats")
-          .select("player_id, season, week, gp, pts_ppr, pts_half_ppr, pts_std")
+          .select("id, player_id, season, week, gp, pts_ppr, pts_half_ppr, pts_std")
           .eq("season_type", "regular")
           .in("season", seasons)
+          .gt("id", lastId || ZERO_UUID)
           .order("id", { ascending: true })
-          .range(from, from + PAGE - 1),
-      { label: `scoreboard actuals page ${from}` },
+          .limit(PAGE),
+      { label: `scoreboard actuals after ${lastId || "start"}` },
     );
     if (error) throw new Error(`scoreboard actual load failed: ${error.message}`);
     if (!data || data.length === 0) break;
+    lastId = data[data.length - 1].id;
     for (const row of data) {
       if (!row.player_id) continue;
       out.push({

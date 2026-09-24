@@ -52,6 +52,9 @@ const POSITION_COLOR: Record<string, string> = {
   TE: "#FBBF24",
   K: "#F472B6",
   DEF: "#94A3B8",
+  DL: "#A3E635",
+  LB: "#E879F9",
+  DB: "#818CF8",
 };
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,95}$/;

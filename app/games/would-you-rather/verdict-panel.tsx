@@ -143,11 +143,6 @@ export function VerdictPanel({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-ink">
                           {asset.name}
-                          {asset.noValue && (
-                            <span className="ml-1 text-xs font-normal text-signal-danger">
-                              (no value)
-                            </span>
-                          )}
                         </span>
                         {asset.detail && (
                           <span className="block truncate text-xs text-ink-subtle">
@@ -155,10 +150,15 @@ export function VerdictPanel({
                           </span>
                         )}
                       </span>
-                      {asset.value !== null && (
-                        <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink-muted">
-                          {asset.value.toLocaleString()}
-                        </span>
+                      {asset.noValue ? (
+                        // Words, never a zero or a red flag (plan IDP-126).
+                        <span className="shrink-0 text-xs text-ink-subtle">No market value</span>
+                      ) : (
+                        asset.value !== null && (
+                          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink-muted">
+                            {asset.value.toLocaleString()}
+                          </span>
+                        )
                       )}
                     </li>
                   );

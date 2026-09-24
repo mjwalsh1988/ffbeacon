@@ -53,7 +53,9 @@ import {
   type PlayerRow,
 } from "@/lib/player-profile";
 import { BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
-import { computeAgeDecimal } from "@/lib/player-age";
+import { computeAgeDecimal, computeAgeYears } from "@/lib/player-age";
+import { BREAKDOWN_PLAYER_SELECT } from "@/lib/breakdown/player-select";
+import { isDefender } from "@/lib/site";
 import { computeEdge, computeGroupEdge, visibleRows } from "@/lib/breakdown/edge";
 import { buildTakeaways, buildVerdict, resolveLensEdges } from "@/lib/breakdown/verdict";
 import { DEFAULT_LENS, LENSES, type LensId } from "@/lib/breakdown/types";
@@ -132,23 +134,25 @@ export type BreakdownResult = {
 /** A player option returned when a slug is unknown. */
 export type BreakdownLookup =
   | { ok: true; result: BreakdownResult }
-  | { ok: false; missing: string[] };
+  | {
+      ok: false;
+      missing: string[];
+      /**
+       * Slugs refused because the player is a defender (plan R-23, IDP-127).
+       * The breakdown compares offensive players only; a defender slug typed
+       * into a URL used to come back as a full comparison of zeros.
+       */
+      refusedSlugs?: string[];
+    };
 
-const PLAYER_SELECT =
-  "id, slug, first_name, last_name, full_name, position, team, status, birth_date, external_ids, metadata, years_experience";
+const PLAYER_SELECT = BREAKDOWN_PLAYER_SELECT;
 
-/** Age in whole years from an ISO birth date, or null. */
-function computeAge(birthDate: string | null): number | null {
-  if (!birthDate) return null;
-  const parts = birthDate.split("-").map((p) => parseInt(p, 10));
-  if (parts.length !== 3 || parts.some((p) => Number.isNaN(p))) return null;
-  const [y, m, d] = parts;
-  const now = new Date();
-  let age = now.getUTCFullYear() - y;
-  const beforeBirthday =
-    now.getUTCMonth() + 1 < m || (now.getUTCMonth() + 1 === m && now.getUTCDate() < d);
-  if (beforeBirthday) age -= 1;
-  return age >= 0 && age < 80 ? age : null;
+/** The requested slugs whose player is a defender, in request order. Pure. */
+export function defenderSlugs(
+  slugs: string[],
+  bySlug: Map<string, { position: string | null }>,
+): string[] {
+  return slugs.filter((s) => isDefender(bySlug.get(s)?.position));
 }
 
 function normalizeTrend(dir: string | null): "up" | "down" | "stable" | null {
@@ -324,7 +328,7 @@ type BreakdownCoreLookup =
        */
       tePremiumPerReception: number;
     }
-  | { ok: false; missing: string[] };
+  | { ok: false; missing: string[]; refusedSlugs?: string[] };
 
 /**
  * Resolve the shared (format, source) context and load every side's core
@@ -365,6 +369,10 @@ async function loadBreakdownCore(
   }
   const missing = slugs.filter((s) => !bySlug.has(s));
   if (missing.length > 0) return { ok: false, missing };
+  // Defenders are refused before anything else is read (plan R-23, IDP-127):
+  // every figure this core loads is an offensive one.
+  const refusedSlugs = defenderSlugs(slugs, bySlug);
+  if (refusedSlugs.length > 0) return { ok: false, missing: [], refusedSlugs };
 
   // Active formats only. The format dropdown never offers an inactive one, and
   // an unknown slug falls through to a null config, which degrades to "no
@@ -461,7 +469,7 @@ async function loadBreakdownCore(
       team: row.team,
       teamPrimary: row.team ? (teamColors.get(row.team) ?? null) : null,
       sleeperId: readSleeperId(row),
-      age: computeAge(row.birth_date),
+      age: computeAgeYears(row.birth_date),
       ageDecimal: computeAgeDecimal(row.birth_date),
       yearsExperience: row.years_experience ?? null,
       injuryStatus: injuryStatusFor(row),
@@ -523,7 +531,7 @@ export async function loadBreakdownPair(
 ): Promise<BreakdownLookup> {
   const lens = params.lens ?? DEFAULT_LENS;
   const core = await loadBreakdownCore(supabase, [slugA, slugB], params);
-  if (!core.ok) return { ok: false, missing: core.missing };
+  if (!core.ok) return { ok: false, missing: core.missing, refusedSlugs: core.refusedSlugs };
 
   const [a, b] = core.sides;
   const result = assembleBreakdown({
@@ -563,7 +571,7 @@ export type BreakdownGroupResult = {
 
 export type BreakdownGroupLookup =
   | { ok: true; result: BreakdownGroupResult }
-  | { ok: false; missing: string[] };
+  | { ok: false; missing: string[]; refusedSlugs?: string[] };
 
 /**
  * The N-sided Beacon Breakdown (two to eight players) behind the Who Should I
@@ -596,7 +604,7 @@ export async function loadBreakdown(
   }
 
   const core = await loadBreakdownCore(supabase, slugs, params);
-  if (!core.ok) return { ok: false, missing: core.missing };
+  if (!core.ok) return { ok: false, missing: core.missing, refusedSlugs: core.refusedSlugs };
 
   const { sides, context, tePremiumPerReception } = core;
 

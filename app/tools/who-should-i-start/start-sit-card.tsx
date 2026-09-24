@@ -59,6 +59,7 @@
  *     sentence stating the absence, never a blank cell and never a zero.
  */
 
+import { positionPlural } from "@/lib/start-sit/reasons";
 import type { CSSProperties, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -103,20 +104,6 @@ export type StartSitCardMarket = {
  */
 export type StartSitCardLayout = "row" | "stack";
 
-/**
- * Sentence-case position plurals, for the matchup row's "ranks 4th in points
- * allowed to running backs" clause. Duplicated from the private
- * POSITION_PLURAL in lib/start-sit/reasons.ts rather than imported: that map
- * is not exported. If reasons.ts ever exports it this should import it.
- */
-const POSITION_PLURAL: Record<PulsePosition, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "wide receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
 
 /**
  * Mirrors the private statusTone() in components/player-profile/injury-status.tsx,
@@ -458,7 +445,7 @@ export function StartSitCard({
                       <span className="mt-1 block text-xs text-ink-muted">
                         <span className="sr-only">, </span>
                         {projection.opponent} ranks {ordinal(projection.defenseRankVsPosition)} in points allowed to{" "}
-                        {POSITION_PLURAL[candidate.position]}
+                        {positionPlural(candidate.position)}
                       </span>
                     )}
                   </>

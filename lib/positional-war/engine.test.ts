@@ -30,6 +30,9 @@ const CV: Record<PulsePosition, number> = {
   TE: 0.7,
   K: 0.5,
   DEF: 0.75,
+  DL: 0.66,
+  LB: 0.41,
+  DB: 0.49,
 };
 
 /**

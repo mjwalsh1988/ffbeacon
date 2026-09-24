@@ -159,8 +159,15 @@ describe("buildPriorCells", () => {
   });
 
   it("files an unknown position only under any, never inventing one", () => {
-    const rows = buildPriorCells([auction({ position: "LB" })]);
+    const rows = buildPriorCells([auction({ position: "OL" })]);
     expect(rows.every((r) => r.position === "any")).toBe(true);
+  });
+
+  it("files a linebacker auction under LB as well as any (IDP-124)", () => {
+    const rows = buildPriorCells([auction({ position: "LB" })]);
+    expect(rows.some((r) => r.cell_key === "redraft|no|LB|wk2_6|2")).toBe(true);
+    expect(rows.some((r) => r.position === "any")).toBe(true);
+    expect(rows).toHaveLength(32);
   });
 
   it("counts distinct leagues and seasons without storing either", () => {

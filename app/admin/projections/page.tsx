@@ -112,6 +112,14 @@ export default async function ProjectionsPage({
           from every figure on this page: they are not counted as misses, and
           they do not drag a source down.
         </p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          Individual defensive players (defensive linemen, linebackers and
+          defensive backs) are not on this page. Their projections carry
+          tackles and sacks rather than a point total, so none of these three
+          scoring bases applies to them. Each one is graded on Sleeper&apos;s
+          default IDP scoring instead, in the per-player accuracy table the
+          League Pulse models read.
+        </p>
       </section>
 
       <nav aria-label="Scoring basis" className="flex flex-wrap items-center gap-2">

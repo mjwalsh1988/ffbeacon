@@ -817,6 +817,15 @@ export type SleeperSeasonProjection = {
 const PROJECTIONS_BASE = "https://api.sleeper.com";
 const PROJECTION_POSITIONS = ["DEF", "K", "QB", "RB", "TE", "WR"] as const;
 
+/**
+ * Individual defensive player positions Sleeper projects (RotoWire). They join
+ * the WEEKLY fetch only, in the same URL as the six above, so one request per
+ * week returns every row and the sync's stale-row rules see one complete set
+ * (plan IDP-114, hazard A). The season/market fetch deliberately stays at six:
+ * no value source prices defenders.
+ */
+export const IDP_PROJECTION_POSITIONS = ["DL", "LB", "DB"] as const;
+
 export async function getSleeperSeasonProjections(
   season: string,
   seasonType: SleeperSeasonType = "regular",
@@ -849,9 +858,16 @@ export async function getSleeperWeeklyProjections(
   season: number,
   week: number,
   seasonType: SleeperSeasonType = "regular",
+  /**
+   * Which positions to ask for. Defaults to all nine, which is what the
+   * nightly sync must use (one complete set per week, hazard A). Only the
+   * one-time IDP history backfill narrows it, so re-fetching a finished
+   * season's defenders does not also rewrite its offensive record.
+   */
+  positions: readonly string[] = [...PROJECTION_POSITIONS, ...IDP_PROJECTION_POSITIONS],
 ): Promise<SleeperWeeklyProjection[]> {
   const params = new URLSearchParams({ season_type: seasonType, order_by: "pts_ppr" });
-  for (const pos of PROJECTION_POSITIONS) params.append("position[]", pos);
+  for (const pos of positions) params.append("position[]", pos);
   const url = `${PROJECTIONS_BASE}/projections/nfl/${season}/${week}?${params.toString()}`;
   return (await safeFetch<SleeperWeeklyProjection[]>(url, 45_000)) ?? [];
 }

@@ -64,7 +64,7 @@
     "wyr:pool": "tsx --env-file=.env.local scripts/would-you-rather-pool.ts",
     "indexnow": "tsx --env-file=.env.local scripts/indexnow.ts",
     "donate:receipts": "tsx --tsconfig tsconfig.scripts.json --env-file=.env.local scripts/send-pending-donation-receipts.ts",
-    "sync:stats:full": "npm run sync:stats && npm run calculate:finishes && npm run calculate:defense-splits && npm run calculate:projection-accuracy",
+    "sync:stats:full": "npm run sync:stats && npm run calculate:finishes && npm run calculate:idp-seasons && npm run calculate:defense-splits && npm run calculate:projection-accuracy",
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
     "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run sync:dynastyprocess && npm run seed:rankings && npm run calculate:trends",
     "backtest:brief-relevance": "tsx --env-file=.env.local scripts/backtest-brief-relevance.ts",
@@ -82,7 +82,9 @@
     "backfill:dynastyprocess": "tsx --env-file=.env.local scripts/backfill-dynastyprocess-history.ts",
     "backfill:rookie-adp": "tsx --env-file=.env.local scripts/backfill-rookie-adp-history.ts",
     "backfill:draft-selections": "tsx --env-file=.env.local scripts/backfill-draft-selections.ts",
-    "backfill:all": "npm run backfill:ktc && npm run backfill:dynastyprocess && npm run backfill:rookie-adp && npm run calculate:trends"
+    "backfill:all": "npm run backfill:ktc && npm run backfill:dynastyprocess && npm run backfill:rookie-adp && npm run calculate:trends",
+    "backfill:idp-columns": "tsx --env-file=.env.local scripts/backfill-idp-stat-columns.ts",
+    "calculate:idp-seasons": "tsx --env-file=.env.local scripts/calculate-idp-seasons.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

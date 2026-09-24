@@ -25,13 +25,16 @@ export function OptimizerPanel({
   optimization,
   isFinal,
   week,
+  defenderSlots = 0,
 }: {
   optimization: LineupOptimization;
   isFinal: boolean;
   week: number;
+  /** Ungraded slots held by a named defender; said apart from unmatched players. */
+  defenderSlots?: number;
 }) {
-  const { moves, pointsLeftOnBench, unavailable, unlistedGain, ungradedSlotCount } =
-    optimization;
+  const { moves, pointsLeftOnBench, unavailable, unlistedGain } = optimization;
+  const ungradedSlotCount = Math.max(0, optimization.ungradedSlotCount - defenderSlots);
 
   // Something is on the bench, but every remaining swap is worth less than half
   // a point. That is a different answer from "your lineup is optimal", and the
@@ -188,6 +191,13 @@ export function OptimizerPanel({
         <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
           {ungradedSlotCount} of your slots {ungradedSlotCount === 1 ? "holds a player" : "hold players"}{" "}
           we could not match to our player list, so {ungradedSlotCount === 1 ? "it is" : "they are"}{" "}
+          left out of both totals above.
+        </p>
+      )}
+      {defenderSlots > 0 && (
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
+          {defenderSlots} of your slots {defenderSlots === 1 ? "holds a defensive player" : "hold defensive players"}.
+          League Pulse does not project defenders yet, so {defenderSlots === 1 ? "that slot is" : "those slots are"}{" "}
           left out of both totals above.
         </p>
       )}

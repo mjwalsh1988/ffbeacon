@@ -40,6 +40,7 @@
  * have no way to tell which.
  */
 
+import { isDefender } from "@/lib/site";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { buildOptimalLineup, type LineupCandidate } from "@/lib/power-pulse/lineup";
@@ -716,4 +717,29 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
     unprojectedSlotCount,
     unprojectableSlotCount: input.slots.filter((s) => !s.projectable).length,
   };
+}
+
+/**
+ * How many filled starting slots hold a defender the week cannot grade (plan
+ * IDP-122 review). League Pulse NAMES defenders now but does not project them
+ * yet, so on an unplayed week each one lands in `ungradedSlotCount`, whose
+ * footnote says "players we could not match to our player list", which is
+ * false for a player named in the table above it. The panel subtracts these
+ * and gives them their own sentence. Pure; derived from the view rather than
+ * added to the optimisation output, so the engine goldens stay as captured.
+ */
+export function ungradedDefenderSlots(
+  groups: { entries: { player: { playerId: string | null; position: string; projected: number | null; actual: number | null } | null }[] }[],
+  isFinal: boolean,
+): number {
+  let count = 0;
+  for (const group of groups) {
+    for (const entry of group.entries) {
+      const p = entry.player;
+      if (!p || p.playerId === null || !isDefender(p.position)) continue;
+      const graded = isFinal ? p.actual : p.projected;
+      if (graded === null) count += 1;
+    }
+  }
+  return count;
 }

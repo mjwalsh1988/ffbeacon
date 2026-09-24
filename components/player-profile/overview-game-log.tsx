@@ -23,6 +23,8 @@
  * read is a cached one those two now share.
  */
 
+import { gameLogHelper } from "@/lib/player-profile/game-log-helper";
+import { currentNflSeason } from "@/lib/nfl-season";
 import Link from "next/link";
 import { Panel } from "@/components/dashboard-panel";
 import { GameLogTable } from "@/components/player-profile/game-log-table";
@@ -105,15 +107,19 @@ export async function OverviewGameLog({
 
   if (rows.length === 0 && pending.length === 0) return null;
 
+  // Only asked on the fallback branch, and cached: is a LATER season already
+  // on the slate? If so, "next season has not been published" is false.
+  const liveSeason = Number(currentNflSeason());
+  const laterSeasonScheduled =
+    isFallback && liveSeason > season
+      ? (await loadSeasonScheduleCached(liveSeason)).weeksCovered.length > 0
+      : false;
+
   return (
     <Panel
       eyebrow={`${season} season`}
       title="Game log"
-      helper={
-        isFallback
-          ? `${season} week by week. This is last season: the ${season + 1} schedule has not been published yet.`
-          : `${season} week by week, with the rest of the schedule and each week's opponent.`
-      }
+      helper={gameLogHelper({ season, isFallback, laterSeasonScheduled })}
       headingLevel={2}
       action={
         <Link

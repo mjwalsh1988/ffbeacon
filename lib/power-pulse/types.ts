@@ -7,10 +7,21 @@
  * for you in week 4.
  */
 
-/** Positions that can occupy a starting slot and that Sleeper projects. */
-export type PulsePosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+/**
+ * Positions that can occupy a starting slot and that Sleeper projects: the six
+ * offensive positions plus the three individual defensive ones (plan R-1).
+ *
+ * Widened on purpose, and every surface that must stay SIX (draft tools, the
+ * start/sit board, the breakdown, the trade finder's suggestions, the charts
+ * and OG cards, and every engine loop until the IDP switch exists) reads
+ * OFFENSE_POSITIONS from lib/site.ts instead, with a comment saying so. The
+ * compiler listed every exhaustive map; each one either gained the three
+ * entries (a display or League Pulse map) or had its key narrowed to
+ * OffensePosition (a surface that stays six).
+ */
+export type PulsePosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF" | "DL" | "LB" | "DB";
 
-export const PULSE_POSITIONS: PulsePosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
+export const PULSE_POSITIONS: PulsePosition[] = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"];
 
 /**
  * Sleeper roster_positions slot tokens mapped to the positions that can fill
@@ -35,6 +46,30 @@ export const PULSE_SLOT_ELIGIBILITY: Record<string, PulsePosition[]> = {
   Q_FLEX: ["QB", "RB", "WR", "TE"],
   IDP_FLEX: [],
 };
+
+/**
+ * The same map with the IDP tokens seatable (plan R-25). Frozen, and never
+ * read unless a server loader has read the IDP switch and passed true.
+ */
+export const IDP_SLOT_ELIGIBILITY: Record<string, PulsePosition[]> = Object.freeze({
+  ...PULSE_SLOT_ELIGIBILITY,
+  DL: ["DL"],
+  LB: ["LB"],
+  DB: ["DB"],
+  IDP_FLEX: ["DL", "LB", "DB"],
+});
+
+/**
+ * The slot map for a league, chosen by the IDP switch
+ * (league_power_pulse_settings.settings.idp.enabled, phase 3). Pure: the flag
+ * is read once by a server loader and passed down as a plain boolean, never
+ * read here. With false it returns PULSE_SLOT_ELIGIBILITY itself, the same
+ * object every engine reads today, which is what makes "off means identical"
+ * a property of the code.
+ */
+export function slotEligibility(idpEnabled: boolean): Record<string, PulsePosition[]> {
+  return idpEnabled ? IDP_SLOT_ELIGIBILITY : PULSE_SLOT_ELIGIBILITY;
+}
 
 /** Slot tokens that never hold an active starter. */
 export const NON_STARTING_SLOTS = new Set(["BN", "IR", "TAXI", "NA"]);

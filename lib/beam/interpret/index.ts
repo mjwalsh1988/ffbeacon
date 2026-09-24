@@ -22,6 +22,7 @@
  * is where data is read, and it is unaware that a human was involved.
  */
 
+import { positionNoun as sitePositionNoun } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type {
@@ -882,23 +883,13 @@ function expandDetail(player: ResolvedPlayer): string {
   return player.team ?? "";
 }
 
+/**
+ * The one position noun helper, with this caller's rule kept: a position it
+ * cannot name reads as nothing rather than as a raw code in a clarify prompt.
+ */
 function positionNoun(position: string | null): string {
-  switch ((position ?? "").toUpperCase()) {
-    case "QB":
-      return "quarterback";
-    case "RB":
-      return "running back";
-    case "WR":
-      return "wide receiver";
-    case "TE":
-      return "tight end";
-    case "K":
-      return "kicker";
-    case "DEF":
-      return "team defense";
-    default:
-      return "";
-  }
+  const noun = sitePositionNoun(position);
+  return noun === position ? "" : noun;
 }
 
 /**

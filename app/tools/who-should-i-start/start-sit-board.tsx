@@ -57,6 +57,7 @@
  * the VALUE source only (board.sourceSlug), never the projection source.
  */
 
+import { positionNoun } from "@/lib/site";
 import type { ReactNode } from "react";
 import { Gauge, ListChecks, Sparkles } from "lucide-react";
 import { StartSitCard, type StartSitCardMarket } from "./start-sit-card";
@@ -415,7 +416,8 @@ function buildMissingPlayersAlert(board: StartSitBoardData): string | null {
   }
 
   if (board.refusedPlayers.length > 0) {
-    const names = joinWithAnd(board.refusedPlayers.map((p) => `${p.name} (${p.position})`));
+    // Spelled out ("linebacker", not "LB") so the sentence reads aloud (IDP-127).
+    const names = joinWithAnd(board.refusedPlayers.map((p) => `${p.name} (${positionNoun(p.position)})`));
     const verb = board.refusedPlayers.length === 1 ? "plays" : "play";
     parts.push(`${names} ${verb} a position this tool does not evaluate.`);
   }

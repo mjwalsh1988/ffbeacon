@@ -1,5 +1,56 @@
 # Handoff
 
+## IDP phase 1 build (IDP-1xx), session of 2026-09-24. BUILT, IN REVIEW
+
+Plan: docs/idp/idp-guide-and-data-plan.md, section 6 (phase 1). Every task and
+its notes are at the END of progress.md under "IDP across FF Beacon, phase 1".
+NOT COMMITTED, NOT PUSHED, NO BRANCH, by instruction. Stop after phase 1; do
+not start phase 2 without the owner.
+
+State: IDP-101 to IDP-132 completed. One independent reviewer ran (the owner
+asked for one covering everything); no blockers; fixes applied and the rest
+explained in progress.md ("IDP-132 review round"). Typecheck green, 405 test
+files and 6,028 tests passing, build green. STOP: owner review before phase 2.
+Open owner decisions: review finding 8 (retire other unpriced Would You Rather
+trades?) and 12 (metadata shape for the one merged two-way player). Measure the
+stats cron's duration on a preview deploy (accuracy step about 141 s).
+
+ALREADY DONE TO PRODUCTION (cannot be undone by discarding the working tree):
+- Migrations 0296 to 0300 applied via MCP; lib/database.types.ts regenerated.
+- Data runs: players sync (eligible_positions), backfill:sleeper-stats for
+  2020 to 2025, backfill:idp-columns for every season, calculate:finishes,
+  calculate:idp-seasons --all, backfill:weekly-projections --idp-only 2020 to
+  2025, sync:weekly-projections (nightly path, now stores defenders),
+  calculate:projection-accuracy, build:projections, calculate:defense-splits,
+  faab:priors.
+- Three Would You Rather pool trades holding a defender retired (ids in
+  progress.md, IDP-130; none had votes).
+- IMPORTANT, until this code is deployed: the DEPLOYED nightly projection
+  sync still asks Sleeper for six positions, and its stale sweep clears every
+  row for a synced week that the run did not touch. It will therefore blank
+  the 2026 defender projection rows for the current and later weeks each night
+  (points and stat_line to null, availability "unprojected"). Nothing in the
+  deployed app reads those rows, so no page changes; the first run of this
+  code after deploy restores them. The 2020 to 2025 history is untouched,
+  because the nightly sync only sweeps the weeks it syncs.
+
+- The same applies to three other nightly jobs on the deployed code: the
+  projection accuracy rebuild deletes and rewrites the whole table without
+  idp123 rows; the FAAB priors rebuild removes the DL/LB/DB cells as stale;
+  and the stats sync writes new weeks without the typed IDP columns (existing
+  rows keep theirs). After deploy, run once: npm run backfill:idp-columns --
+  --season 2026, npm run calculate:idp-seasons, npm run
+  calculate:projection-accuracy, npm run faab:priors. The finishes rebuild is
+  a database function, already updated, so it is correct either way.
+
+Deviations from the plan (each explained in its progress.md entry): IDP-102
+guard allow-lists 22 pre-existing wording-variant maps; IDP-103 keeps
+PositionColorKey at six; IDP-113 narrows "usable IDP map" to bare IDP maps
+(goldens caught the plain OR); IDP-114 keeps out/unprojected semantics; IDP-116
+adds an IDP-only fetch; IDP-117 orchestrator is lib/calculate-idp-seasons.ts;
+IDP-119 skips the beacon calibration slope list; IDP-123 also skips defenders
+from the cut list; IDP-125 test lives beside the capability.
+
 ## Session of 2026-09-20 (part two): page widths and the League Pulse season switch
 
 NOT COMMITTED, by instruction. The chopped Power Pulse work from earlier the

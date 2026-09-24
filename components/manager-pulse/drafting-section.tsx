@@ -19,6 +19,7 @@
  * unknown, never as "never used autopick".
  */
 
+import type { IdpPosition } from "@/lib/site";
 import { ChartFigure, DataTable, Th, Td } from "@/components/chart-kit";
 import { TRADE_POSITIONS, type TradePosition } from "@/lib/trade-finder/types";
 import { SectionFrame } from "./section-frame";
@@ -33,13 +34,16 @@ import {
 import { underLens, lensLabel } from "@/components/manager-shell/lens";
 import type { ManagerDrafting, LeagueLens } from "@/lib/manager-pulse/types";
 
-const POSITION_BAR_COLOR: Record<TradePosition, string> = {
+const POSITION_BAR_COLOR: Record<TradePosition | IdpPosition, string> = {
   QB: "bg-position-qb",
   RB: "bg-position-rb",
   WR: "bg-position-wr",
   TE: "bg-position-te",
   K: "bg-position-k",
   DEF: "bg-position-def",
+  DL: "bg-position-dl",
+  LB: "bg-position-lb",
+  DB: "bg-position-db",
 };
 
 export function DraftingSection({

@@ -531,6 +531,59 @@ export const SOCIAL_LINKS: Array<{
 export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
 export type Position = (typeof POSITIONS)[number];
 
+/**
+ * The six offensive positions, under a name that says why a surface uses them.
+ * The same array as POSITIONS: every surface that must stay six (rankings,
+ * draft tools, value sources) reads this so a later widening is deliberate.
+ */
+export const OFFENSE_POSITIONS = POSITIONS;
+export type OffensePosition = (typeof OFFENSE_POSITIONS)[number];
+
+/** True for one of the six offensive positions; narrows the type. */
+export function isOffensePosition(position: string | null | undefined): position is OffensePosition {
+  return !!position && (OFFENSE_POSITIONS as readonly string[]).includes(position);
+}
+
+/** Sleeper's three individual defensive player positions. */
+export const IDP_POSITIONS = ["DL", "LB", "DB"] as const;
+export type IdpPosition = (typeof IDP_POSITIONS)[number];
+
+/**
+ * True for an individual defensive player (DL, LB, DB). The team defense (DEF)
+ * is NOT a defender in this sense: it is scored and valued like an offensive
+ * position. The one place this question is answered.
+ */
+export function isDefender(position: string | null | undefined): boolean {
+  if (!position) return false;
+  return (IDP_POSITIONS as readonly string[]).includes(position.toUpperCase());
+}
+
+const POSITION_NOUNS: Record<string, { singular: string; plural: string }> = {
+  QB: { singular: "quarterback", plural: "quarterbacks" },
+  RB: { singular: "running back", plural: "running backs" },
+  WR: { singular: "wide receiver", plural: "wide receivers" },
+  TE: { singular: "tight end", plural: "tight ends" },
+  K: { singular: "kicker", plural: "kickers" },
+  DEF: { singular: "team defense", plural: "team defenses" },
+  DL: { singular: "defensive lineman", plural: "defensive linemen" },
+  LB: { singular: "linebacker", plural: "linebackers" },
+  DB: { singular: "defensive back", plural: "defensive backs" },
+};
+
+/**
+ * The English word for a position, for prose and accessible names. The ONE
+ * copy: every "QB" to "quarterback" map in the site delegates here. Anything
+ * it does not know (OL, LS, an unfamiliar slot) comes back as its own code.
+ */
+export function positionNoun(
+  position: string | null | undefined,
+  form: "singular" | "plural" = "singular",
+): string {
+  if (!position) return "";
+  const entry = POSITION_NOUNS[position.toUpperCase()];
+  return entry ? entry[form] : position;
+}
+
 export const DEFAULT_FORMAT_SLUG = "redraft-ppr-std";
 
 // NOTE: the default data source is no longer a hardcoded constant. It lives in

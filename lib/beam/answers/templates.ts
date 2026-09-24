@@ -16,6 +16,7 @@
  *     verb comes early and no sentence needs a parenthetical to make sense.
  */
 
+import { positionNoun as sitePositionNoun } from "@/lib/site";
 import { formatEastern } from "@/lib/datetime";
 import type { BeamAnswerContext } from "@/lib/beam/types";
 import type { BeamStat } from "@/lib/beam/stats/registry";
@@ -114,23 +115,9 @@ export function wrongPositionSentence(
   return `We do not track ${lowerLabel(stat.label)} for ${what}, so there is nothing to report for ${playerName}.`;
 }
 
+/** Delegates to the one position noun helper in lib/site.ts. */
 export function positionNoun(position: string): string {
-  switch (position.toUpperCase()) {
-    case "QB":
-      return "quarterback";
-    case "RB":
-      return "running back";
-    case "WR":
-      return "wide receiver";
-    case "TE":
-      return "tight end";
-    case "K":
-      return "kicker";
-    case "DEF":
-      return "team defense";
-    default:
-      return position;
-  }
+  return sitePositionNoun(position);
 }
 
 /** "Jahmyr Gibbs had more, 1,412 rushing yards to Bijan Robinson's 1,205." */

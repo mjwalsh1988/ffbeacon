@@ -22,6 +22,9 @@ const positionCv = z.object({
   TE: z.number().min(0.05).max(2),
   K: z.number().min(0.05).max(2),
   DEF: z.number().min(0.05).max(2),
+  DL: z.number().min(0.05).max(2),
+  LB: z.number().min(0.05).max(2),
+  DB: z.number().min(0.05).max(2),
 });
 
 const positionReliability = z.object({
@@ -31,6 +34,9 @@ const positionReliability = z.object({
   TE: unit,
   K: unit,
   DEF: unit,
+  DL: unit,
+  LB: unit,
+  DB: unit,
 });
 
 export const powerPulseSettingsSchema = z

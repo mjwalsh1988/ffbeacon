@@ -22,6 +22,9 @@
  * `scoreWithFallback`.
  */
 
+import { isDefender } from "@/lib/site";
+import { normalizeProjectedIdpLine } from "@/lib/idp/stat-line";
+
 /** A Sleeper scoring_settings map: stat key to points per unit. */
 export type ScoringSettings = Record<string, number>;
 
@@ -86,7 +89,24 @@ export function isUsableScoring(scoring: ScoringSettings | null | undefined): bo
   if (!scoring || typeof scoring !== "object") return false;
   const hasYardage = CORE_YARDAGE_KEYS.some((k) => typeof scoring[k] === "number");
   const hasTd = CORE_TD_KEYS.some((k) => typeof scoring[k] === "number");
-  return hasYardage && hasTd;
+  if (hasYardage && hasTd) return true;
+  // A BARE IDP map (an IDP preset, or a defender-only scoring question) has no
+  // offensive key at all and is still a complete answer for a defender's line.
+  // A map with some offensive keys but not the core pair is a truncated league
+  // object and stays untrusted, whatever IDP keys ride along with it.
+  return !hasYardage && !hasTd && scoresIdp(scoring);
+}
+
+/**
+ * True when a scoring map weights at least one individual defensive stat. A
+ * league without one has no rule for a defender, so a defender under it has no
+ * projection at all rather than a projection of zero (plan hazard B).
+ */
+export function scoresIdp(scoring: ScoringSettings | null | undefined): boolean {
+  if (!scoring || typeof scoring !== "object") return false;
+  return Object.entries(scoring).some(
+    ([key, value]) => key.startsWith("idp_") && typeof value === "number" && Number.isFinite(value) && value !== 0,
+  );
 }
 
 function numeric(value: unknown): number | null {
@@ -204,6 +224,22 @@ export function scoreWithFallback(
   scoring: ScoringSettings | null | undefined,
   position: string | null | undefined,
 ): { points: number | null; usedLeagueScoring: boolean } {
+  // A defender is decided BEFORE the dot product, and never falls through to
+  // the stored pts_* columns, which are offensive-only for him. A league with
+  // no idp_* rule has no answer for him: null, which the UI reads as "No
+  // projection", never a confident zero. A league that does score IDP scores
+  // his projected line through the one normaliser (team-defense and ADP keys
+  // dropped, combined tackles derived when absent).
+  if (isDefender(position)) {
+    if (!isUsableScoring(scoring) || !scoresIdp(scoring)) {
+      return { points: null, usedLeagueScoring: false };
+    }
+    if (!stats || typeof stats !== "object") return { points: null, usedLeagueScoring: false };
+    const line = normalizeProjectedIdpLine(stats as Record<string, unknown>);
+    if (Object.keys(line).length === 0) return { points: null, usedLeagueScoring: false };
+    return { points: scoreStatMap(line, scoring), usedLeagueScoring: true };
+  }
+
   const exact = scoreStatMap(stats, scoring);
   if (exact !== null) return { points: exact, usedLeagueScoring: true };
 

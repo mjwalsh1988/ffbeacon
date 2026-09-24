@@ -146,6 +146,16 @@ export const FRESHNESS_SPECS: readonly FreshnessSpec[] = [
     matters:
       "Actual production, which feeds projection accuracy and opponent strength. Idle by design outside the season.",
   },
+  {
+    table: "player_idp_seasons",
+    column: "computed_at",
+    label: "Defender season totals",
+    maxAgeHours: 48,
+    months: [1, 2, 8, 9, 10, 11, 12],
+    kickoffGated: true,
+    matters:
+      "The defender search gate and the defender career tables read these. Rebuilt nightly from the stats job; idle by design outside the season.",
+  },
 ];
 
 /** Whether a seasonal spec should be judged at this moment. */

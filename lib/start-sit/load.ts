@@ -52,6 +52,8 @@
  * published", a different and unrelated absence.
  */
 
+import { BREAKDOWN_PLAYER_SELECT } from "@/lib/breakdown/player-select";
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { closestScoringBase, scoringSettingsForFormat } from "@/lib/league-scoring";
@@ -61,7 +63,6 @@ import { getActiveFormats } from "@/lib/source";
 import { loadAdjustedProjections, type AdjustedProjectionSummary } from "@/lib/projections/read";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import { loadDefenseRanks, type DefenseRank } from "@/lib/power-pulse/load";
-import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import {
   loadGameEnvironment,
   environmentTier,
@@ -85,12 +86,9 @@ type AnySupabase =
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
 /**
- * Mirrors lib/beacon-breakdown.ts's private PLAYER_SELECT (that file is
- * outside this task's scope, so the column list is duplicated here rather
- * than importing an unexported constant). Keep the two in step by hand.
+ * The same column list the Beacon Breakdown core reads, from one shared copy.
  */
-const PLAYER_SELECT =
-  "id, slug, first_name, last_name, full_name, position, team, status, birth_date, external_ids, metadata, years_experience";
+const PLAYER_SELECT = BREAKDOWN_PLAYER_SELECT;
 
 /** Sleeper publishes an 18-week regular season. Own copy, matching clock.ts and load-extras.ts. */
 const MAX_REGULAR_SEASON_WEEK = 18;
@@ -239,7 +237,8 @@ export function parseStartCountParam(input: string | string[] | undefined): numb
 export function normalizeCandidatePosition(position: string): PulsePosition | null {
   const upper = position.trim().toUpperCase();
   const mapped = upper === "DST" ? "DEF" : upper;
-  return (PULSE_POSITIONS as readonly string[]).includes(mapped) ? (mapped as PulsePosition) : null;
+  // The board refuses defenders (plan R-23), so only the six offensive positions map.
+  return (OFFENSE_POSITIONS as readonly string[]).includes(mapped) ? (mapped as PulsePosition) : null;
 }
 
 /** floor = max(0, points - sigma), ceiling = points + sigma. Either null propagates both to null. */

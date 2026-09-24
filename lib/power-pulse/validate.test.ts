@@ -215,3 +215,22 @@ describe("powerPulseSettingsSchema: opponent bounds", () => {
     expect(validatePowerPulseSettings(DEFAULT_POWER_PULSE_SETTINGS).ok).toBe(true);
   });
 });
+
+describe("defender settings round-trip (IDP-119)", () => {
+  it("accepts DL, LB and DB in the CV and reliability maps and keeps them", () => {
+    const result = validatePowerPulseSettings(DEFAULT_POWER_PULSE_SETTINGS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.settings.variance.defaultCv.LB).toBe(0.414);
+    expect(result.settings.opponent.positionReliability.DB).toBe(0);
+  });
+
+  it("fills defender keys from the defaults when a stored document predates them", () => {
+    const stored = JSON.parse(JSON.stringify(DEFAULT_POWER_PULSE_SETTINGS));
+    delete stored.variance.defaultCv.DL;
+    delete stored.opponent.positionReliability.LB;
+    const merged = mergePowerPulseSettings(stored);
+    expect(merged.variance.defaultCv.DL).toBe(0.659);
+    expect(merged.opponent.positionReliability.LB).toBe(0);
+  });
+});

@@ -14,6 +14,9 @@ const POS_CLASS: Record<string, string> = {
   TE: "bg-position-te/15 text-position-te",
   K: "bg-position-k/15 text-position-k",
   DEF: "bg-position-def/15 text-position-def",
+  DL: "bg-position-dl/15 text-position-dl",
+  LB: "bg-position-lb/15 text-position-lb",
+  DB: "bg-position-db/15 text-position-db",
 };
 
 export function finishLabel(position: string, finish: number): string {

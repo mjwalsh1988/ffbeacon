@@ -53,8 +53,15 @@
  *   from those numbers, and every sentence cites one of them.
  */
 
-/** A position the optimizer understands. Mirrors PulsePosition deliberately. */
-export type LedgerPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+import type { PulsePosition } from "@/lib/power-pulse/types";
+
+/**
+ * A position the optimizer understands: an alias of PulsePosition, so the two
+ * can never drift apart. It includes the three defender positions since IDP-120;
+ * with the IDP switch off no defender is eligible for any gradable slot, so the
+ * ledger's figures are unchanged (the goldens hold that).
+ */
+export type LedgerPosition = PulsePosition;
 
 /**
  * One settled week for one roster, graded.

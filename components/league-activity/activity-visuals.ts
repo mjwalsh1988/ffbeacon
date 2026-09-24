@@ -129,6 +129,9 @@ export const POSITION_TAG: Record<string, string> = {
   TE: "bg-position-te/12 text-position-te ring-position-te/30",
   K: "bg-position-k/12 text-position-k ring-position-k/30",
   DEF: "bg-position-def/12 text-position-def ring-position-def/30",
+  DL: "bg-position-dl/12 text-position-dl ring-position-dl/30",
+  LB: "bg-position-lb/12 text-position-lb ring-position-lb/30",
+  DB: "bg-position-db/12 text-position-db ring-position-db/30",
   PICK: "bg-brand-purple/12 text-brand-purple ring-brand-purple/30",
 };
 

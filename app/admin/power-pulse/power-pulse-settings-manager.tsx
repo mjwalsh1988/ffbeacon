@@ -459,7 +459,7 @@ export function PowerPulseSettingsManager({
         title="Opponent matchup reliability by position"
         description="How much of a position's matchup swing survives the shrink, 0 to 1, measured as the year over year correlation of our stored multipliers. A receiver matchup number this season told us effectively nothing about the same matchup next season, which is why wide receiver defaults to 0: no adjustment at all until a corrected measurement earns one back."
       >
-        {(["QB", "RB", "WR", "TE", "K", "DEF"] as const).map((position) => (
+        {(["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"] as const).map((position) => (
           <Field
             key={position}
             label={`${position} reliability`}
@@ -589,7 +589,7 @@ export function PowerPulseSettingsManager({
         title="Weekly variance"
         description="How much a player's score swings week to week, as a share of their average. Drives win probabilities: a high-variance team beats a better opponent more often than the averages suggest. These are the fallbacks for players with no measured history."
       >
-        {(["QB", "RB", "WR", "TE", "K", "DEF"] as const).map((position) => (
+        {(["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"] as const).map((position) => (
           <Field
             key={position}
             label={`${position} default`}

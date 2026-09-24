@@ -67,7 +67,13 @@ export type PriorCellRow = {
   seasons: number[];
 };
 
-const POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
+/**
+ * The positions a prior cell is filed under. DL, LB and DB joined in IDP-124:
+ * an IDP auction used to fall into "any" only, which blended linebacker
+ * prices into every other position's league-wide rollup with nothing of its
+ * own to read (migration 0300 widened the table's CHECK to match).
+ */
+const POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"]);
 
 /** Nearest-rank, matching lib/faab/market.ts. Interpolation on 30 samples is false precision. */
 export function percentile(sorted: number[], p: number): number {

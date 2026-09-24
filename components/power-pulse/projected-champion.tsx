@@ -24,6 +24,7 @@
  * Server component: pure presentation over data resolved upstream.
  */
 
+import { positionNoun } from "@/lib/site";
 import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { Panel } from "@/components/dashboard-panel";
@@ -65,9 +66,7 @@ function winOdds(team: PulseTeam): number | null {
 }
 
 function positionLabel(position: string): string {
-  if (position === "DEF") return "defense";
-  if (position === "K") return "kicker";
-  return position;
+  return positionNoun(position);
 }
 
 /**

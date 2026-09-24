@@ -32,6 +32,7 @@
  * loader already relies on for its own N-sided reads.)
  */
 
+import { isDefender } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { closestScoringBase, describeLeagueScoring } from "@/lib/league-scoring";
@@ -60,7 +61,6 @@ import {
   type LineupCandidate,
 } from "@/lib/power-pulse/lineup";
 import { computeLineupSwap, type CandidateWeek } from "@/lib/faab/marginal";
-import type { PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { MIN_START_SIT_PLAYERS, MAX_START_SIT_PLAYERS } from "@/lib/start-sit/types";
@@ -378,6 +378,9 @@ export async function calculateLeagueImpact(
     if (!sleeperId) return null;
     const candidate = players.get(sleeperId);
     if (!candidate) return null;
+    // A guard where a cast used to be (plan IDP-127): a defender has no
+    // lineup impact to compute until the IDP switch threads through (IDP-313).
+    if (isDefender(candidate.position)) return null;
 
     const alreadyMine = mine!.playerSleeperIds.includes(sleeperId);
     const holder = rosters.find((r) => r.playerSleeperIds.includes(sleeperId));
@@ -427,7 +430,7 @@ export async function calculateLeagueImpact(
       rosterByWeek: baselineWeeks,
       candidateByWeek,
       candidatePlayerId: candidate.playerId,
-      candidatePosition: candidate.position as PulsePosition,
+      candidatePosition: candidate.position,
       rosterMeta: myMeta,
       // Adding someone you already roster costs no roster spot.
       mustDrop: rosterFull && !alreadyMine,

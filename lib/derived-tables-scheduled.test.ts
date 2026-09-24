@@ -91,6 +91,7 @@ describe("derived data producers are reachable without a human", () => {
     expect(statsRoute).toContain("calculate-positional-finishes");
     expect(statsRoute).toContain("calculate-defense-splits");
     expect(statsRoute).toContain("calculate-projection-accuracy");
+    expect(statsRoute).toContain("calculate-idp-seasons");
   });
 
   it("registers every cron route's job name in CRON_JOBS", () => {

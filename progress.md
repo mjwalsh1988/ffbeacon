@@ -15728,3 +15728,270 @@ T729 | completed | Amazonbot blocked site-wide in robots.txt, Singapore traffic 
      | depends on: none
      | notes: 2026-09-22. Amazonbot made 11.8k of 45k requests in 24 hours, much of it walking /leagues/ pages one every 4 seconds, and sent no readers. robots.ts gained a named `Amazonbot` group with `Disallow: /`; every other crawler still reads only the wildcard group. The owner's 2026-09-11 decision to allow AI crawlers stands for everyone else, and the robots.ts header records the exception and why. Separately, a Vercel Firewall custom rule "Challenge Singapore traffic" (Country equals Singapore, then Challenge) was published from the dashboard. It lives in Vercel, not the repo. Custom rules have no verified-bot exemption, so a genuine crawler request from a Singapore IP would also be challenged. Bot Protection stays off and the AI Bots managed rule stays at Allow. Not committed; the robots.txt change reaches Amazonbot only after the next deploy.
      | verified: yes. robots.txt rendered through Next.js's own resolveRobots shows the wildcard group unchanged plus "User-Agent: Amazonbot / Disallow: /". lib/llms/crawlability.test.ts 20 of 20 pass, including one asserting Googlebot, Bingbot, GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot, Applebot and Mediapartners-Google have no group of their own. Firewall rules page shows the rule published with action Challenge.
+
+# IDP across FF Beacon, phase 1 (IDP-1xx). Plan: docs/idp/idp-guide-and-data-plan.md
+
+Session of 2026-09-24. Phase 1 only (foundation, data, fixes for what is broken
+today). NOT COMMITTED, NOT PUSHED, NO BRANCH, by instruction. Owner asked for ONE
+independent reviewer sub-agent at the end covering implementation, bugs,
+security, speed and accessibility (overrides the plan's three reviewers).
+Goldens captured at git hash 2368cac07730f876dda57843d4049a221b8e0ccc.
+
+IDP-101 | completed | Golden fixtures before any engine change
+IDP-102 | completed | Position constants and the one noun helper (lib/site.ts)
+IDP-103 | completed | Colour tokens for DL, LB, DB and every accent map
+IDP-104 | completed | Migration 0296: typed IDP columns on player_stats
+IDP-105 | completed | Migration 0297: players.eligible_positions
+IDP-106 | completed | Migration 0298: finishes offense-only rebuild plus idp123 finishes
+IDP-107 | completed | Migration 0299: player_idp_seasons (RLS)
+IDP-108 | completed | Migration 0300: CHECK widenings
+IDP-109 | completed | Map IDP keys in the stats mapper
+IDP-110 | completed | Backfill typed IDP columns from stored metadata
+IDP-111 | completed | Fill eligible_positions in the players sync
+IDP-112 | completed | lib/idp/stat-line.ts and scoring presets
+IDP-113 | completed | Scoring core: usable IDP maps and hazard B
+IDP-114 | completed | IDP projections in the one weekly fetch
+IDP-115 | completed | IDP accuracy under idp123
+IDP-116 | completed | Backfill IDP projections 2020 to 2025
+IDP-117 | completed | player_idp_seasons build script and nightly registration
+IDP-118 | completed | IDP opponent splits
+IDP-119 | completed | IDP variance curves, defaults, zod
+IDP-120 | completed | Widen PulsePosition and pin every six-position site
+IDP-121 | completed | Guard test: no defender module reads stored points columns
+IDP-122 | completed | Name IDP players in League Pulse loaders
+IDP-123 | completed | Cut list never offers an unknown or unprojected player first
+IDP-124 | completed | FAAB priors by IDP position
+IDP-125 | completed | BEAM early gate
+IDP-126 | completed | "No market value" wherever a noValue asset renders
+IDP-127 | completed | Breakdown and picker refuse defenders
+IDP-128 | completed | Game log helper copy
+IDP-129 | completed | League Relay waiver jab
+IDP-130 | completed | Would You Rather pool refuses unpriced trades, retires the three
+IDP-131 | completed | Draft snapshot value verdict only with a value
+IDP-132 | completed | Phase 1 verification and the review
+
+Section 4.6 live checks, re-run 2026-09-24 (before any change):
+- leagues: 40 IDP of 676. Slot tokens in IDP leagues: DL 36, LB 36, DB 39, IDP_FLEX 72 (no DE/DT/CB/S/DP).
+- defender regular-season rows with def_snp / all rows: 2020 9,900/13,087; 2021 11,064/19,028; 2022 10,317/18,366; 2023 10,522/18,552; 2024 10,549/18,977; 2025 9,941/19,071; 2026 1,219/2,183.
+- settled matchup defender points: DL 5,365 at 7.01, LB 5,209 at 8.91, DB 4,182 at 7.17.
+- defender projection rows: 0 (any source).
+- finishes rows outside the six: DB 10,305, DL 9,990, LB 5,814, OL 8,544, LS 756, P 795, OT 492, OG 144, T 93, G 81, C 69, DE 6, K/P 3.
+- Would You Rather active trades holding a defender: 3.
+
+IDP-101 | completed | Golden fixtures before any engine change
+     | files: lib/power-pulse/test-fixtures.ts, lib/*/engine.golden.test.ts (power-pulse, positional-war, manager-ledger), lib/league-lineups/build.golden.test.ts, lib/league-schedule/matchup.golden.test.ts, lib/{power-pulse,positional-war,manager-ledger,league-lineups,league-schedule}/golden/*.json (11 files)
+     | notes: Captured at 2368cac on untouched code. readGolden() writes a golden ONLY with UPDATE_GOLDENS=1 and otherwise fails on a missing file, so a golden cannot regenerate itself around a regression. goldenJson sorts keys, turns Maps and Sets into sorted objects, and strips version keys. Each engine has an ordinary and an IDP fixture (Power Pulse also chopped). Today the IDP golden equals the offense one for Power Pulse byte for byte (defenders are dropped by startingSlots), which is itself the evidence of the defect section 1 describes.
+     | verified: yes (11 golden tests pass twice, typecheck green)
+
+IDP-102 | completed | Position constants and the one noun helper
+     | files: lib/site.ts (OFFENSE_POSITIONS, OffensePosition, IDP_POSITIONS, IdpPosition, isDefender, positionNoun), NEW lib/site.test.ts, lib/beam/answers/templates.ts, lib/beam/interpret/index.ts, lib/start-sit/reasons.ts (positionPlural exported), app/tools/who-should-i-start/start-sit-card.tsx (imports it; hazard J duplicate gone), components/league-war/summary.ts, war-rail-summary.tsx, upgrade-panel.tsx, app/api/og/war/[league_id]/card.tsx, components/power-pulse/projected-champion.tsx, lib/league-schedule/slots.ts
+     | notes: Both BEAM copies now delegate; interpret/index.ts keeps its own rule (unknown code reads as empty) via a two-line wrapper, so its clarify prompts do not change. Copy that moved: the start/sit reason says "team defenses" rather than "defenses"; the Positional WAR OG line says "Team defense" rather than "Defense"; the projected-champion card now spells out "running back" etc. where it printed the bare code. The guard (no second QB-to-"quarterback" map) found 22 maps the plan did not list; they are allow-listed in lib/site.test.ts as a debt ledger with a reason each (mostly deliberate wording variants on offense-only surfaces, plus ones phase 2/3 tasks rework). New files cannot join.
+     | verified: yes (typecheck green, 389 files / 5,921 tests pass, goldens green)
+
+IDP-103 | completed | Colour tokens for DL, LB, DB and every accent map
+     | files: tailwind.config.ts (position.dl #A3E635, .lb #E879F9, .db #818CF8), lib/on-the-clock/position-colors.ts (IdpColorKey, AnyPositionColorKey, positionColorKey, nine-key BADGE/CELL/ROW), components/player-profile/player-hero.tsx, positional-finishes.tsx, app/api/og/player/[slug]/route.tsx (K, DEF and IDP accents added; no card falls to grey), app/api/og/start-sit/route.tsx, app/api/og/faab/route.tsx, app/api/og/team/[league_id]/[roster_id]/route.tsx, app/api/og/matchup/.../share/route.tsx (IDP group now the LB hue), components/league-activity/activity-visuals.ts, components/waiver-wire/player-card.tsx, board-rail.tsx, components/manager-pulse/drafting-section.tsx, components/chart-kit.tsx (DL/LB/DB series, three new markers: pentagon, triangle-down, hourglass), components/chart-kit.test.ts, NEW lib/on-the-clock/position-colors.test.ts
+     | notes: PositionColorKey itself stays SIX, deliberately: lib/draft-tracker/types.ts aliases BoardPosition to it, and widening it would have quietly admitted defenders to the draft tracker (R-11). The defender keys sit beside it (AnyPositionColorKey, positionColorKey), and positionColorKey also resolves Sleeper sub-positions (DE, OLB, CB, SS ...). The plan said the team and FAAB OG maps index with no fallback; both already had one (`?? INK_MUTED`, `?? CYAN`), so no change there beyond the new keys. The plan asked for a contrast check on the light surface too; the product has no light theme (chart-kit.tsx header says so), so the assertion covers the two dark chart surfaces (#0B0B14 and #0F0F1A) at 3:1 for all nine. Measured: lime 12.99, fuchsia 7.96, indigo 6.57 against #0B0B14. The top-pickup card uses POSITION_BADGE so it picked the classes up with no edit.
+     | verified: yes (chart-kit and position-colors tests 15 pass, typecheck green)
+
+IDP-104 | completed | Migration 0296: typed IDP columns on player_stats
+     | files: supabase/migrations/0296_player_stats_idp_columns.sql, lib/database.types.ts
+     | notes: 22 nullable numeric columns plus partial index idx_player_stats_def_weeks (season, week) where def_snp is not null. Applied via MCP. Access matrix unchanged (existing player_stats policies).
+     | verified: yes (types regenerated: 176 added lines, no removals; typecheck green)
+
+IDP-105 | completed | Migration 0297: players.eligible_positions
+     | files: supabase/migrations/0297_players_eligible_positions.sql, lib/database.types.ts
+     | notes: text[] not null default '{}', backfilled from metadata.sleeper.fantasy_positions upper-cased, Sleeper order kept, filtered to the nine, fallback array[position]. Result: 263 players multi-eligible (plan expected about 260); 0 players with an empty list. Two stored-LB players (JaCoby Stevens, Marcell Harris) have eligible ["DB"] only: Sleeper's own position field says LB while fantasy_positions says DB. Eligibility follows fantasy_positions (that is what Sleeper lets a manager start him as), and the primary is untouched per R-2.
+     | verified: yes (counts above by query)
+
+IDP-106 | completed | Migration 0298: finishes offense-only plus idp123
+     | files: supabase/migrations/0298_positional_finishes_idp.sql
+     | notes: scoring CHECK gains idp123; rebuild_positional_finishes ranks the six on the PPR keys and DL/LB/DB on idp123 from the 0296 typed columns, counting only weeks with def_snp not null; get_player_positional_finishes returns nothing for a non-offensive player. Grants re-stated (service_role only on the rebuild). The migration deletes the non-six PPR rows but does NOT run the rebuild: the typed columns are empty until IDP-110, and running it first would rank every defender at zero. The Roquan Smith check is done in IDP-110 after the rebuild.
+     | verified: yes (see IDP-110: rebuild ran, Roquan 234 = arithmetic)
+
+IDP-107 | completed | Migration 0299: player_idp_seasons
+     | files: supabase/migrations/0299_player_idp_seasons.sql, lib/database.types.ts
+     | notes: PK (player_id, season, season_type); position CHECK DL/LB/DB; season_type CHECK; totals per stat column; games, games_20_snaps, avg_def_snap_pct; no points, no metadata (derived). Index (season, season_type, position).
+     | verified: yes, RLS sequence: (1) applied via MCP; (2) pg_policies shows player_idp_seasons_select_public {anon,authenticated} SELECT and player_idp_seasons_service_role_all {service_role} ALL; (3) SELECT as anon inside begin/rollback returns (0 rows, no error); (4) SELECT as authenticated returns without error; (5) INSERT as anon refused with 42501 "new row violates row-level security policy"; (6) access matrix documented in the migration header.
+
+IDP-108 | completed | Migration 0300: CHECK widenings
+     | files: supabase/migrations/0300_idp_check_widenings.sql
+     | notes: Read back from pg_constraint after apply:
+       nfl_defense_vs_position_position_check CHECK (position = ANY (ARRAY['QB','RB','WR','TE','K','DEF','DL','LB','DB']))
+       nfl_defense_vs_position_scoring_check CHECK (scoring = ANY (ARRAY['pts_ppr','pts_half_ppr','pts_std','idp123']))
+       player_projection_accuracy_scoring_check CHECK (scoring = ANY (ARRAY['pts_ppr','pts_half_ppr','pts_std','idp123']))
+       league_positional_war_cache_position_check CHECK (position = ANY (ARRAY['QB','RB','WR','TE','K','DEF','DL','LB','DB']))
+       positional_war_curves_position_check CHECK (position = ANY (ARRAY['QB','RB','WR','TE','K','DEF','DL','LB','DB']))
+       faab_market_priors_position_check CHECK (position = ANY (ARRAY['QB','RB','WR','TE','K','DEF','DL','LB','DB','any']))
+       player_positional_finishes_scoring_check CHECK (scoring = ANY (ARRAY['pts_ppr','pts_half_ppr','pts_std','idp123'])) (from 0298)
+       0056 and 0054 untouched.
+     | verified: yes
+
+IDP-109 | completed | Map IDP keys in the stats mapper
+     | files: lib/sleeper-stats-map.ts (exported NULLABLE_IDP_COLUMNS, def_snap_pct derived beside snap_pct), NEW lib/sleeper-stats-map.test.ts
+     | notes: Absent key is null, never 0; values kept as sent (a half sack is 0.5). Neither sync file changed: both spread the mapped row.
+     | verified: yes (5 tests)
+
+IDP-111 | completed | Fill eligible_positions in the players sync
+     | files: lib/sync-sleeper-players.ts (pickEligiblePositions, StagedRow.eligiblePositions, written on upsert), lib/sync-sleeper-players.test.ts
+     | notes: Done BEFORE the players re-sync in IDP-110 so the sync writes the column itself. npm run sync:players ran 2026-09-24: 9,411 upserted; afterwards 263 multi-eligible and 0 empty, identical to the migration backfill.
+     | verified: yes (4 new tests; production counts)
+
+IDP-112 | completed | lib/idp/stat-line.ts and lib/idp/scoring-presets.ts
+     | files: NEW lib/idp/stat-line.ts, lib/idp/scoring-presets.ts, lib/idp/stat-line.test.ts
+     | notes: normalizeProjectedIdpLine (idp_* only, idp_tkl derived when absent), normalizeActualIdpLine (drops pts_*, pos_rank_*, adp_*, gp, gs, gms_active), scoreIdpLine (dot product), hasIdpStats, IDP_PRESETS (idp123, big3, fantasypros, espn; every idp key present, bonuses zero), IDP_PRESET_LABEL. Roquan Smith 2025 week 2 read from production (15 tackles: 8 solo, 7 assisted, 3 TFL, 2 QB hits, 1 FR, 1 TD) scores 40 under idp123, equal to Sleeper's own pts_idp 40; 37.25 under Big 3.
+     | verified: yes (9 tests)
+
+IDP-113 | completed | Scoring core: usable IDP maps and hazard B
+     | files: lib/league-scoring.ts (scoresIdp, isUsableScoring, scoreWithFallback defender branch), lib/league-scoring.test.ts, lib/league-activity/labels.ts (7 labels)
+     | notes: A defender is decided before the dot product: no trusted map or no nonzero idp_* rule gives null (never PPR, never 0); otherwise his projected line goes through normalizeProjectedIdpLine and is dot-producted. DEVIATION FROM THE PLAN'S WORDING, caught by the goldens: "isUsableScoring returns true when the map has an idp key even without offensive keys" first went in as a plain OR, which let IDP keys rescue a TRUNCATED offensive map (yardage but no touchdown key) and changed the IDP golden. The rule is now: usable when the core offensive pair is present, or when the map is BARE IDP (no core offensive key at all) with a nonzero idp rule. The plan's own test (a bare IDP123 map is usable) holds; a truncated league stays untrusted for everyone. Only caller of scoreWithFallback is lib/power-pulse/project.ts (projections).
+     | verified: yes (league-scoring 44 tests incl. goldens; typecheck green)
+
+IDP-110 | completed | Backfill typed IDP columns, then close the gap
+     | files: NEW scripts/backfill-idp-stat-columns.ts, scripts/backfill-idp-stat-columns.test.ts, package.json (backfill:idp-columns)
+     | notes: Zero Sleeper calls; runs metadata through the sync's own mapper and writes only changed rows. First version paged a whole season by offset and timed out on 2020 (57014); it now reads one (season, week) at a time on idx_stats_week with an id keyset, 7 to 15 seconds a season. Sequence run on 2026-09-24: column backfill 2025 (33,668 rows filled), npm run sync:players, npm run backfill:sleeper-stats for 2020, 2021, 2022, 2023, 2024, 2025 (29,618 / 51,367 / 49,768 / 50,230 / 51,091 / 51,530 rows upserted, all through the new mapper), then the column backfill over every season: 2016 to 2019 hold no rows, 2020 to 2025 needed 0 updates (the re-fetch had filled them), 2026 filled 9,870. A second pass is a no-op by construction.
+       GAP: defender regular-season row counts are IDENTICAL before and after the re-fetch (2020 13,087; 2021 19,028; 2022 18,366; 2023 18,552; 2024 18,977; 2025 19,071; 2026 2,183), so the "defenders an old allow-list dropped" gap the plan anticipated does not exist in the current data.
+       CHECK: typed totals against metadata.stats totals for 2025, per key (all 21 IDP keys plus snaps) and per position group (DL, LB, DB): ZERO mismatching rows, to the unit.
+       Finishes rebuilt (npm run calculate:finishes, 25,472 rows): idp123 rows DB 2,580, DL 2,722, LB 1,414; no non-six rows under the PPR keys remain. Roquan Smith 2025 idp123 = 234, equal to the D-1 arithmetic on his typed columns (LB21 of 199). Sleeper's own 2025 pts_idp sums to 238 for him; the 4-point gap is Sleeper crediting something outside IDP123 (return yardage or a return bonus), which is expected.
+     | verified: yes
+
+IDP-114 | completed | IDP projections in the one weekly fetch (hazards A, D, G, I)
+     | files: lib/sleeper.ts (exported IDP_PROJECTION_POSITIONS; weekly URL asks for all nine; season/market URL untouched; optional positions param used only by the history backfill), lib/sync-weekly-projections.ts (hasPublishedPoints counts idp_* figures, isDefenderProjectionRow, dedupeProjectionRows, defender stat_line normalised and projected_pts_* null), NEW lib/sync-weekly-projections.idp.test.ts, lib/sleeper-fetch.test.ts (URL test), lib/projections/raw-column-guard.test.ts (allow-list entry for the new test, see below)
+     | notes: DEVIATION: the plan says a defender row "with a game and no stats is out". Kept the existing classifier instead: with an injury designation it is "out" (a real zero), without one it is "unprojected" (no opinion, null), exactly as offense is treated and for the reason written on classifyRow (Sleeper's silence is not a forecast of zero). ADP-only rows with no game are "bye" and dropped (R-26). The two-way DB/WR player is classed as offense (offensive fantasy position wins, the players sync's own rule) and his two rows are merged. ALLOW-LIST: the new test names the three projected_pts columns to assert they stay null for a defender; it tests an EXEMPT writer and reads nothing, the same situation as the existing build-beacon-projections test entry. The plan's "no new allow-list entry" referred to the accuracy module (IDP-115), which needed none.
+       Live run (npm run sync:weekly-projections, 2026-09-24): 32,977 rows stored across weeks 3 to 18. Week 3: defenders 772 projected (the plan measured 772), 129 out, 391 unprojected, 0 with a stored point figure, 0 carrying team-defense keys, 771 with idp_tkl; offense 475 projected / 95 out / 528 unprojected. "cleared 199" per week was checked: the combined URL returns every offensive row the old six-position URL returns (3,305 of 3,305 for week 18), so those 199 are players absent from Sleeper's feed altogether, re-touched by the existing stale sweep every run.
+     | verified: yes (9 tests in the idp test file, URL test, guards green)
+
+IDP-115 | completed | IDP accuracy under idp123 (hazard H)
+     | files: lib/calculate-projection-accuracy.ts (ScoringBase gains idp123, scoringKeysFor, actualIdp123 from typed columns, projectedIdp123 from stat_line, second defender read joined to players.position, literal ACTUAL_SELECT, summarizeSource comment), lib/calculate-projection-accuracy.test.ts, app/admin/projections/page.tsx (labelled note: defenders are not on the PPR scoreboard and why)
+     | notes: The PPR scoreboard (lib/projection-scoreboard.ts) needs no code change: it grades projected_pts_*, which are null for every defender, so defenders never enter it; the admin page now says so in words. Both projection guard tests stay green with no allow-list entry for this module.
+     | verified: yes (4 new tests; lib/projections 197 tests pass; typecheck green). First real run happens in IDP-116 after the backfill.
+
+IDP-116 | completed | Backfill IDP projections 2020 to 2025
+     | files: lib/sleeper.ts (getSleeperWeeklyProjections optional positions list), lib/sync-weekly-projections.ts (opts.positions; refuses positions with clearStale true), scripts/backfill-weekly-projections.ts (--idp-only), lib/sync-weekly-projections.idp.test.ts (2 tests), lib/projections/engine.test.ts (a DL row mirrors under ffbeacon with its line intact and null points), lib/calculate-projection-accuracy.ts (keyset paging, see below)
+     | notes: The plan allowed "all positions" if the script took no position list. It did not, so one was added: re-fetching whole past seasons for every position would have overwritten the stored OFFENSIVE projection history with Sleeper's current view of those seasons, which is the evidence projection accuracy grades. Run: npm run backfill:weekly-projections -- --from-season 2020 --to-season 2025 --idp-only. Stored: 2020 26,940; 2021 26,493; 2022 26,280; 2023 23,736; 2024 24,985; 2025 23,270 (151,704 total, all matched).
+       ACCURACY: the first run afterwards failed on a statement timeout: the graded window now reaches 2020, and all four loaders in lib/calculate-projection-accuracy.ts paged by deep offset. They now page by id keyset. Second run: 16,530 rows for 3,286 players in 142 s. First idp123 figures (blended rows, source sleeper): DB beat rate 0.4375 over 21,309 weeks (681 players), DL 0.4332 over 21,460 (615), LB 0.3525 over 13,072 (395). No defender row exists under any PPR key. Offense figures unchanged in shape (sleeper MAE 4.13 PPR over 15,096 graded weeks, ffbeacon 4.01 over 903).
+       MIRROR (D-3): npm run build:projections, 36,037 rows written for 2026 weeks 3 to 18 (notProjectable 20,634 includes the defenders). Parity check (lib/projections/source.ts countFor rule, player_id not null): sleeper 36,037 and ffbeacon 36,037; defenders 19,493 on each side, 0 with a stored point figure, 13,018 with an idp_tkl line on each side.
+     | verified: yes
+
+IDP-117 | completed | player_idp_seasons build and nightly registration
+     | files: NEW lib/idp/seasons.ts (pure aggregateIdpSeasons), lib/idp/seasons.test.ts, NEW lib/calculate-idp-seasons.ts (orchestrator; named calculate-* so lib/derived-tables-scheduled.test.ts's producer scan sees it), NEW scripts/calculate-idp-seasons.ts, package.json (calculate:idp-seasons; sync:stats:full gains it after calculate:finishes), app/api/cron/sync-sleeper-stats/route.ts (fourth derived step, idpSeasons, own error boundary), lib/data-freshness.ts (FRESHNESS_SPECS entry, computed_at, 48h, months 1,2,8-12, kickoff gated), lib/derived-tables-scheduled.test.ts (asserts the stats route chains calculate-idp-seasons)
+     | notes: The plan put the builder at lib/idp/seasons.ts; the guard only scans top-level lib/calculate-* and lib/sync-* files, so the orchestrator lives at lib/calculate-idp-seasons.ts and the pure part at lib/idp/seasons.ts. lib/cron-runs.ts summarizeCronResult was NOT changed: it only surfaces top-level numeric keys and every derived step's result is nested ({ ok, result }), so a key there would never render; the raw JSON already shows it. Only weeks with def_snp recorded count as games; games_20_snaps counts weeks at 20+ snaps. Run --all: 78,892 defender weeks read, 14,218 season rows written (2020 to 2026).
+       CHECK: 2025 regular idp123 totals from player_idp_seasons against Sleeper's own pts_idp summed over the same weeks: DB 29,545 vs 29,545 (0.000%), DL 26,797 vs 26,797 (0.000%), LB 17,441 vs 17,444 (-0.017%). Inside the 0.1% bar.
+     | verified: yes (3 unit tests; derived-tables guard green; production build run)
+
+IDP-118 | completed | IDP opponent splits
+     | files: lib/calculate-defense-splits.ts (SCORING_BASES gains idp123, POSITIONS gains DL/LB/DB, STARTABLE_PER_TEAM DL 4 LB 3 DB 4, exported pointsFor with the cross cases null, exported groupPerformances and idp123FromColumns, keyset paging, reliability lookup cast until IDP-119/120 widen the settings type), NEW lib/calculate-defense-splits.test.ts, lib/power-pulse/load.ts (loadAccuracy and loadDefenseSplits accept one key or several; merged by player, earlier key wins), lib/power-pulse/load.test.ts (fake client made order-independent like the real one; merge test)
+     | notes: A defender row's opponent is the offense he faced, so his bucket reads "what this offense gives up to linebackers", the key project.ts already looks up. Callers still pass one key; phase 3 (IDP-303) passes two. Live rebuild (npm run calculate:defense-splits): 2025 and 2024 each wrote 192 rows per PPR base (unchanged, 6 positions x 32) plus 96 idp123 rows (DL, LB, DB x 32). 2025 idp123 multipliers: DB 0.836 to 1.177, DL 0.800 to 1.250, LB 0.837 to 1.166, 17 games sampled. 2026 writes nothing yet for any base (fewer than MIN_GAMES), as before.
+     | verified: yes (5 splits tests, load tests 15 pass, typecheck green, production rebuild)
+
+IDP-119 | completed | IDP variance curves, defaults, zod
+     | files: lib/power-pulse/variance-curve.ts (ScoringBase gains idp123; DL_CURVE, LB_CURVE, DB_CURVE shared across every base; idp123 carries the PPR curve set so an offensive lookup under it stays sane; measured table in the header), lib/power-pulse/default-settings.ts (defaultCv DL 0.659 LB 0.414 DB 0.494; positionReliability DL/LB/DB 0), lib/power-pulse/validate.ts (both zod objects gain the three keys), app/admin/power-pulse/power-pulse-settings-manager.tsx (both position lists gain them), lib/calculate-defense-splits.ts (the IDP-118 cast removed now the type carries them), tests in variance-curve.test.ts and validate.test.ts
+     | notes: No measure:variance script exists in the repo (the curve file's header cites one). The anchors were measured in SQL with the same method: 2023 to 2025 regular season, idp123 points from the typed columns over weeks with a defensive snap, players with 10+ such weeks, per (season, position) ranked by points per game, bands 1-12, 13-24, 25-36, 37-60, 61-96, anchor = mean ppg of the band, cv = median of stddev_pop/mean. Result table: DL 16.3/0.635, 13.0/0.659, 11.3/0.654, 9.9/0.728, 8.1/0.842; LB 18.9/0.386, 16.5/0.426, 15.0/0.443, 12.3/0.512, 6.4/0.856; DB 15.7/0.470, 13.8/0.502, 12.9/0.474, 11.9/0.512, 10.5/0.579. defaultCv = median over the startable range (top 48 DL and DB, top 36 LB). Model version stays pp-8 (bumped at switch-on, IDP-405).
+       NOT DONE, deliberately: the plan also said the beacon-projections calibration-slope list gains DL/LB/DB at 1.0. That list belongs to lib/projections (our own engine), which never models a defender: every defender row is mirrored from Sleeper (notProjectable), so a slope for him would be a setting that changes nothing. Left out rather than shipping a dead control.
+       A stored settings document that predates the keys is filled from the defaults by mergePowerPulseSettings (tested).
+     | verified: yes (45 tests across validate, variance-curve, variance; typecheck green)
+
+IDP-120 | completed | Widen PulsePosition and pin every six-position site
+     | files: lib/power-pulse/types.ts (PulsePosition and PULSE_POSITIONS nine; IDP_SLOT_ELIGIBILITY frozen; slotEligibility(idpEnabled); PULSE_SLOT_ELIGIBILITY unchanged), lib/site.ts (isOffensePosition), NEW lib/power-pulse/types.test.ts, plus the per-file decisions below
+     | notes: tsc listed only seven sites (far fewer than the plan's list: trade-finder, most On The Clock maps and the Beacon settings key on their own position types, so the widening never reached them). Per-file decisions (sub-tasks):
+       IDP-120a lib/manager-ledger/types.ts: LedgerPosition becomes an alias of PulsePosition (plan). Output unchanged: no defender is eligible for a gradable slot under the OFF map.
+       IDP-120b lib/power-pulse/engine.ts: internal positionTotals gains DL/LB/DB zeros (League Pulse map). The result only carries startable positions, so the output is unchanged (golden green). Loops at 419/751/772 left on PULSE_POSITIONS: each is filtered by the league's startable positions.
+       IDP-120c lib/on-the-clock/draft-pulse.ts: per-position maps keyed by OffensePosition, loops on OFFENSE_POSITIONS, a non-offensive seat is skipped (draft tools stay six, R-11).
+       IDP-120d lib/on-the-clock/awards.ts: startable positions and the room average on OFFENSE_POSITIONS.
+       IDP-120e app/tools/on-the-clock/draft-pulse-board.tsx: columns on OFFENSE_POSITIONS.
+       IDP-120f lib/start-sit/toughest-calls.ts: TOUGHEST_CALLS_STARTABLE_CUT keyed by OffensePosition, loops pinned, a non-offensive candidate is never eligible (board refuses defenders).
+       IDP-120g lib/positional-war/engine.test.ts: CV map gains the three (test data).
+       Pins the compiler could not see (filters and series built from PULSE_POSITIONS), each now OFFENSE_POSITIONS with a comment naming the phase-3 task that widens it: lib/power-pulse/load.ts loadPlayers (IDP-301/122), lib/positional-war/load.ts universe (IDP-308), lib/projections/read.ts toPulsePosition (IDP-303), lib/breakdown/load-extras.ts (R-23), lib/on-the-clock/projection-board.ts (R-11), lib/start-sit/load.ts (R-23), lib/trade-finder/profile.ts LINEUP_POSITIONS (R-5), components/chart-kit.tsx PLAYER_SERIES (hazard E), components/league-war/overlay.ts plottable and upgrade-panel.tsx dropdown (IDP-309), app/leagues/[league_id]/positional-war/actions.ts z.enum (IDP-309), app/api/og/war/[league_id]/card.tsx cache-row filter and legend (R-10), lib/league-positional-war-data.ts isPulsePosition (IDP-309), app/tools/who-should-i-start/page.tsx empty result.
+       Left on PULSE_POSITIONS on purpose: lib/positional-war/replacement.ts startablePositions (derives from the slot map, so the OFF map still yields six; it now takes the map as a parameter, defaulting to OFF), components/league-war/selection.ts positionOrder (an index for sorting; identical order for the six).
+       Unused PULSE_POSITIONS imports removed, duplicate lib/site imports merged in the touched files.
+     | verified: yes (typecheck green; full suite 397 files / 5,993 tests; all 11 goldens green unchanged; overlay, load, lineup and simulate tests the plan named pass unchanged; replacement.test.ts gained the IDP case against slotEligibility(true))
+
+IDP-121 | completed | Guard test: no defender module reads stored points columns
+     | files: NEW lib/idp/points-guard.test.ts
+     | notes: Roots lib/idp/ (everything), lib/player-profile/defender*, lib/guides/idp-*; columns pts_ppr, pts_half_ppr, pts_std, pts_idp matched on word boundaries; test files are not scanned (they carry real Sleeper payloads as fixtures to prove the normaliser DROPS those keys). Vacuity check asserts lib/idp/stat-line.ts is in the scanned set. No allow-list.
+     | verified: yes (3 tests)
+
+IDP-122 | completed | Name IDP players in League Pulse loaders (names only, no projections)
+     | files: lib/power-pulse/load.ts (loadPlayers opts.positions defaulting to OFFENSE_POSITIONS; selects eligible_positions into PlayerRow.eligible; NAMING_POSITIONS; projectablePlayerIds), lib/league-schedule/data.ts, lib/league-lineups/data.ts (roster read; the free-agent read keeps the default), lib/league-lineups/season-data.ts, lib/manager-ledger/load.ts, lib/power-pulse/load.test.ts (3 tests)
+     | notes: The three schedule/lineups loaders also derive their projection and accuracy id lists from projectablePlayerIds (offense only). Without that, a named defender in an IDP-scoring league would have picked up a projection on the bench now that defender projection rows exist, which is phase 3 behaviour. Every candidate-building caller (Power Pulse, Positional WAR upgrade, Trade Ideas impact, FAAB, breakdown league impact) keeps the offense default.
+       LIVE CHECK, "NFL IDP - Deep rosters" (sleeper 1315039157147402240, 2026), running the real loadPlayers over every rostered id: BEFORE 1,968 ids, 846 resolved, 1,122 rendering "Unknown player" (exactly the league's rostered defenders); AFTER (NAMING_POSITIONS) 1,968 resolved, 0 unknown.
+     | verified: yes (load tests 18 pass; typecheck green)
+
+IDP-123 | completed | Cut list never offers an unknown or unprojected player first
+     | files: lib/league-lineups/advice.ts (unknown players and defenders skipped and counted; unjudgedSentence; null perWeek sorts LAST; DropResult.unjudged), lib/league-lineups/data.ts (dropUnjudged), app/leagues/[league_id]/lineups/page.tsx, components/league-lineups/roster-moves.tsx (DropPanel renders the unjudged sentence under the list or the note), lib/league-lineups/advice.test.ts
+     | notes: Defenders are skipped as well as unknown players: after IDP-122 a defender is named but has no projection and no market value, so under the old sort he would have become the FIRST cut suggestion in every dynasty IDP league (a starting linebacker offered as the emptiest seat). He is counted and the panel says "N defensive players are not listed: League Pulse does not project defenders yet ...". Phase 3 (R-5) replaces the skip with the seat test. CHANGED EXISTING BEHAVIOUR, per the plan: an offensive player with no rest-of-season projection now sorts last instead of first; the test that pinned "at the very top" was rewritten with the reason in a comment.
+     | verified: yes (lineups tests 130 pass)
+
+IDP-124 | completed | FAAB priors by IDP position
+     | files: lib/faab/priors-build.ts (POSITIONS gains DL, LB, DB), lib/faab/priors-build.test.ts (the "unknown position" case now uses OL; new LB case)
+     | notes: Before: 649 completed waiver claims of defenders (DB 200, DL 227, LB 222) were filed under "any" only. npm run faab:priors: 2,301 cells from 18,491 auctions across 449 leagues; DL 116 cells (largest sample 212), LB 108 (201), DB 76 (175). The "any" rollups are unchanged, since IDP auctions were already in them.
+     | verified: yes (21 tests; production rebuild)
+
+IDP-125 | completed | BEAM early gate
+     | files: lib/beam/capabilities/player-stat-line.ts (defenderStatLineAnswer; run() skips the stat read for a defender; present() returns the decline card), app/admin/beam/actions.ts (alias editor selects position and refuses a defender slug), NEW lib/beam/capabilities/player-stat-line.idp.test.ts
+     | notes: The decline card: "Defensive stat lines arrive with IDP support. We hold {name}'s games but cannot read tackles and sacks back here yet." with the context note "Defenders will be scored on Sleeper default IDP scoring." Checked production: 0 of 74 stored aliases point at a defender today, so the gate is preventive. The plan put the test in lib/beam/interpret/interpret.test.ts; it lives beside the capability instead because the gate is in the capability, not in interpretation.
+     | verified: yes (lib/beam 78 tests pass)
+
+IDP-126 | completed | "No market value" wherever a noValue asset renders
+     | files: components/signal-check-trade-card.tsx, app/tools/trade-calculator/trade-result.tsx, app/games/would-you-rather/verdict-panel.tsx, app/tools/on-the-clock/trade-history.tsx, app/api/og/trade/[transaction_id]/route.tsx, NEW lib/signal-check/no-market-value-copy.test.ts
+     | notes: The red "(no value)" suffix after the name is gone; the VALUE position itself now reads "No market value" in text-ink-subtle (the same text for sight and screen reader, since it is one real text node). That also removes the "0" the three card components printed in the value column for a noValue asset, the "n/a" in On The Clock's trade history, and the "0" on the OG trade card. The partial-grade label is IDP-207 (phase 2). Test is a source-level assertion rather than renderToStaticMarkup: all five renderers need a full BuilderView or trade-history payload, and the assertion is about the words on the noValue branch.
+     | verified: yes (5 tests; typecheck green)
+
+IDP-127 | completed | Breakdown and picker refuse defenders (R-23)
+     | files: lib/beacon-breakdown.ts (defenderSlugs; loadBreakdownCore returns refusedSlugs before loading anything; BreakdownLookup and BreakdownGroupLookup carry it; computeAge folded into lib/player-age.ts computeAgeYears), NEW lib/breakdown/player-select.ts (BREAKDOWN_PLAYER_SELECT, the one copy), lib/start-sit/load.ts (imports it), app/api/og/breakdown/[a]/[b]/route.tsx ("Defensive players are not compared here"), app/tools/who-should-i-start/page.tsx (a defender keeps his slug so the board refuses him in its own sentence, but gets no picker chip), app/tools/who-should-i-start/start-sit-board.tsx (the refusal names the position in words, "linebacker" not "LB"), lib/breakdown/league-impact.ts (the position cast became a defender guard), NEW lib/breakdown/defender-refusal.test.ts
+     | notes: Hazard J folds done here: PLAYER_SELECT (two hand-synced copies) and computeAge (a private copy of computeAgeYears; the shared one also validates month and day, which only rejects impossible dates).
+     | verified: yes (294 tests across breakdown, start-sit and WSIS)
+
+IDP-128 | completed | Game log helper copy
+     | files: NEW lib/player-profile/game-log-helper.ts (+ test), components/player-profile/overview-game-log.tsx
+     | notes: On the fallback branch the panel now asks (cached) whether a LATER season already has a published slate; if so it says "No upcoming games are projected for this player" instead of claiming next season's schedule is unpublished. The spring wording is kept when it is true.
+     | verified: yes (3 tests)
+
+IDP-129 | completed | League Relay waiver jab
+     | files: lib/league-relay/waiver-writeup.ts, lib/league-relay/waiver-writeup.test.ts
+     | notes: Defender: "{name} plays a position no value source prices, so there is no number to hold this claim against." Anyone else: "{name} has no projection this week" plus the market clause when there is one. Neither contains "itself a review".
+     | verified: yes (League Relay 165 tests)
+
+IDP-130 | completed | Would You Rather pool refuses unpriced trades and retires the three
+     | files: lib/would-you-rather/pool.ts (admitGradedTrade, pure: refuses when result.view.hasMissingValues; the existing startup and player-asset rules moved into it unchanged), NEW lib/would-you-rather/pool.test.ts
+     | notes: RETIREMENT, run once on production 2026-09-24 through the MCP (same statement the admin retireTradeAction issues, status 'retired'; votes are never deleted):
+       update would_you_rather_trades t set status = 'retired' where t.status = 'active' and exists (select 1 from league_transactions lt cross join lateral jsonb_object_keys(coalesce(lt.adds,'{}'::jsonb)) pid join players p on p.external_ids->>'sleeper' = pid where lt.id = t.transaction_id and p.position in ('DL','LB','DB'));
+       Retired: a4a70aec-edd6-4167-bc7d-428c46d59202 (sleeper tx 1394049726034247680), ba176571-b7c3-4bae-83e6-9b2d2a6ecd15 (1326030145047236608), 93ada44b-aa8e-4870-9b1f-6d92815ca07d (1349109743469219840). Votes kept: 0, 0, 0 (none had been voted on). The IDP-207 partial flag joins the predicate in phase 2.
+     | verified: yes (3 tests; WYR 116 tests pass)
+
+IDP-131 | completed | Draft snapshot value verdict only with a value
+     | files: lib/on-the-clock/draft-snapshot.ts (snapshotPickVerdict; verdict null and metadata.adp_only true when beacon_value is null), lib/on-the-clock/draft-pulse.ts (DraftPulseTeam.unprojectedIdpCount and unprojectedOtherCount, summing to unprojectedCount; DraftPulseInput.idpPlayerIds; DRAFT_PULSE_VERSION otc-pulse-4 so cached payloads without the fields rebuild), lib/on-the-clock/pulse-service.ts (idpPlayerIds from the picks' own positions), app/tools/on-the-clock/draft-pulse-board.tsx and draft-complete.tsx (one sentence each when defensive picks are present), tests draft-pulse.test.ts (2), NEW draft-snapshot.verdict.test.ts (3), draft-grade-spread.test.ts fixture
+     | notes: The plan's `adp_only: true` is stored in the row's existing metadata jsonb, not a new column: on_the_clock_pick_snapshots is written by the snapshot and read by nothing in the app today (checked), so no UI renders "market only" yet; the live room computes its own ADP marks, which phase 2 (IDP-211) makes honest for defender picks.
+     | verified: yes (On The Clock 411 tests)
+
+IDP-132 phase gate, section 4.6 re-run AFTER (2026-09-24):
+- defender projection rows: sleeper 171,064 (2020 to 2026), ffbeacon 19,493 (the 2026 mirror). Before: 0 and 0.
+- finishes outside the six: DB 2,580, DL 2,722, LB 1,414, all under idp123; no OL/LS/P/etc rows and no defender row under a PPR key. Before: 36,000+ rows ranked on PPR.
+- Would You Rather active trades holding a defender: 0 (was 3).
+- player_idp_seasons rows: 14,218. player_projection_accuracy idp123 rows: 6,204; defender rows under any PPR key: 0.
+- Typed totals equal metadata totals for 2025, every key and position group: 0 mismatches (IDP-110). player_idp_seasons idp123 against Sleeper's pts_idp: DB 0.000%, DL 0.000%, LB -0.017% (IDP-117). One-week sweep holds both sets (IDP-114). RLS verified (IDP-107).
+- Gate fix: the full suite caught lib/idp/points-guard.test.ts's own self-test string naming a raw projection column, which lib/projections/raw-column-guard.test.ts flagged; the string was changed (no allow-list entry).
+- ASCII scan over all 153 changed and new files: 0 em dashes, en dashes, curly quotes, ellipsis characters, non-breaking spaces or middle dots.
+- npm run build: exit 0, compiled in 47s, 57 of 57 static pages generated, no errors or warnings in the log.
+
+IDP-132 review round (one independent reviewer, per the owner): no blockers; 5 should-fix, 8 minor, 2 notes.
+FIXED:
+- 1 lib/projection-scoreboard.ts: keyset paging for both loaders; the projection read skips rows with no PPR figure, so defender history no longer widens the scoreboard's seasons or trips the offset timeout.
+- 2 lib/calculate-projection-accuracy.ts: the first projection read skips rows with no PPR figure (defenders are read once, with their stat line). A defender-only actuals read for idp-only seasons was tried and REVERTED: no time saved (144 s against 142 s) and it changed grading (a special-teams week with no defensive snap stopped counting as played). Final run: 16,530 rows, identical to before, 141 s. The reported coverage count "players" is now 2,945 instead of 3,286 because unprojected-only players are no longer read; it is a count on the run summary only.
+- 3 app/tools/who-should-i-start/page.tsx: the breakdown is handed the offensive slugs only; the board still receives every slug and refuses the defender in its own sentence. One linebacker no longer takes the receivers' breakdown tabs with him.
+- 4 lib/league-lineups/build.ts ungradedDefenderSlots (+ NEW lib/league-lineups/defender-slots.test.ts), components/league-lineups/optimizer-panel.tsx, app/leagues/[league_id]/lineups/page.tsx: named defenders the week cannot grade get their own sentence ("League Pulse does not project defenders yet") instead of "players we could not match". Derived from the view so the engine goldens stay as captured.
+- 6 lib/league-lineups/advice.ts: the note reads "No projection for the rest of the season, so this list cannot weigh him."
+- 7 lib/manager-ledger/default-settings.ts: MANAGER_LEDGER_MODEL_VERSION ledger-5, so cached IDP-league detail rebuilds with defender names.
+- 9 app/api/og/trade/[transaction_id]/route.tsx: "No market value" in #8A8A9C (the AA ink-subtle), not the retired #6B6B7D.
+- 11 lib/on-the-clock/draft-snapshot.ts: doc comments back on their own functions.
+- stale comment in lib/positional-war/load.ts ("this drops nothing") rewritten.
+NOT FIXED, with the reason:
+- 5 (speed) filtering defender rows at the query in lib/positional-war/load.ts: implemented, then REVERTED because 12 load tests use fakes that do not model the join filter; IDP-308 rewrites this loader and its fakes, so it moves there. On The Clock's loadAllProjections and the beacon mirror also read defender rows; the mirror must (D-3); the draft board filters them in code. Open question from the reviewer, unmeasured: Positional WAR's per-week data-cache entry size against Next's 2 MB item limit.
+- 8 Would You Rather: the admission rule refuses ANY unpriced asset (plan R-19 says "unpriced"), while the retirement covered defenders only. Other active trades with an unpriced offensive asset stay until the owner decides whether to retire them.
+- 10 player_idp_seasons is upsert-only: a player who stops being a defender keeps his old rows. Harmless until the phase 2 search gate reads it; fix in IDP-201.
+- 12 dedupeProjectionRows stores the merged object as metadata for the one two-way player; CLAUDE.md says metadata is the raw object. Left for the owner: one player, and keeping both raw rows changes the column's shape.
+- 13 source-level tests for "No market value" and the breakdown OG: accepted as is; phase 2's IDP-207 rebuilds those renderers.
+- 14 (note) on a settled week, defenders in IDP slots are now graded on actual points on Lineups (ungradedSlotCount drops to zero there). Correct, and every figure reconciles; stated here because "names only" did not describe it.
+- 15 (note) eligible_positions falls back to the primary even when it is outside the nine (an OL gets {OL}). Harmless: loadPlayers filters by primary before reading it.
+- Cron time budget: the stats cron (maxDuration 300) now runs accuracy (about 141 s) beside finishes, splits and idp seasons. Measure it once on a preview deploy before relying on it.
+After fixes: typecheck green, 405 files / 6,028 tests pass.
+- Build after the review fixes: exit 0, compiled in 31.2s, 57 of 57 static pages.

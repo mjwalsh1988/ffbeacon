@@ -1,0 +1,330 @@
+{
+  "gradableSlots": [
+    "QB",
+    "RB",
+    "WR",
+    "FLEX"
+  ],
+  "gradedWeeks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "season": 2025,
+  "teams": [
+    {
+      "draft": {
+        "aboveBaseline": 0,
+        "best": [],
+        "picks": 0,
+        "points": 0,
+        "worst": []
+      },
+      "draftRank": null,
+      "efficiencyRank": 1,
+      "lineup": {
+        "actualRecord": {
+          "losses": 0,
+          "ties": 0,
+          "wins": 6
+        },
+        "bestLineupRecord": {
+          "losses": 0,
+          "ties": 0,
+          "wins": 6
+        },
+        "efficiency": 0.9898697539797395,
+        "optimalPoints": 345.5,
+        "pointsLeft": 3.5,
+        "setPoints": 342,
+        "weeks": [
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": {
+              "gain": 2.5,
+              "inName": "WR2",
+              "inPoints": 9.5,
+              "outName": "RB2",
+              "outPlayerId": "rb2",
+              "outPoints": 7
+            },
+            "officialPoints": 52,
+            "opponentPoints": 49.5,
+            "optimalPoints": 54.5,
+            "outcome": "win",
+            "pointsLeft": 2.5,
+            "setPoints": 52,
+            "ungradedSlots": 0,
+            "week": 1
+          },
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": {
+              "gain": 1,
+              "inName": "WR2",
+              "inPoints": 9,
+              "outName": "RB2",
+              "outPlayerId": "rb2",
+              "outPoints": 8
+            },
+            "officialPoints": 54,
+            "opponentPoints": 51,
+            "optimalPoints": 55,
+            "outcome": "win",
+            "pointsLeft": 1,
+            "setPoints": 54,
+            "ungradedSlots": 0,
+            "week": 2
+          },
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": null,
+            "officialPoints": 56,
+            "opponentPoints": 52.5,
+            "optimalPoints": 56,
+            "outcome": "win",
+            "pointsLeft": 0,
+            "setPoints": 56,
+            "ungradedSlots": 0,
+            "week": 3
+          },
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": null,
+            "officialPoints": 58,
+            "opponentPoints": 54,
+            "optimalPoints": 58,
+            "outcome": "win",
+            "pointsLeft": 0,
+            "setPoints": 58,
+            "ungradedSlots": 0,
+            "week": 4
+          },
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": null,
+            "officialPoints": 60,
+            "opponentPoints": 55.5,
+            "optimalPoints": 60,
+            "outcome": "win",
+            "pointsLeft": 0,
+            "setPoints": 60,
+            "ungradedSlots": 0,
+            "week": 5
+          },
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": null,
+            "officialPoints": 62,
+            "opponentPoints": 57,
+            "optimalPoints": 62,
+            "outcome": "win",
+            "pointsLeft": 0,
+            "setPoints": 62,
+            "ungradedSlots": 0,
+            "week": 6
+          }
+        ],
+        "weeksGraded": 6,
+        "weeksWithUngradedSlots": 0,
+        "winsLeftOnBench": 0
+      },
+      "ownerHandle": "one",
+      "scoringRank": 1,
+      "sleeperRosterId": 1,
+      "teamName": "One",
+      "tradeRank": null,
+      "trades": {
+        "anyPicks": false,
+        "moves": [],
+        "net": 0,
+        "pointsIn": 0,
+        "pointsOut": 0,
+        "trades": 0
+      },
+      "waiverRank": null,
+      "waivers": {
+        "best": [],
+        "faabSpent": null,
+        "hits": 0,
+        "moves": 0,
+        "pointsOnRoster": 0,
+        "pointsPerDollar": null,
+        "pointsStarted": 0
+      }
+    },
+    {
+      "draft": {
+        "aboveBaseline": 0,
+        "best": [],
+        "picks": 0,
+        "points": 0,
+        "worst": []
+      },
+      "draftRank": null,
+      "efficiencyRank": 2,
+      "lineup": {
+        "actualRecord": {
+          "losses": 6,
+          "ties": 0,
+          "wins": 0
+        },
+        "bestLineupRecord": {
+          "losses": 0,
+          "ties": 4,
+          "wins": 2
+        },
+        "efficiency": 0.9247467438494935,
+        "optimalPoints": 345.5,
+        "pointsLeft": 26,
+        "setPoints": 319.5,
+        "weeks": [
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": {
+              "gain": 2.5,
+              "inName": "WR1",
+              "inPoints": 12,
+              "outName": "WR2",
+              "outPlayerId": "wr2",
+              "outPoints": 9.5
+            },
+            "officialPoints": 49.5,
+            "opponentPoints": 52,
+            "optimalPoints": 54.5,
+            "outcome": "loss",
+            "pointsLeft": 5,
+            "setPoints": 49.5,
+            "ungradedSlots": 0,
+            "week": 1
+          },
+          {
+            "bestLineupOutcome": "win",
+            "biggestMiss": {
+              "gain": 3,
+              "inName": "WR1",
+              "inPoints": 12,
+              "outName": "WR2",
+              "outPlayerId": "wr2",
+              "outPoints": 9
+            },
+            "officialPoints": 51,
+            "opponentPoints": 54,
+            "optimalPoints": 55,
+            "outcome": "loss",
+            "pointsLeft": 4,
+            "setPoints": 51,
+            "ungradedSlots": 0,
+            "week": 2
+          },
+          {
+            "bestLineupOutcome": "tie",
+            "biggestMiss": {
+              "gain": 3.5,
+              "inName": "WR1",
+              "inPoints": 12,
+              "outName": "WR2",
+              "outPlayerId": "wr2",
+              "outPoints": 8.5
+            },
+            "officialPoints": 52.5,
+            "opponentPoints": 56,
+            "optimalPoints": 56,
+            "outcome": "loss",
+            "pointsLeft": 3.5,
+            "setPoints": 52.5,
+            "ungradedSlots": 0,
+            "week": 3
+          },
+          {
+            "bestLineupOutcome": "tie",
+            "biggestMiss": {
+              "gain": 4,
+              "inName": "WR1",
+              "inPoints": 12,
+              "outName": "WR2",
+              "outPlayerId": "wr2",
+              "outPoints": 8
+            },
+            "officialPoints": 54,
+            "opponentPoints": 58,
+            "optimalPoints": 58,
+            "outcome": "loss",
+            "pointsLeft": 4,
+            "setPoints": 54,
+            "ungradedSlots": 0,
+            "week": 4
+          },
+          {
+            "bestLineupOutcome": "tie",
+            "biggestMiss": {
+              "gain": 4.5,
+              "inName": "WR1",
+              "inPoints": 12,
+              "outName": "WR2",
+              "outPlayerId": "wr2",
+              "outPoints": 7.5
+            },
+            "officialPoints": 55.5,
+            "opponentPoints": 60,
+            "optimalPoints": 60,
+            "outcome": "loss",
+            "pointsLeft": 4.5,
+            "setPoints": 55.5,
+            "ungradedSlots": 0,
+            "week": 5
+          },
+          {
+            "bestLineupOutcome": "tie",
+            "biggestMiss": {
+              "gain": 5,
+              "inName": "WR1",
+              "inPoints": 12,
+              "outName": "WR2",
+              "outPlayerId": "wr2",
+              "outPoints": 7
+            },
+            "officialPoints": 57,
+            "opponentPoints": 62,
+            "optimalPoints": 62,
+            "outcome": "loss",
+            "pointsLeft": 5,
+            "setPoints": 57,
+            "ungradedSlots": 0,
+            "week": 6
+          }
+        ],
+        "weeksGraded": 6,
+        "weeksWithUngradedSlots": 0,
+        "winsLeftOnBench": 2
+      },
+      "ownerHandle": "two",
+      "scoringRank": 2,
+      "sleeperRosterId": 2,
+      "teamName": "Two",
+      "tradeRank": null,
+      "trades": {
+        "anyPicks": false,
+        "moves": [],
+        "net": 0,
+        "pointsIn": 0,
+        "pointsOut": 0,
+        "trades": 0
+      },
+      "waiverRank": null,
+      "waivers": {
+        "best": [],
+        "faabSpent": null,
+        "hits": 0,
+        "moves": 0,
+        "pointsOnRoster": 0,
+        "pointsPerDollar": null,
+        "pointsStarted": 0
+      }
+    }
+  ],
+  "ungradableSlots": []
+}

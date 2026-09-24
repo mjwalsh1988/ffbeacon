@@ -8,9 +8,10 @@
  * directly has to live in a sibling file instead.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
+import { positionNoun } from "@/lib/site";
 import { ImageResponse } from "next/og";
 import { POSITION_SERIES, markerPath } from "@/components/chart-kit";
-import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 // The scarcest/deepest selection is shared with the rail summary card (E6),
 // not reimplemented here: docs/league-pulse/league-pulse-positional-war-plan.md 15.5.2
 // says the card's headline must use the same deterministic template the rail
@@ -62,7 +63,10 @@ type CacheRow = {
   curve: unknown;
 };
 
-const PULSE_POSITION_SET = new Set<string>(PULSE_POSITIONS);
+// Pinned to the six offensive positions (plan R-10): the card draws the
+// offense curve only. PulsePosition now also covers DL, LB and DB, and admitting
+// cache rows by it would draw nine lines on a card sized for six.
+const PULSE_POSITION_SET = new Set<string>(OFFENSE_POSITIONS);
 
 function isPulsePosition(value: string): value is PulsePosition {
   return PULSE_POSITION_SET.has(value);
@@ -95,14 +99,10 @@ export function toPositionCurves(rows: CacheRow[]): PositionCurve[] {
 }
 
 /** The spoken and written name of a position. "DEF" alone reads as an abbreviation. */
-const POSITION_LONG_NAME: Record<PulsePosition, string> = {
-  QB: "Quarterback",
-  RB: "Running back",
-  WR: "Wide receiver",
-  TE: "Tight end",
-  K: "Kicker",
-  DEF: "Defense",
-};
+function positionLongName(position: string): string {
+  const noun = positionNoun(position);
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
 
 /**
  * The card's one-sentence headline: "<Position> is the hardest position to
@@ -117,7 +117,7 @@ export function buildHeadline(curves: PositionCurve[]): string | null {
   if (!scarcest) return null;
   // Wording matches components/league-war/summary.ts buildChartSummary, so the
   // card and the page it links to say the same thing about the same league.
-  return `${POSITION_LONG_NAME[scarcest.position]} is the hardest position to replace in this league.`;
+  return `${positionLongName(scarcest.position)} is the hardest position to replace in this league.`;
 }
 
 export type LegendRow = { position: PulsePosition; label: string; color: string };
@@ -130,7 +130,7 @@ export type LegendRow = { position: PulsePosition; label: string; color: string 
 export function buildLegendRows(curves: PositionCurve[]): LegendRow[] {
   const byPosition = new Map(curves.map((c) => [c.position, c]));
   const rows: LegendRow[] = [];
-  for (const position of PULSE_POSITIONS) {
+  for (const position of OFFENSE_POSITIONS) {
     const curve = byPosition.get(position);
     if (!curve || curve.curve.length === 0) continue;
     const warLabel = curve.warAtDemand != null ? curve.warAtDemand.toFixed(2) : "-";

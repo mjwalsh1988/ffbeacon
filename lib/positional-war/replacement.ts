@@ -151,12 +151,16 @@ export function positionWeekStats(fill: MergedFill, position: PulsePosition): Po
  * lib/faab/free-agents.ts startablePositions(): a league with no K slot gets
  * no K here either. `slots` is expected already-startable (as returned by
  * `startingSlots()`), matching the contract of `buildMergedFill`'s `slots`
- * param.
+ * param. `eligibility` defaults to the OFF map; phase 3 passes
+ * slotEligibility(idpEnabled) (plan R-25).
  */
-export function startablePositions(slots: string[]): PulsePosition[] {
+export function startablePositions(
+  slots: string[],
+  eligibility: Record<string, PulsePosition[]> = PULSE_SLOT_ELIGIBILITY,
+): PulsePosition[] {
   const positions = new Set<PulsePosition>();
   for (const slot of slots) {
-    for (const position of PULSE_SLOT_ELIGIBILITY[slot] ?? []) positions.add(position);
+    for (const position of eligibility[slot] ?? []) positions.add(position);
   }
   return PULSE_POSITIONS.filter((position) => positions.has(position));
 }

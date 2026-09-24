@@ -142,6 +142,22 @@ function msFrom(value: unknown): number | null {
 }
 
 /**
+ * The stored value verdict for one made pick (plan IDP-131). Null for a keeper,
+ * and null for any pick with no value behind it: the delta against ADP is kept,
+ * and adpOnly says the row is market-only rather than a value judgement.
+ */
+export function snapshotPickVerdict(input: {
+  isKeeper: boolean;
+  beaconValue: number | null;
+  delta: number | null;
+  threshold: number;
+}): { verdict: ReturnType<typeof classifyPickValue> | null; adpOnly: boolean } {
+  const adpOnly = input.beaconValue === null;
+  if (input.isKeeper || adpOnly) return { verdict: null, adpOnly };
+  return { verdict: classifyPickValue(input.delta, input.threshold), adpOnly };
+}
+
+/**
  * Return the finalized snapshot for a completed draft, creating it on first
  * open. `formatSlug`/`formatLabel` are hints from the client's LeagueCard; when
  * absent the league is fetched from Sleeper once and the format re-detected.
@@ -400,7 +416,17 @@ export async function getOrCreateDraftSnapshot(
       ? (adp.adpBySleeperId[pk.sleeperPlayerId] ?? null)
       : null;
     const delta = pickValueDelta(pk.pickNo, pickAdp);
-    const verdict = pk.isKeeper ? null : classifyPickValue(delta, threshold);
+    // A value VERDICT needs a value behind it (plan IDP-131). The delta is ADP
+    // alone, and a defender (or anyone no value source prices) used to be
+    // stamped "good value" on ADP with nothing underneath. The delta is kept
+    // and the row says it is market-only.
+    const beaconValue = boardEntry?.value ?? null;
+    const { verdict, adpOnly } = snapshotPickVerdict({
+      isKeeper: pk.isKeeper,
+      beaconValue,
+      delta,
+      threshold,
+    });
     return {
       sleeper_draft_id: draftId,
       pick_no: pk.pickNo,
@@ -414,12 +440,12 @@ export async function getOrCreateDraftSnapshot(
       position: pk.position,
       team: pk.team,
       is_keeper: pk.isKeeper,
-      beacon_value: boardEntry?.value ?? null,
+      beacon_value: beaconValue,
       beacon_rank: boardEntry?.rank ?? null,
       sleeper_adp: pickAdp,
       pick_value_delta: delta,
       value_verdict: verdict,
-      metadata: { threshold_picks: threshold } as unknown as Json,
+      metadata: { threshold_picks: threshold, adp_only: adpOnly } as unknown as Json,
     };
   });
 

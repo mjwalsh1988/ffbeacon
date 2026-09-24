@@ -6,6 +6,8 @@ import {
   loadDefenseSplits,
   loadLeague,
   loadPlayers,
+  NAMING_POSITIONS,
+  projectablePlayerIds,
   loadProjections,
   loadRosters,
   type ProjectionRow,
@@ -456,10 +458,10 @@ export async function loadMatchupDetail(
       ]),
     ),
   );
-  const players = await loadPlayers(admin, sleeperIds);
-  const playerIds = Array.from(
-    new Set([...players.values()].map((p) => p.playerId)),
-  );
+  // Defenders are NAMED (plan IDP-122) and not projected: the id list for the
+  // projection and accuracy reads below comes from the offensive players only.
+  const players = await loadPlayers(admin, sleeperIds, { positions: NAMING_POSITIONS });
+  const playerIds = projectablePlayerIds(players);
 
   const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(season);

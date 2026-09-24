@@ -143,3 +143,27 @@ describe("curveFor", () => {
     );
   });
 });
+
+describe("defender curves (IDP-119)", () => {
+  const BASES = ["pts_ppr", "pts_half_ppr", "pts_std", "idp123"] as const;
+  const NINE = PULSE_POSITIONS;
+
+  it("has a non-empty curve for all nine positions under every base, idp123 included", () => {
+    for (const base of BASES) {
+      for (const position of NINE) {
+        expect(curveFor(base, position as PulsePosition).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("reads a defender identically under every base, since receptions never touch him", () => {
+    for (const position of ["DL", "LB", "DB"] as const) {
+      expect(curveFor("pts_std", position)).toEqual(curveFor("idp123", position));
+      expect(curveFor("pts_ppr", position)).toEqual(curveFor("idp123", position));
+    }
+  });
+
+  it("finds linebackers steadier than edge rushers at the top band", () => {
+    expect(curveFor("idp123", "LB")[0].cv).toBeLessThan(curveFor("idp123", "DL")[0].cv);
+  });
+});

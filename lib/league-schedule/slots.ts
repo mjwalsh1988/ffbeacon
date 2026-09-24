@@ -19,6 +19,7 @@
  * functions. Do not unify them.
  */
 
+import { positionNoun } from "@/lib/site";
 import { NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
 import type { ScheduleSlot, SlotGroup } from "./types";
 
@@ -115,13 +116,13 @@ const LABELS: Record<string, string> = {
  * row.
  */
 const DESCRIPTIONS: Record<string, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "team defense",
-  DST: "team defense",
+  QB: positionNoun("QB"),
+  RB: positionNoun("RB"),
+  WR: positionNoun("WR"),
+  TE: positionNoun("TE"),
+  K: positionNoun("K"),
+  DEF: positionNoun("DEF"),
+  DST: positionNoun("DEF"),
   FLEX: "flex, any running back, receiver or tight end",
   REC_FLEX: "wide receiver or tight end flex",
   WR_TE: "wide receiver or tight end flex",
@@ -129,9 +130,9 @@ const DESCRIPTIONS: Record<string, string> = {
   WRRB_WRT: "flex, any running back, receiver or tight end",
   SUPER_FLEX: "superflex, any quarterback, running back, receiver or tight end",
   Q_FLEX: "superflex, any quarterback, running back, receiver or tight end",
-  DL: "defensive lineman",
-  LB: "linebacker",
-  DB: "defensive back",
+  DL: positionNoun("DL"),
+  LB: positionNoun("LB"),
+  DB: positionNoun("DB"),
   IDP_FLEX: "individual defensive player flex",
 };
 

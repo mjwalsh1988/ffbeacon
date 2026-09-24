@@ -1,3 +1,4 @@
+import { ungradedDefenderSlots } from "@/lib/league-lineups/build";
 import type { Metadata } from "next";
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
@@ -481,7 +482,7 @@ async function LineupBody({
     );
   }
 
-  const { view, dropNote, teams } = result;
+  const { view, dropNote, dropUnjudged, teams } = result;
 
   // /tools/faab takes no league param, so the link is the bare tool. Passing
   // one that the route does not read would look like a deep link and behave
@@ -579,6 +580,7 @@ async function LineupBody({
               optimization={view.optimization}
               isFinal={view.isFinal}
               week={view.week}
+              defenderSlots={ungradedDefenderSlots(view.groups, view.isFinal)}
             />
           )}
 
@@ -628,6 +630,7 @@ async function LineupBody({
               <DropPanel
                 options={view.dropOptions}
                 note={dropNote}
+                unjudged={dropUnjudged}
                 isKeeperLeague={isKeeperLeague}
               />
             </>

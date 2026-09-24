@@ -18,20 +18,14 @@
  * is a feature the reader did not ask for.
  */
 
+import { positionNoun } from "@/lib/site";
 import type { PlottableCurve } from "@/lib/positional-war/types";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import type { PositionalWarStatus } from "@/lib/league-positional-war-data";
 import { formatEastern, formatRelative } from "@/lib/datetime";
 import { selectScarcestAndDeepest } from "./selection";
 
-const POSITION_NAME: Record<PulsePosition, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "team defense",
-};
+const positionName = (position: string): string => positionNoun(position);
 
 function fmtWar(war: number): string {
   return war.toFixed(2);
@@ -77,7 +71,7 @@ export function buildChartSummary(curves: readonly PlottableCurve[], teamCount: 
     return `Not calculated for this league yet. ${closing}`;
   }
 
-  const scarcestName = POSITION_NAME[scarcest.position];
+  const scarcestName = positionName(scarcest.position);
   const scarcestWar = scarcest.warRank1 !== null ? fmtWar(scarcest.warRank1) : null;
   const halfWinRank = firstRankBelowHalfWin(scarcest);
   const scarcestSentence =
@@ -93,7 +87,7 @@ export function buildChartSummary(curves: readonly PlottableCurve[], teamCount: 
     return `${scarcestSentence} ${closing}`;
   }
 
-  const deepestName = POSITION_NAME[deepest.position];
+  const deepestName = positionName(deepest.position);
   const deepestWar = deepest.warRank1 !== null ? fmtWar(deepest.warRank1) : null;
   const maxGap = maxAdjacentGapWithinDemand(deepest);
   const deepestSentence =

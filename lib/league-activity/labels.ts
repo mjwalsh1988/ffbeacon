@@ -228,6 +228,13 @@ const SCORING_LABELS: Record<string, string> = {
   idp_tkl_loss: "Tackle for loss",
   idp_safe: "Defensive safety",
   idp_blk_kick: "Defensive blocked kick",
+  idp_qb_hit: "Quarterback hit",
+  idp_sack_yd: "Sack yards",
+  idp_int_ret_yd: "Interception return yards",
+  idp_fum_ret_yd: "Fumble return yards",
+  idp_pass_def_3p: "Bonus for 3 or more passes defended",
+  bonus_tkl_10p: "Bonus for 10 or more tackles",
+  bonus_sack_2p: "Bonus for 2 or more sacks",
 };
 
 export function scoringLabel(key: string): string {

@@ -35,6 +35,11 @@ const POSITION_COLOR: Record<string, string> = {
   RB: "#34D399",
   WR: "#60A5FA",
   TE: "#FBBF24",
+  K: "#F472B6",
+  DEF: "#94A3B8",
+  DL: "#A3E635",
+  LB: "#E879F9",
+  DB: "#818CF8",
 };
 
 /**

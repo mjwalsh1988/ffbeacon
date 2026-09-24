@@ -381,6 +381,12 @@ export function computePowerPulse(
       TE: 0,
       K: 0,
       DEF: 0,
+      // Internal only. A defender is credited here only once the IDP switch
+      // seats one (phase 3, IDP-307); the result only carries positions the
+      // league's slots can start, so these zeros never reach a page.
+      DL: 0,
+      LB: 0,
+      DB: 0,
     };
     const nameById = new Map(
       enriched.map((e) => [e.player.playerId, e.player]),

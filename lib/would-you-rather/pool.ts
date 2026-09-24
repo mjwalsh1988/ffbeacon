@@ -32,7 +32,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import type { LeagueTradeInput } from "@/lib/league-signal-check";
+import type { LeagueTradeInput, LeagueTradeSignalCheck } from "@/lib/league-signal-check";
 import { normalizeDraftPicks } from "@/lib/league-pulse";
 import {
   gradeLeagueTrades,
@@ -51,6 +51,33 @@ type Client = SupabaseClient<Database>;
  * that a cold request pays for one page rather than a table scan.
  */
 const SAMPLE_WINDOW = 300;
+
+/**
+ * Whether a graded trade may enter the pool. Pure, exported for the test.
+ *
+ * REFUSED WHEN ANY ASSET IS UNPRICED (plan R-19, IDP-130). A trade holding a
+ * defender, or anything else no value source prices, grades with that asset
+ * at nothing, so the reveal would tell a room of voters one side won on
+ * numbers that leave a piece of the trade out. The game has no honest way to
+ * show a partial grade after a vote, so the trade never enters the pool.
+ */
+export function admitGradedTrade(
+  result: Pick<LeagueTradeSignalCheck, "startup" | "assetMeta" | "view">,
+  settings: Pick<WouldYouRatherSettings["pool"], "include_startup_trades" | "require_player_asset">,
+): boolean {
+  if (result.view.hasMissingValues) return false;
+  if (result.startup !== null && !settings.include_startup_trades) return false;
+  // A pick-for-pick trade grades fine and plays badly: there is nothing to
+  // recognise and nothing to argue about. Checked against the GRADED sides,
+  // because a startup pick that became a player counts as the player.
+  if (settings.require_player_asset) {
+    const hasPlayer = (["a", "b"] as const).some((side) =>
+      (result.assetMeta[side] ?? []).some((m) => m.kind === "player"),
+    );
+    if (!hasPlayer) return false;
+  }
+  return true;
+}
 
 /** Below this many active rows, a serve triggers a top-up. */
 export const POOL_LOW_WATER_MARK = 25;
@@ -304,16 +331,7 @@ async function growPoolOnce(
       const result = graded.results.get(item.row.sleeper_transaction_id);
       if (!result) return [];
       const isStartup = result.startup !== null;
-      if (isStartup && !settings.pool.include_startup_trades) return [];
-      // A pick-for-pick trade grades fine and plays badly: there is nothing to
-      // recognise and nothing to argue about. Checked against the GRADED sides,
-      // because a startup pick that became a player counts as the player.
-      if (settings.pool.require_player_asset) {
-        const hasPlayer = (["a", "b"] as const).some((side) =>
-          (result.assetMeta[side] ?? []).some((m) => m.kind === "player"),
-        );
-        if (!hasPlayer) return [];
-      }
+      if (!admitGradedTrade(result, settings.pool)) return [];
       return [
         {
           league_id: item.row.league_id,

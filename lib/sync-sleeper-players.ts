@@ -152,6 +152,29 @@ export function pickPrimaryPosition(player: SleeperPlayer): string | null {
   return candidates[0] ?? null;
 }
 
+/** The positions League Pulse can seat a player at (the PulsePosition values). */
+const ELIGIBLE_POSITION_SET = new Set(["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"]);
+
+/**
+ * Every fantasy position Sleeper lets this player be started at, for
+ * players.eligible_positions (migration 0297). Sleeper's fantasy_positions
+ * upper-cased, in Sleeper's order, de-duplicated and FILTERED to the nine
+ * League Pulse positions (OL, LS, LEO, OT and the like are dropped). Falls back
+ * to the primary alone when nothing survives, so a player always has at least
+ * one. The primary itself is still pickPrimaryPosition's, unchanged.
+ */
+export function pickEligiblePositions(player: SleeperPlayer, primary: string): string[] {
+  const out: string[] = [];
+  if (Array.isArray(player.fantasy_positions)) {
+    for (const p of player.fantasy_positions) {
+      if (typeof p !== "string") continue;
+      const pos = p.toUpperCase();
+      if (ELIGIBLE_POSITION_SET.has(pos) && !out.includes(pos)) out.push(pos);
+    }
+  }
+  return out.length > 0 ? out : [primary];
+}
+
 /**
  * Sleeper's roster situation for a player, normalized.
  *
@@ -209,6 +232,7 @@ type StagedRow = {
   first_name: string;
   last_name: string;
   position: string;
+  eligiblePositions: string[];
   team: string | null;
   status: string;
   injuryStatus: string | null;
@@ -364,6 +388,7 @@ export async function runSleeperPlayersSync(
       first_name: first || "Unknown",
       last_name: last || sleeperId,
       position,
+      eligiblePositions: pickEligiblePositions(player, position),
       team: player.team ?? null,
       status: deriveStatus(player),
       injuryStatus,
@@ -468,6 +493,7 @@ export async function runSleeperPlayersSync(
       first_name: s.first_name,
       last_name: s.last_name,
       position: s.position,
+      eligible_positions: s.eligiblePositions,
       team: s.team,
       status: s.status,
       birth_date: s.birth_date,

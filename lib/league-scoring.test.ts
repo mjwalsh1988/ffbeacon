@@ -289,3 +289,59 @@ describe("normalizedScoring key-set parity with scoreStatMap (T-WAR-04)", () => 
     });
   }
 });
+
+describe("defenders in the scoring core (IDP-113, hazard B)", () => {
+  const IDP123: ScoringSettings = {
+    idp_tkl_solo: 2, idp_tkl_ast: 1, idp_tkl_loss: 2, idp_sack: 6, idp_qb_hit: 1, idp_pass_def: 3,
+    idp_ff: 3, idp_fum_rec: 3, idp_safe: 3, idp_blk_kick: 3, idp_int: 6, idp_def_td: 6,
+  };
+  const DL_LINE = { idp_tkl: 4.1, idp_tkl_solo: 2.6, idp_tkl_ast: 1.5, idp_tkl_loss: 0.6, idp_sack: 0.5, idp_qb_hit: 1.1, def_pr_yd: 3, pts_ppr: 1.2 };
+  const noStored = { ppr: 1.2, half_ppr: 1.2, std: 1.2 };
+  // solo 2.6x2 + ast 1.5 + tfl 0.6x2 + sack 0.5x6 + qb hit 1.1 = 12
+  const EXPECTED = 2.6 * 2 + 1.5 + 0.6 * 2 + 0.5 * 6 + 1.1;
+
+  it("treats a bare IDP map as usable", () => {
+    expect(isUsableScoring(IDP123)).toBe(true);
+    expect(scoreStatMap(DL_LINE, IDP123)).not.toBeNull();
+  });
+
+  it("gives a defender no projection under a league with no IDP rule, never PPR or zero", () => {
+    const result = scoreWithFallback(DL_LINE, noStored, TEP_LEAGUE, "DL");
+    expect(result.points).toBeNull();
+    expect(result.usedLeagueScoring).toBe(false);
+  });
+
+  it("scores a defender on Sleeper's default IDP arithmetic, dropping team-defense keys", () => {
+    const withTeamDefense: ScoringSettings = { ...TEP_LEAGUE, ...IDP123, def_pr_yd: 0.1 };
+    const result = scoreWithFallback(DL_LINE, noStored, withTeamDefense, "DL");
+    expect(result.usedLeagueScoring).toBe(true);
+    expect(result.points).toBeCloseTo(EXPECTED, 10);
+  });
+
+  it("projects a plain Tackle league from solo plus assisted when combined is absent", () => {
+    const plainTackle: ScoringSettings = { ...TEP_LEAGUE, idp_tkl: 1 };
+    const result = scoreWithFallback({ idp_tkl_solo: 5, idp_tkl_ast: 3 }, noStored, plainTackle, "LB");
+    expect(result.points).toBeCloseTo(8, 10);
+  });
+
+  it("leaves an offensive player exactly as before", () => {
+    const withIdp: ScoringSettings = { ...TEP_LEAGUE, ...IDP123 };
+    expect(scoreWithFallback(TE_PROJECTION, stored(), withIdp, "TE").points).toBeCloseTo(
+      scoreWithFallback(TE_PROJECTION, stored(), TEP_LEAGUE, "TE").points as number,
+      10,
+    );
+  });
+
+  function stored() {
+    return { ppr: 15.31, half_ppr: 12.17, std: 9.03 };
+  }
+});
+
+describe("isUsableScoring with IDP keys (IDP-113)", () => {
+  it("does not let IDP keys rescue a truncated offensive map", () => {
+    expect(isUsableScoring({ rec_yd: 0.1, idp_sack: 6 })).toBe(false);
+    expect(
+      scoreWithFallback({ idp_sack: 1 }, { ppr: null, half_ppr: null, std: null }, { rec_yd: 0.1, idp_sack: 6 }, "DL").points,
+    ).toBeNull();
+  });
+});

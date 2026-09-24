@@ -19,11 +19,16 @@
  *   npm run backfill:weekly-projections                    # last 2 completed seasons
  *   npm run backfill:weekly-projections -- --seasons 2023,2024,2025
  *   npm run backfill:weekly-projections -- --from-season 2022 --to-season 2025
+ *   npm run backfill:weekly-projections -- --from-season 2020 --to-season 2025 --idp-only
+ *
+ * --idp-only asks Sleeper for DL, LB and DB alone (plan IDP-116), so filling in
+ * defender history does not re-write the offensive projections already stored
+ * for those seasons with Sleeper's CURRENT view of them.
  */
 
 import { getServiceClient } from "./_supabase";
 import { runWeeklyProjectionsSync, REGULAR_SEASON_LAST_WEEK } from "../lib/sync-weekly-projections";
-import { currentNflSeason } from "../lib/sleeper";
+import { currentNflSeason, IDP_PROJECTION_POSITIONS } from "../lib/sleeper";
 
 function argVal(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -76,6 +81,7 @@ async function main() {
       // clearing a week we already scored would delete the evidence rather than
       // correct it. Only the forward-looking nightly sync sweeps.
       clearStale: false,
+      positions: process.argv.includes("--idp-only") ? IDP_PROJECTION_POSITIONS : undefined,
     });
     grandTotal += result.totalStored;
     console.log(

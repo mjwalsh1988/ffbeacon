@@ -55,6 +55,7 @@
  * clobbers previously stored projections.
  */
 
+import { hasIdpStats, normalizeProjectedIdpLine } from "./idp/stat-line";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import {
@@ -81,13 +82,73 @@ function readPts(stats: Record<string, number> | null | undefined, key: string):
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-/** Whether Sleeper published any point projection at all for this row. */
+/**
+ * Whether Sleeper published any projection at all for this row. For a defender
+ * that is any finite idp_* figure: Sleeper projects his stats and no point
+ * total worth reading, so checking pts_* alone would call every projected
+ * defender "unprojected" and empty his stat line (plan hazard D).
+ */
 function hasPublishedPoints(row: SleeperWeeklyProjection): boolean {
   return (
     readPts(row.stats, "pts_ppr") !== null ||
     readPts(row.stats, "pts_half_ppr") !== null ||
-    readPts(row.stats, "pts_std") !== null
+    readPts(row.stats, "pts_std") !== null ||
+    hasIdpStats(row.stats)
   );
+}
+
+const OFFENSE_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"];
+const DEFENDER_LABELS = new Set(["DL", "DE", "DT", "NT", "LB", "ILB", "OLB", "DB", "CB", "S", "SS", "FS"]);
+
+/**
+ * Whether a projection row belongs to a defender, by the SAME rule the players
+ * sync uses for the primary position: an offensive fantasy position wins when
+ * the player has one (the two-way DB/WR player is a receiver here, and keeps
+ * his offensive points), otherwise any defensive label makes him a defender.
+ */
+export function isDefenderProjectionRow(row: SleeperWeeklyProjection): boolean {
+  const labels: string[] = [];
+  for (const p of row.player?.fantasy_positions ?? []) {
+    if (typeof p === "string") labels.push(p.toUpperCase());
+  }
+  if (typeof row.player?.position === "string") labels.push(row.player.position.toUpperCase());
+  if (labels.some((p) => OFFENSE_ORDER.includes(p))) return false;
+  if (labels.some((p) => DEFENDER_LABELS.has(p))) return true;
+  // No label at all: a line of idp_* figures is a defender's line.
+  return labels.length === 0 && hasIdpStats(row.stats);
+}
+
+/**
+ * One row per player. A player listed under two requested positions (the DB/WR
+ * two-way player) comes back twice in the one response; two rows with the same
+ * conflict key inside one upsert chunk fail the whole chunk (plan hazard I).
+ * The two are merged: stats unioned (later keys never overwrite a finite
+ * figure already present), and the first row's game context kept, filled from
+ * the second where it is missing.
+ */
+export function dedupeProjectionRows(rows: SleeperWeeklyProjection[]): SleeperWeeklyProjection[] {
+  const byId = new Map<string, SleeperWeeklyProjection>();
+  for (const row of rows) {
+    const id = typeof row.player_id === "string" ? row.player_id.trim() : "";
+    if (!id) continue;
+    const seen = byId.get(id);
+    if (!seen) {
+      byId.set(id, row);
+      continue;
+    }
+    const stats: Record<string, number> = { ...(row.stats ?? {}) };
+    for (const [key, value] of Object.entries(seen.stats ?? {})) {
+      if (typeof value === "number" && Number.isFinite(value)) stats[key] = value;
+    }
+    byId.set(id, {
+      ...seen,
+      stats,
+      game_id: seen.game_id ?? row.game_id,
+      opponent: seen.opponent ?? row.opponent,
+      team: seen.team ?? row.team,
+    });
+  }
+  return [...byId.values()];
 }
 
 /** Sleeper's injury designation on a projection row, trimmed. Null when healthy. */
@@ -157,6 +218,13 @@ export type WeeklyProjectionsSyncOptions = {
    * evidence rather than correct it.
    */
   clearStale?: boolean;
+  /**
+   * Narrow the fetch to these positions. ONLY for the one-time IDP history
+   * backfill, and only together with clearStale false: a narrowed fetch with
+   * the stale sweep on would clear every row of the positions it did not ask
+   * for. The call refuses that combination rather than trusting the caller.
+   */
+  positions?: readonly string[];
 };
 
 export type WeeklyProjectionsSyncResult = {
@@ -199,6 +267,9 @@ export async function runWeeklyProjectionsSync(
   const startedAt = new Date(started).toISOString();
   const seasonType: SleeperSeasonType = opts.seasonType ?? "regular";
   const clearStale = opts.clearStale ?? true;
+  if (opts.positions && clearStale) {
+    throw new Error("runWeeklyProjectionsSync: a position-narrowed fetch must pass clearStale false");
+  }
 
   // Resolve season and starting week from explicit opts or Sleeper's live state.
   let season = opts.season ?? null;
@@ -271,8 +342,9 @@ export async function runWeeklyProjectionsSync(
   let matchedPlayers = 0;
 
   for (const week of weeks) {
-    const rows = await getSleeperWeeklyProjections(season as number, week, seasonType);
-    totalFetched += rows.length;
+    const fetched = await getSleeperWeeklyProjections(season as number, week, seasonType, opts.positions);
+    totalFetched += fetched.length;
+    const rows = dedupeProjectionRows(fetched);
 
     const inserts: WeeklyProjectionInsert[] = [];
     let matchedThisWeek = 0;
@@ -298,6 +370,14 @@ export async function runWeeklyProjectionsSync(
       const playerId = idBySleeper.get(sleeperId) ?? null;
       if (playerId) matchedThisWeek += 1;
 
+      // A defender's stored pts_* are Sleeper's offensive-only figures and mean
+      // nothing for him, so they stay null in every state, and his projected
+      // line keeps idp_* keys only (team-defense and ADP keys dropped, plan
+      // R-8b). Nothing reads a defender's points from these columns: they are
+      // scored from stat_line under a league's own rules.
+      const defender = isDefenderProjectionRow(row);
+      const projectedLine = defender ? normalizeProjectedIdpLine(row.stats) : (row.stats ?? null);
+
       inserts.push({
         source: WEEKLY_PROJECTION_SOURCE_SLUG,
         season: season as number,
@@ -309,13 +389,15 @@ export async function runWeeklyProjectionsSync(
         // whichever base fits its league gets the same answer. An unprojected
         // row carries nulls: the row exists to overwrite whatever number was
         // sitting there, not to assert a new one.
-        projected_pts_ppr: isOut ? 0 : isUnprojected ? null : readPts(row.stats, "pts_ppr"),
-        projected_pts_half_ppr: isOut
-          ? 0
-          : isUnprojected
-            ? null
-            : readPts(row.stats, "pts_half_ppr"),
-        projected_pts_std: isOut ? 0 : isUnprojected ? null : readPts(row.stats, "pts_std"),
+        projected_pts_ppr: defender ? null : isOut ? 0 : isUnprojected ? null : readPts(row.stats, "pts_ppr"),
+        projected_pts_half_ppr: defender
+          ? null
+          : isOut
+            ? 0
+            : isUnprojected
+              ? null
+              : readPts(row.stats, "pts_half_ppr"),
+        projected_pts_std: defender ? null : isOut ? 0 : isUnprojected ? null : readPts(row.stats, "pts_std"),
         availability,
         injury_status: readInjuryStatus(row),
         opponent: typeof row.opponent === "string" ? row.opponent : null,
@@ -328,7 +410,7 @@ export async function runWeeklyProjectionsSync(
         // {} scores to a definite zero, null scores to no opinion at all, which
         // is exactly the distinction between the two states. The raw payload is
         // preserved in metadata regardless.
-        stat_line: (isOut ? {} : isUnprojected ? null : (row.stats ?? null)) as unknown as Json,
+        stat_line: (isOut ? {} : isUnprojected ? null : projectedLine) as unknown as Json,
         metadata: row as unknown as Json,
         generated_at: nowIso,
         updated_at: nowIso,

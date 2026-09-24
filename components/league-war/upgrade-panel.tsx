@@ -1,9 +1,10 @@
 "use client";
 
+import { OFFENSE_POSITIONS, positionNoun } from "@/lib/site";
 import { useState, useTransition } from "react";
 import { Panel } from "@/components/dashboard-panel";
 import { ChartEmpty } from "@/components/chart-kit";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import { requestUpgradeWhatIf } from "@/app/leagues/[league_id]/positional-war/actions";
 import type { UpgradeWhatIfOutcome } from "@/lib/positional-war/upgrade";
 
@@ -28,14 +29,10 @@ import type { UpgradeWhatIfOutcome } from "@/lib/positional-war/upgrade";
  * them legible is the entire point of the panel.
  */
 
-const POSITION_LABEL: Record<PulsePosition, string> = {
-  QB: "Quarterback",
-  RB: "Running back",
-  WR: "Wide receiver",
-  TE: "Tight end",
-  K: "Kicker",
-  DEF: "Team defense",
-};
+function positionLabel(position: string): string {
+  const noun = positionNoun(position);
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
 
 /**
  * Matches the return shape of lib/positional-war/upgrade.ts
@@ -111,9 +108,9 @@ export function UpgradeWhatIfPanel({
                 disabled={pending}
                 className="min-h-11 w-full rounded-card border border-line bg-base/60 px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
               >
-                {PULSE_POSITIONS.map((pos) => (
+                {OFFENSE_POSITIONS.map((pos) => (
                   <option key={pos} value={pos}>
-                    {POSITION_LABEL[pos]}
+                    {positionLabel(pos)}
                   </option>
                 ))}
               </select>
@@ -124,7 +121,7 @@ export function UpgradeWhatIfPanel({
               disabled={pending}
               className="min-h-11 min-w-11 rounded-card bg-brand-cyan/15 px-4 py-2 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
             >
-              {pending ? "Checking" : `Check ${POSITION_LABEL[position].toLowerCase()}`}
+              {pending ? "Checking" : `Check ${positionLabel(position).toLowerCase()}`}
             </button>
           </div>
 

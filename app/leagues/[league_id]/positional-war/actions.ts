@@ -1,9 +1,10 @@
 "use server";
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import { z } from "zod";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import {
   claimWarUpgradeEntrySlot,
   claimWarUpgradeSlot,
@@ -42,7 +43,8 @@ import {
  *   4. Simulate, in lib/positional-war/upgrade.ts runUpgradeWhatIf.
  */
 
-const POSITION_PATTERN = z.enum(PULSE_POSITIONS as [PulsePosition, ...PulsePosition[]]);
+// The upgrade what-if runs for offensive positions until phase 3 (IDP-309).
+const POSITION_PATTERN = z.enum(OFFENSE_POSITIONS as unknown as [PulsePosition, ...PulsePosition[]]);
 
 const requestSchema = z.object({
   sleeperLeagueId: z.string().regex(/^[0-9]{1,32}$/),

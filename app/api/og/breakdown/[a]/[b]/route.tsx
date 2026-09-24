@@ -115,7 +115,14 @@ export async function GET(
       sourceParam: url.searchParams.get("source") ?? undefined,
       lens,
     });
-    if (!lookup.ok) return notFoundImage("Players not found");
+    if (!lookup.ok) {
+      // A defender is refused in words rather than drawn as a card of zeros
+      // (plan R-23, IDP-127).
+      if (lookup.refusedSlugs && lookup.refusedSlugs.length > 0) {
+        return notFoundImage("Defensive players are not compared here");
+      }
+      return notFoundImage("Players not found");
+    }
 
     const core = lookup.result;
     const context = core.context;

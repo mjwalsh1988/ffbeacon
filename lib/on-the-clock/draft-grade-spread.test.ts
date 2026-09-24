@@ -43,6 +43,8 @@ function pulse(
     starterWeeksPlayed: null,
     projectedCount: 15,
     unprojectedCount: 0,
+    unprojectedIdpCount: 0,
+    unprojectedOtherCount: 0,
     startersFilled: filled,
     waiverFilledSlots: waiverPointsShare > 0 ? 1 : 0,
     waiverPointsShare,

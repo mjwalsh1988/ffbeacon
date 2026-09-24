@@ -11,6 +11,7 @@
  * zeroes reads as a bad season; it usually means we hold nothing.
  */
 
+import { isDefender } from "@/lib/site";
 import { z } from "zod";
 import type { BeamAnswer, BeamCapability } from "@/lib/beam/types";
 import { statLineFor } from "@/lib/beam/stats/registry";
@@ -40,6 +41,27 @@ const schema = z.object({
 type Params = z.infer<typeof schema>;
 type Result = { aggregate: SeasonAggregate | null };
 
+/**
+ * The answer for a defender, until BEAM has IDP stat lines (plan IDP-125, R-20).
+ *
+ * BEAM's direct and fuzzy lookups already skip defenders; an admin alias is the
+ * one way one arrives here. The offensive stat line would read him back as a
+ * row of zero rushing and receiving yards, which is a confident wrong answer,
+ * so he gets a plain decline instead. Exported so the test can hold the words.
+ */
+export function defenderStatLineAnswer(playerName: string): BeamAnswer {
+  const headline = `Defensive stat lines arrive with IDP support. We hold ${playerName}'s games but cannot read tackles and sacks back here yet.`;
+  const context = buildContext({ note: "Defenders will be scored on Sleeper default IDP scoring." });
+  return {
+    headline,
+    speech: buildSpeech({ headline, facts: [], caveats: [], context }),
+    facts: [],
+    context,
+    links: [],
+    caveats: [],
+  };
+}
+
 export const playerStatLine: BeamCapability<Params, Result> = {
   id: "player.stat.line",
   label: "Player season line",
@@ -63,6 +85,8 @@ export const playerStatLine: BeamCapability<Params, Result> = {
 
   async run(params, ctx) {
     if (seasonOutOfRange(params.season.season, ctx.clock)) return { aggregate: null };
+    // Nothing to read for a defender yet; see defenderStatLineAnswer.
+    if (isDefender(params.player.position)) return { aggregate: null };
     const aggregates = await loadSeasonAggregates(
       ctx.supabase,
       [params.player.id],
@@ -74,6 +98,9 @@ export const playerStatLine: BeamCapability<Params, Result> = {
 
   present(result, params, ctx): BeamAnswer {
     const player = params.player;
+    if (isDefender(player.position)) {
+      return { ...defenderStatLineAnswer(player.name), links: [playerLink(player)] };
+    }
     const season = params.season.season;
     const caveats: string[] = [];
 

@@ -41,8 +41,9 @@
  *   a pure re-export so the Beacon Breakdown tool did not have to change.
  */
 
+import { OFFENSE_POSITIONS, type IdpPosition } from "@/lib/site";
 import type { ReactNode } from "react";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import type { PulsePosition } from "@/lib/power-pulse/types";
 
 /** Player A is purple, player B is cyan, everywhere in the tool. */
 export const SERIES_A = "#A855F7";
@@ -238,7 +239,18 @@ export type SeriesStyle = {
   color: string;
   /** SVG stroke-dasharray, or null for a solid line. */
   dash: string | null;
-  marker: "circle" | "square" | "diamond" | "triangle" | "cross" | "star" | "plus" | "hexagon";
+  marker:
+    | "circle"
+    | "square"
+    | "diamond"
+    | "triangle"
+    | "cross"
+    | "star"
+    | "plus"
+    | "hexagon"
+    | "pentagon"
+    | "triangle-down"
+    | "hourglass";
 };
 
 /**
@@ -292,7 +304,7 @@ export type SeriesStyle = {
  *     marker shape below is the sanctioned mitigation for this residual risk
  *     ("legal only with secondary encoding"), and every series ships both.
  */
-export const POSITION_SERIES: Record<PulsePosition, SeriesStyle> = {
+export const POSITION_SERIES: Record<PulsePosition | IdpPosition, SeriesStyle> = {
   // Brand purple, fixed. Contrast vs #0B0B14: 4.95:1 (AA).
   QB: { color: "#A855F7", dash: null, marker: "circle" },
   // Brand cyan, fixed. Contrast vs #0B0B14: 10.84:1 (AAA).
@@ -305,6 +317,15 @@ export const POSITION_SERIES: Record<PulsePosition, SeriesStyle> = {
   K: { color: "#FB7185", dash: "1 4", marker: "cross" },
   // Yellow. Contrast vs #0B0B14: 14.86:1 (AAA).
   DEF: { color: "#FDE047", dash: "10 3 2 3 2 3", marker: "star" },
+  // The three defensive curves draw on their OWN chart (plan R-10), so they
+  // need to separate from each other first; they are also distinct from the
+  // six above in colour, dash and marker, which chart-kit.test.ts holds.
+  // Lime (tailwind position.dl). Contrast vs #0B0B14: 12.99:1 (AAA).
+  DL: { color: "#A3E635", dash: "4 2", marker: "pentagon" },
+  // Fuchsia (position.lb). Contrast vs #0B0B14: 7.96:1 (AAA).
+  LB: { color: "#E879F9", dash: "12 3", marker: "triangle-down" },
+  // Indigo (position.db). Contrast vs #0B0B14: 6.57:1 (AA).
+  DB: { color: "#818CF8", dash: "3 2 8 2", marker: "hourglass" },
 };
 
 /**
@@ -314,7 +335,7 @@ export const POSITION_SERIES: Record<PulsePosition, SeriesStyle> = {
  * position: this palette carries no positional meaning.
  *
  * The first six entries are POSITION_SERIES's own six styles, read out in
- * PULSE_POSITIONS order, because that six-way set is already the validated
+ * OFFENSE_POSITIONS order, because that six-way set is already the validated
  * distinguishable set this file documents above (CVD separation, the
  * normal-vision floor, and chroma all hold, and every entry already carries
  * its own dash and marker). Two more are appended for players seven and
@@ -337,7 +358,10 @@ export const POSITION_SERIES: Record<PulsePosition, SeriesStyle> = {
  * new "plus" is a slimmer, larger cross than "cross" draws.
  */
 export const PLAYER_SERIES: SeriesStyle[] = [
-  ...PULSE_POSITIONS.map((position) => POSITION_SERIES[position]),
+  // The six offensive styles only: this palette is for an N-player comparison
+  // of offensive players, and spreading the widened PULSE_POSITIONS would
+  // silently shift players seven and eight (plan hazard E).
+  ...OFFENSE_POSITIONS.map((position) => POSITION_SERIES[position]),
   // Player 7. Solid grey (ink.muted). Contrast vs #0B0B14: 8.35:1 (AAA).
   { color: "#A8A8B8", dash: null, marker: "plus" },
   // Player 8. Dotted white (ink.DEFAULT). Contrast vs #0B0B14: 17.85:1 (AAA).
@@ -436,6 +460,25 @@ export function markerPath(marker: SeriesStyle["marker"], cx: number, cy: number
         pts.push([cx + rad * Math.cos(angle), cy + rad * Math.sin(angle)]);
       }
       return `M${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L")} Z`;
+    }
+    case "pentagon": {
+      const rad = r * 1.15;
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 5; i++) {
+        const angle = (-90 + i * 72) * (Math.PI / 180);
+        pts.push([cx + rad * Math.cos(angle), cy + rad * Math.sin(angle)]);
+      }
+      return `M${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L")} Z`;
+    }
+    case "triangle-down": {
+      const h = r * 1.2;
+      return `M${cx.toFixed(2)},${(cy + h).toFixed(2)} L${(cx + h).toFixed(2)},${(cy - h * 0.8).toFixed(2)} L${(cx - h).toFixed(2)},${(cy - h * 0.8).toFixed(2)} Z`;
+    }
+    case "hourglass": {
+      // Two triangles meeting at the centre, so it reads apart from the
+      // diamond and both triangles at marker size.
+      const s = r * 1.05;
+      return `M${(cx - s).toFixed(2)},${(cy - s).toFixed(2)} L${(cx + s).toFixed(2)},${(cy - s).toFixed(2)} L${(cx - s).toFixed(2)},${(cy + s).toFixed(2)} L${(cx + s).toFixed(2)},${(cy + s).toFixed(2)} Z`;
     }
     default: {
       const exhaustive: never = marker;

@@ -8,6 +8,8 @@ import {
   loadDefenseSplits,
   loadLeague,
   loadPlayers,
+  NAMING_POSITIONS,
+  projectablePlayerIds,
   loadProjections,
   type ProjectionRow,
 } from "@/lib/power-pulse/load";
@@ -219,7 +221,8 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
       // nothing from wave 1 beyond what is already in hand, so waiting for the
       // player lookup before starting them spent a round trip on nothing.
       const [players, defense, resolvedSource] = await Promise.all([
-        loadPlayers(admin, [...sleeperIds]),
+        // Named, not projected (plan IDP-122).
+        loadPlayers(admin, [...sleeperIds], { positions: NAMING_POSITIONS }),
         loadDefenseSplits(admin, scoringBase, defenseSeasons),
         resolveProjectionSourceForWindow({
           supabase: admin,
@@ -230,7 +233,7 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
         }),
       ]);
       projectionSource = resolvedSource;
-      const playerIds = [...new Set([...players.values()].map((p) => p.playerId))];
+      const playerIds = projectablePlayerIds(players);
 
       if (playerIds.length > 0) {
         const [projectionRows, accuracy] = await Promise.all([

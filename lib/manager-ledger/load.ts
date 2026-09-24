@@ -20,6 +20,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import {
   loadPlayers,
+  NAMING_POSITIONS,
   loadRosters,
   type RosterRow,
 } from "@/lib/power-pulse/load";
@@ -357,7 +358,9 @@ export async function loadLedgerPlayers(
   }
   for (const pick of picks) ids.add(pick.playerId);
 
-  const rows = await loadPlayers(supabase, [...ids]);
+  // Names and positions only: a claimed or drafted defender is named rather
+  // than printed as "Player 12345" (plan IDP-122). Nothing here projects.
+  const rows = await loadPlayers(supabase, [...ids], { positions: NAMING_POSITIONS });
   const out = new Map<string, LedgerPlayer>();
   for (const [sleeperId, row] of rows) {
     out.set(sleeperId, { sleeperId, name: row.name, position: row.position });

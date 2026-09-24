@@ -50,10 +50,10 @@
  * surface every co-winner.
  */
 
+import { OFFENSE_POSITIONS } from "@/lib/site";
 import type { DraftPosition, RankedPlayer } from "./board-types";
 import type { OnTheClockSettings, ShapedPick } from "./types";
 import type { DraftPulseTeam } from "./draft-pulse";
-import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import {
   buildMarketCurve,
   computePickSurplus,
@@ -683,7 +683,8 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
    * others do is that team's hole, and the difference matters to every award
    * built on positional shares.
    */
-  const startablePositions = PULSE_POSITIONS.filter((pos) =>
+  // Draft awards stay offense-only (plan R-11).
+  const startablePositions = OFFENSE_POSITIONS.filter((pos) =>
     pulseTeams.some((t) => t.positionPoints[pos] > 0),
   );
   const pulsePendingLabel = noPulse
@@ -1121,7 +1122,7 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     const ids = [...shares.keys()];
     const distance = new Map<number, number>();
     if (ids.length >= 3) {
-      const room = PULSE_POSITIONS.map(
+      const room = OFFENSE_POSITIONS.map(
         (_, i) =>
           ids.reduce((sum, id) => sum + (shares.get(id)?.[i] ?? 0), 0) /
           ids.length,

@@ -284,11 +284,6 @@ export function SignalCheckTradeCard({
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-ink">
                             {a.name}
-                            {a.noValue && (
-                              <span className="ml-1 text-xs font-normal text-signal-danger">
-                                (no value)
-                              </span>
-                            )}
                           </span>
                           {detail && (
                             // A startup line carries the seat, how it was
@@ -304,10 +299,16 @@ export function SignalCheckTradeCard({
                             </span>
                           )}
                         </span>
-                        {a.value !== null && (
-                          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink-muted">
-                            {a.value.toLocaleString()}
-                          </span>
+                        {a.noValue ? (
+                          // Words, never a zero or a red flag: no value source
+                          // prices this asset (plan IDP-126).
+                          <span className="shrink-0 text-xs text-ink-subtle">No market value</span>
+                        ) : (
+                          a.value !== null && (
+                            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink-muted">
+                              {a.value.toLocaleString()}
+                            </span>
+                          )
                         )}
                       </li>
                     );

@@ -66,12 +66,34 @@
  *
  * Every figure here comes from player_stats, 2023 through 2025, regular season,
  * requiring 10 games. Reproduce the whole table with npm run measure:variance.
+ *
+ * DEFENDERS (plan IDP-119). One curve per IDP position, shared by every base,
+ * because reception scoring does not touch a defender, and also keyed under
+ * "idp123", the base a defender's variance is read under. Measured the same way
+ * on 2023 to 2025 idp123 points from the typed player_stats columns (weeks with
+ * a defensive snap, 10+ games), rank bands 1-12, 13-24, 25-36, 37-60, 61-96:
+ *
+ *     band    DL             LB             DB
+ *     1-12    16.3  0.635    18.9  0.386    15.7  0.470
+ *     13-24   13.0  0.659    16.5  0.426    13.8  0.502
+ *     25-36   11.3  0.654    15.0  0.443    12.9  0.474
+ *     37-60    9.9  0.728    12.3  0.512    11.9  0.512
+ *     61-96    8.1  0.842     6.4  0.856    10.5  0.579
+ *
+ * Linebackers are the steadiest defenders (tackles are volume), edge rushers
+ * the most volatile (sacks are lumpy). There is no measure:variance script in
+ * this repo; the query that produced this table is recorded in progress.md
+ * under IDP-119.
  */
 
+import type { IdpPosition } from "@/lib/site";
 import type { PulsePosition } from "./types";
 
-/** The three stored-points bases a league's scoring map can be closest to. */
-export type ScoringBase = "pts_ppr" | "pts_half_ppr" | "pts_std";
+/**
+ * The three stored-points bases a league's scoring map can be closest to, plus
+ * idp123, the base a defender's variance is read under.
+ */
+export type ScoringBase = "pts_ppr" | "pts_half_ppr" | "pts_std" | "idp123";
 
 /**
  * One measured point on a position's curve: at this many projected points per
@@ -86,7 +108,10 @@ export type VarianceAnchor = {
   cv: number;
 };
 
-export type VarianceCurve = Record<PulsePosition, VarianceAnchor[]>;
+export type VarianceCurve = Record<
+  PulsePosition | IdpPosition,
+  VarianceAnchor[]
+>;
 
 /**
  * Reception scoring is the only thing that separates the three bases, so the
@@ -117,36 +142,65 @@ const DEF_CURVE: VarianceAnchor[] = [
   { points: 5.1, cv: 0.844 },
 ];
 
+const DL_CURVE: VarianceAnchor[] = [
+  { points: 16.3, cv: 0.635 },
+  { points: 13.0, cv: 0.659 },
+  { points: 11.3, cv: 0.654 },
+  { points: 9.9, cv: 0.728 },
+  { points: 8.1, cv: 0.842 },
+];
+
+const LB_CURVE: VarianceAnchor[] = [
+  { points: 18.9, cv: 0.386 },
+  { points: 16.5, cv: 0.426 },
+  { points: 15.0, cv: 0.443 },
+  { points: 12.3, cv: 0.512 },
+  { points: 6.4, cv: 0.856 },
+];
+
+const DB_CURVE: VarianceAnchor[] = [
+  { points: 15.7, cv: 0.47 },
+  { points: 13.8, cv: 0.502 },
+  { points: 12.9, cv: 0.474 },
+  { points: 11.9, cv: 0.512 },
+  { points: 10.5, cv: 0.579 },
+];
+
+const IDP_CURVES = { DL: DL_CURVE, LB: LB_CURVE, DB: DB_CURVE };
+
+const PPR_CURVES: VarianceCurve = {
+  QB: QB_CURVE,
+  RB: [
+    { points: 20.2, cv: 0.467 },
+    { points: 16.2, cv: 0.46 },
+    { points: 14.8, cv: 0.495 },
+    { points: 13.0, cv: 0.549 },
+    { points: 10.7, cv: 0.593 },
+    { points: 6.6, cv: 0.763 },
+  ],
+  WR: [
+    { points: 20.1, cv: 0.502 },
+    { points: 16.5, cv: 0.534 },
+    { points: 15.0, cv: 0.554 },
+    { points: 13.7, cv: 0.565 },
+    { points: 12.6, cv: 0.574 },
+    { points: 9.9, cv: 0.628 },
+  ],
+  TE: [
+    { points: 14.2, cv: 0.542 },
+    { points: 11.0, cv: 0.57 },
+    { points: 9.5, cv: 0.65 },
+    { points: 8.0, cv: 0.646 },
+    { points: 6.5, cv: 0.685 },
+    { points: 4.2, cv: 0.659 },
+  ],
+  K: K_CURVE,
+  DEF: DEF_CURVE,
+  ...IDP_CURVES,
+};
+
 export const VARIANCE_CURVES: Record<ScoringBase, VarianceCurve> = {
-  pts_ppr: {
-    QB: QB_CURVE,
-    RB: [
-      { points: 20.2, cv: 0.467 },
-      { points: 16.2, cv: 0.46 },
-      { points: 14.8, cv: 0.495 },
-      { points: 13.0, cv: 0.549 },
-      { points: 10.7, cv: 0.593 },
-      { points: 6.6, cv: 0.763 },
-    ],
-    WR: [
-      { points: 20.1, cv: 0.502 },
-      { points: 16.5, cv: 0.534 },
-      { points: 15.0, cv: 0.554 },
-      { points: 13.7, cv: 0.565 },
-      { points: 12.6, cv: 0.574 },
-      { points: 9.9, cv: 0.628 },
-    ],
-    TE: [
-      { points: 14.2, cv: 0.542 },
-      { points: 11.0, cv: 0.57 },
-      { points: 9.5, cv: 0.65 },
-      { points: 8.0, cv: 0.646 },
-      { points: 6.5, cv: 0.685 },
-      { points: 4.2, cv: 0.659 },
-    ],
-    K: K_CURVE,
-    DEF: DEF_CURVE,
-  },
+  pts_ppr: PPR_CURVES,
   pts_half_ppr: {
     QB: QB_CURVE,
     RB: [
@@ -175,6 +229,7 @@ export const VARIANCE_CURVES: Record<ScoringBase, VarianceCurve> = {
     ],
     K: K_CURVE,
     DEF: DEF_CURVE,
+    ...IDP_CURVES,
   },
   pts_std: {
     QB: QB_CURVE,
@@ -204,7 +259,12 @@ export const VARIANCE_CURVES: Record<ScoringBase, VarianceCurve> = {
     ],
     K: K_CURVE,
     DEF: DEF_CURVE,
+    ...IDP_CURVES,
   },
+  // A defender's own base. The PPR offensive curves ride along so a caller
+  // that reads an offensive position under idp123 by mistake still gets a sane
+  // figure rather than an empty curve and the flat default.
+  idp123: PPR_CURVES,
 };
 
 /**
@@ -245,7 +305,7 @@ export function cvForPoints(
 /** The curve for one position under one scoring base. Empty when unknown. */
 export function curveFor(
   scoringBase: string,
-  position: PulsePosition,
+  position: PulsePosition | IdpPosition,
   curves: Record<string, VarianceCurve> = VARIANCE_CURVES,
 ): VarianceAnchor[] {
   const table = curves[scoringBase] ?? curves.pts_ppr;

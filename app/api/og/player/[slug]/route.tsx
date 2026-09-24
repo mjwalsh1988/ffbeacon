@@ -24,6 +24,13 @@ function positionAccent(position: string): string {
   if (pos === "RB") return "#10B981";
   if (pos === "WR") return CYAN;
   if (pos === "TE") return "#F59E0B";
+  // The site hues (tailwind.config.ts position.*) for the rest, so no player
+  // card falls through to grey.
+  if (pos === "K") return "#F472B6";
+  if (pos === "DEF") return "#94A3B8";
+  if (pos === "DL") return "#A3E635";
+  if (pos === "LB") return "#E879F9";
+  if (pos === "DB") return "#818CF8";
   return "#A8A8B8";
 }
 

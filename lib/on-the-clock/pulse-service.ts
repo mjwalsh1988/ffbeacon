@@ -15,6 +15,7 @@
  * has to run. Everything after it is arithmetic over numbers already in memory.
  */
 
+import { isDefender } from "@/lib/site";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -325,6 +326,13 @@ async function resolveContext(
         // Everything anyone in this league owns, which is what makes the leftover
         // pool a WAIVER wire rather than the whole player universe.
         rosteredPlayerIds: rosteredPlayerIds(teams),
+        // Defenders picked in this draft, by the pick's own position, so the
+        // room can say why they sit outside the projections (IDP-131).
+        idpPlayerIds: new Set(
+          cache.picks
+            .filter((pk) => pk.playerId && isDefender(pk.position))
+            .map((pk) => pk.playerId as string),
+        ),
       });
       const { error } = await admin.from("on_the_clock_pulse_cache").upsert(
         {

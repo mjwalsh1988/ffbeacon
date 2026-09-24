@@ -120,6 +120,9 @@ const ALLOWLIST: Record<string, string> = {
   "lib/player-profile.ts":
     "Deliberately left raw. The profile's weekly-projections card and overview panel are the one place on the site that shows a projection engine's own published number, and the per-stat beat/miss comparison grades exactly that number against what happened; routing it through loadAdjustedProjections would grade a figure nobody published. WHICH engine is no longer pinned: both loaders take a required source resolved by lib/projections/current-source.ts, and both headings render its display name. See the comments above loadWeeklyProjections and loadProjectionsMap in that file.",
 
+  "lib/sync-weekly-projections.idp.test.ts":
+    "Tests the rows lib/sync-weekly-projections.ts (EXEMPT_FILES above) writes for defenders, and has to name the three columns to assert they stay NULL for a defender (plan IDP-114): his pts_* are Sleeper's offensive-only figures. Reads nothing from the table. Allow-listed alongside the writer, matching the build-beacon-projections test below.",
+
   "lib/build-beacon-projections.test.ts":
     "Tests the raw player_weekly_projections row shape lib/build-beacon-projections.ts itself reads and writes (that file is already EXEMPT_FILES above); allow-listed alongside it, matching lib/positional-war/load.test.ts above.",
 };

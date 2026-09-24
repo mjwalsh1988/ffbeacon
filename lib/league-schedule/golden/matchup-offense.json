@@ -1,0 +1,321 @@
+{
+  "away": {
+    "actualTotal": null,
+    "benchUpgrades": [],
+    "optimalTotal": 67,
+    "ownerAvatarId": null,
+    "ownerHandle": null,
+    "pointsLeftOnBench": 0,
+    "projectedTotal": 67,
+    "pulseRank": 2,
+    "record": {
+      "losses": 1,
+      "ties": 0,
+      "wins": 3
+    },
+    "rosterRowId": "r-2",
+    "scoredTotal": null,
+    "sigma": 15.508970614476965,
+    "sleeperRosterId": 2,
+    "slots": [
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "qbb",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-qbb",
+          "position": "QB",
+          "projected": 23,
+          "reliability": 1,
+          "sigma": 8.395,
+          "sleeperId": "qbb",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "quarterback",
+          "group": "QB",
+          "label": "QB",
+          "order": 0,
+          "projectable": true,
+          "token": "QB"
+        }
+      },
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "rbb",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-rbb",
+          "position": "RB",
+          "projected": 15,
+          "reliability": 1,
+          "sigma": 7.35,
+          "sleeperId": "rbb",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "running back",
+          "group": "RB",
+          "label": "RB",
+          "order": 1,
+          "projectable": true,
+          "token": "RB"
+        }
+      },
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "wrb",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-wrb",
+          "position": "WR",
+          "projected": 14,
+          "reliability": 1,
+          "sigma": 7.874461538461539,
+          "sleeperId": "wrb",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "wide receiver",
+          "group": "WR",
+          "label": "WR",
+          "order": 2,
+          "projectable": true,
+          "token": "WR"
+        }
+      },
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "rbxb",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-rbxb",
+          "position": "RB",
+          "projected": 15,
+          "reliability": 1,
+          "sigma": 7.35,
+          "sleeperId": "rbxb",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "flex, any running back, receiver or tight end",
+          "group": "FLEX",
+          "label": "FLEX",
+          "order": 3,
+          "projectable": true,
+          "token": "FLEX"
+        }
+      }
+    ],
+    "teamName": "Team 2",
+    "unprojectedSlots": 0
+  },
+  "hasUnprojectableSlots": false,
+  "home": {
+    "actualTotal": null,
+    "benchUpgrades": [
+      {
+        "gain": 3,
+        "inPlayer": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "rbxa",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-rbxa",
+          "position": "RB",
+          "projected": 15,
+          "reliability": 1,
+          "sigma": 7.35,
+          "sleeperId": "rbxa",
+          "team": "BUF"
+        },
+        "outPlayer": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "rba",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-rba",
+          "position": "RB",
+          "projected": 12,
+          "reliability": 1,
+          "sigma": 6.817565217391305,
+          "sleeperId": "rba",
+          "team": "BUF"
+        },
+        "requiresMove": false,
+        "slotLabel": "RB"
+      }
+    ],
+    "optimalTotal": 61,
+    "ownerAvatarId": null,
+    "ownerHandle": null,
+    "pointsLeftOnBench": 15,
+    "projectedTotal": 46,
+    "pulseRank": 1,
+    "record": {
+      "losses": 1,
+      "ties": 0,
+      "wins": 3
+    },
+    "rosterRowId": "r-1",
+    "scoredTotal": null,
+    "sigma": 12.872013230783656,
+    "sleeperRosterId": 1,
+    "slots": [
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "qba",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-qba",
+          "position": "QB",
+          "projected": 20,
+          "reliability": 1,
+          "sigma": 7.563225806451613,
+          "sleeperId": "qba",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "quarterback",
+          "group": "QB",
+          "label": "QB",
+          "order": 0,
+          "projectable": true,
+          "token": "QB"
+        }
+      },
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "rba",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-rba",
+          "position": "RB",
+          "projected": 12,
+          "reliability": 1,
+          "sigma": 6.817565217391305,
+          "sleeperId": "rba",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "running back",
+          "group": "RB",
+          "label": "RB",
+          "order": 1,
+          "projectable": true,
+          "token": "RB"
+        }
+      },
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "wra",
+          "nflIsHome": null,
+          "nflOpponent": "SF",
+          "opponentMultiplier": 1,
+          "playerId": "p-wra",
+          "position": "WR",
+          "projected": 14,
+          "reliability": 1,
+          "sigma": 7.874461538461539,
+          "sleeperId": "wra",
+          "team": "BUF"
+        },
+        "slot": {
+          "description": "wide receiver",
+          "group": "WR",
+          "label": "WR",
+          "order": 2,
+          "projectable": true,
+          "token": "WR"
+        }
+      },
+      {
+        "player": {
+          "actual": null,
+          "availability": null,
+          "beatRate": null,
+          "injuryStatus": null,
+          "isInactive": false,
+          "name": "Unknown player",
+          "nflIsHome": null,
+          "nflOpponent": null,
+          "opponentMultiplier": null,
+          "playerId": null,
+          "position": "",
+          "projected": null,
+          "reliability": null,
+          "sigma": null,
+          "sleeperId": "0",
+          "team": null
+        },
+        "slot": {
+          "description": "flex, any running back, receiver or tight end",
+          "group": "FLEX",
+          "label": "FLEX",
+          "order": 3,
+          "projectable": true,
+          "token": "FLEX"
+        }
+      }
+    ],
+    "teamName": "Team 1",
+    "unprojectedSlots": 1
+  },
+  "homeWinProb": 0.14872111291216944,
+  "isCurrent": true,
+  "isFinal": false,
+  "resultsVisible": false,
+  "season": 2026,
+  "week": 5
+}

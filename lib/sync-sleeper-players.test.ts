@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveStatus, pickPrimaryPosition, slugifyPlayer } from "./sync-sleeper-players";
+import { deriveStatus, pickEligiblePositions, pickPrimaryPosition, slugifyPlayer } from "./sync-sleeper-players";
 import type { SleeperPlayer } from "./sleeper";
 
 function player(p: Partial<SleeperPlayer>): SleeperPlayer {
@@ -92,5 +92,26 @@ describe("pickPrimaryPosition", () => {
 
   it("returns null when there is nothing to go on", () => {
     expect(pickPrimaryPosition(player({}))).toBeNull();
+  });
+});
+
+describe("pickEligiblePositions (IDP-111)", () => {
+  it("keeps both halves of a dual-eligible defender, primary unchanged", () => {
+    const p = player({ position: "DE", fantasy_positions: ["DL", "LB"] });
+    expect(pickPrimaryPosition(p)).toBe("DL");
+    expect(pickEligiblePositions(p, "DL")).toEqual(["DL", "LB"]);
+  });
+
+  it("drops labels no lineup slot takes", () => {
+    expect(pickEligiblePositions(player({ fantasy_positions: ["LB", "LS"] }), "LB")).toEqual(["LB"]);
+  });
+
+  it("falls back to the primary when Sleeper lists nothing usable", () => {
+    expect(pickEligiblePositions(player({ position: "LB" }), "LB")).toEqual(["LB"]);
+    expect(pickEligiblePositions(player({ fantasy_positions: ["OL"] }), "OL")).toEqual(["OL"]);
+  });
+
+  it("upper-cases and de-duplicates", () => {
+    expect(pickEligiblePositions(player({ fantasy_positions: ["db", "DB", "lb"] }), "DB")).toEqual(["DB", "LB"]);
   });
 });

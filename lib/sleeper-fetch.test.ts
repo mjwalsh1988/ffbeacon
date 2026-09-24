@@ -136,3 +136,17 @@ describe("safeFetch (via getSleeperUser)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("projection URLs (IDP-114)", () => {
+  it("asks for DL, LB and DB in the weekly fetch and not in the season fetch", async () => {
+    const { getSleeperWeeklyProjections, getSleeperSeasonProjections } = await import("./sleeper");
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+    await getSleeperWeeklyProjections(2026, 3);
+    await getSleeperSeasonProjections("2026");
+    const weekly = decodeURIComponent(String(fetchMock.mock.calls[0][0]));
+    const seasonal = decodeURIComponent(String(fetchMock.mock.calls[1][0]));
+    for (const pos of ["DL", "LB", "DB", "WR", "QB"]) expect(weekly).toContain(`position[]=${pos}`);
+    for (const pos of ["DL", "LB", "DB"]) expect(seasonal).not.toContain(`position[]=${pos}`);
+    expect(seasonal).toContain("position[]=WR");
+  });
+});

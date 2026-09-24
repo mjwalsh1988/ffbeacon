@@ -34,6 +34,7 @@
  * ("71 percent"), matching the plan's own example; points carry one decimal.
  */
 
+import { positionNoun } from "@/lib/site";
 import { ordinal } from "@/lib/league-team-status";
 import type { PulsePosition, StartSitCandidate, StartSitProjection } from "./types";
 
@@ -54,14 +55,9 @@ export const MIN_GRADED_WEEKS = 4;
 export const MAX_START_SIT_REASONS = 5;
 
 /** Sentence-case position plurals, for "allows the fourth-most points to running backs". */
-const POSITION_PLURAL: Record<PulsePosition, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "wide receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+export function positionPlural(position: string): string {
+  return positionNoun(position, "plural");
+}
 
 /** Word ordinals for 2 to 10; numeric ordinals (11th, 12th, ...) beyond that. */
 const WORD_ORDINALS: Record<number, string> = {
@@ -196,7 +192,7 @@ function matchupReason(input: StartSitReasonInput): string | null {
   if (!winnerProj.opponent) return null;
   return `${winnerCandidate.name} has the better matchup: ${winnerProj.opponent} allows ${rankPhrase(
     winnerRank,
-  )} points to ${POSITION_PLURAL[winnerCandidate.position]}.`;
+  )} points to ${positionPlural(winnerCandidate.position)}.`;
 }
 
 /** "{A} has beaten the projection in {m} of {n} graded weeks; {B} in {p} of {q}." */
