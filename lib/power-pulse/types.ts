@@ -125,6 +125,12 @@ export type LineupSlot = {
   slot: string;
   eligible: PulsePosition[];
   playerId: string | null;
+  /**
+   * The position the holder was seated AS (plan R-3). His primary unless the
+   * slot does not take his primary and he is dual-eligible: a DL/LB player in
+   * an LB slot is credited to LB. Null for an empty slot.
+   */
+  playedAs: PulsePosition | null;
   points: number;
   sigma: number;
 };

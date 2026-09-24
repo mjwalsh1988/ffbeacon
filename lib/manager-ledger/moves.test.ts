@@ -155,6 +155,24 @@ describe("buildWaiverLedger", () => {
     );
     expect(ledger.moves).toBe(0);
   });
+
+  it("names a claimed defender and credits what he scored (plan IDP-310)", () => {
+    const players = new Map(PLAYERS);
+    players.set("lb", { sleeperId: "lb", name: "Player LB", position: "LB" });
+    const weeks: IndexedWeek[] = [
+      ...WEEKS,
+      { week: 4, sleeperRosterId: 1, playerPoints: new Map([["lb", 14]]), startedIds: new Set(["lb"]) },
+    ];
+    const ledger = buildWaiverLedger(
+      1,
+      [tx({ id: "w-lb", week: 4, adds: { lb: 1 }, bid: 3, rosterIds: [1] })],
+      new LedgerIndex(weeks),
+      players,
+      true,
+    );
+    expect(ledger.moves).toBe(1);
+    expect(ledger.best[0]).toMatchObject({ name: "Player LB", position: "LB", pointsStarted: 14 });
+  });
 });
 
 describe("buildTradeLedger", () => {

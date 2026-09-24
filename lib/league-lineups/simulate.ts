@@ -40,19 +40,39 @@
  */
 
 import { winProbability } from "@/lib/power-pulse/math";
-import { PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+import { slotEligibility } from "@/lib/power-pulse/types";
 import type { LineupGroup, LineupPlayer } from "./types";
 
-/** The positions a slot token accepts. Empty for IDP and unknown tokens. */
-export function eligiblePositionsFor(token: string): string[] {
-  return PULSE_SLOT_ELIGIBILITY[token] ?? [];
+/**
+ * The positions a slot token accepts. Empty for unknown tokens, and for the
+ * defensive ones while the IDP switch is off.
+ *
+ * `idpEnabled` arrives as a prop from the server loader (plan R-25); this
+ * module is client-safe and never reads the settings document itself.
+ */
+export function eligiblePositionsFor(token: string, idpEnabled = false): string[] {
+  return [...(slotEligibility(idpEnabled)[token] ?? [])];
 }
 
-/** True when this player could legally hold this slot. */
-export function isEligibleFor(token: string, position: string): boolean {
-  const eligible = eligiblePositionsFor(token);
+/**
+ * True when this player could legally hold this slot. Takes his primary
+ * position, or his full eligibility list (a DL/LB player may hold an LB slot
+ * once the switch is on).
+ */
+export function isEligibleFor(
+  token: string,
+  positions: string | readonly string[],
+  idpEnabled = false,
+): boolean {
+  const eligible = eligiblePositionsFor(token, idpEnabled);
   if (eligible.length === 0) return false;
-  return eligible.includes(position.toUpperCase());
+  const list = typeof positions === "string" ? [positions] : positions;
+  return list.some((position) => eligible.includes(position.toUpperCase()));
+}
+
+/** Every position a board player may be seated as: his list when carried, else his primary. */
+function positionsOf(player: LineupPlayer): readonly string[] {
+  return player.eligible && player.eligible.length > 0 ? player.eligible : [player.position];
 }
 
 /**
@@ -74,11 +94,15 @@ export function isEligibleFor(token: string, position: string): boolean {
  * simulate with, and reading his absence as a zero would report the swap as a
  * loss of every point the outgoing player was worth.
  */
-export function swapCandidates(bench: LineupPlayer[], token: string): LineupPlayer[] {
+export function swapCandidates(
+  bench: LineupPlayer[],
+  token: string,
+  idpEnabled = false,
+): LineupPlayer[] {
   return bench
     .filter((p) => p.rosterSlot === "bench")
     .filter((p) => p.projected !== null)
-    .filter((p) => isEligibleFor(token, p.position))
+    .filter((p) => isEligibleFor(token, positionsOf(p), idpEnabled))
     .sort((a, b) => (b.projected ?? 0) - (a.projected ?? 0));
 }
 
@@ -90,12 +114,16 @@ export function swapCandidates(bench: LineupPlayer[], token: string): LineupPlay
  * predicate rather than restating it is what keeps the count and the list from
  * ever disagreeing about whether a button should exist.
  */
-export function countSwapCandidates(bench: LineupPlayer[], token: string): number {
+export function countSwapCandidates(
+  bench: LineupPlayer[],
+  token: string,
+  idpEnabled = false,
+): number {
   let count = 0;
   for (const player of bench) {
     if (player.rosterSlot !== "bench") continue;
     if (player.projected === null) continue;
-    if (!isEligibleFor(token, player.position)) continue;
+    if (!isEligibleFor(token, positionsOf(player), idpEnabled)) continue;
     count += 1;
   }
   return count;

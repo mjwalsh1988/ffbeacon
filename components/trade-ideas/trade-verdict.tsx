@@ -1,3 +1,4 @@
+import { isDefender } from "@/lib/site";
 import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react";
 import {
   PLAYER_PHOTO_RADIUS,
@@ -720,7 +721,7 @@ function AssetRow({ asset }: { asset: ResolvedAsset }) {
 
   const detail = [asset.position, asset.team].filter(Boolean).join(", ");
   const figures = [
-    `value ${fmtValue(asset.value)}`,
+    isDefender(asset.position) && asset.value === 0 ? "No market value" : `value ${fmtValue(asset.value)}`,
     asset.projPoints !== null
       ? `${asset.projPoints.toFixed(1)} pts/wk`
       : "no projection",

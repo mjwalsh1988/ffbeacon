@@ -106,6 +106,17 @@ export type DropInput = {
   isKeeperLeague: boolean;
   /** Sleeper ids the optimal lineup seats this week. Never offered as a cut. */
   seatedSleeperIds: Set<string>;
+  /**
+   * The IDP switch (plan R-25). Off: a defender is never judged, only counted
+   * and explained, because nothing here projects him. On: he is judged like
+   * anyone else, except the defenders in `protectedDefenderIds`.
+   */
+  idpEnabled?: boolean;
+  /**
+   * Defenders a dynasty or keeper roster is never told to cut (plan R-5), from
+   * ./defender-protection.ts. Read only when `idpEnabled` is true.
+   */
+  protectedDefenderIds?: ReadonlySet<string>;
 };
 
 export type DropResult = {
@@ -152,6 +163,25 @@ export function unjudgedSentence(unknown: number, defenders: number): string | n
 }
 
 /**
+ * The sentence naming the defenders the list declined to judge as cuts (plan
+ * R-5): the page says who it left out and why, rather than returning a shorter
+ * list that reads as complete. Names up to three, then counts the rest.
+ */
+export function protectedDefenderSentence(names: readonly string[]): string | null {
+  if (names.length === 0) return null;
+  const shown = names.slice(0, 3);
+  const rest = names.length - shown.length;
+  const list =
+    rest > 0
+      ? `${shown.join(", ")} and ${rest} more`
+      : shown.length === 1
+        ? shown[0]
+        : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  const plural = names.length > 1;
+  return `${list} ${plural ? "are" : "is"} not listed: your best lineup starts ${plural ? "them" : "him"} in at least half of the weeks left, or ${plural ? "they rank" : "he ranks"} among your starters at the position. No value source prices defensive players, so this is what keeps a starter off the list.`;
+}
+
+/**
  * The players this roster would miss least, cheapest first.
  *
  * ANYONE THE OPTIMISER SEATS THIS WEEK IS EXCLUDED OUTRIGHT. He is, by
@@ -164,6 +194,8 @@ export function buildDropOptions(input: DropInput): DropResult {
   const scored: Array<{ option: DropOption; sort: number }> = [];
   let unknown = 0;
   let defenders = 0;
+  const protectedNames: string[] = [];
+  const idpEnabled = input.idpEnabled === true;
 
   for (const player of input.benchable) {
     if (input.seatedSleeperIds.has(player.sleeperId)) continue;
@@ -174,8 +206,17 @@ export function buildDropOptions(input: DropInput): DropResult {
       continue;
     }
     if (isDefender(player.position)) {
-      defenders += 1;
-      continue;
+      if (!idpEnabled) {
+        defenders += 1;
+        continue;
+      }
+      if (input.protectedDefenderIds?.has(player.sleeperId)) {
+        protectedNames.push(player.name);
+        continue;
+      }
+      // Otherwise judged exactly like anyone else: rest-of-season points,
+      // cheapest first. His value is null, so the dynasty guard below cannot
+      // fire for him; the protection above is what stands in for it.
     }
 
     const perWeek = input.restOfSeasonPerWeek.get(player.sleeperId) ?? null;
@@ -211,7 +252,10 @@ export function buildDropOptions(input: DropInput): DropResult {
 
   const options = scored.slice(0, DROP_OPTION_LIMIT).map((s) => s.option);
 
-  const unjudged = unjudgedSentence(unknown, defenders);
+  const unjudged =
+    [unjudgedSentence(unknown, defenders), protectedDefenderSentence(protectedNames)]
+      .filter((s): s is string => s !== null)
+      .join(" ") || null;
   if (options.length > 0) return { options, note: null, unjudged };
 
   if (kept.length > 0) {

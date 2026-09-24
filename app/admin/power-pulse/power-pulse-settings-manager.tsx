@@ -621,6 +621,24 @@ export function PowerPulseSettingsManager({
       </Section>
 
       <Section
+        title="Defensive players (IDP)"
+        description="When this is off, League Pulse leaves DL, LB, DB and IDP flex slots empty in every model, exactly as it did before defenders were added. When it is on, those slots are filled with defenders projected under each league's own IDP scoring, in Power Pulse, Positional WAR, Lineups, Schedules, Decisions, Trade Ideas and the FAAB calculator."
+      >
+        <div className="sm:col-span-2">
+          <Checkbox
+            label="Project and seat defensive players in League Pulse"
+            checked={settings.idp.enabled}
+            onChange={(v) => patch("idp", { enabled: v })}
+            describedBy="pp-idp-hint"
+          />
+          <p id="pp-idp-hint" className="mt-1 text-[11px] leading-tight text-ink-subtle">
+            Turning this on recomputes every league on its next view. Only leagues that
+            start defenders get a different answer.
+          </p>
+        </div>
+      </Section>
+
+      <Section
         title="Lineup realism"
         description="Power Pulse projects every remaining week from the best lineup a roster could possibly set, which assumes every manager in the league will extract every point their roster can produce for the rest of the season. Measured against settled results, real managers start roughly 76 to 90 percent of what was available to them. Turning this on discounts each team's projection toward their own measured share, from the Decisions page. It is off by default because it is a judgement call, not a bug fix: it is partly a claim about future behaviour rather than about a roster, and it is noisy early in a season."
       >

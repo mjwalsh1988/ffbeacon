@@ -47,6 +47,7 @@ import {
   type LeagueCategoryKey,
 } from "@/lib/league-category";
 import { calculateLeagueFaab } from "@/lib/faab/league-faab";
+import { loadFaabDefenders } from "@/lib/faab/idp-free-agents";
 import {
   calculateAcrossLeagues,
   MAX_PRICED_LEAGUES,
@@ -324,11 +325,18 @@ export async function fetchLeagueFreeAgents(input: {
           "We hold no rosters for this league yet, so we cannot tell who is available. Pick it again in a moment.",
       };
     }
+    // THE DEFENDERS NOBODY HOLDS (plan R-6, IDP-312), only once the IDP switch
+    // is on in a league that starts them. No value source ranks one, so none is
+    // in the ranked universe above; they come from this week's projections,
+    // top fifteen per position, marked unranked and listed after everyone else.
+    const defenders = await loadFaabDefenders(admin, league.id);
+    const positions = [...result.positions];
+    for (const d of defenders) if (!positions.includes(d.position)) positions.push(d.position);
     return {
       ok: true,
-      players: result.players,
+      players: [...result.players, ...defenders],
+      positions,
       rostered: result.rostered,
-      positions: result.positions,
     };
   } catch (err) {
     console.error("[faab] free agent list failed", err);

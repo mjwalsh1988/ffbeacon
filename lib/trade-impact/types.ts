@@ -196,7 +196,8 @@ export type TradeReasonKind =
   | "direction-fit"
   | "direction-clash"
   | "grade"
-  | "their-side";
+  | "their-side"
+  | "defender-caveat";
 
 /** Why a figure is missing, so a surface can say so rather than show a zero. */
 export type ImpactGaps = {

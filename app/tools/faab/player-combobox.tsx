@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { isDefender, positionNoun } from "@/lib/site";
 
 export type FaabPlayer = {
   slug: string;
@@ -17,6 +18,11 @@ export type FaabPlayer = {
    * (format, source) pair. Surfaced in the selected-player card. */
   position_rank: number;
   value: number | null;
+  /**
+   * True for a defender added while the IDP switch is on (plan R-6). No value
+   * source ranks one, so the list says "not ranked" rather than a number.
+   */
+  unranked?: boolean;
 };
 
 const MAX_SUGGESTIONS = 40;
@@ -254,11 +260,16 @@ export function PlayerCombobox({
                     <span className="text-ink">{p.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
                       {p.position}
+                      {isDefender(p.position) ? (
+                        <span className="sr-only">, {positionNoun(p.position)}</span>
+                      ) : null}
                       {p.team ? `, ${p.team}` : ""}
                     </span>
                   </span>
                   <span className="flex-shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
-                    #{p.overall_rank}
+                    {/* No value source ranks a defender (plan R-6), so he gets
+                        words rather than a rank number that would read as one. */}
+                    {p.unranked ? "not ranked" : `#${p.overall_rank}`}
                   </span>
                 </li>
               );

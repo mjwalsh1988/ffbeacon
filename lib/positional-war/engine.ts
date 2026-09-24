@@ -28,8 +28,12 @@
  * marker is labeled with its real value rather than with an asserted zero.
  */
 
-import type { LineupCandidate } from "@/lib/power-pulse/lineup";
-import type { PulsePosition } from "@/lib/power-pulse/types";
+import {
+  pulseEligibility,
+  type LineupCandidate,
+  type SlotEligibilityMap,
+} from "@/lib/power-pulse/lineup";
+import { slotEligibility, type PulsePosition } from "@/lib/power-pulse/types";
 import {
   buildMergedFill,
   positionWeekStats,
@@ -60,8 +64,16 @@ function mean(values: number[]): number {
   return sum / values.length;
 }
 
-/** One week's candidate list: every player who has a projection that week. */
-function weekCandidates(players: WarPlayerInput[], week: number): LineupCandidate[] {
+/**
+ * One week's candidate list: every player who has a projection that week.
+ * Eligibility lists ride along only with the IDP switch on (plan R-25), so the
+ * OFF fill is offered exactly the candidates it always was.
+ */
+function weekCandidates(
+  players: WarPlayerInput[],
+  week: number,
+  withEligibility: boolean,
+): LineupCandidate[] {
   const out: LineupCandidate[] = [];
   for (const player of players) {
     const projection = player.byWeek.get(week);
@@ -69,11 +81,34 @@ function weekCandidates(players: WarPlayerInput[], week: number): LineupCandidat
     out.push({
       playerId: player.playerId,
       position: player.position,
+      ...(withEligibility && player.eligible
+        ? { eligible: pulseEligibility(player.position, player.eligible) }
+        : {}),
       points: projection.points,
       sigma: projection.sigma,
     });
   }
   return out;
+}
+
+/**
+ * The universe narrowed to players this league could start at all (plan
+ * R-12): his primary, or with the switch on any position he is eligible for,
+ * must be one the league's slots take. A kicker in a league with no kicker
+ * slot, or a defender in a league with no defensive slot, never enters the
+ * fill. Benched there, he could only ever land in a bucket nothing reads, so
+ * this changes no curve; it keeps the fill from carrying him.
+ */
+function startableUniverse(
+  players: WarPlayerInput[],
+  positions: ReadonlySet<string>,
+  withEligibility: boolean,
+): WarPlayerInput[] {
+  return players.filter((player) => {
+    if (positions.has(player.position)) return true;
+    if (!withEligibility || !player.eligible) return false;
+    return player.eligible.some((position) => positions.has(position.toUpperCase()));
+  });
 }
 
 /**
@@ -129,12 +164,15 @@ type ScoredPlayer = {
  * what lets two leagues with identical settings share one computation.
  */
 export function computeCurves(input: WarInput): WarResult {
-  const { league, players, settings } = input;
+  const { league, settings } = input;
+  const idpEnabled = league.idpEnabled === true;
+  const slotMap: SlotEligibilityMap = slotEligibility(idpEnabled);
 
   const weeks: number[] = [];
   for (let week = league.fromWeek; week <= league.toWeek; week += 1) weeks.push(week);
 
-  const positions = startablePositions(league.slots);
+  const positions = startablePositions(league.slots, slotMap);
+  const players = startableUniverse(input.players, new Set(positions), idpEnabled);
 
   // Slot tokens this league runs that no projection covers. Rendered as a
   // footnote from the league's raw roster_positions by the caller; recorded
@@ -150,8 +188,9 @@ export function computeCurves(input: WarInput): WarResult {
   const structuralFill = buildMergedFill({
     slots: league.slots,
     teamCount: league.teamCount,
-    candidates: structuralCandidates(players, weeks),
+    candidates: structuralCandidates(players, weeks, idpEnabled),
     week: null,
+    eligibility: slotMap,
   });
 
   // One fill per week. W + 1 total, with the structural fill above.
@@ -162,8 +201,9 @@ export function computeCurves(input: WarInput): WarResult {
       buildMergedFill({
         slots: league.slots,
         teamCount: league.teamCount,
-        candidates: weekCandidates(players, week),
+        candidates: weekCandidates(players, week, idpEnabled),
         week,
+        eligibility: slotMap,
       }),
     );
   }
@@ -335,10 +375,11 @@ export function computeCurves(input: WarInput): WarResult {
 /**
  * Slot tokens a league runs that this model cannot project, for the footnote.
  *
- * Sleeper publishes projections for DEF, K, QB, RB, TE and WR only, so an IDP
- * league's defensive slots have no projection and are excluded. Reported by
- * name so the footnote can say WHICH positions were left out, which is the
- * difference between an honest omission and a silently short answer.
+ * With the IDP switch off, an IDP league's defensive slots are not projected
+ * here and are excluded; with it on, only a token nobody projects (EDGE) is.
+ * Reported by name so the footnote can say WHICH positions were left out,
+ * which is the difference between an honest omission and a silently short
+ * answer.
  *
  * Derived from the league's RAW roster_positions rather than from the
  * fingerprint, so two leagues that share a curve still get their own footnote.
@@ -346,7 +387,7 @@ export function computeCurves(input: WarInput): WarResult {
 export function unprojectableSlots(
   rosterPositions: string[],
   nonStarting: ReadonlySet<string>,
-  eligibility: Record<string, PulsePosition[]>,
+  eligibility: SlotEligibilityMap,
 ): string[] {
   const out = new Set<string>();
   for (const token of rosterPositions) {

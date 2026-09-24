@@ -88,11 +88,15 @@ export type UnmatchedSplit = {
 export function splitUnmatchedOwners(
   unmatchedOwnedIds: readonly string[],
   info: ReadonlyMap<string, UnmatchedOwnerInfo>,
+  /**
+   * The positions a chart on this page plots. The offensive six by default;
+   * the panel passes every position it has a curve for, which adds DL, LB and
+   * DB once the IDP switch has produced a Defense chart (plan IDP-309).
+   */
+  plottable: ReadonlySet<string> = new Set<string>(OFFENSE_POSITIONS),
 ): UnmatchedSplit {
   const pastDepth: Array<{ sleeperId: string; name: string; position: PulsePosition }> = [];
   let noProjectionCount = 0;
-  // The offense chart; the defense chart arrives in phase 3 (plan R-10, IDP-309).
-  const plottable = new Set<string>(OFFENSE_POSITIONS);
 
   for (const id of unmatchedOwnedIds) {
     const entry = info.get(id);

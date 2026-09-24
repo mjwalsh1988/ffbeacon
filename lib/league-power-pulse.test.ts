@@ -740,3 +740,57 @@ describe("POWER_PULSE_RETRY_MS", () => {
     expect(POWER_PULSE_RETRY_MS).toBe(15 * 60 * 1000);
   });
 });
+
+/* ---------------------------------------------------------------------- */
+/* IDP-301: the switch is read once and threaded as a boolean              */
+/* ---------------------------------------------------------------------- */
+
+describe("the IDP switch (plan IDP-301)", () => {
+  const IDP_SLOTS = ["QB", "RB", "WR", "DL", "LB", "DB", "IDP_FLEX", "BN"];
+
+  it("loads offense only, with one scoring key, when the switch is off", async () => {
+    wireOkPipeline();
+    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ rosterPositions: IDP_SLOTS }) as never);
+    const { client } = makeFakeClient({ leaguesRow: { last_pulsed_at: null } });
+    await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
+
+    const opts = vi.mocked(loadPlayers).mock.calls[0]?.[2] as { positions: readonly string[] };
+    expect([...opts.positions]).toEqual(["QB", "RB", "WR", "TE", "K", "DEF"]);
+    expect(typeof vi.mocked(loadAccuracy).mock.calls[0]?.[2]).toBe("string");
+    expect(typeof vi.mocked(loadDefenseSplits).mock.calls[0]?.[1]).toBe("string");
+    expect(vi.mocked(computePowerPulse).mock.calls[0]?.[0].idpEnabled).toBe(false);
+  });
+
+  it("loads defenders and reads idp123 beside the league base when on in an IDP league", async () => {
+    wireOkPipeline();
+    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ rosterPositions: IDP_SLOTS }) as never);
+    vi.mocked(loadPowerPulseSettings).mockResolvedValue({
+      modelVersion: "v1",
+      idp: { enabled: true },
+    } as never);
+    const { client } = makeFakeClient({ leaguesRow: { last_pulsed_at: null } });
+    await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
+
+    const opts = vi.mocked(loadPlayers).mock.calls[0]?.[2] as { positions: readonly string[] };
+    expect(opts.positions).toContain("LB");
+    expect(vi.mocked(loadAccuracy).mock.calls[0]?.[2]).toEqual(["pts_std", "idp123"]);
+    expect(vi.mocked(computePowerPulse).mock.calls[0]?.[0].idpEnabled).toBe(true);
+  });
+
+  it("changes no read in a league with no defensive slot, even with the switch on", async () => {
+    wireOkPipeline();
+    vi.mocked(loadLeague).mockResolvedValue(
+      fakeLeague({ rosterPositions: ["QB", "RB", "WR", "BN"] }) as never,
+    );
+    vi.mocked(loadPowerPulseSettings).mockResolvedValue({
+      modelVersion: "v1",
+      idp: { enabled: true },
+    } as never);
+    const { client } = makeFakeClient({ leaguesRow: { last_pulsed_at: null } });
+    await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
+
+    const opts = vi.mocked(loadPlayers).mock.calls[0]?.[2] as { positions: readonly string[] };
+    expect(opts.positions).not.toContain("LB");
+    expect(typeof vi.mocked(loadAccuracy).mock.calls[0]?.[2]).toBe("string");
+  });
+});

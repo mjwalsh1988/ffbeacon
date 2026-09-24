@@ -39,6 +39,11 @@ export type FreeAgentOption = {
   overall_rank: number;
   position_rank: number;
   value: number | null;
+  /**
+   * True for a defender added while the IDP switch is on (plan R-6). No value
+   * source ranks one, so the list says "not ranked" rather than a number.
+   */
+  unranked?: boolean;
 };
 
 /** Sleeper writes "0" into an empty roster slot. It is not a player. */

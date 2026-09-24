@@ -8,7 +8,7 @@
  * directly has to live in a sibling file instead.
  */
 
-import { OFFENSE_POSITIONS } from "@/lib/site";
+import { OFFENSE_POSITIONS, isDefender } from "@/lib/site";
 import { positionNoun } from "@/lib/site";
 import { ImageResponse } from "next/og";
 import { POSITION_SERIES, markerPath } from "@/components/chart-kit";
@@ -71,6 +71,20 @@ const PULSE_POSITION_SET = new Set<string>(OFFENSE_POSITIONS);
 function isPulsePosition(value: string): value is PulsePosition {
   return PULSE_POSITION_SET.has(value);
 }
+
+/**
+ * True when this league also has a defensive curve (plan R-10, IDP-309). The
+ * card stays pinned to offense and carries one line pointing at the page,
+ * rather than drawing nine lines on a card sized for six.
+ */
+export function hasDefensiveCurve(rows: CacheRow[]): boolean {
+  return rows.some(
+    (row) => isDefender(row.position) && Array.isArray(row.curve) && row.curve.length > 0,
+  );
+}
+
+/** The one line the card prints when a defensive curve exists. */
+export const DEFENSIVE_CURVE_NOTE = "The defensive curve is on the league page.";
 
 /**
  * Maps league_positional_war_cache rows to PositionCurve[], the same shape

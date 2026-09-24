@@ -273,7 +273,7 @@ function buildMargin(
  */
 function buildFootnote(view: MatchupView): string {
   // Counted from the SLOT DEFINITIONS rather than from the filled players: an
-  // empty IDP slot is still a slot the totals cannot include.
+  // empty slot League Pulse does not project is still one the totals exclude.
   const unprojectable = view.home.slots.filter((entry) => !entry.slot.projectable).length;
   // The live wording carries the 0.0 caveat because the picture cannot be asked
   // about it later. Sleeper's per-player map holds a real zero for a player
@@ -286,9 +286,9 @@ function buildFootnote(view: MatchupView): string {
       : "Projected in this league's own scoring";
 
   if (!view.hasUnprojectableSlots || unprojectable === 0) return base;
-  return `${base}. Totals exclude ${unprojectable} IDP ${
+  return `${base}. Totals exclude ${unprojectable} ${
     unprojectable === 1 ? "slot" : "slots"
-  }, which Sleeper publishes no projections for`;
+  } League Pulse does not project`;
 }
 
 function leadingSide(home: number | null, away: number | null): "home" | "away" | null {

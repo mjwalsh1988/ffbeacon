@@ -205,7 +205,7 @@ export function buildFootnote(input: FootnoteInput): string {
     `A replacement player is the best one at his position who would not make a starting lineup anywhere in this ${teamCount}-team league.`,
   );
   if (excludedSlots.length > 0) {
-    parts.push(`Sleeper does not project ${excludedSlots.join(", ")}, so they are excluded.`);
+    parts.push(`League Pulse does not project ${excludedSlots.join(", ")}, so they are excluded.`);
   }
   if (shallowPositions.length > 0) {
     const names = shallowPositions.join(", ");

@@ -2,10 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   buildOptimalLineup,
   scoreSetLineup,
+  pulseEligibility,
   startingSlots,
   type LineupCandidate,
 } from "./lineup";
-import type { PulsePosition } from "./types";
+import { slotEligibility, type PulsePosition } from "./types";
 
 function candidate(
   playerId: string,
@@ -143,5 +144,68 @@ describe("scoreSetLineup", () => {
 
   it("does not double count a duplicated starter id", () => {
     expect(scoreSetLineup(["a", "a"], pool)?.total).toBeCloseTo(20, 5);
+  });
+});
+
+describe("IDP seating (plan IDP-302)", () => {
+  const ON = slotEligibility(true);
+  const OFF = slotEligibility(false);
+
+  it("keeps IDP tokens with the ON map and drops them with the OFF map", () => {
+    const tokens = ["QB", "DL", "LB", "DB", "IDP_FLEX", "BN"];
+    expect(startingSlots(tokens, ON)).toEqual(["QB", "DL", "LB", "DB", "IDP_FLEX"]);
+    expect(startingSlots(tokens, OFF)).toEqual(["QB"]);
+    expect(startingSlots(tokens)).toEqual(["QB"]);
+  });
+
+  it("seats a DL/LB player in the LB slot when DL is already full, credited as LB", () => {
+    const dualDl: LineupCandidate = { ...candidate("edge", "DL", 12), eligible: ["DL", "LB"] };
+    const result = buildOptimalLineup(
+      ["DL", "LB"],
+      [candidate("dl1", "DL", 15), dualDl, candidate("lb-weak", "LB", 6)],
+      ON,
+    );
+    expect(result.total).toBeCloseTo(27, 5);
+    const lb = result.slots.find((s) => s.slot === "LB");
+    expect(lb?.playerId).toBe("edge");
+    expect(lb?.playedAs).toBe("LB");
+    expect(result.slots.find((s) => s.slot === "DL")?.playedAs).toBe("DL");
+  });
+
+  it("credits IDP_FLEX to the holder's primary", () => {
+    const result = buildOptimalLineup(
+      ["IDP_FLEX"],
+      [{ ...candidate("edge", "DL", 12), eligible: ["DL", "LB"] }],
+      ON,
+    );
+    expect(result.slots[0].playedAs).toBe("DL");
+  });
+
+  it("relocates a dual-eligible incumbent along an augmenting path", () => {
+    // LB slot first in order: the greedy pass seats the 20-point DL/LB player
+    // wherever it can, and the 18-point pure DL must still find the DL slot.
+    const result = buildOptimalLineup(
+      ["LB", "DL"],
+      [{ ...candidate("dual", "DL", 20), eligible: ["DL", "LB"] }, candidate("dl", "DL", 18)],
+      ON,
+    );
+    expect(result.total).toBeCloseTo(38, 5);
+  });
+
+  it("an eligibility list outside the map changes nothing under the OFF map", () => {
+    const pool = [
+      { ...candidate("dual", "DL", 20), eligible: ["DL", "LB"] as PulsePosition[] },
+      candidate("qb", "QB", 18),
+    ];
+    const result = buildOptimalLineup(startingSlots(["QB", "DL", "LB"], OFF), pool, OFF);
+    expect(result.slots.map((s) => s.playerId)).toEqual(["qb"]);
+    expect(result.slots[0].playedAs).toBe("QB");
+  });
+
+  it("pulseEligibility keeps the primary first and drops labels the optimiser cannot seat", () => {
+    expect(pulseEligibility("LB", ["LB", "LS"])).toEqual(["LB"]);
+    expect(pulseEligibility("DL", ["DL", "LB"])).toEqual(["DL", "LB"]);
+    expect(pulseEligibility("LB", ["DB", "LB"])).toEqual(["LB", "DB"]);
+    expect(pulseEligibility("WR", null)).toEqual(["WR"]);
   });
 });

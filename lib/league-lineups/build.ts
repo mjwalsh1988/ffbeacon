@@ -43,11 +43,15 @@
 import { isDefender } from "@/lib/site";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
-import { buildOptimalLineup, type LineupCandidate } from "@/lib/power-pulse/lineup";
+import {
+  buildOptimalLineup,
+  pulseEligibility,
+  type LineupCandidate,
+} from "@/lib/power-pulse/lineup";
 import type { AccuracyRow, DefenseRow, PlayerRow, ProjectionRow } from "@/lib/power-pulse/load";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { SLOT_GROUP_LABEL, SLOT_GROUP_ORDER } from "@/lib/league-schedule/slots";
-import { PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+import { slotEligibility } from "@/lib/power-pulse/types";
 import type { ScheduleSlot, SlotGroup } from "@/lib/league-schedule/types";
 import {
   environmentTier,
@@ -143,6 +147,12 @@ export type BuildLineupInput = {
   environment: GameEnvironmentWeek;
   /** Positional WAR by Sleeper id. Empty when the curve is not built. */
   positionalWar: Map<string, PositionalWarEntry>;
+  /**
+   * The IDP switch, read once by the server loader (plan R-25). It must agree
+   * with the `projectable` flags on `slots`, which the same loader built from
+   * the same switch. Absent or false: the OFF slot map, exactly as before.
+   */
+  idpEnabled?: boolean;
 };
 
 /** Two decimals, the precision fantasy points are quoted at everywhere. */
@@ -274,6 +284,7 @@ export function buildLineupPlayer(
     positionalWarPoolSize: war ? war.poolSize : null,
     environment: env,
     environmentTier: environmentTier(env?.impliedTotal ?? null, input.environment.average),
+    ...(input.idpEnabled ? { eligible: pulseEligibility(row.position, row.eligible) } : {}),
   };
 }
 
@@ -379,6 +390,14 @@ export type BuiltLineup = {
  * were wrong enough to make the manager bench him is not an answer.
  */
 export function buildLineup(input: BuildLineupInput): BuiltLineup {
+  const idpEnabled = input.idpEnabled === true;
+  const slotMap = slotEligibility(idpEnabled);
+  /** Every position a resolved player may be seated as under the map in force. */
+  const eligibleOf = (sleeperId: string, fallback: string): string[] => {
+    const row = input.players.get(sleeperId);
+    if (!row) return [fallback];
+    return idpEnabled ? pulseEligibility(row.position, row.eligible) : [row.position];
+  };
   const reserve = new Set(input.reserveSleeperIds.filter(validPlayerId));
   const taxi = new Set(input.taxiSleeperIds.filter(validPlayerId));
 
@@ -521,6 +540,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
     candidates.push({
       playerId: row.playerId,
       position: row.position,
+      ...(idpEnabled ? { eligible: pulseEligibility(row.position, row.eligible) } : {}),
       points,
       sigma: player.sigma ?? 0,
     });
@@ -537,7 +557,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
   let baseFillTotal: number | null = null;
 
   if (candidates.length > 0 && projectableTokens.length > 0) {
-    const fill = buildOptimalLineup(projectableTokens, candidates);
+    const fill = buildOptimalLineup(projectableTokens, candidates, slotMap);
     // The fill's OWN total, before the unprojectable slots are added back on.
     // That add-back is a constant shared by both sides of any comparison, so
     // the raw number is the one a with-him fill is measured against.
@@ -616,13 +636,19 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
 
     for (const inbound of incoming) {
       const slot = input.slots[inbound.slotIndex];
-      const eligible = PULSE_SLOT_ELIGIBILITY[slot.token] ?? [];
+      const slotTakes: readonly string[] = slotMap[slot.token] ?? [];
 
-      // The cheapest unpaired starter who could legally hold this slot. Falling
-      // back to the cheapest unpaired starter of any position keeps the totals
-      // exact in the odd shapes where no eligible partner is left; the common
-      // case is the eligible one, and it is what makes the sentence true.
-      let outbound = outgoing.find((o) => !o.taken && eligible.includes(o.player.position as never));
+      // The cheapest unpaired starter who could legally hold this slot, judged
+      // on HIS eligibility list (a DL/LB starter can hold an LB slot once the
+      // switch is on). Falling back to the cheapest unpaired starter of any
+      // position keeps the totals exact in the odd shapes where no eligible
+      // partner is left; the common case is the eligible one, and it is what
+      // makes the sentence true.
+      let outbound = outgoing.find(
+        (o) =>
+          !o.taken &&
+          eligibleOf(o.player.sleeperId, o.player.position).some((p) => slotTakes.includes(p)),
+      );
       if (!outbound) outbound = outgoing.find((o) => !o.taken);
       if (outbound) outbound.taken = true;
 

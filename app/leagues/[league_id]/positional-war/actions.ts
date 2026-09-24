@@ -1,10 +1,10 @@
 "use server";
 
-import { OFFENSE_POSITIONS } from "@/lib/site";
 import { z } from "zod";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
-import { type PulsePosition } from "@/lib/power-pulse/types";
+import { loadPositionalWarView } from "@/lib/league-positional-war-data";
+import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import {
   claimWarUpgradeEntrySlot,
   claimWarUpgradeSlot,
@@ -43,8 +43,11 @@ import {
  *   4. Simulate, in lib/positional-war/upgrade.ts runUpgradeWhatIf.
  */
 
-// The upgrade what-if runs for offensive positions until phase 3 (IDP-309).
-const POSITION_PATTERN = z.enum(OFFENSE_POSITIONS as unknown as [PulsePosition, ...PulsePosition[]]);
+// Any position a curve can exist for. A defensive curve exists only once the
+// IDP switch is on in a league that starts defenders (plan IDP-309). Gate 2b
+// below refuses a position with no stored curve BEFORE the slot is claimed, so
+// a crafted DL request against any other league spends nothing.
+const POSITION_PATTERN = z.enum(PULSE_POSITIONS as unknown as [PulsePosition, ...PulsePosition[]]);
 
 const requestSchema = z.object({
   sleeperLeagueId: z.string().regex(/^[0-9]{1,32}$/),
@@ -85,10 +88,10 @@ export async function requestUpgradeWhatIf(raw: unknown): Promise<UpgradeWhatIfO
   // second lookup. Not itself a simulation: a single-row read by a unique key.
   const { data: leagueRow } = await admin
     .from("leagues")
-    .select("id")
+    .select("id, season")
     .eq("sleeper_league_id", input.sleeperLeagueId)
     .maybeSingle();
-  if (!leagueRow) {
+  if (!leagueRow || leagueRow.season == null) {
     return { ok: false, reason: "league-not-found" };
   }
 
@@ -113,6 +116,16 @@ export async function requestUpgradeWhatIf(raw: unknown): Promise<UpgradeWhatIfO
   });
   if (!viewer.ok) {
     return { ok: false, reason: viewer.reason };
+  }
+
+  // Gate 2b: a stored curve for the position. Free for the reader, and the
+  // read is the request-memoised one runUpgradeWhatIf repeats, so it costs no
+  // second query. Without it a position with no curve (every defensive one
+  // while the IDP switch is off) would claim a slot and then be refused.
+  const view = await loadPositionalWarView(admin, leagueRow.id, Number(leagueRow.season));
+  const curve = view?.curves.find((c) => c.position === input.position) ?? null;
+  if (!curve || curve.curve.length === 0) {
+    return { ok: false, reason: "no-candidates" };
   }
 
   // Gate 3: the rate-limit slot. Fails closed: an outage refuses rather than

@@ -28,6 +28,7 @@ import {
   buildOptimalLineup,
   lineupSigma,
   type LineupCandidate,
+  type SlotEligibilityMap,
 } from "@/lib/power-pulse/lineup";
 import { mean } from "@/lib/power-pulse/math";
 import type { WeeklyDistribution } from "@/lib/power-pulse/what-if";
@@ -48,6 +49,8 @@ export type SwapWeekDetail = {
 export type RosterSwapInput = {
   /** Projectable startable slot tokens, in league order. */
   slots: string[];
+  /** The slot map from the IDP switch (plan R-25). Absent: the OFF map. */
+  slotMap?: SlotEligibilityMap;
   /** Remaining weeks, ascending. */
   weeks: number[];
   /** This roster's projectable candidates per week, BEFORE the trade. */
@@ -125,11 +128,11 @@ export function computeRosterSwap(input: RosterSwapInput): RosterSwapResult {
     const arrivals = incomingByWeek.get(week) ?? [];
     const arrivingIds = new Set(arrivals.map((c) => c.playerId));
 
-    const before = buildOptimalLineup(slots, roster);
+    const before = buildOptimalLineup(slots, roster, input.slotMap);
     const after = buildOptimalLineup(slots, [
       ...roster.filter((c) => !leaving.has(c.playerId)),
       ...arrivals,
-    ]);
+    ], input.slotMap);
 
     weeklyBefore.set(week, {
       mean: before.total,

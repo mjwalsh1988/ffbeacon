@@ -13,6 +13,8 @@ import {
   type ProjectionRow,
 } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { winProbability } from "@/lib/power-pulse/math";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
@@ -446,7 +448,11 @@ export async function loadMatchupDetail(
     ),
   );
 
-  const slots = alignedStartingSlots(league.rosterPositions);
+  const scoringBase = closestScoringBase(league.scoringSettings);
+  // The IDP switch (plan R-25): which slots this page projects, which players
+  // get a projection and which keys their accuracy and splits are read under.
+  const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
+  const slots = alignedStartingSlots(league.rosterPositions, idpReads.slotMap);
 
   const sleeperIds = Array.from(
     new Set(
@@ -458,12 +464,11 @@ export async function loadMatchupDetail(
       ]),
     ),
   );
-  // Defenders are NAMED (plan IDP-122) and not projected: the id list for the
-  // projection and accuracy reads below comes from the offensive players only.
+  // Defenders are always NAMED (plan IDP-122). They are projected only when
+  // the switch is on and this league starts a defensive slot.
   const players = await loadPlayers(admin, sleeperIds, { positions: NAMING_POSITIONS });
-  const playerIds = projectablePlayerIds(players);
+  const playerIds = projectablePlayerIds(players, idpReads.loadsDefenders);
 
-  const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(season);
 
   // WHICH PROJECTION SOURCE THIS PAGE READS IS NOT THIS PAGE'S DECISION.
@@ -495,8 +500,8 @@ export async function loadMatchupDetail(
     loadProjections(admin, playerIds, season, week, week, projectionSource),
     // Scoped to the SAME source, per migration 0240: a reliability multiplier
     // measured against Sleeper's projection means nothing applied to ours.
-    loadAccuracy(admin, playerIds, scoringBase, projectionSource),
-    loadDefenseSplits(admin, scoringBase, defenseSeasons),
+    loadAccuracy(admin, playerIds, scoringKeysArg(idpReads), projectionSource),
+    loadDefenseSplits(admin, scoringKeysArg(idpReads), defenseSeasons),
     // Home and away, which no stats or projection row carries. Memoised for an
     // hour inside lib/sleeper.ts, so this is one request per process per season
     // rather than one per matchup view. A null means the venue reads as unknown
@@ -569,6 +574,7 @@ export async function loadMatchupDetail(
       settings,
       chopped: league.chopped,
       homeAwayByTeamWeek,
+      idpEnabled: idpReads.idpEnabled,
     }),
   };
 }

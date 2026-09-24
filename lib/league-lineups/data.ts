@@ -13,7 +13,16 @@ import {
   type ProjectionRow,
 } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
-import { buildOptimalLineup } from "@/lib/power-pulse/lineup";
+import {
+  buildOptimalLineup,
+  pulseEligibility,
+  startingSlots,
+  type SlotEligibilityMap,
+} from "@/lib/power-pulse/lineup";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg, type IdpReads } from "@/lib/power-pulse/idp-reads";
+import { loadIdpFreeAgents, startableIdpPositions } from "@/lib/idp/free-agents";
+import { protectedDefenderIds } from "./defender-protection";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
@@ -224,8 +233,11 @@ export async function loadLineupView(
   const roster = rosters.find((r) => r.sleeperRosterId === sleeperRosterId);
   if (!roster) return { ok: false, reason: "no-roster", teams };
 
-  const slots = alignedStartingSlots(league.rosterPositions);
   const scoringBase = closestScoringBase(league.scoringSettings);
+  // The IDP switch (plan R-25): which slots are projected, which players get a
+  // projection, and which keys accuracy and splits are read under.
+  const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
+  const slots = alignedStartingSlots(league.rosterPositions, idpReads.slotMap);
   const defenseSeasons = defenseSeasonsFor(season);
 
   // The week's matchup row, when Sleeper has published one. It carries the
@@ -309,7 +321,8 @@ export async function loadLineupView(
   // opponent's own Power Pulse row is read, and running it afterwards spent a
   // whole round trip on four small columns.
   const [players, weekMatchupsRes] = await Promise.all([
-    // Named, not projected (plan IDP-122): see projectablePlayerIds below.
+    // Every defender is NAMED (plan IDP-122); see projectablePlayerIds below
+    // for which of them are also projected.
     loadPlayers(admin, sleeperIds, { positions: NAMING_POSITIONS }),
     matchupRow?.matchup_id === null || matchupRow?.matchup_id === undefined
       ? Promise.resolve({ data: null })
@@ -321,7 +334,7 @@ export async function loadLineupView(
           .eq("week", week)
           .eq("matchup_id", matchupRow.matchup_id),
   ]);
-  const playerIds = projectablePlayerIds(players);
+  const playerIds = projectablePlayerIds(players, idpReads.loadsDefenders);
 
   const opponentRow = (
     (weekMatchupsRes.data ?? []) as Array<{
@@ -365,8 +378,8 @@ export async function loadLineupView(
       // One week, both bounds equal, so Postgres returns the ~25 rows this page
       // renders rather than the rest of the season for the same players.
       loadProjections(admin, playerIds, season, week, week, projectionSource),
-      loadAccuracy(admin, playerIds, scoringBase, projectionSource),
-      loadDefenseSplits(admin, scoringBase, defenseSeasons),
+      loadAccuracy(admin, playerIds, scoringKeysArg(idpReads), projectionSource),
+      loadDefenseSplits(admin, scoringKeysArg(idpReads), defenseSeasons),
       getNflHomeAwayMap(season),
       loadGameEnvironment(supabase, season, week),
       // READ ONLY. Never a compute: see the module header.
@@ -399,6 +412,7 @@ export async function loadLineupView(
               [...players.values()].map((p) => [p.playerId, p.injuryStatus] as const),
             ),
             currentWeek,
+            includeDefenders: idpReads.loadsDefenders,
           })
         : Promise.resolve(null),
       formatConfigId && waiversApply
@@ -459,6 +473,7 @@ export async function loadLineupView(
     homeAwayByTeamWeek,
     environment,
     positionalWar,
+    idpEnabled: idpReads.idpEnabled,
   };
 
   const built = buildLineup(buildInput);
@@ -539,12 +554,48 @@ export async function loadLineupView(
     }
   }
 
+  // THE DEFENDER GUARD (plan R-5). No value source prices a defender, so the
+  // dynasty value guard can never protect one; the lineup does instead. Built
+  // only when defenders are projected here at all, off the same
+  // rest-of-season read the cut list already uses, so it adds no query.
+  let protectedDefenders: Set<string> | undefined;
+  if (idpReads.loadsDefenders && isKeeperLeague && restOfSeason) {
+    const unavailable = new Set([...roster.reserveSleeperIds, ...roster.taxiSleeperIds]);
+    const pointsByPlayerWeek = new Map<string, Map<number, number>>();
+    for (const [playerId, summary] of restOfSeason.byPlayer) {
+      const weeks = new Map<number, number>();
+      for (const [w, projected] of summary.byWeek) weeks.set(w, projected.points);
+      pointsByPlayerWeek.set(playerId, weeks);
+    }
+    const remainingWeeks: number[] = [];
+    for (let w = currentWeek; w <= lastRegularWeek; w += 1) remainingWeeks.push(w);
+    protectedDefenders = protectedDefenderIds({
+      isKeeperLeague,
+      slotTokens: startingSlots(league.rosterPositions, idpReads.slotMap),
+      slotMap: idpReads.slotMap,
+      roster: roster.playerSleeperIds
+        .filter((sid) => !unavailable.has(sid))
+        .map((sid) => players.get(sid))
+        .filter((p): p is NonNullable<typeof p> => Boolean(p))
+        .map((p) => ({
+          sleeperId: p.sleeperId,
+          playerId: p.playerId,
+          position: p.position,
+          eligible: p.eligible,
+        })),
+      pointsByPlayerWeek,
+      weeks: remainingWeeks,
+    });
+  }
+
   const drops: DropResult = buildDropOptions({
     benchable: [...built.bench, ...built.reserve, ...built.taxi],
     restOfSeasonPerWeek,
     valueBySleeperId,
     isKeeperLeague,
     seatedSleeperIds,
+    idpEnabled: idpReads.loadsDefenders,
+    protectedDefenderIds: protectedDefenders,
   });
 
   // THE METER IS CLAIMED HERE, after every validation and only when the panel
@@ -571,6 +622,9 @@ export async function loadLineupView(
         projectionSource,
         scoringBase,
         status,
+        slotMap: idpReads.slotMap,
+        idpReads,
+        leagueRowId,
       });
     } else {
       waiversState = "throttled";
@@ -612,6 +666,7 @@ export async function loadLineupView(
     waiversState,
     projectionSource,
     opponent,
+    idpEnabled: idpReads.idpEnabled,
     weekStatus: phase,
     // THE REPORT, and only once there is something to report. A live week has
     // points but no settled result, so it gets a recap with a null outcome
@@ -673,24 +728,48 @@ async function buildWaivers(args: {
   projectionSource: string;
   scoringBase: string;
   status: Parameters<typeof buildWaiverSuggestions>[1];
+  /** The slot map the baseline fill used, so a with-him fill is on the same terms. */
+  slotMap: SlotEligibilityMap;
+  /** What the IDP switch decided for this league (plan R-25). */
+  idpReads: IdpReads;
+  leagueRowId: string;
 }) {
-  const { admin, buildInput, built, freeAgents, slots, week, season, projectionSource, scoringBase, status } =
+  const { admin, buildInput, built, freeAgents, slots, week, season, projectionSource, scoringBase, status, slotMap, idpReads, leagueRowId } =
     args;
 
-  if (!freeAgents || freeAgents.players.length === 0) return [];
+  if (!freeAgents) return [];
 
-  const shortlist = freeAgents.players
-    .filter((p) => p.sleeper_id)
-    .slice(0, WAIVER_CANDIDATE_POOL);
+  const shortlist: Array<{ player_id: string; sleeper_id: string | null; overall_rank: number }> =
+    freeAgents.players.filter((p) => p.sleeper_id).slice(0, WAIVER_CANDIDATE_POOL);
+
+  // THE DEFENDERS NOBODY HOLDS (plan R-6). No value source ranks a defender,
+  // so none is in the offensive universe above; they come from this week's
+  // projections instead, top fifteen per position the league starts. Inside
+  // the metered panel, like everything else here. No overall rank exists for
+  // them, which the ranking below reads as "unranked", never as first.
+  if (idpReads.loadsDefenders) {
+    const idpFreeAgents = await loadIdpFreeAgents(admin, {
+      leagueRowId,
+      season,
+      week,
+      source: projectionSource,
+      scoringSettings: buildInput.scoringSettings,
+      startable: startableIdpPositions(built.fillTokens, slotMap),
+    });
+    for (const fa of idpFreeAgents ?? []) {
+      shortlist.push({ player_id: fa.playerId, sleeper_id: fa.sleeperId, overall_rank: Number.NaN });
+    }
+  }
   if (shortlist.length === 0) return [];
 
   const candidateIds = shortlist.map((p) => p.player_id);
   const [rows, accuracy, faPlayers] = await Promise.all([
     loadProjections(admin, candidateIds, season, week, week, projectionSource),
-    loadAccuracy(admin, candidateIds, scoringBase, projectionSource),
+    loadAccuracy(admin, candidateIds, scoringKeysArg(idpReads), projectionSource),
     loadPlayers(
       admin,
       shortlist.map((p) => p.sleeper_id as string),
+      { positions: idpReads.candidatePositions },
     ),
   ]);
 
@@ -731,15 +810,22 @@ async function buildWaivers(args: {
     const player = buildLineupPlayer(faInput, sleeperId, "bench", null);
     if (player.projected === null) continue;
 
-    const withHim = buildOptimalLineup(projectableTokens, [
-      ...baseCandidates,
-      {
-        playerId: row.playerId,
-        position: row.position,
-        points: player.projected,
-        sigma: player.sigma ?? 0,
-      },
-    ]);
+    const withHim = buildOptimalLineup(
+      projectableTokens,
+      [
+        ...baseCandidates,
+        {
+          playerId: row.playerId,
+          position: row.position,
+          ...(buildInput.idpEnabled
+            ? { eligible: pulseEligibility(row.position, row.eligible) }
+            : {}),
+          points: player.projected,
+          sigma: player.sigma ?? 0,
+        },
+      ],
+      slotMap,
+    );
 
     const pointsAdded = Math.max(0, withHim.total - baseTotal);
     const seatIndex = withHim.slots.findIndex((s) => s.playerId === row.playerId);

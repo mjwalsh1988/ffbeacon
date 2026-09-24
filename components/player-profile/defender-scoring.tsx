@@ -453,12 +453,19 @@ export function DefenderThisWeek({
   playerName,
   engineDisplay,
   headingLevel = 3,
+  leagueLinks = [],
 }: {
   next: DefenderWeek | null;
   accuracy: DefenderAccuracy | null;
   playerName: string;
   engineDisplay: string;
   headingLevel?: 2 | 3;
+  /**
+   * The reader's own IDP leagues, linked into League Pulse Lineups. Passed
+   * only once the IDP switch is on (plan IDP-314); empty otherwise, so the
+   * panel renders exactly as before.
+   */
+  leagueLinks?: { name: string; href: string }[];
 }) {
   const option = useScoring();
   if (!next || !next.projected) {
@@ -502,6 +509,20 @@ export function DefenderThisWeek({
           Beat the {engineDisplay} projection in {accuracy.weeksBeat} of {accuracy.weeksPlayed} games (
           {Math.round(accuracy.beatRate * 100)}%), measured in Sleeper default IDP scoring.
         </p>
+      )}
+      {leagueLinks.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-line pt-3 text-sm">
+          {leagueLinks.map((link) => (
+            <li key={link.href}>
+              <a
+                href={link.href}
+                className="inline-flex min-h-11 items-center font-semibold text-brand-cyan underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Your lineup in {link.name}
+              </a>
+            </li>
+          ))}
+        </ul>
       )}
     </Panel>
   );

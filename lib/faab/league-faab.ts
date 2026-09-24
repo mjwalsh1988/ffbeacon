@@ -41,6 +41,10 @@ import {
   reliabilityMultiplier,
 } from "@/lib/power-pulse/project";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
+import { pulseEligibility } from "@/lib/power-pulse/lineup";
+import { protectedDefenderIds } from "@/lib/league-lineups/defender-protection";
 import { simulateWithReplacements } from "@/lib/power-pulse/what-if";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
@@ -159,6 +163,19 @@ export type LeagueFaabOutcome =
 /** Per-week projected points for one roster, ready for lineup building. */
 type RosterWeeks = Map<number, LineupCandidate[]>;
 
+/** Player id to week to points, the shape the defender guard reads. */
+function pointsByPlayerWeek(byWeek: RosterWeeks | undefined): Map<string, Map<number, number>> {
+  const out = new Map<string, Map<number, number>>();
+  for (const [week, list] of byWeek ?? []) {
+    for (const c of list) {
+      const weeks = out.get(c.playerId) ?? new Map<number, number>();
+      weeks.set(week, c.points);
+      out.set(c.playerId, weeks);
+    }
+  }
+  return out;
+}
+
 function buildRosterWeeks({
   roster,
   players,
@@ -172,6 +189,7 @@ function buildRosterWeeks({
   pulseSettings,
   faabInjury,
   ignoreInjuries = false,
+  idpEnabled = false,
 }: {
   roster: RosterRow;
   players: Map<string, PlayerRow>;
@@ -191,6 +209,8 @@ function buildRosterWeeks({
    * look like the cheapest one to release.
    */
   ignoreInjuries?: boolean;
+  /** The IDP switch (plan R-25): candidates carry their eligibility only when on. */
+  idpEnabled?: boolean;
 }): { byWeek: RosterWeeks; meta: Map<string, RosterMetaEntry> } {
   // IR and taxi players cannot start, so they are not lineup candidates and are
   // not drop candidates either: cutting them frees nothing that matters here.
@@ -248,6 +268,7 @@ function buildRosterWeeks({
       byWeek.get(week)?.push({
         playerId: player.playerId,
         position: player.position,
+        ...(idpEnabled ? { eligible: pulseEligibility(player.position, player.eligible) } : {}),
         points: projected.points * carry,
         sigma: projected.sigma * carry,
       });
@@ -383,7 +404,17 @@ export async function calculateLeagueFaab(
   const allSleeperIds = Array.from(
     new Set([...rosteredSleeperIds, input.candidateSleeperId]),
   );
-  const players = await loadPlayers(supabase, allSleeperIds);
+  // The IDP switch, read once (plan R-25; the settings read is memoised, so the
+  // second call below costs nothing). Off, or a league with no defensive slot:
+  // offense only, one scoring key, the OFF slot map, exactly as before.
+  const idpReads = idpReadsFor(
+    idpEnabledFrom(await loadPowerPulseSettings(supabase)),
+    league.rosterPositions,
+    closestScoringBase(league.scoringSettings),
+  );
+  const players = await loadPlayers(supabase, allSleeperIds, {
+    positions: idpReads.candidatePositions,
+  });
 
   const candidate = players.get(input.candidateSleeperId);
   if (!candidate) {
@@ -417,8 +448,8 @@ export async function calculateLeagueFaab(
   const [projectionRows, accuracy, defense, schedule, valueContext, seasonPoints] =
     await Promise.all([
       loadProjections(supabase, playerIds, league.season, currentWeek, undefined, projectionSource),
-      loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
-      loadDefenseSplits(supabase, scoringBase, defenseSeasons),
+      loadAccuracy(supabase, playerIds, scoringKeysArg(idpReads), projectionSource),
+      loadDefenseSplits(supabase, scoringKeysArg(idpReads), defenseSeasons),
       // A chopped league has no head-to-head question to answer, so the
       // schedule is not read for one. Sleeper publishes placeholder matchup
       // ids for chopped leagues and the old model turned them into a playoff
@@ -458,7 +489,7 @@ export async function calculateLeagueFaab(
     projections.set(row.playerId, byWeek);
   }
 
-  const slots = startingSlots(league.rosterPositions);
+  const slots = startingSlots(league.rosterPositions, idpReads.slotMap);
   if (slots.length === 0) {
     return { ok: false, error: "We could not read this league's starting lineup shape." };
   }
@@ -476,6 +507,7 @@ export async function calculateLeagueFaab(
     defenseSeasons,
     pulseSettings,
     faabInjury: settings.injury,
+    idpEnabled: idpReads.idpEnabled,
   };
 
   // ---- the candidate, projected on exactly the same terms ------------------
@@ -556,6 +588,25 @@ export async function calculateLeagueFaab(
     candidateValue: playerValues.get(candidate.playerId) ?? null,
     isKeeperLeague: valueContext.isKeeperLeague,
     dropGuard: settings.dropGuard,
+    slotMap: idpReads.slotMap,
+    ...(idpReads.idpEnabled
+      ? { candidateEligible: pulseEligibility(candidate.position, candidate.eligible) }
+      : {}),
+    // R-5: in a dynasty or keeper league, a defender the lineup relies on is
+    // never the cut. Built off the roster weeks already projected above.
+    protectedIds: idpReads.loadsDefenders
+      ? protectedDefenderIds({
+          isKeeperLeague: valueContext.isKeeperLeague,
+          slotTokens: slots,
+          slotMap: idpReads.slotMap,
+          roster: [...(rosterMetaById.get(mine.sleeperRosterId)?.keys() ?? [])]
+            .map((playerId) => [...players.values()].find((p) => p.playerId === playerId))
+            .filter((p): p is PlayerRow => Boolean(p))
+            .map((p) => ({ sleeperId: p.playerId, playerId: p.playerId, position: p.position, eligible: p.eligible })),
+          pointsByPlayerWeek: pointsByPlayerWeek(rosterWeeksById.get(mine.sleeperRosterId)),
+          weeks,
+        })
+      : undefined,
   };
 
   // First pass, every week counted equally. The playoff weeks are reweighted
@@ -709,6 +760,10 @@ export async function calculateLeagueFaab(
         candidateByWeek,
         candidatePlayerId: candidate.playerId,
         candidatePosition: candidate.position as PulsePosition,
+        slotMap: idpReads.slotMap,
+        ...(idpReads.idpEnabled
+          ? { candidateEligible: pulseEligibility(candidate.position, candidate.eligible) }
+          : {}),
         rosterMeta: rosterMetaById.get(roster.sleeperRosterId) ?? new Map(),
         mustDrop: false,
       });

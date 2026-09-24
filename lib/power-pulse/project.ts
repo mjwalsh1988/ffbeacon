@@ -17,6 +17,7 @@ import {
   scoreWithFallback,
   type ScoringSettings,
 } from "@/lib/league-scoring";
+import { isDefender } from "@/lib/site";
 import type { PowerPulseSettings } from "./default-settings";
 import { clamp } from "./math";
 import type { AccuracyRow, DefenseRow, ProjectionRow } from "./load";
@@ -367,9 +368,14 @@ export function projectPlayerWeek({
   // map and closestScoringBase is two comparisons, so a parameter would only
   // create a way for a caller to hand this function a base that disagrees with
   // the scoring it is simultaneously being asked to score under.
+  // A defender's volatility is measured under idp123 (plan IDP-303): his
+  // points come from the league's own IDP rules, never from a PPR base, so the
+  // offensive base the league's map is closest to says nothing about him.
   const cv = coefficientOfVariation(subject.position, accuracy, settings, {
     projectedPoints: scored.points,
-    scoringBase: closestScoringBase(scoringSettings),
+    scoringBase: isDefender(subject.position)
+      ? "idp123"
+      : closestScoringBase(scoringSettings),
   });
 
   return {

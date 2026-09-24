@@ -16,7 +16,9 @@ import {
 } from "@/lib/power-pulse/load";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
-import { startingSlots, type LineupCandidate } from "@/lib/power-pulse/lineup";
+import { pulseEligibility, startingSlots, type LineupCandidate } from "@/lib/power-pulse/lineup";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import { simulateWithReplacements, type WeeklyDistribution } from "@/lib/power-pulse/what-if";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
@@ -266,7 +268,19 @@ export async function runUpgradeWhatIf(
   for (let w = currentWeek; w <= lastRegularWeek; w += 1) weeks.push(w);
   if (weeks.length === 0) return { ok: false, reason: "no-season-left" };
 
-  const slots = startingSlots(league.rosterPositions);
+  // The IDP switch, read once (plan R-25). A defensive curve only exists when
+  // it is on, so a defender request against a league without one has already
+  // been refused above as "no-candidates".
+  const pulseSettings = await loadPowerPulseSettings(supabase);
+  const idpReads = idpReadsFor(
+    idpEnabledFrom(pulseSettings),
+    league.rosterPositions,
+    closestScoringBase(league.scoringSettings),
+  );
+  const eligibleOf = (position: PulsePosition, listed: readonly string[] | undefined) =>
+    idpReads.idpEnabled ? { eligible: pulseEligibility(position, listed) } : {};
+
+  const slots = startingSlots(league.rosterPositions, idpReads.slotMap);
   if (slots.length === 0) return { ok: false, reason: "no-candidates" };
 
   // IR and taxi players cannot start, so a cut there frees nothing that
@@ -276,14 +290,15 @@ export async function runUpgradeWhatIf(
   const rosteredSleeperIds = mine.playerSleeperIds.filter((sid) => !ineligible.has(sid));
 
   const allSleeperIds = Array.from(new Set([...rosteredSleeperIds, targetSleeperId]));
-  const players = await loadPlayers(supabase, allSleeperIds);
+  const players = await loadPlayers(supabase, allSleeperIds, {
+    positions: idpReads.candidatePositions,
+  });
   const targetPlayer = players.get(targetSleeperId);
   if (!targetPlayer) return { ok: false, reason: "no-candidates" };
 
   const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(league.season);
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
-  const pulseSettings = await loadPowerPulseSettings(supabase);
 
   // The projection source is resolved, never assumed. See
   // resolveProjectionSourceForWindow in lib/projections/source.ts: it makes no
@@ -299,8 +314,8 @@ export async function runUpgradeWhatIf(
 
   const [projectionRows, accuracy, defense, schedule] = await Promise.all([
     loadProjections(supabase, playerIds, season, currentWeek, undefined, projectionSource),
-    loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
-    loadDefenseSplits(supabase, scoringBase, defenseSeasons),
+    loadAccuracy(supabase, playerIds, scoringKeysArg(idpReads), projectionSource),
+    loadDefenseSplits(supabase, scoringKeysArg(idpReads), defenseSeasons),
     loadSchedule(supabase, leagueRowId, season),
   ]);
 
@@ -343,6 +358,7 @@ export async function runUpgradeWhatIf(
       rosterByWeek.get(week)?.push({
         playerId: player.playerId,
         position: player.position,
+        ...eligibleOf(player.position, player.eligible),
         points: projected.points,
         sigma: projected.sigma,
       });
@@ -388,6 +404,10 @@ export async function runUpgradeWhatIf(
     candidateByWeek,
     candidatePlayerId: targetPlayer.playerId,
     candidatePosition: targetPlayer.position,
+    ...(idpReads.idpEnabled
+      ? { candidateEligible: pulseEligibility(targetPlayer.position, targetPlayer.eligible) }
+      : {}),
+    slotMap: idpReads.slotMap,
     rosterMeta,
     mustDrop,
   });

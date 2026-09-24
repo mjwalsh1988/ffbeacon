@@ -65,7 +65,7 @@ describe("scoring", () => {
   });
 
   it("offers the four presets first, then the reader's leagues", () => {
-    const options = scoringOptions([{ id: "L1", name: "Dynasty Gurus", scoring: { idp_tkl: 1 } }]);
+    const options = scoringOptions([{ id: "L1", sleeperLeagueId: "123", name: "Dynasty Gurus", scoring: { idp_tkl: 1 } }]);
     expect(options.map((o) => o.id)).toEqual(["idp123", "big3", "fantasypros", "espn", "league:L1"]);
     expect(options[4].label).toBe("your league's scoring (Dynasty Gurus)");
   });

@@ -40,6 +40,8 @@ import {
   type LedgerFingerprintInput,
 } from "@/lib/manager-ledger/fingerprint";
 import { planSlots } from "@/lib/manager-ledger/lineup";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
 import {
   buildIneligibleIds,
   loadLedgerDraftPicks,
@@ -200,12 +202,21 @@ function lastPulsedAtAdvanced(row: BackoffRow): boolean {
  * league row. Same key, same invalidation behaviour, a fraction of the cost.
  * Mirrors the split lib/league-positional-war.ts makes for the same reason.
  */
+/** The IDP switch as a boolean. Memoised a minute inside loadPowerPulseSettings. */
+async function ledgerIdpEnabled(supabase: ServiceClient): Promise<boolean> {
+  return idpEnabledFrom(await loadPowerPulseSettings(supabase));
+}
+
 async function buildFingerprintInput(
   supabase: ServiceClient,
   leagueRowId: string,
   league: LedgerLeagueRow,
 ): Promise<LedgerFingerprintInput> {
-  const [weeksRes, rosterRes, txRes, pickRes] = await Promise.all([
+  const [idpEnabled, weeksRes, rosterRes, txRes, pickRes] = await Promise.all([
+    // The IDP switch (plan R-25). It enters the key through `slots` only: with
+    // it on an IDP league's defensive slots become gradable, so its slot list
+    // and fingerprint change; every other league's stay byte-identical.
+    ledgerIdpEnabled(supabase),
     // `week` alone, not the jsonb columns: 216 tiny rows rather than 430 kB.
     supabase
       .from("league_matchups")
@@ -237,7 +248,7 @@ async function buildFingerprintInput(
     gradedWeekCount: weekNumbers.length,
     latestGradedWeek: weekNumbers.length > 0 ? Math.max(...weekNumbers) : 0,
     rosterCount: rosterRes.count ?? 0,
-    slots: planSlots(league.rosterPositions).gradableTokens,
+    slots: planSlots(league.rosterPositions, idpEnabled).gradableTokens,
     transactionCount: txRes.count ?? 0,
     draftPickCount: pickRes.count ?? 0,
     modelVersion: MANAGER_LEDGER_MODEL_VERSION,
@@ -662,6 +673,7 @@ export async function calculateLeagueManagerLedger(
   const computed = computeLedger({
     season: ctx.league.season,
     rosterPositions: ctx.league.rosterPositions,
+    idpEnabled: await ledgerIdpEnabled(supabase),
     rosters: ctx.rosters.map((r) => ({
       sleeperRosterId: r.sleeperRosterId,
       teamName: r.teamName,

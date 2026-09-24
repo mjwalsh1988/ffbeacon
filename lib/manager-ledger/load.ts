@@ -368,7 +368,7 @@ export async function loadLedgerPlayers(
   const rows = await loadPlayers(supabase, [...ids], { positions: NAMING_POSITIONS });
   const out = new Map<string, LedgerPlayer>();
   for (const [sleeperId, row] of rows) {
-    out.set(sleeperId, { sleeperId, name: row.name, position: row.position });
+    out.set(sleeperId, { sleeperId, name: row.name, position: row.position, eligible: row.eligible });
   }
   return out;
 }

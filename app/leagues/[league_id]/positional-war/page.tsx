@@ -32,7 +32,8 @@ import { UpgradeWhatIfPanel } from "@/components/league-war/upgrade-panel";
 import { matchViewerRoster } from "@/lib/league-viewer";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
-import { loadViewerCandidates } from "@/lib/league-positional-war-data";
+import { loadPositionalWarView, loadViewerCandidates } from "@/lib/league-positional-war-data";
+import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import { resolveUpgradePanelAvailability } from "@/lib/positional-war/upgrade";
 import type { SleeperLeague } from "@/lib/sleeper";
 
@@ -376,11 +377,20 @@ async function UpgradeWhatIfSection({
   );
   if (viewerRosterId === null) return null;
 
-  const availability = await resolveUpgradePanelAvailability(supabase, {
-    leagueRowId,
-    season,
-    viewerRosterId,
-  });
+  // The same cache()-wrapped read the chart panel makes, so this costs no
+  // second query. The dropdown offers exactly the positions with a curve.
+  const [availability, view] = await Promise.all([
+    resolveUpgradePanelAvailability(supabase, {
+      leagueRowId,
+      season,
+      viewerRosterId,
+    }),
+    loadPositionalWarView(supabase, leagueRowId, season),
+  ]);
+  const curvePositions = new Set(
+    (view?.curves ?? []).filter((c) => c.curve.length > 0).map((c) => c.position),
+  );
+  const positions = PULSE_POSITIONS.filter((p) => curvePositions.has(p));
 
   return (
     <UpgradeWhatIfPanel
@@ -389,6 +399,7 @@ async function UpgradeWhatIfSection({
       searchedUsername={searchedUsername}
       focusedRosterId={focusedRosterId}
       availability={availability}
+      positions={positions.length > 0 ? positions : undefined}
     />
   );
 }

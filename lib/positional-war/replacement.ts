@@ -16,13 +16,26 @@
  * DIFFERENT metric under the same name (the team-specific "what does losing
  * this player cost" metric, which belongs in Trade Ideas, not here).
  *
- * Ordering invariant this module relies on and the tests assert: because
- * buildOptimalLineup offers candidates in descending points and admits via
- * augmenting paths, and two players at the same position share slot
- * eligibility, the seated players at any one position are exactly the top k
- * of that position by points. So `max(benched at pos) <= min(seated at pos)`
- * always, and `replacement(pos) = max(benched at pos)` is the same quantity as
- * "the (seatedCount + 1)-th best player at that position".
+ * Ordering invariant this module relies on and the tests assert:
+ * `max(benched eligible for pos) <= min(seated as pos)`, always. It is an
+ * exchange argument on an optimal fill, not a property of the greedy order: if
+ * a benched player who could fill a pos slot outscored someone seated AS pos,
+ * swapping the two would raise the total, so the fill was not optimal.
+ *
+ * Two bookkeeping rules make that hold once a player can list more than one
+ * position (plan R-3, IDP-308; only ever the case with the IDP switch on):
+ *
+ *   - A SEATED player is counted at the position he was seated AS
+ *     (LineupSlot.playedAs). A DL/LB player in an LB slot is an LB seat.
+ *   - A BENCHED player is counted at EVERY position he is eligible for,
+ *     because he is the replacement option at each of them.
+ *
+ * With the switch off no candidate carries an eligibility list, playedAs is
+ * always the primary and each benched player lands in one bucket, which is
+ * exactly the bookkeeping this module did before. Then `replacement(pos) =
+ * max(benched at pos)` is also "the (seatedCount + 1)-th best player at that
+ * position"; with dual eligibility it is the best player who could have filled
+ * a pos slot and was left out, which is what replacement means.
  *
  * REPLACEMENT IS DEFINED PER POSITION (definition A), not per slot (B) and not
  * by rerunning the fill with a player removed (C). B is not comparable across
@@ -36,7 +49,12 @@
  * the league runs deep flex. No positional special case is required.
  */
 
-import { buildOptimalLineup, type LineupCandidate } from "@/lib/power-pulse/lineup";
+import {
+  buildOptimalLineup,
+  pulseEligibility,
+  type LineupCandidate,
+  type SlotEligibilityMap,
+} from "@/lib/power-pulse/lineup";
 import { PULSE_POSITIONS, PULSE_SLOT_ELIGIBILITY, type PulsePosition } from "@/lib/power-pulse/types";
 import type { WarPlayerInput } from "./types";
 
@@ -44,9 +62,9 @@ import type { WarPlayerInput } from "./types";
 export type MergedFill = {
   /** null for the structural (bye-free) fill. */
   week: number | null;
-  /** Seated players' points, grouped by the position they actually play. */
+  /** Seated players' points, grouped by the position they were seated AS. */
   seatedByPosition: Map<PulsePosition, number[]>;
-  /** Benched players' points, grouped by the position they actually play. */
+  /** Benched players' points, at every position each one is eligible for. */
   benchedByPosition: Map<PulsePosition, number[]>;
   /** League-average optimal lineup total: sum of seated points / teamCount. */
   muRef: number;
@@ -68,14 +86,20 @@ export function buildMergedFill(params: {
   teamCount: number;
   candidates: LineupCandidate[];
   week: number | null;
+  /** The slot map in force. Defaults to the OFF map (plan R-25). */
+  eligibility?: SlotEligibilityMap;
 }): MergedFill {
   const { slots, teamCount, candidates, week } = params;
 
   const leagueWideSlots = Array.from({ length: teamCount }, () => slots).flat();
-  const fill = buildOptimalLineup(leagueWideSlots, candidates);
+  const fill = buildOptimalLineup(
+    leagueWideSlots,
+    candidates,
+    params.eligibility ?? PULSE_SLOT_ELIGIBILITY,
+  );
 
-  // buildOptimalLineup's LineupSlot carries only the seated player's id and
-  // points/sigma, not his position, so recover it from the candidate list.
+  // playedAs is the position the seat is credited to (plan R-3). The primary
+  // from the candidate list is the fallback for a slot that somehow lacks it.
   const positionById = new Map(candidates.map((c) => [c.playerId, c.position]));
 
   const seatedByPosition = new Map<PulsePosition, number[]>();
@@ -85,7 +109,7 @@ export function buildMergedFill(params: {
     if (slot.playerId === null) continue;
     sumPoints += slot.points;
     sumSigmaSq += slot.sigma * slot.sigma;
-    const position = positionById.get(slot.playerId);
+    const position = slot.playedAs ?? positionById.get(slot.playerId);
     if (!position) continue;
     const bucket = seatedByPosition.get(position);
     if (bucket) bucket.push(slot.points);
@@ -94,9 +118,16 @@ export function buildMergedFill(params: {
 
   const benchedByPosition = new Map<PulsePosition, number[]>();
   for (const candidate of fill.benched) {
-    const bucket = benchedByPosition.get(candidate.position);
-    if (bucket) bucket.push(candidate.points);
-    else benchedByPosition.set(candidate.position, [candidate.points]);
+    // His primary, then any other position he is eligible for. A candidate with
+    // no list (every one while the switch is off) lands in one bucket only.
+    const positions = candidate.eligible?.length
+      ? pulseEligibility(candidate.position, candidate.eligible)
+      : [candidate.position];
+    for (const position of positions) {
+      const bucket = benchedByPosition.get(position);
+      if (bucket) bucket.push(candidate.points);
+      else benchedByPosition.set(position, [candidate.points]);
+    }
   }
 
   const muRef = teamCount > 0 ? sumPoints / teamCount : 0;
@@ -156,7 +187,7 @@ export function positionWeekStats(fill: MergedFill, position: PulsePosition): Po
  */
 export function startablePositions(
   slots: string[],
-  eligibility: Record<string, PulsePosition[]> = PULSE_SLOT_ELIGIBILITY,
+  eligibility: SlotEligibilityMap = PULSE_SLOT_ELIGIBILITY,
 ): PulsePosition[] {
   const positions = new Set<PulsePosition>();
   for (const slot of slots) {
@@ -176,6 +207,8 @@ export function startablePositions(
 export function structuralCandidates(
   players: WarPlayerInput[],
   weeks: number[],
+  /** Carry each player's eligibility list (only with the IDP switch on). */
+  withEligibility = false,
 ): LineupCandidate[] {
   const candidates: LineupCandidate[] = [];
   for (const player of players) {
@@ -193,6 +226,9 @@ export function structuralCandidates(
     candidates.push({
       playerId: player.playerId,
       position: player.position,
+      ...(withEligibility && player.eligible
+        ? { eligible: pulseEligibility(player.position, player.eligible) }
+        : {}),
       points: sumPoints / count,
       sigma: sumSigma / count,
     });

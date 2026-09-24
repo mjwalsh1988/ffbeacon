@@ -14,6 +14,8 @@ import {
   type ProjectionRow,
 } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
@@ -179,8 +181,11 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
     // THE SLOT LIST IS POSITIONALLY ALIGNED TO SLEEPER'S OWN ARRAY, so an
     // unfilled slot leaves a gap rather than shifting everybody below it up
     // one. Same list, same reason, as the board itself.
-    const slots = alignedStartingSlots(league.rosterPositions);
     const scoringBase = closestScoringBase(league.scoringSettings);
+    // The IDP switch (plan R-25): with it on, a defensive slot is projected
+    // here too, so "projected" and "scored" count the same starters.
+    const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
+    const slots = alignedStartingSlots(league.rosterPositions, idpReads.slotMap);
     const defenseSeasons = defenseSeasonsFor(season);
 
     const startersByWeek = new Map<number, (string | null)[]>();
@@ -221,9 +226,9 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
       // nothing from wave 1 beyond what is already in hand, so waiting for the
       // player lookup before starting them spent a round trip on nothing.
       const [players, defense, resolvedSource] = await Promise.all([
-        // Named, not projected (plan IDP-122).
+        // Every defender is named (plan IDP-122); projected only with the switch on.
         loadPlayers(admin, [...sleeperIds], { positions: NAMING_POSITIONS }),
-        loadDefenseSplits(admin, scoringBase, defenseSeasons),
+        loadDefenseSplits(admin, scoringKeysArg(idpReads), defenseSeasons),
         resolveProjectionSourceForWindow({
           supabase: admin,
           season,
@@ -233,12 +238,12 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
         }),
       ]);
       projectionSource = resolvedSource;
-      const playerIds = projectablePlayerIds(players);
+      const playerIds = projectablePlayerIds(players, idpReads.loadsDefenders);
 
       if (playerIds.length > 0) {
         const [projectionRows, accuracy] = await Promise.all([
           loadProjections(admin, playerIds, season, 1, lastWeek, projectionSource),
-          loadAccuracy(admin, playerIds, scoringBase, projectionSource),
+          loadAccuracy(admin, playerIds, scoringKeysArg(idpReads), projectionSource),
         ]);
 
         const byPlayerWeek = new Map<string, ProjectionRow>();

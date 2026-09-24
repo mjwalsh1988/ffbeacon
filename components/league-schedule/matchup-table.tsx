@@ -225,9 +225,10 @@ export function MatchupTable({
   const rows = groupRows(pairSlots(home, away));
   const colCount = away ? 3 : 2;
 
-  // Slots the league runs that Sleeper publishes no projections for. Counted
+  // Slots the league runs that League Pulse does not project: the defensive
+  // slots while the IDP switch is off, and any token nobody projects. Counted
   // from the slot definitions rather than from the filled players, because an
-  // empty IDP slot is still a slot the totals cannot include.
+  // empty slot is still a slot the totals cannot include.
   const unprojectableSlots = home.slots.filter((entry) => !entry.slot.projectable).length;
   const unprojectedNote = unprojectedFilledNote(home, away);
 
@@ -411,9 +412,9 @@ export function MatchupTable({
                   colSpan={colCount}
                   className="px-2 py-2 text-[11px] leading-relaxed text-ink-muted"
                 >
-                  Totals exclude {unprojectableSlots} IDP{" "}
-                  {unprojectableSlots === 1 ? "slot" : "slots"}, which Sleeper does not
-                  publish projections for.
+                  Totals exclude {unprojectableSlots}{" "}
+                  {unprojectableSlots === 1 ? "slot" : "slots"} League Pulse does not
+                  project.
                 </td>
               </tr>
             )}

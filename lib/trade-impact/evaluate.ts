@@ -1,9 +1,10 @@
 import "server-only";
+import { isDefender } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import type { LineupCandidate } from "@/lib/power-pulse/lineup";
-import { buildOptimalLineup, startingSlots } from "@/lib/power-pulse/lineup";
+import { buildOptimalLineup, pulseEligibility, startingSlots } from "@/lib/power-pulse/lineup";
 import { winProbability } from "@/lib/power-pulse/math";
 import {
   simulateWithReplacements,
@@ -335,6 +336,9 @@ function buildRosterWeeks(
       byWeek.get(week)?.push({
         playerId: player.playerId,
         position: player.position,
+        ...(world.idpReads?.idpEnabled
+          ? { eligible: pulseEligibility(player.position, player.eligible) }
+          : {}),
         points: projected.points,
         sigma: projected.sigma,
       });
@@ -438,6 +442,9 @@ function buildIncomingWeeks(
       byWeek.get(week)?.push({
         playerId: player.playerId,
         position: player.position,
+        ...(world.idpReads?.idpEnabled
+          ? { eligible: pulseEligibility(player.position, player.eligible) }
+          : {}),
         points: projected.points,
         sigma: projected.sigma,
       });
@@ -606,10 +613,11 @@ export async function evaluateValidatedTrade(
     return { ok: false, error: "One of those teams is not in this league." };
   }
 
-  // Only slots the projection model can fill. IDP slots are dropped for the same
-  // reason Power Pulse drops them: nothing is published for them, and filling
-  // them with zero would drag every team toward a floor no roster can reach.
-  const slots = startingSlots(world.league.rosterPositions);
+  // Only slots the projection model can fill, under the slot map the IDP switch
+  // chose (plan R-25). Off, defensive slots are dropped for the same reason
+  // Power Pulse drops them: filling them with zero would drag every team toward
+  // a floor no roster can reach. On, they are filled with projected defenders.
+  const slots = startingSlots(world.league.rosterPositions, world.idpReads?.slotMap);
   const weeks = world.remainingWeeks;
 
   const outgoingPlayerIds = outgoing
@@ -637,6 +645,7 @@ export async function evaluateValidatedTrade(
 
   const mineSwap = computeRosterSwap({
     slots,
+    slotMap: world.idpReads?.slotMap,
     weeks,
     rosterByWeek: mineBefore,
     incomingByWeek: incomingWeeks,
@@ -644,6 +653,7 @@ export async function evaluateValidatedTrade(
   });
   const theirSwap = computeRosterSwap({
     slots,
+    slotMap: world.idpReads?.slotMap,
     weeks,
     rosterByWeek: theirBefore,
     incomingByWeek: outgoingWeeks,
@@ -820,6 +830,12 @@ export async function evaluateValidatedTrade(
       return weakest ? { ...weakest, label: slotLabel(weakest.label) } : null;
     })(),
     depthCost: depthCostOf(mineImpact.positionBefore, mineImpact.positionAfter),
+    // Only when defenders are lineup candidates here. With the switch off a
+    // defender is never loaded, so he adds no wins either, and "judged on
+    // projected wins only" would describe a judgement that was not made.
+    unpricedDefenders: world.idpReads?.loadsDefenders
+      ? [...incoming, ...outgoing].filter((a) => a.kind === "player" && isDefender(a.position)).length
+      : 0,
   };
 
   const unpricedNames = [...incoming, ...outgoing]

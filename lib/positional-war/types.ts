@@ -139,11 +139,16 @@ export type PositionCurve = PlottableCurve & {
 /** The league facts the engine needs. No roster, by design. */
 export type WarLeagueInput = {
   season: number;
-  /** Startable slot tokens for ONE team, from startingSlots(). */
+  /** Startable slot tokens for ONE team, from startingSlots() under the same map. */
   slots: string[];
   teamCount: number;
   fromWeek: number;
   toWeek: number;
+  /**
+   * The IDP switch, read once by the orchestrator (plan R-25). Absent or false:
+   * the OFF slot map, exactly the model that ran before defenders existed.
+   */
+  idpEnabled?: boolean;
 };
 
 /** One projectable player in the universe, with his week-by-week output. */
@@ -156,6 +161,12 @@ export type WarPlayerInput = {
   position: PulsePosition;
   /** Sleeper's injury designation, verbatim. Null when healthy. */
   injuryStatus: string | null;
+  /**
+   * Every position he may be seated as. Present only with defenders in the
+   * universe (plan R-3): he is still drawn on ONE curve, his primary's, but a
+   * DL/LB player can fill an LB slot and counts toward LB replacement.
+   */
+  eligible?: readonly string[];
   /**
    * Keyed by week. A missing week is a bye or an unpublished projection and
    * contributes nothing. It is never a zero: a zero would drag his average down

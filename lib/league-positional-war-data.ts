@@ -23,7 +23,6 @@
  * key and silently turn every shared read back into two.
  */
 
-import { OFFENSE_POSITIONS } from "@/lib/site";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -89,12 +88,15 @@ function decodeCurvePoints(json: Json): WarCurvePoint[] {
 }
 
 /**
- * The page reads the offense curve only until the Offense and Defense charts
- * land (plan R-10, IDP-309). A cache row at DL, LB or DB cannot exist while
- * the IDP switch is off; pinning it here keeps the page six-wide either way.
+ * Any of the nine. A cache row at DL, LB or DB exists only once the IDP switch
+ * has produced a defensive curve for a league that starts defenders (plan
+ * IDP-309); turning the switch off changes that league's fingerprint, and the
+ * recompute prunes the defensive rows (lib/positional-war/share.ts
+ * writeLeagueCache). The page draws them as a separate Defense chart.
  */
+const CURVE_POSITIONS = new Set<string>(PULSE_POSITIONS);
 function isPulsePosition(value: string): value is PulsePosition {
-  return (OFFENSE_POSITIONS as readonly string[]).includes(value);
+  return CURVE_POSITIONS.has(value);
 }
 
 type WarCacheRow = Database["public"]["Tables"]["league_positional_war_cache"]["Row"];

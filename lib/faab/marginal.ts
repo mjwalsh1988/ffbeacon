@@ -22,6 +22,7 @@ import {
   buildOptimalLineup,
   lineupSigma,
   type LineupCandidate,
+  type SlotEligibilityMap,
 } from "@/lib/power-pulse/lineup";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import type {
@@ -50,6 +51,23 @@ export type LineupSwapInput = {
   candidateByWeek: Map<number, CandidateWeek>;
   candidatePlayerId: string;
   candidatePosition: PulsePosition;
+  /**
+   * Every position the candidate may be seated as (plan R-3). Set only with the
+   * IDP switch on; absent, his primary alone, as before.
+   */
+  candidateEligible?: readonly PulsePosition[];
+  /**
+   * The slot map the lineups are filled with, from the IDP switch (plan R-25).
+   * Absent: the OFF map, exactly as before the switch existed.
+   */
+  slotMap?: SlotEligibilityMap;
+  /**
+   * Rostered players never named as the cut, by FF Beacon player id (plan R-5):
+   * in a dynasty or keeper league, the defenders the lineup relies on. No value
+   * source prices a defender, so the value guard below would otherwise sort
+   * every one of them to the bottom and offer a starting linebacker first.
+   */
+  protectedIds?: ReadonlySet<string>;
   /** Names for whoever we would suggest dropping. */
   rosterMeta: Map<string, RosterMetaEntry>;
   /**
@@ -153,6 +171,7 @@ function withCandidate(
     {
       playerId: input.candidatePlayerId,
       position: input.candidatePosition,
+      ...(input.candidateEligible ? { eligible: input.candidateEligible } : {}),
       points: own.points,
       sigma: own.sigma,
     },
@@ -200,6 +219,25 @@ function valueOf(values: Map<string, number | null> | undefined, id: string): nu
  * meaningful top and bottom.
  */
 function eligibleForDrop(
+  input: LineupSwapInput,
+  ids: string[],
+): { eligible: Set<string>; refused: string[] } {
+  // THE DEFENDER GUARD FIRST (plan R-5), whatever the value guard decides.
+  // It stands on its own because it does not depend on market values at all.
+  const shielded = input.protectedIds;
+  if (shielded && shielded.size > 0) {
+    const open = ids.filter((id) => !shielded.has(id));
+    const inner = eligibleForDropByValue(input, open);
+    return {
+      eligible: inner.eligible,
+      refused: [...ids.filter((id) => shielded.has(id)), ...inner.refused],
+    };
+  }
+  return eligibleForDropByValue(input, ids);
+}
+
+/** The value guards, unchanged from before the defender guard existed. */
+function eligibleForDropByValue(
   input: LineupSwapInput,
   ids: string[],
 ): { eligible: Set<string>; refused: string[] } {
@@ -288,8 +326,8 @@ function chooseDrop(input: LineupSwapInput): {
   // produced. When there is no healthy board the two are the same map and the
   // second pass is the same numbers twice, which is cheap enough to be worth
   // the simpler code.
-  const byRanking = scoreRemovals(slots, weeks, ranking, ids);
-  const byReality = scoreRemovals(slots, weeks, input.rosterByWeek, ids);
+  const byRanking = scoreRemovals(slots, weeks, ranking, ids, input.slotMap);
+  const byReality = scoreRemovals(slots, weeks, input.rosterByWeek, ids, input.slotMap);
 
   // The two boards do different jobs, and keeping them apart is what makes the
   // list both safe and readable.
@@ -363,11 +401,13 @@ function chooseDrop(input: LineupSwapInput): {
       const projectsFor = passedMeta?.injuryStatus
         ? `${passedName} projects for nothing while he is on ${passedMeta.injuryStatus}`
         : `${passedName} projects for the least of anyone here`;
-      const because = refusedSet.has(naive.id)
-        ? input.isKeeperLeague
-          ? "but you keep this team, and he is nowhere near the bottom of it"
-          : "but the market still rates him above this claim"
-        : "but he is only projecting low because he is hurt";
+      const because = input.protectedIds?.has(naive.id)
+        ? "but your lineup starts him most weeks, and no value source prices defensive players to say otherwise"
+        : refusedSet.has(naive.id)
+          ? input.isKeeperLeague
+            ? "but you keep this team, and he is nowhere near the bottom of it"
+            : "but the market still rates him above this claim"
+          : "but he is only projecting low because he is hurt";
       notes.push(`${projectsFor}, ${because}, so we left him off this list.`);
     }
   }
@@ -411,10 +451,11 @@ function scoreRemovals(
   weeks: number[],
   board: Map<number, LineupCandidate[]>,
   ids: string[],
+  slotMap?: SlotEligibilityMap,
 ): Map<string, Scored> {
   const base = new Map<number, number>();
   for (const week of weeks) {
-    base.set(week, buildOptimalLineup(slots, board.get(week) ?? []).total);
+    base.set(week, buildOptimalLineup(slots, board.get(week) ?? [], slotMap).total);
   }
 
   const out = new Map<string, Scored>();
@@ -430,7 +471,7 @@ function scoreRemovals(
         rawWeeks += 1;
       }
       const without = candidates.filter((c) => c.playerId !== id);
-      const reduced = buildOptimalLineup(slots, without).total;
+      const reduced = buildOptimalLineup(slots, without, slotMap).total;
       costs.push(Math.max(0, (base.get(week) ?? 0) - reduced));
     }
     out.set(id, {
@@ -456,7 +497,7 @@ export function computeLineupSwap(input: LineupSwapInput): LineupSwapResult {
 
   // Pass one: the team as it stands. The drop search is measured against these.
   for (const week of weeks) {
-    const lineup = buildOptimalLineup(slots, rosterByWeek.get(week) ?? []);
+    const lineup = buildOptimalLineup(slots, rosterByWeek.get(week) ?? [], input.slotMap);
     baseTotals.set(week, lineup.total);
     weeklyBefore.set(week, { mean: lineup.total, sigma: lineupSigma(lineup.slots) });
   }
@@ -482,7 +523,7 @@ export function computeLineupSwap(input: LineupSwapInput): LineupSwapResult {
     const roster = rosterByWeek.get(week) ?? [];
 
     // Gross: what he adds before anything is cut. This is his own contribution.
-    const gross = buildOptimalLineup(slots, withCandidate(roster, input, week));
+    const gross = buildOptimalLineup(slots, withCandidate(roster, input, week), input.slotMap);
 
     // Net: the same lineup, after the player you would actually cut is gone.
     // When no cut is required the two are the same build.
@@ -494,6 +535,7 @@ export function computeLineupSwap(input: LineupSwapInput): LineupSwapResult {
             input,
             week,
           ),
+          input.slotMap,
         )
       : gross;
 

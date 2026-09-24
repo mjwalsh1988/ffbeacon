@@ -8,6 +8,8 @@ import {
   isValidLeagueId,
   toPositionCurves,
   buildLegendRows,
+  hasDefensiveCurve,
+  DEFENSIVE_CURVE_NOTE,
   buildWarSvg,
   svgToDataUri,
   buildHeadline,
@@ -109,6 +111,7 @@ export async function GET(
   const chartDataUri = svgToDataUri(svg);
   const legendRows = buildLegendRows(curves);
   const headline = buildHeadline(curves) ?? "Positional WAR is still calculating.";
+  const defensiveNote = hasDefensiveCurve(cacheRows ?? []) ? DEFENSIVE_CURVE_NOTE : null;
   const { BG, BG_BASE, INK, INK_MUTED, INK_SUBTLE, PURPLE, CYAN } = BRAND;
 
   return new ImageResponse(
@@ -204,6 +207,9 @@ export async function GET(
 
         {/* Deterministic headline, matching the rail summary's template */}
         <p style={{ fontSize: 20, color: INK, margin: "14px 0 0 0", fontWeight: 600 }}>{headline}</p>
+        {defensiveNote && (
+          <p style={{ fontSize: 16, color: INK_MUTED, margin: "6px 0 0 0" }}>{defensiveNote}</p>
+        )}
 
         {/* Footer URL */}
         <p

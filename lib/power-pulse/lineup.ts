@@ -27,30 +27,70 @@
 
 import {
   NON_STARTING_SLOTS,
+  PULSE_POSITIONS,
   PULSE_SLOT_ELIGIBILITY,
   type LineupSlot,
   type PulsePosition,
 } from "./types";
 
+/** A slot map: roster_positions token to the positions that may fill it. */
+export type SlotEligibilityMap = Readonly<Record<string, readonly PulsePosition[]>>;
+
 /** A candidate for a starting slot in one specific week. */
 export type LineupCandidate = {
   playerId: string;
   position: PulsePosition;
+  /**
+   * Every position he may be seated as (players.eligible_positions, plan R-2).
+   * Absent means his primary only, which is every candidate built while the
+   * IDP switch is off: callers set this only when they pass the IDP map, so
+   * the OFF path seats exactly the candidates it always did.
+   */
+  eligible?: readonly PulsePosition[];
   points: number;
   sigma: number;
 };
 
+const PULSE_POSITION_SET = new Set<string>(PULSE_POSITIONS);
+
+/**
+ * A player row's eligibility as positions the optimiser understands: his
+ * primary first, then every other listed position that is a PulsePosition.
+ * Anything else Sleeper lists (OL, LS) is dropped. Pure, so the engines and
+ * the what-if dialog agree on who can play where.
+ */
+export function pulseEligibility(
+  primary: PulsePosition,
+  listed: readonly string[] | null | undefined,
+): PulsePosition[] {
+  const out: PulsePosition[] = [primary];
+  for (const raw of listed ?? []) {
+    const code = raw.toUpperCase();
+    if (!PULSE_POSITION_SET.has(code)) continue;
+    if (!out.includes(code as PulsePosition)) out.push(code as PulsePosition);
+  }
+  return out;
+}
+
 /**
  * Expand a league's roster_positions array into the startable slots, dropping
- * bench, IR, and taxi. Unknown tokens (individual defensive slots in an IDP
- * league) are dropped too: we cannot project them, and filling them with zero
- * would drag every team's projected score toward an unreachable floor.
+ * bench, IR, and taxi. Tokens the slot map cannot fill are dropped too: with
+ * the IDP switch off that is every defensive slot (DL, LB, DB, IDP_FLEX), and
+ * with it on only a token nobody publishes projections for (EDGE, say).
+ * Filling a slot we cannot project with zero would drag every team's
+ * projected score toward an unreachable floor.
+ *
+ * The map defaults to the OFF map, so every caller written before the switch
+ * reads exactly what it always did.
  */
-export function startingSlots(rosterPositions: string[]): string[] {
+export function startingSlots(
+  rosterPositions: string[],
+  eligibility: SlotEligibilityMap = PULSE_SLOT_ELIGIBILITY,
+): string[] {
   const out: string[] = [];
   for (const token of rosterPositions) {
     if (NON_STARTING_SLOTS.has(token)) continue;
-    const eligible = PULSE_SLOT_ELIGIBILITY[token];
+    const eligible = eligibility[token];
     if (!eligible || eligible.length === 0) continue;
     out.push(token);
   }
@@ -58,12 +98,11 @@ export function startingSlots(rosterPositions: string[]): string[] {
 }
 
 /** How many startable slots a league runs. Used for depth math. */
-export function countStartingSlots(rosterPositions: string[]): number {
-  return startingSlots(rosterPositions).length;
-}
-
-function eligibleFor(slot: string): PulsePosition[] {
-  return PULSE_SLOT_ELIGIBILITY[slot] ?? [];
+export function countStartingSlots(
+  rosterPositions: string[],
+  eligibility: SlotEligibilityMap = PULSE_SLOT_ELIGIBILITY,
+): number {
+  return startingSlots(rosterPositions, eligibility).length;
 }
 
 /**
@@ -76,8 +115,11 @@ function eligibleFor(slot: string): PulsePosition[] {
 export function buildOptimalLineup(
   slots: string[],
   candidates: LineupCandidate[],
+  eligibility: SlotEligibilityMap = PULSE_SLOT_ELIGIBILITY,
 ): { slots: LineupSlot[]; total: number; benched: LineupCandidate[] } {
-  const slotEligibility = slots.map((slot) => eligibleFor(slot));
+  const slotEligibility: PulsePosition[][] = slots.map((slot) => [
+    ...(eligibility[slot] ?? []),
+  ]);
   /** slot index to the candidate currently holding it. */
   const occupant: (LineupCandidate | null)[] = slots.map(() => null);
 
@@ -105,6 +147,41 @@ export function buildOptimalLineup(
   const NO_SLOTS: number[] = [];
 
   /**
+   * Slot indices a CANDIDATE can occupy: the union of his eligible positions'
+   * buckets, ascending. A candidate with no eligibility list (every candidate
+   * while the IDP switch is off) reads his primary's bucket directly, the
+   * exact array the fill used before multi-eligibility existed. A dual-eligible
+   * one is memoised by his sorted list, so the augmenting paths stay as cheap
+   * as the single-position lookup above. Kuhn's algorithm is unchanged and
+   * stays exact: eligibility is still a fixed set of slots per candidate.
+   */
+  const unionCache = new Map<string, number[]>();
+  const slotsFor = (candidate: LineupCandidate): number[] => {
+    const list = candidate.eligible;
+    if (
+      !list ||
+      list.length === 0 ||
+      (list.length === 1 && list[0] === candidate.position)
+    ) {
+      return slotsByPosition.get(candidate.position) ?? NO_SLOTS;
+    }
+    const all = list.includes(candidate.position)
+      ? list
+      : [candidate.position, ...list];
+    const key = [...all].sort().join("|");
+    const cached = unionCache.get(key);
+    if (cached) return cached;
+    const merged = new Set<number>();
+    for (const position of all) {
+      for (const index of slotsByPosition.get(position) ?? NO_SLOTS)
+        merged.add(index);
+    }
+    const out = [...merged].sort((a, b) => a - b);
+    unionCache.set(key, out);
+    return out;
+  };
+
+  /**
    * Which attempt last visited each slot. A plain stamp array replaces the
    * per-candidate Set<number>: one allocation for the whole fill instead of
    * one per offer, and an integer compare instead of a hash lookup. Attempt
@@ -118,7 +195,7 @@ export function buildOptimalLineup(
    * The stamp guards against revisiting a slot within one attempt.
    */
   const seat = (candidate: LineupCandidate): boolean => {
-    const eligibleSlots = slotsByPosition.get(candidate.position) ?? NO_SLOTS;
+    const eligibleSlots = slotsFor(candidate);
     for (const slotIndex of eligibleSlots) {
       if (visitedStamp[slotIndex] === attempt) continue;
       visitedStamp[slotIndex] = attempt;
@@ -148,6 +225,7 @@ export function buildOptimalLineup(
       slot: slots[i],
       eligible: slotEligibility[i],
       playerId: holder?.playerId ?? null,
+      playedAs: holder ? playedAsFor(holder, slotEligibility[i]) : null,
       points: holder?.points ?? 0,
       sigma: holder?.sigma ?? 0,
     });
@@ -155,6 +233,23 @@ export function buildOptimalLineup(
 
   const benched = candidates.filter((c) => !seated.has(c.playerId));
   return { slots: filled, total, benched };
+}
+
+/**
+ * The position a seated player is credited to (plan R-3): his primary when the
+ * slot takes it (so IDP_FLEX credits a linebacker as a linebacker), otherwise
+ * the first of his other eligible positions the slot takes. A DL/LB player
+ * seated in an LB slot is credited to LB.
+ */
+export function playedAsFor(
+  holder: LineupCandidate,
+  slotTakes: readonly PulsePosition[],
+): PulsePosition {
+  if (slotTakes.includes(holder.position)) return holder.position;
+  for (const position of holder.eligible ?? []) {
+    if (slotTakes.includes(position)) return position;
+  }
+  return holder.position;
 }
 
 /**

@@ -176,6 +176,25 @@ export type PowerPulseSettings = {
    * `minWeeks` exist to bound both. Bump `modelVersion` when changing any of
    * this, so every league rescores rather than serving a mix.
    */
+  /**
+   * The IDP switch (plan R-25). While false, every League Pulse model seats,
+   * projects and grades exactly the players it did before defenders existed
+   * here: offense, kickers and team defenses, with DL, LB, DB and IDP_FLEX
+   * slots left unfilled. While true, those slots are filled with defenders
+   * projected under the league's own IDP scoring.
+   *
+   * Read ONCE per request by a server loader and passed down as a plain
+   * boolean (`idpEnabled`, see idpEnabledFrom below). No pure or client module
+   * reads this document, so a false switch reaches the engines as the very
+   * same slot map object they used before the switch existed. Turning it on
+   * changes the stored document, which changes the effective model version,
+   * so every league rescores on its next view; only leagues that start
+   * defenders get a different answer.
+   */
+  idp: {
+    enabled: boolean;
+  };
+
   lineupRealism: {
     /** Nothing changes until this is true. */
     enabled: boolean;
@@ -521,6 +540,10 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
     seed: 20260801,
   },
 
+  idp: {
+    enabled: false,
+  },
+
   lineupRealism: {
     enabled: false,
     blend: 0.5,
@@ -675,6 +698,7 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
       },
     },
     simulation: obj("simulation", base.simulation),
+    idp: obj("idp", base.idp),
     lineupRealism: obj("lineupRealism", base.lineupRealism),
     display: obj("display", base.display),
     war: obj("war", base.war),
@@ -684,4 +708,13 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
     // position from.
     beaconProjections: mergeProjectionSettings(s.beaconProjections),
   };
+}
+
+/**
+ * The IDP switch as the plain boolean every server loader passes down (plan
+ * R-25). Strictly true: a stored document holding anything other than the
+ * literal true leaves the switch off.
+ */
+export function idpEnabledFrom(settings: Pick<PowerPulseSettings, "idp">): boolean {
+  return settings.idp?.enabled === true;
 }

@@ -11,16 +11,22 @@
  * one bug this module exists to prevent.
  *
  * This deliberately DIFFERS from `startingSlots()` in lib/power-pulse/lineup.ts,
- * which additionally drops the tokens it cannot project (the IDP slots). Power
- * Pulse is right to drop them: filling an IDP slot with zero would pull every
- * team's projected score toward a floor no team can reach. The Schedule view is
- * right to keep them: it renders the lineup a human set, and a lineup missing
- * three linebackers is not that lineup. Two callers, two correct answers, two
- * functions. Do not unify them.
+ * which additionally drops the tokens it cannot project (the IDP slots while
+ * the IDP switch is off, and any token nobody projects, like EDGE, always).
+ * Power Pulse is right to drop them: filling such a slot with zero would pull
+ * every team's projected score toward a floor no team can reach. The Schedule
+ * view is right to keep them: it renders the lineup a human set, and a lineup
+ * missing three linebackers is not that lineup. Two callers, two correct
+ * answers, two functions. Do not unify them.
+ *
+ * Whether a kept slot is PROJECTABLE follows the same slot map the optimiser
+ * reads, passed in by the server loader (plan R-25). It defaults to the OFF
+ * map, so a caller that does not pass one gets exactly what it always did.
  */
 
 import { positionNoun } from "@/lib/site";
 import { NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+import type { SlotEligibilityMap } from "@/lib/power-pulse/lineup";
 import type { ScheduleSlot, SlotGroup } from "./types";
 
 /**
@@ -177,12 +183,17 @@ export function slotGroupOf(token: string): SlotGroup {
 }
 
 /**
- * True when Sleeper publishes projections for the positions that can fill this
- * slot. False for IDP, which drives the "not published" treatment and the
- * footnote that says the totals exclude those slots.
+ * True when the slot map can fill this slot, which is when we project the
+ * positions that play it. With the IDP switch off that excludes the defensive
+ * slots; with it on, only a token nobody projects (EDGE). False drives the
+ * "no projection" treatment and the footnote that says the totals exclude
+ * those slots.
  */
-export function isProjectableSlot(token: string): boolean {
-  const eligible = PULSE_SLOT_ELIGIBILITY[token];
+export function isProjectableSlot(
+  token: string,
+  eligibility: SlotEligibilityMap = PULSE_SLOT_ELIGIBILITY,
+): boolean {
+  const eligible = eligibility[token];
   return Array.isArray(eligible) && eligible.length > 0;
 }
 
@@ -191,7 +202,10 @@ export function isProjectableSlot(token: string): boolean {
  * `order` is the index into THIS list, which is the index into Sleeper's
  * `starters` array. See the header for why nothing else is filtered out.
  */
-export function alignedStartingSlots(rosterPositions: string[]): ScheduleSlot[] {
+export function alignedStartingSlots(
+  rosterPositions: string[],
+  eligibility: SlotEligibilityMap = PULSE_SLOT_ELIGIBILITY,
+): ScheduleSlot[] {
   const out: ScheduleSlot[] = [];
   for (const token of rosterPositions) {
     if (NON_STARTING_TOKENS.has(token)) continue;
@@ -200,7 +214,7 @@ export function alignedStartingSlots(rosterPositions: string[]): ScheduleSlot[] 
       label: slotLabel(token),
       description: slotDescription(token),
       group: slotGroupOf(token),
-      projectable: isProjectableSlot(token),
+      projectable: isProjectableSlot(token, eligibility),
       order: out.length,
     });
   }

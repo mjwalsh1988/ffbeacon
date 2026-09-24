@@ -43,24 +43,18 @@
 import type { ReactNode } from "react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
+import { positionNoun } from "@/lib/site";
 import type { SchedulePlayer } from "@/lib/league-schedule/types";
 import { CHIP, EYEBROW, fmtPoints, opponentLabel, opponentWords } from "./format";
 
-/** Spoken position names, so a matchup sentence reads like a sentence. */
-const POSITION_WORDS: Record<string, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "wide receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "team defenses",
-  DL: "defensive linemen",
-  LB: "linebackers",
-  DB: "defensive backs",
-};
-
+/**
+ * Spoken position names, so a matchup sentence reads like a sentence. The one
+ * noun helper in lib/site.ts; a code it does not know reads "{code} players".
+ */
 function positionWords(position: string): string {
-  return POSITION_WORDS[position.toUpperCase()] ?? `${position} players`;
+  const code = position.toUpperCase();
+  const noun = positionNoun(code, "plural");
+  return noun === code ? `${position} players` : noun;
 }
 
 /**

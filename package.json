@@ -84,6 +84,7 @@
     "backfill:draft-selections": "tsx --env-file=.env.local scripts/backfill-draft-selections.ts",
     "backfill:all": "npm run backfill:ktc && npm run backfill:dynastyprocess && npm run backfill:rookie-adp && npm run calculate:trends",
     "backfill:idp-columns": "tsx --env-file=.env.local scripts/backfill-idp-stat-columns.ts",
+    "verify:idp-invariant": "tsx --env-file=.env.local scripts/verify-idp-invariant.ts",
     "calculate:idp-seasons": "tsx --env-file=.env.local scripts/calculate-idp-seasons.ts"
   },
   "dependencies": {

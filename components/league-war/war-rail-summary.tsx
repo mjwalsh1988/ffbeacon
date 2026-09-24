@@ -42,6 +42,7 @@ import {
   resolveUnmatchedOwnerInfo,
 } from "@/lib/league-positional-war-data";
 import type { PlottableCurve } from "@/lib/positional-war/types";
+import { isDefender, OFFENSE_POSITIONS } from "@/lib/site";
 import { matchCurveOwnership, splitUnmatchedOwners } from "./overlay";
 import { buildYourBestLine, selectScarcestAndDeepest } from "./selection";
 
@@ -132,8 +133,12 @@ export async function WarRailSummary({
   const topWar = rows[0].war;
 
   const plottable = view.curves.filter((c) => c.curve.length > 0);
+  // The sparkline mirrors the page's first chart, which is the offensive one;
+  // a Defense chart has its own section on the page (plan IDP-309). A league
+  // that starts only defenders has no offensive curve, so it draws those.
+  const offensive = plottable.filter((c) => !isDefender(c.position));
   const geometry = buildChartGeometry({
-    curves: plottable,
+    curves: offensive.length > 0 ? offensive : plottable,
     mode: "rank",
     maxRank: RAIL_MAX_RANK,
     ...RAIL_BOX,
@@ -154,7 +159,13 @@ export async function WarRailSummary({
       let hasOneAtScarcest = false;
       if (!best && ownership.unmatchedOwnedIds.length > 0) {
         const info = await resolveUnmatchedOwnerInfo(supabase, ownership.unmatchedOwnedIds);
-        const split = splitUnmatchedOwners(ownership.unmatchedOwnedIds, info);
+        // Every position the page plots, defensive ones included, so a
+        // reader's linebacker ranked past the chart is still found.
+        const plotted = new Set<string>([
+          ...OFFENSE_POSITIONS,
+          ...plottable.filter((c) => isDefender(c.position)).map((c) => c.position),
+        ]);
+        const split = splitUnmatchedOwners(ownership.unmatchedOwnedIds, info, plotted);
         hasOneAtScarcest = split.pastDepth.some((p) => p.position === scarcest.position);
       }
       yourBestLine = buildYourBestLine(scarcest.position, best, hasOneAtScarcest);

@@ -1,6 +1,214 @@
 # Handoff
 
-## NEXT SESSION: START IDP PHASE 3 HERE
+## NEXT SESSION: START HERE. IDP PHASE 4 (launch) IS NEXT, NOT STARTED
+
+### Where things stand (end of 2026-09-24, seventh pass)
+
+- IDP phases 1, 2 and 3 are all BUILT, REVIEWED AND COMMITTED to main. Phases 1
+  and 2 are pushed and deployed. PHASE 3 IS COMMITTED LOCALLY BUT NOT PUSHED
+  (owner instruction), so production does not run phase 3 code yet. Check with
+  `git status` and `git log origin/main..main` before doing anything.
+- The IDP switch, `league_power_pulse_settings.settings.idp.enabled` (row
+  id='global'), is OFF on production and must stay off until task IDP-405.
+  With it off, every League Pulse number is exactly what it was before phase 3.
+- Phase 3 tasks IDP-301 to IDP-317 and the review round IDP-317R are recorded
+  at the end of progress.md under "IDP across FF Beacon, phase 3". Phase 4's
+  task list (IDP-401 to IDP-407, all pending) is directly below them.
+- Last gate: typecheck green, `npx vitest run` 429 files / 6,215 tests (plus
+  one plainName test added after that run, green on its own), `npm run build`
+  57 of 57, punctuation scan clean over every changed file.
+- Migrations: latest on disk and applied is 0302. Phase 3 added none. Next
+  number 0303. The plan's "Start here" still says 0295; ignore that.
+
+### What to read, in order
+
+1. CLAUDE.md in the repo root and ~/.claude/CLAUDE.md. Read .env.local and echo
+   the variable NAMES only.
+2. docs/idp/idp-guide-and-data-plan.md: section 0 (decisions, do not reopen
+   without the owner), section 8 (phase 3, what now exists) and section 9
+   (phase 4, the work).
+3. progress.md from the heading "IDP across FF Beacon, phase 3" to the end:
+   what was built, every deliberate deviation with its reason, and the phase 4
+   task list.
+4. docs/idp/phase-3-invariant-report.txt: switch off against switch on for the
+   31 IDP leagues on production, and the 20 ordinary leagues that came out
+   identical.
+
+### Before phase 4 can start (owner steps, ask, do not assume)
+
+1. The owner reviews phase 3 and says whether to PUSH it. Nothing in phase 4
+   that touches production (IDP-405 above all) may happen until phase 3 is
+   pushed AND deployed: flipping the switch against old code turns on nothing
+   and still rescores every league.
+2. After the deploy, run `npm run verify:idp-invariant` once more; every
+   ordinary league must print "identical" and the script must exit 0.
+3. The owner has never opened the phase 3 screens in a browser, at phone width
+   or with a screen reader. They only render with the switch ON, so this is
+   part of IDP-405/406, not before it.
+
+### Phase 4, in order (plan section 9; details in progress.md)
+
+- IDP-401 lint decision: OWNER CHOOSES. Do not install eslint unasked.
+- IDP-402 accuracy backtest per position (idp123 against a naive last-4-weeks
+  average, 2020 to 2025): findings to the owner.
+- IDP-403 set DL, LB, DB positionReliability from measured values only, through
+  the admin form.
+- IDP-404 CLAUDE.md updates: DRAFT the wording and get OWNER APPROVAL before
+  writing. The plan lists the sentences that become false (PROJECTION_POSITIONS,
+  the Schedules null-projection paragraph, Power Pulse and Positional WAR
+  position statements, the Manager Ledger IDP paragraph, the stale "team deep
+  view, future phase" route) plus a new short IDP section.
+- IDP-405 switch on and version bumps: OWNER GO-AHEAD REQUIRED, after the push
+  and deploy. idp.enabled true; modelVersion pp-9; Positional WAR war-5;
+  Manager Ledger ledger-5; decide tf2 (phase 3 left it on purpose, see
+  IDP-311); guide lesson 8 and the FAQ answer flip to "yes, in League Pulse".
+  Recompute stays on demand through pulseLeague; nothing goes into a cron.
+- IDP-406 post-launch checks (day 1, then Search Console at 28 and 56 days).
+- IDP-407 final reviews and close-out.
+- Reviews at the end: for phases 2 and 3 the owner asked for ONE reviewer
+  sub-agent instead of the plan's three. Ask which they want for phase 4.
+  Never pass `name` to the Agent tool.
+
+### Known and live today, not caused by phase 3
+
+- Fourth & Violence (sleeper 1361073366127083520), the one league that starts
+  only defenders, shows a Power Pulse table of 0.0 points a week with playoff
+  odds of 100 or 0 percent while the switch is off. Switching on fixes it.
+- 32 man (sleeper 1375706195679019008) shows 0.00 expected wins for all 32
+  teams in both switch states. Not an IDP effect; not investigated.
+
+### Open items for the owner (reasons in progress.md)
+
+- FAAB manual mode has no defender picker (IDP-312).
+- The FAAB result card shows no idp123 finish line for a defender (IDP-312).
+- The Who Should I Start page still refuses a defender before its league tab;
+  routing one there is an owner decision (IDP-313).
+- R-5 cut protection is deliberately not on the Positional WAR upgrade what-if
+  or Who Should I Start, which guard no player at all (IDP-317R item 10).
+- Carried from phase 2 and still open: the items listed under "Carried INTO
+  phase 3" further down this file, except IDP-308 and the IDP-305 link, which
+  phase 3 closed. The DE/DT position normalisation in the players sync was NOT
+  done in phase 3.
+
+### Session rules that still bind
+
+One atomic task at a time; typecheck and tests after each; update progress.md
+after each; never chain shell commands; plain ASCII punctuation everywhere; no
+Claude attribution in commits; do not push or create a branch unless the owner
+says so; stop at the end of the phase for the owner.
+
+## PREVIOUS: FINISH IDP PHASE 3 (IDP-315 to IDP-317, then one reviewer), kept for history
+
+State at the end of the session of 2026-09-24 (sixth pass): IDP-301 to IDP-314
+are BUILT and recorded task by task at the very end of progress.md under
+"IDP across FF Beacon, phase 3". NOTHING IS COMMITTED OR PUSHED, by instruction.
+The switch (league_power_pulse_settings.settings.idp.enabled) exists, defaults
+to false, and must STAY OFF; phase 4 (IDP-405) turns it on.
+
+Owner instructions for the phase (still binding): finish phase 3, then spawn
+ONE independent reviewer sub-agent (bugs, security, performance/speed,
+accessibility, plan adherence) over the whole phase 3 diff, fix what it finds,
+STOP, and give the owner a plain-language report of what phase 3 did. Do not
+commit or push. Do not start phase 4. Never pass `name` to the Agent tool.
+
+Read first: CLAUDE.md (repo and ~/.claude), .env.local (echo names only), plan
+docs/idp/idp-guide-and-data-plan.md section 8 (and 0 for the decisions), then
+the phase 3 block at the end of progress.md.
+
+### What exists now (the shape a new session must know)
+
+- lib/power-pulse/default-settings.ts: settings.idp.enabled, idpEnabledFrom().
+  validate.ts has the zod object; admin form has a "Defensive players (IDP)"
+  section.
+- NEW lib/power-pulse/idp-reads.ts: idpReadsFor(idpEnabled, rosterPositions,
+  scoringBase) returns slotMap, candidatePositions, scoringKeys and
+  loadsDefenders (true only when the switch is on AND the league starts a
+  defensive slot). scoringKeysArg() passes a bare string when off, so OFF reads
+  are byte-identical. EVERY loader threads the switch through this.
+- lib/power-pulse/lineup.ts: startingSlots / buildOptimalLineup /
+  countStartingSlots take an optional slot map (default OFF map);
+  LineupCandidate.eligible (set only when on); pulseEligibility(); playedAsFor();
+  LineupSlot.playedAs.
+- Callers wired: Power Pulse engine + orchestrator, Schedules (slots.ts,
+  matchup.ts, data.ts), Lineups (build.ts, simulate.ts, data.ts,
+  season-data.ts, board, swap dialog, optimiser panel, page), lib/projections/
+  read.ts (includeDefenders opt-in), NEW lib/idp/free-agents.ts, NEW
+  lib/league-lineups/defender-protection.ts (R-5), advice.ts, Positional WAR
+  (replacement, engine, load with offense/defense slices at the query and
+  CACHE_SHAPE_VERSION v3, fingerprint, orchestrator, panel with Offense and
+  Defense charts, dashboard, table, upgrade what-if, action, OG card line),
+  Manager Ledger (lineup, engine, load, orchestrator), trade impact (load,
+  evaluate, roster-swap, reasons "defender-caveat"), Trade Ideas builder
+  (defenders with "No market value" only when on), FAAB (marginal.ts slotMap,
+  candidateEligible, protectedIds; league-faab.ts; NEW lib/faab/
+  idp-free-agents.ts; actions.ts; combobox), Who Should I Start league impact,
+  defender profile "This week" links.
+- New goldens: lib/power-pulse/golden/power-pulse-idp-on.json,
+  lib/positional-war/golden/war-idp-on.json. All 11 phase-1 goldens are
+  unchanged and green (the proof the OFF path is untouched).
+
+### Deliberate deviations and open items (full reasons in progress.md)
+
+- Power Pulse form ratio is now null (components.formUnmeasured) for a league
+  that starts slots the model cannot fill, i.e. every IDP league while the
+  switch is off. Plan IDP-307 asked for this; it changes IDP leagues' OFF
+  output once two weeks settle, and nothing else.
+- Admin hint says turning the switch on rescores EVERY league (the stored
+  document changes the effective model version); only IDP leagues change.
+- Lineups "What is IDP scoring?" link is in the footnotes, not the colgroup
+  header (a link there would be re-read on every cell).
+- R-5 "starter count" read per roster, not league-wide.
+- Not done, stated: trade-finder fingerprint tf2 (suggestions never hold a
+  defender, so no bump needed); FAAB manual mode IDP shapes and league-load.ts
+  idp123 finishes; the Who Should I Start page still refuses defenders before
+  the league tab (league-impact itself now handles one when on; routing is an
+  owner decision).
+- IDP-314 tests were not re-run after the last edit (typecheck green).
+
+### Next steps, in order
+
+1. LINE ENDINGS FIRST. The working tree is CRLF (core.autocrlf=true) and several
+   files edited this session by sed or node appends now mix CRLF and LF lines
+   (for example lib/power-pulse/lineup.test.ts, lib/faab/marginal.ts,
+   lib/trade-impact/load.ts and evaluate.ts, lib/projections/read.ts,
+   lib/league-positional-war-data.ts, app/leagues/[league_id]/lineups/page.tsx,
+   app/leagues/[league_id]/positional-war/page.tsx, lib/manager-ledger/load.ts,
+   lib/breakdown/league-impact.test.ts, progress.md). Find every modified or new
+   file with `git status --short`, and for each one that mixes endings rewrite
+   it to a single style with a small Node script (never Python: it writes CRLF).
+   Then check `git diff --stat` shows no whole-file rewrites.
+2. Run `npx vitest run lib/player-profile components/player-profile` (IDP-314),
+   then `npm run typecheck`, then the full `npx vitest run` (last full count
+   before this phase: 419 files / 6,143 tests; it should now be higher).
+3. IDP-315, tests sweep: plan section 8 lists the modules (lib/power-pulse
+   variance tests, lib/league-lineups status/weeks, lib/league-schedule
+   lineups/insights, lib/positional-war war, chart-geometry, table, tiers,
+   upgrade, scatter-geometry, chart-layout, share). For each: add the IDP case
+   where behaviour changed, otherwise record "reviewed, unchanged" in
+   progress.md. Also run the guard tests: lib/idp/points-guard.test.ts,
+   lib/projections/source-guard and raw-column-guard, lib/positional-war/
+   naming.test.ts (WAR token rule), lib/site.test.ts (noun-map ledger: two
+   lines were deleted this phase, player-detail-dialog and slot-swap-dialog; the
+   trade-finder explain.ts/types.ts lines are still there and were NOT folded).
+4. IDP-316: NEW scripts/verify-idp-invariant.ts (+ a test for its pure parts,
+   isRunDirectly guard, package.json script). It loads engine INPUTS through the
+   existing loaders for about 20 sampled non-IDP leagues and all 40 IDP leagues,
+   runs the pure engines (computePowerPulse with idpEnabled false/true,
+   computeCurves with league.idpEnabled, computeLedger with idpEnabled) and diffs
+   the outputs. It must NEVER call calculateLeague* (those write). Non-IDP: must
+   be identical. IDP: write before/after figures (weekly totals, playoff odds,
+   efficiency, curves) into progress.md for the owner.
+5. IDP-317 gate: typecheck, full suite, `npm run build`, ASCII scan of every
+   touched file (no em/en dashes, curly quotes, ellipsis, middle dots, nbsp),
+   goldens green with the switch off.
+6. Spawn ONE reviewer (no `name`) over the phase 3 diff with the scope above,
+   including "no data hidden at any breakpoint" on the Positional WAR Defense
+   section, the Lineups board and the Power Pulse rooms, and security on the
+   widened upgrade action, the builder's defender assets and the metered
+   free-agent panels. Fix findings, rerun the gate, record everything in
+   progress.md, then STOP with the plain-language report. No commit, no push.
+
+## PREVIOUS: IDP PHASE 3 START NOTES (kept for history)
 
 SIDE QUEST DONE, COMMITTED AND PUSHED (2026-09-24, fifth pass): every Supabase read that could silently stop at 1000 rows is fixed through the shared helper lib/supabase/fetch-all.ts (RC-T01 to RC-T06 at the end of progress.md, gate green). Phase 3 code should use fetchAllRows / fetchAllRowsInChunks for any read that can pass 1000 rows. After deploy, watch the three items in RC-T06.
 

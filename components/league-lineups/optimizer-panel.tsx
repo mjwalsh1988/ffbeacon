@@ -26,12 +26,18 @@ export function OptimizerPanel({
   isFinal,
   week,
   defenderSlots = 0,
+  idpEnabled = false,
 }: {
   optimization: LineupOptimization;
   isFinal: boolean;
   week: number;
   /** Ungraded slots held by a named defender; said apart from unmatched players. */
   defenderSlots?: number;
+  /**
+   * The IDP switch (plan R-25). Decides the reason given for an ungraded
+   * defender: not projected at all while off, no projection this week once on.
+   */
+  idpEnabled?: boolean;
 }) {
   const { moves, pointsLeftOnBench, unavailable, unlistedGain } = optimization;
   const ungradedSlotCount = Math.max(0, optimization.ungradedSlotCount - defenderSlots);
@@ -196,8 +202,13 @@ export function OptimizerPanel({
       )}
       {defenderSlots > 0 && (
         <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
-          {defenderSlots} of your slots {defenderSlots === 1 ? "holds a defensive player" : "hold defensive players"}.
-          League Pulse does not project defenders yet, so {defenderSlots === 1 ? "that slot is" : "those slots are"}{" "}
+          {defenderSlots} of your slots {defenderSlots === 1 ? "holds a defensive player" : "hold defensive players"}
+          {idpEnabled
+            ? isFinal
+              ? " with no score for this week"
+              : " with no projection this week"
+            : ". League Pulse does not project defenders yet"}
+          , so {defenderSlots === 1 ? "that slot is" : "those slots are"}{" "}
           left out of both totals above.
         </p>
       )}

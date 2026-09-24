@@ -397,3 +397,67 @@ describe("calculateLeagueImpact: three to eight candidates", () => {
     );
   });
 });
+
+describe("calculateLeagueImpact: a defensive candidate (plan IDP-313)", () => {
+  function withDefender(idpOn: boolean) {
+    vi.mocked(loadLeague).mockResolvedValue({
+      ...LEAGUE,
+      rosterPositions: ["QB", "RB", "WR", "FLEX", "LB", "BN", "BN"],
+      scoringSettings: { pass_yd: 0.04, pass_td: 4, rush_yd: 0.1, rush_td: 6, rec: 1, rec_yd: 0.1, rec_td: 6, idp_tkl_solo: 2 },
+    } as never);
+    vi.mocked(loadPlayers).mockResolvedValue(
+      new Map([
+        ...PLAYERS,
+        ["lb1", { ...candidatePlayer("c2"), playerId: "lb1-uuid", sleeperId: "lb1", position: "LB" } as PlayerRow],
+      ]),
+    );
+    vi.mocked(loadProjections).mockResolvedValue([
+      ...PROJECTIONS,
+      ...[5, 6].map((week) => ({
+        playerId: "lb1-uuid",
+        week,
+        opponent: "SEA",
+        statLine: { idp_tkl_solo: 5 },
+        ppr: null,
+        halfPpr: null,
+        std: null,
+        availability: "projected",
+      })),
+    ]);
+    vi.mocked(loadPowerPulseSettings).mockResolvedValue({
+      ...DEFAULT_POWER_PULSE_SETTINGS,
+      idp: { enabled: idpOn },
+    });
+  }
+
+  it("is refused with the switch off", async () => {
+    withDefender(false);
+    const outcome = await calculateLeagueImpact(fakeSupabase, {
+      leagueRowId: "league-row-1",
+      sleeperRosterId: 1,
+      candidateSleeperIds: ["c2", "lb1"],
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.report.impacts[1]).toBeNull();
+    const opts = vi.mocked(loadPlayers).mock.calls.at(-1)?.[2] as { positions: readonly string[] };
+    expect(opts.positions).not.toContain("LB");
+  });
+
+  it("is evaluated under the league's scoring with the switch on", async () => {
+    withDefender(true);
+    const outcome = await calculateLeagueImpact(fakeSupabase, {
+      leagueRowId: "league-row-1",
+      sleeperRosterId: 1,
+      candidateSleeperIds: ["c2", "lb1"],
+    });
+    expect(outcome.ok).toBe(true);
+    const opts = vi.mocked(loadPlayers).mock.calls.at(-1)?.[2] as { positions: readonly string[] };
+    expect(opts.positions).toContain("LB");
+    expect(vi.mocked(loadAccuracy).mock.calls.at(-1)?.[2]).toEqual(["pts_ppr", "idp123"]);
+    const lbSwap = vi
+      .mocked(computeLineupSwap)
+      .mock.calls.find((call) => call[0].candidatePosition === "LB");
+    expect(lbSwap).toBeDefined();
+  });
+});

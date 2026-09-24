@@ -38,6 +38,7 @@ import {
   type ScoringSettings,
 } from "@/lib/league-scoring";
 import { startingSlots } from "@/lib/power-pulse/lineup";
+import { slotEligibility } from "@/lib/power-pulse/types";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import type { WarSettings } from "@/lib/positional-war/default-settings";
 
@@ -87,6 +88,16 @@ export type WarFingerprintInput = {
   teamCount: number;
   /** Raw roster_positions. startingSlots() runs and sorts inside this module. */
   rosterPositions: string[];
+  /**
+   * The IDP switch (plan R-25, IDP-308). It is NOT a payload field: it decides
+   * which slot map startingSlots() reads, so with it on an IDP league's
+   * defensive slots enter `slots` and its fingerprint changes, and with it off
+   * (or in a league with no defensive slot) the payload, and so every stored
+   * hash, is byte-identical to what it was before the switch existed. Nothing
+   * else about the curve depends on the switch: the universe includes
+   * defenders only when those slots are there to seat them.
+   */
+  idpEnabled?: boolean;
   scoringSettings: ScoringSettings | null;
   pulseSettings: FingerprintedPulseSettings;
   warSettings: FingerprintedWarSettings;
@@ -167,7 +178,7 @@ function buildPayload(input: WarFingerprintInput) {
     fromWeek: input.fromWeek,
     toWeek: input.toWeek,
     teamCount: input.teamCount,
-    slots: sortStrings(startingSlots(input.rosterPositions)),
+    slots: sortStrings(startingSlots(input.rosterPositions, slotEligibility(input.idpEnabled === true))),
     scoring: normalizedScoring(input.scoringSettings),
     scoringUsable: isUsableScoring(input.scoringSettings),
     scoringBase: closestScoringBase(input.scoringSettings),
@@ -215,7 +226,7 @@ export function warInputsDigest(input: WarFingerprintInput): WarInputsDigest {
     fromWeek: input.fromWeek,
     toWeek: input.toWeek,
     teamCount: input.teamCount,
-    slots: sortStrings(startingSlots(input.rosterPositions)),
+    slots: sortStrings(startingSlots(input.rosterPositions, slotEligibility(input.idpEnabled === true))),
     scoringBase: closestScoringBase(input.scoringSettings),
     scoringUsable: isUsableScoring(input.scoringSettings),
     scoringKeyCount: normalizedScoring(input.scoringSettings).length,

@@ -556,6 +556,7 @@ async function LineupBody({
                 positionalWarUnavailable={view.positionalWarUnavailable}
                 unprojectableSlotCount={view.unprojectableSlotCount}
                 unprojectedSlotCount={view.unprojectedSlotCount}
+                idpEnabled={view.idpEnabled}
               />
             </div>
           </Panel>
@@ -581,6 +582,7 @@ async function LineupBody({
               isFinal={view.isFinal}
               week={view.week}
               defenderSlots={ungradedDefenderSlots(view.groups, view.isFinal)}
+              idpEnabled={view.idpEnabled}
             />
           )}
 

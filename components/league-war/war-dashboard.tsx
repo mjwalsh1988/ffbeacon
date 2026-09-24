@@ -57,6 +57,8 @@ export function WarDashboard({
   leagueName,
   sourceDisplay,
   formatDisplay,
+  group = "offense",
+  headingLevel = 3,
 }: {
   positions: WarDashboardPosition[];
   axisMode: WarAxisMode;
@@ -67,7 +69,22 @@ export function WarDashboard({
   leagueName: string;
   sourceDisplay: string;
   formatDisplay: string;
+  /**
+   * Which chart this is (plan R-10, IDP-309). The page draws offense and, once
+   * the IDP switch has produced defensive curves, a second dashboard for
+   * defense. The defense one has no trade-value scatterplot: no value source
+   * prices a defender, so every dot would be missing.
+   */
+  group?: "offense" | "defense";
+  /**
+   * The level of this dashboard's own headings. 3 when it is the only one under
+   * the panel's h2; 4 when the panel wraps each group under an h3 of its own,
+   * so the outline never skips a level.
+   */
+  headingLevel?: 3 | 4;
 }) {
+  const H = headingLevel === 4 ? "h4" : "h3";
+  const isDefense = group === "defense";
   const plottable = useMemo(() => positions.filter((p) => p.curve.length > 0), [positions]);
 
   const [visible, setVisible] = useState<Set<PulsePosition>>(() =>
@@ -116,9 +133,10 @@ export function WarDashboard({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-ink">Positions</h3>
+        <H className="text-sm font-semibold text-ink">Positions</H>
         <p className="mt-0.5 text-xs text-ink-muted">
-          One filter for both charts and the table. Currently showing {activeList}.
+          {isDefense ? "One filter for the chart and the table." : "One filter for both charts and the table."}{" "}
+          Currently showing {activeList}.
         </p>
         <div className="mt-2">
           <SeriesToggleLegend items={legendItems} onToggle={(id) => toggle(id as PulsePosition)} />
@@ -131,10 +149,10 @@ export function WarDashboard({
         </p>
       ) : (
         <>
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className={isDefense ? "grid gap-6" : "grid gap-6 xl:grid-cols-2"}>
             <figure className="min-w-0 rounded-card border border-line bg-base/40 p-4">
               <figcaption>
-                <h3 className="text-sm font-semibold text-ink">Wins over replacement</h3>
+                <H className="text-sm font-semibold text-ink">Wins over replacement</H>
                 <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
                   How much each position drops off. A steep line runs out fast; a flat one means the
                   next player down is nearly as good.
@@ -154,9 +172,16 @@ export function WarDashboard({
               </div>
             </figure>
 
+            {isDefense ? (
+              <p className="text-xs leading-relaxed text-ink-muted">
+                There is no trade value chart for defensive players. No value source prices
+                them, so every point would be missing. Their wins over replacement are in the
+                chart above and the table below.
+              </p>
+            ) : (
             <figure className="min-w-0 rounded-card border border-line bg-base/40 p-4">
               <figcaption>
-                <h3 className="text-sm font-semibold text-ink">Trade value against wins</h3>
+                <H className="text-sm font-semibold text-ink">Trade value against wins</H>
                 <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
                   What the market charges, against what a player is worth in this league. Value from{" "}
                   {sourceDisplay} at {formatDisplay}.
@@ -180,10 +205,11 @@ export function WarDashboard({
                 </p>
               )}
             </figure>
+            )}
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-ink">Every plotted player</h3>
+            <H className="text-sm font-semibold text-ink">Every plotted player</H>
             <p className="mt-0.5 text-xs text-ink-muted">{describeTierScale(tierScale)}</p>
             <div className="mt-3">
               <WarPlayerTable
@@ -191,6 +217,7 @@ export function WarDashboard({
                 positions={visible}
                 leagueName={leagueName}
                 sourceDisplay={sourceDisplay}
+                group={group}
               />
             </div>
             <dl className="mt-4 grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">

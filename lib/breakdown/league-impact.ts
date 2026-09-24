@@ -57,9 +57,12 @@ import { simulateSeason, type SimTeam } from "@/lib/power-pulse/simulate";
 import {
   buildOptimalLineup,
   lineupSigma,
+  pulseEligibility,
   startingSlots,
   type LineupCandidate,
 } from "@/lib/power-pulse/lineup";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import { computeLineupSwap, type CandidateWeek } from "@/lib/faab/marginal";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
@@ -139,6 +142,7 @@ function buildRosterWeeks({
   defense,
   defenseSeasons,
   pulseSettings,
+  idpEnabled = false,
 }: {
   roster: RosterRow;
   players: Map<string, PlayerRow>;
@@ -150,6 +154,8 @@ function buildRosterWeeks({
   defense: Parameters<typeof projectPlayerWeek>[0]["defense"];
   defenseSeasons: number[];
   pulseSettings: PowerPulseSettings;
+  /** The IDP switch (plan R-25): candidates carry eligibility only when on. */
+  idpEnabled?: boolean;
 }): {
   byWeek: RosterWeeks;
   meta: Map<string, { name: string; position: string }>;
@@ -190,6 +196,7 @@ function buildRosterWeeks({
       byWeek.get(week)?.push({
         playerId: player.playerId,
         position: player.position,
+        ...(idpEnabled ? { eligible: pulseEligibility(player.position, player.eligible) } : {}),
         points: projected.points,
         sigma: projected.sigma,
       });
@@ -224,8 +231,9 @@ function simTeamsFrom(
 function lineupTotals(
   slots: string[],
   candidates: LineupCandidate[],
+  slotMap?: Parameters<typeof buildOptimalLineup>[2],
 ): { mean: number; sigma: number } {
-  const lineup = buildOptimalLineup(slots, candidates);
+  const lineup = buildOptimalLineup(slots, candidates, slotMap);
   return { mean: lineup.total, sigma: lineupSigma(lineup.slots) };
 }
 
@@ -273,9 +281,17 @@ export async function calculateLeagueImpact(
 
   const rosteredSleeperIds = new Set(rosters.flatMap((r) => r.playerSleeperIds));
   const allSleeperIds = Array.from(new Set([...rosteredSleeperIds, ...candidateIds]));
-  const players = await loadPlayers(supabase, allSleeperIds);
-
   const scoringBase = closestScoringBase(league.scoringSettings);
+  // The IDP switch, read once (plan R-25; the settings read is memoised).
+  const idpReads = idpReadsFor(
+    idpEnabledFrom(await loadPowerPulseSettings(supabase)),
+    league.rosterPositions,
+    scoringBase,
+  );
+  const players = await loadPlayers(supabase, allSleeperIds, {
+    positions: idpReads.candidatePositions,
+  });
+
   const defenseSeasons = defenseSeasonsFor(league.season);
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 
@@ -295,8 +311,8 @@ export async function calculateLeagueImpact(
 
   const [projectionRows, accuracy, defense, schedule] = await Promise.all([
     loadProjections(supabase, playerIds, league.season, currentWeek, undefined, projectionSource),
-    loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
-    loadDefenseSplits(supabase, scoringBase, defenseSeasons),
+    loadAccuracy(supabase, playerIds, scoringKeysArg(idpReads), projectionSource),
+    loadDefenseSplits(supabase, scoringKeysArg(idpReads), defenseSeasons),
     loadSchedule(supabase, input.leagueRowId, league.season),
   ]);
 
@@ -307,7 +323,7 @@ export async function calculateLeagueImpact(
     projections.set(row.playerId, byWeek);
   }
 
-  const slots = startingSlots(league.rosterPositions);
+  const slots = startingSlots(league.rosterPositions, idpReads.slotMap);
   if (slots.length === 0) {
     return { ok: false, error: "We could not read this league's starting lineup shape." };
   }
@@ -329,7 +345,7 @@ export async function calculateLeagueImpact(
   const rosterMetaById = new Map<number, Map<string, { name: string; position: string }>>();
   let usedLeagueScoring = false;
   for (const roster of rosters) {
-    const built = buildRosterWeeks({ roster, ...projectArgs });
+    const built = buildRosterWeeks({ roster, ...projectArgs, idpEnabled: idpReads.idpEnabled });
     rosterWeeksById.set(roster.sleeperRosterId, built.byWeek);
     rosterMetaById.set(roster.sleeperRosterId, built.meta);
     usedLeagueScoring = usedLeagueScoring || built.usedLeagueScoring;
@@ -340,7 +356,7 @@ export async function calculateLeagueImpact(
   for (const roster of rosters) {
     const byWeek = rosterWeeksById.get(roster.sleeperRosterId) ?? new Map();
     const weekMap = new Map<number, { mean: number; sigma: number }>();
-    for (const week of weeks) weekMap.set(week, lineupTotals(slots, byWeek.get(week) ?? []));
+    for (const week of weeks) weekMap.set(week, lineupTotals(slots, byWeek.get(week) ?? [], idpReads.slotMap));
     weeklyBefore.set(roster.sleeperRosterId, weekMap);
   }
 
@@ -378,9 +394,10 @@ export async function calculateLeagueImpact(
     if (!sleeperId) return null;
     const candidate = players.get(sleeperId);
     if (!candidate) return null;
-    // A guard where a cast used to be (plan IDP-127): a defender has no
-    // lineup impact to compute until the IDP switch threads through (IDP-313).
-    if (isDefender(candidate.position)) return null;
+    // A defender has a lineup impact only once the IDP switch is on in a league
+    // that starts one (plan IDP-313). Otherwise this is still the refusal
+    // IDP-127 put where a cast used to be.
+    if (isDefender(candidate.position) && !idpReads.loadsDefenders) return null;
 
     const alreadyMine = mine!.playerSleeperIds.includes(sleeperId);
     const holder = rosters.find((r) => r.playerSleeperIds.includes(sleeperId));
@@ -431,6 +448,10 @@ export async function calculateLeagueImpact(
       candidateByWeek,
       candidatePlayerId: candidate.playerId,
       candidatePosition: candidate.position,
+      slotMap: idpReads.slotMap,
+      ...(idpReads.idpEnabled
+        ? { candidateEligible: pulseEligibility(candidate.position, candidate.eligible) }
+        : {}),
       rosterMeta: myMeta,
       // Adding someone you already roster costs no roster spot.
       mustDrop: rosterFull && !alreadyMine,

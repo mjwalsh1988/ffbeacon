@@ -6,7 +6,7 @@ import type {
   PlayerRow,
   ProjectionRow,
 } from "@/lib/power-pulse/load";
-import type { PulsePosition } from "@/lib/power-pulse/types";
+import { slotEligibility, type PulsePosition } from "@/lib/power-pulse/types";
 import {
   buildMatchupView,
   type BuildMatchupInput,
@@ -863,5 +863,56 @@ describe("settled week, roster as of that week", () => {
 
     expect(view.home.optimalTotal).toBeCloseTo(30, 5);
     expect(view.home.pointsLeftOnBench).toBe(0);
+  });
+});
+
+describe("the IDP switch (plan IDP-304)", () => {
+  const SCORING = { pass_yd: 0.04, pass_td: 4, rush_yd: 0.1, rush_td: 6, rec: 1, rec_yd: 0.1, rec_td: 6, idp_tkl_solo: 2, idp_tkl_ast: 1, idp_sack: 6 };
+  const ON = slotEligibility(true);
+
+  function idpWorld(on: boolean): World {
+    const players = new Map<string, PlayerRow>([
+      ["qb1", player("qb1", "QB")],
+      ["lb1", player("lb1", "LB")],
+      ["edge", { ...player("edge", "DL"), eligible: ["DL", "LB"] }],
+    ]);
+    const projections = new Map<string, ProjectionRow>([
+      [`p-qb1|${WEEK}`, projection("p-qb1", 20)],
+      [`p-lb1|${WEEK}`, { ...projection("p-lb1", 0), ppr: null, halfPpr: null, std: null, statLine: { idp_tkl_solo: 4, idp_tkl_ast: 2 }, availability: "projected" }],
+      [`p-edge|${WEEK}`, { ...projection("p-edge", 0), ppr: null, halfPpr: null, std: null, statLine: { idp_tkl_solo: 3, idp_tkl_ast: 1, idp_sack: 1 }, availability: "projected" }],
+    ]);
+    const slots = alignedStartingSlots(["QB", "LB", "IDP_FLEX", "BN"], on ? ON : undefined);
+    return { slots, players, projections };
+  }
+
+  it("with the switch off, the loader-shaped LB row stays unprojected and out of the totals", () => {
+    const w = idpWorld(false);
+    const view = buildMatchupView(
+      input(w, side(w.slots, { starters: ["qb1", "lb1", null], all: ["qb1", "lb1", "edge"] }), null, {
+        scoringSettings: SCORING,
+      }),
+    );
+    expect(view.home.slots[1].player?.projected).toBeNull();
+    expect(view.home.projectedTotal).toBeCloseTo(20, 5);
+    expect(view.home.benchUpgrades).toEqual([]);
+  });
+
+  it("with the switch on, the same LB is projected under the league's IDP rules and the empty flex is offered", () => {
+    const w = idpWorld(true);
+    const view = buildMatchupView(
+      input(w, side(w.slots, { starters: ["qb1", "lb1", null], all: ["qb1", "lb1", "edge"] }), null, {
+        scoringSettings: SCORING,
+        idpEnabled: true,
+      }),
+    );
+    // 4 solo x 2 + 2 assisted x 1 = 10, before any multiplier.
+    expect(view.home.slots[1].player?.projected).toBeGreaterThan(0);
+    expect(view.hasUnprojectableSlots).toBe(false);
+    expect(view.home.unprojectedSlots).toBe(0);
+    // The DL/LB bench player fills the empty IDP flex.
+    const move = view.home.benchUpgrades[0];
+    expect(move?.inPlayer.sleeperId).toBe("edge");
+    expect(move?.slotLabel).toBe("IDP");
+    expect(view.home.pointsLeftOnBench).toBeGreaterThan(0);
   });
 });

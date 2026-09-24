@@ -34,6 +34,8 @@ import {
 import { choppedWeeks, resolveFinalWeek } from "@/lib/chopped/league";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -533,10 +535,16 @@ export async function calculateLeaguePowerPulse(
   const sleeperIds = Array.from(
     new Set(rosters.flatMap((r) => r.playerSleeperIds)),
   );
-  const players = await loadPlayers(supabase, sleeperIds);
-  const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
-
   const scoringBase = closestScoringBase(league.scoringSettings);
+  // The IDP switch, read once here and passed down as a boolean (plan R-25).
+  // Off, or on in a league that starts no defensive slot: the offense list and
+  // one scoring key, the exact reads this made before the switch existed.
+  const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
+
+  const players = await loadPlayers(supabase, sleeperIds, {
+    positions: idpReads.candidatePositions,
+  });
+  const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 
   // Opponent splits come from whichever of the current season and the two
   // before it actually have a usable row; opponentMultiplier picks.
@@ -567,8 +575,9 @@ export async function calculateLeaguePowerPulse(
   const [projections, accuracy, defense, schedule, results] = await Promise.all([
     loadProjections(supabase, playerIds, league.season, currentWeek, undefined, projectionSource),
     // Scoped to the SAME source, per migration 0240.
-    loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
-    loadDefenseSplits(supabase, scoringBase, defenseSeasons),
+    // A defender is graded and split under idp123 only (plan IDP-303).
+    loadAccuracy(supabase, playerIds, scoringKeysArg(idpReads), projectionSource),
+    loadDefenseSplits(supabase, scoringKeysArg(idpReads), defenseSeasons),
     loadSchedule(supabase, leagueRowId, league.season),
     loadCompletedResults(supabase, leagueRowId, league.season),
   ]);
@@ -647,6 +656,7 @@ export async function calculateLeaguePowerPulse(
     aliveRosterIds,
     currentWeek,
     settings,
+    idpEnabled: idpReads.idpEnabled,
   });
 
   if (teams.length === 0) {

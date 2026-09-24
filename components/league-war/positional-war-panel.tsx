@@ -48,7 +48,12 @@ import { unprojectableSlots } from "@/lib/positional-war/engine";
 import { buildTierScale } from "@/lib/positional-war/tiers";
 import { WAR_TIER_LABEL } from "@/lib/positional-war/tiers";
 import { buildWarDashboardPositions, ownerLabel } from "@/lib/positional-war/table";
-import { NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+import { NON_STARTING_SLOTS, slotEligibility } from "@/lib/power-pulse/types";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { createAdminClient } from "@/lib/supabase/server";
+import { OFFENSE_POSITIONS, isDefender } from "@/lib/site";
+import type { WarDashboardPosition } from "@/lib/positional-war/table";
 import { describeLeagueScoring, type ScoringSettings } from "@/lib/league-scoring";
 import { matchViewerRoster } from "@/lib/league-viewer";
 import {
@@ -209,7 +214,18 @@ export async function PositionalWarPanel({
     ownership.unmatchedOwnedIds.length > 0
       ? await resolveUnmatchedOwnerInfo(supabase, ownership.unmatchedOwnedIds)
       : new Map();
-  const unmatchedSplit = splitUnmatchedOwners(ownership.unmatchedOwnedIds, unmatchedInfo);
+  // The offensive six as before, plus any defensive position this page draws a
+  // curve for, so the reader's own linebacker ranked past the chart's depth is
+  // named rather than counted as having no projection.
+  const plottedPositions = new Set<string>([
+    ...OFFENSE_POSITIONS,
+    ...dashboardPositions.filter((p) => isDefender(p.position) && p.curve.length > 0).map((p) => p.position),
+  ]);
+  const unmatchedSplit = splitUnmatchedOwners(
+    ownership.unmatchedOwnedIds,
+    unmatchedInfo,
+    plottedPositions,
+  );
 
   // Same reasoning: the summary introduces the chart, so it describes the
   // players the chart plots.
@@ -234,8 +250,25 @@ export async function PositionalWarPanel({
     ),
   );
 
-  const summary = buildChartSummary(dashboardPositions, teamCount);
-  const excludedSlots = unprojectableSlots(rosterPositions, NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY);
+  // OFFENSE AND DEFENSE ARE TWO CHARTS (plan R-10, IDP-309). Defensive curves
+  // exist only once the IDP switch is on in a league that starts defenders, so
+  // with it off `defensePositions` is empty and the page renders exactly the
+  // one chart it always did. Both charts share one tier scale above: the unit
+  // is wins in this league either way, so "Elite" means the same thing on both.
+  const offensePositions = dashboardPositions.filter((p) => !isDefender(p.position));
+  const defensePositions = dashboardPositions.filter((p) => isDefender(p.position));
+  const hasDefense = defensePositions.some((p) => p.curve.length > 0);
+
+  const summary = buildChartSummary(offensePositions, teamCount);
+  const defenseSummary = hasDefense ? buildChartSummary(defensePositions, teamCount) : "";
+  // The switch, read once (plan R-25), decides which of this league's slots
+  // the footnote calls unprojected. Memoised for a minute in the loader.
+  const idpEnabled = idpEnabledFrom(await loadPowerPulseSettings(createAdminClient()));
+  const excludedSlots = unprojectableSlots(
+    rosterPositions,
+    NON_STARTING_SLOTS,
+    slotEligibility(idpEnabled),
+  );
   const scoringDescription = describeLeagueScoring(scoringSettings);
   const footnote = buildFootnote({
     fromWeek: view.fromWeek,
@@ -250,15 +283,16 @@ export async function PositionalWarPanel({
     projectionSourceLabel,
   });
 
-  const noteGeometry = buildChartGeometry({
-    curves: view.curves.filter((c) => c.curve.length > 0),
-    mode: axisMode,
-    maxRank,
-    ...GEOMETRY_DIMS,
-  });
+  // Per chart, because each chart scales to its own curves.
+  const truncatedIn = (curves: typeof view.curves) =>
+    curves.length > 0 &&
+    buildChartGeometry({ curves, mode: axisMode, maxRank, ...GEOMETRY_DIMS }).series.some(
+      (s) => s.truncated,
+    );
   const truncationNote = buildTruncationNote(
     maxRank,
-    noteGeometry.series.some((s) => s.truncated),
+    truncatedIn(view.curves.filter((c) => c.curve.length > 0 && !isDefender(c.position))) ||
+      truncatedIn(view.curves.filter((c) => c.curve.length > 0 && isDefender(c.position))),
   );
 
   const overlayLines =
@@ -283,16 +317,58 @@ export async function PositionalWarPanel({
         helper="Which positions are hard to replace in this league, and who the players are."
         action={<WarAxisToggle mode={axisMode} />}
       >
-        <WarDashboard
-          positions={dashboardPositions}
-          axisMode={axisMode}
-          maxRank={maxRank}
-          tierScale={tierScale}
-          chartSummary={summary}
-          leagueName={leagueName}
-          sourceDisplay={sourceDisplay}
-          formatDisplay={formatDisplay}
-        />
+        {hasDefense ? (
+          <div className="space-y-10">
+            <section aria-labelledby="positional-war-offense">
+              <h3 id="positional-war-offense" className="text-base font-semibold text-ink">
+                Offense
+              </h3>
+              <div className="mt-3">
+                <WarDashboard
+                  positions={offensePositions}
+                  axisMode={axisMode}
+                  maxRank={maxRank}
+                  tierScale={tierScale}
+                  chartSummary={summary}
+                  leagueName={leagueName}
+                  sourceDisplay={sourceDisplay}
+                  formatDisplay={formatDisplay}
+                  headingLevel={4}
+                />
+              </div>
+            </section>
+            <section aria-labelledby="positional-war-defense">
+              <h3 id="positional-war-defense" className="text-base font-semibold text-ink">
+                Defense
+              </h3>
+              <div className="mt-3">
+                <WarDashboard
+                  positions={defensePositions}
+                  axisMode={axisMode}
+                  maxRank={maxRank}
+                  tierScale={tierScale}
+                  chartSummary={defenseSummary}
+                  leagueName={leagueName}
+                  sourceDisplay={sourceDisplay}
+                  formatDisplay={formatDisplay}
+                  group="defense"
+                  headingLevel={4}
+                />
+              </div>
+            </section>
+          </div>
+        ) : (
+          <WarDashboard
+            positions={offensePositions}
+            axisMode={axisMode}
+            maxRank={maxRank}
+            tierScale={tierScale}
+            chartSummary={summary}
+            leagueName={leagueName}
+            sourceDisplay={sourceDisplay}
+            formatDisplay={formatDisplay}
+          />
+        )}
 
         {truncationNote && <p className="mt-3 text-xs text-ink-subtle">{truncationNote}</p>}
 
@@ -311,9 +387,12 @@ export async function PositionalWarPanel({
     );
   }
 
-  const previewRows = dashboardPositions.flatMap((position) =>
-    position.curve.map((row) => ({ position: position.position, row })),
-  );
+  const previewGroups: Array<{ key: "offense" | "defense"; title: string; positions: WarDashboardPosition[]; summary: string }> = [
+    { key: "offense", title: hasDefense ? "Wins over replacement, offense" : "Wins over replacement", positions: offensePositions, summary },
+    ...(hasDefense
+      ? [{ key: "defense" as const, title: "Wins over replacement, defense", positions: defensePositions, summary: defenseSummary }]
+      : []),
+  ];
 
   return (
     <Panel
@@ -323,13 +402,19 @@ export async function PositionalWarPanel({
       headingFocusable
       helper={`How steeply each position drops off in this league. Top ${maxRank} at each.`}
     >
+      {previewGroups.map((group) => {
+        const previewRows = group.positions.flatMap((position) =>
+          position.curve.map((row) => ({ position: position.position, row })),
+        );
+        return (
+      <div key={group.key} className={group.key === "defense" ? "mt-8" : undefined}>
       <ChartFigure
         // The Panel above renders an h2, so the figure title is an h3. Passing
         // nothing would leave the default h4 and skip a level.
         titleLevel={3}
-        title="Wins over replacement"
-        summary={summary}
-        tableLabel="View every plotted player"
+        title={group.title}
+        summary={group.summary}
+        tableLabel={group.key === "defense" ? "View every plotted defensive player" : "View every plotted player"}
         table={
           <DataTable
             caption={`The top ${maxRank} at each position, by wins over replacement`}
@@ -375,8 +460,11 @@ export async function PositionalWarPanel({
           </DataTable>
         }
       >
-        <PositionalWarChart curves={dashboardPositions} axisMode={axisMode} maxRank={maxRank} />
+        <PositionalWarChart curves={group.positions} axisMode={axisMode} maxRank={maxRank} />
       </ChartFigure>
+      </div>
+        );
+      })}
 
       {truncationNote && <p className="mt-2 text-xs text-ink-subtle">{truncationNote}</p>}
 

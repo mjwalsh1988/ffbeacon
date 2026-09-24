@@ -27,7 +27,7 @@
  * ties broken by WAR then player id) are not restated here.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import {
   filterWarRows,
@@ -39,6 +39,7 @@ import {
 } from "@/lib/positional-war/table";
 import { WAR_TIER_LABEL, WAR_TIER_MEANING, type WarTier } from "@/lib/positional-war/tiers";
 import type { PulsePosition } from "@/lib/power-pulse/types";
+import { isDefender } from "@/lib/site";
 
 /** How long the spoken summary waits for typing to settle. */
 const ANNOUNCE_DELAY_MS = 500;
@@ -176,6 +177,7 @@ export function WarPlayerTable({
   positions,
   leagueName,
   sourceDisplay,
+  group = "offense",
 }: {
   /** Every row, unfiltered. The position filter is applied here. */
   rows: WarTableRow[];
@@ -185,7 +187,15 @@ export function WarPlayerTable({
   leagueName: string;
   /** Named in the value column's description, never a raw source slug. */
   sourceDisplay: string;
+  /**
+   * Which chart this table sits under. The Defense section renders a second
+   * table on the same page, so every label a reader can land on says which one
+   * it is (plan IDP-309). The offense wording is unchanged.
+   */
+  group?: "offense" | "defense";
 }) {
+  const isDefense = group === "defense";
+  const searchId = useId();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<WarSortKey>("war");
   const [sortDir, setSortDir] = useState<WarSortDirection>("desc");
@@ -243,7 +253,7 @@ export function WarPlayerTable({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${leagueName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "league"}-positional-war.csv`;
+    link.download = `${leagueName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "league"}-positional-war${isDefense ? "-defense" : ""}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -259,11 +269,11 @@ export function WarPlayerTable({
     <div>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[12rem] flex-1">
-          <label htmlFor="war-table-search" className="mb-1 block text-xs font-medium text-ink-muted">
-            Search players
+          <label htmlFor={searchId} className="mb-1 block text-xs font-medium text-ink-muted">
+            {isDefense ? "Search defensive players" : "Search players"}
           </label>
           <input
-            id="war-table-search"
+            id={searchId}
             type="search"
             value={search}
             onChange={(e) => {
@@ -281,7 +291,7 @@ export function WarPlayerTable({
           className="flex min-h-11 items-center gap-2 rounded-card border border-line bg-base/40 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
-          Download {filtered.length} rows as CSV
+          Download {filtered.length} {isDefense ? "defensive " : ""}rows as CSV
         </button>
       </div>
 
@@ -295,7 +305,11 @@ export function WarPlayerTable({
       <div
         tabIndex={0}
         role="region"
-        aria-label="Player wins over replacement table, scrollable"
+        aria-label={
+          isDefense
+            ? "Defensive player wins over replacement table, scrollable"
+            : "Player wins over replacement table, scrollable"
+        }
         className="mt-2 overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
       >
         {/* On a narrow screen the table keeps its natural width and the wrapper
@@ -303,8 +317,9 @@ export function WarPlayerTable({
             being squeezed or dropped. On desktop it fills the container. */}
         <table className="w-max min-w-full border-collapse text-sm sm:w-full">
           <caption className="sr-only">
-            Every plotted player, with wins over replacement, projected points, and current trade
-            value from {sourceDisplay}. Sortable by any numeric column.
+            {isDefense
+              ? "Every plotted defensive player, with wins over replacement and projected points. No value source prices defenders, and the value column says so for each one. Sortable by any numeric column."
+              : `Every plotted player, with wins over replacement, projected points, and current trade value from ${sourceDisplay}. Sortable by any numeric column.`}
           </caption>
           <thead className="bg-surface/60 text-xs uppercase tracking-wide text-ink-subtle">
             <tr>
@@ -419,7 +434,11 @@ export function WarPlayerTable({
                 <td className="px-3 py-2 text-right tabular-nums text-ink">
                   {/* A dash, never a zero: this source publishes no value for
                       him, which is not the same as saying he is worthless. */}
-                  {row.tradeValue === null ? (
+                  {row.tradeValue === null && isDefender(row.position) ? (
+                    // Words, never a dash or a zero: no value source prices a
+                    // defender at all (the premium standard, plan section 0).
+                    <span className="text-xs text-ink-subtle">No market value</span>
+                  ) : row.tradeValue === null ? (
                     <span title={`${sourceDisplay} publishes no value for this player`}>-</span>
                   ) : (
                     Math.round(row.tradeValue)

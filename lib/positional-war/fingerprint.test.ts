@@ -249,7 +249,7 @@ describe("warFingerprint: false-hit scenarios from plan section 6.4", () => {
     expect(a).toBe(b);
   });
 
-  it("IDP slots versus bench slots in their place produce the identical fingerprint (not caught, intentionally)", () => {
+  it("with the IDP switch off, IDP slots versus bench slots in their place produce the identical fingerprint", () => {
     const withIdp = warFingerprint(
       baseInput({
         rosterPositions: ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "K", "DEF", "IDP_FLEX", "LB"],
@@ -261,6 +261,28 @@ describe("warFingerprint: false-hit scenarios from plan section 6.4", () => {
       }),
     );
     expect(withIdp).toBe(withBench);
+  });
+
+  it("with the IDP switch on, IDP slots enter the fingerprint (plan IDP-308)", () => {
+    const withIdp = warFingerprint(
+      baseInput({
+        rosterPositions: ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "K", "DEF", "IDP_FLEX", "LB"],
+        idpEnabled: true,
+      }),
+    );
+    const withBench = warFingerprint(
+      baseInput({
+        rosterPositions: ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN", "BN"],
+        idpEnabled: true,
+      }),
+    );
+    expect(withIdp).not.toBe(withBench);
+  });
+
+  it("the switch alone never moves an ordinary league's fingerprint", () => {
+    const off = warFingerprint(baseInput({ rosterPositions: [...BASE_ROSTER_POSITIONS] }));
+    const on = warFingerprint(baseInput({ rosterPositions: [...BASE_ROSTER_POSITIONS], idpEnabled: true }));
+    expect(on).toBe(off);
   });
 });
 

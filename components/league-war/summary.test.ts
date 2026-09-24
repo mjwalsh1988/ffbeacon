@@ -156,7 +156,7 @@ describe("buildFootnote", () => {
 
   it("names excluded positions only when there are any", () => {
     const withExclusions = buildFootnote({ ...base, excludedSlots: ["LB", "DB"] });
-    expect(withExclusions).toContain("Sleeper does not project LB, DB");
+    expect(withExclusions).toContain("League Pulse does not project LB, DB");
     const without = buildFootnote(base);
     expect(without).not.toContain("excluded");
   });

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { slotEligibility } from "@/lib/power-pulse/types";
 import {
   alignedStartingSlots,
   isProjectableSlot,
@@ -174,5 +175,30 @@ describe("orderSlotsForDisplay", () => {
     const ordered = orderSlotsForDisplay(slots.map((slot) => ({ slot })));
     expect(ordered.map((e) => e.slot.token)).toEqual(["QB", "EDGE"]);
     expect(SLOT_GROUP_ORDER.indexOf("IDP")).toBeGreaterThan(SLOT_GROUP_ORDER.indexOf("QB"));
+  });
+});
+
+describe("slots with the IDP switch on (plan IDP-304)", () => {
+  const ON = slotEligibility(true);
+
+  it("marks every defensive slot projectable and keeps an unknown token unprojectable", () => {
+    const slots = alignedStartingSlots(["QB", "DL", "LB", "DB", "IDP_FLEX", "EDGE", "BN"], ON);
+    expect(slots.filter((s) => s.projectable).map((s) => s.token)).toEqual([
+      "QB",
+      "DL",
+      "LB",
+      "DB",
+      "IDP_FLEX",
+    ]);
+    expect(slots.find((s) => s.token === "EDGE")?.projectable).toBe(false);
+    // Alignment never depends on the switch.
+    expect(slots.map((s) => s.order)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it("isProjectableSlot follows the map it is given", () => {
+    expect(isProjectableSlot("LB", ON)).toBe(true);
+    expect(isProjectableSlot("IDP_FLEX", ON)).toBe(true);
+    expect(isProjectableSlot("LB")).toBe(false);
+    expect(isProjectableSlot("EDGE", ON)).toBe(false);
   });
 });

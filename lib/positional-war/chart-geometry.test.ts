@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildChartGeometry,
+  defaultVisiblePositions,
   parseAxisMode,
   WAR_CHART_MAX_RANK,
   WAR_PREVIEW_MAX_RANK,
@@ -428,5 +429,27 @@ describe("the rank cap", () => {
     expect(geometry.zeroY).not.toBeNull();
     expect(geometry.zeroY!).toBeGreaterThanOrEqual(geometry.plot.top);
     expect(geometry.zeroY!).toBeLessThanOrEqual(geometry.plot.bottom);
+  });
+});
+
+describe("the Defense chart (plan IDP-309, IDP-315)", () => {
+  const defense = [
+    makeCurve("DL", 2, [0.4, 0.3, 0.2, 0.1]),
+    makeCurve("LB", 3, [0.5, 0.4, 0.3, 0.2, 0.1]),
+    makeCurve("DB", 3, [0.3, 0.25, 0.2, 0.15, 0.1]),
+  ];
+
+  it("shows every defensive curve on first paint, since none is a skill position", () => {
+    expect([...defaultVisiblePositions(defense)].sort()).toEqual(["DB", "DL", "LB"]);
+  });
+
+  it("keeps the offensive default unchanged when the offense chart is drawn on its own", () => {
+    expect([...defaultVisiblePositions(sixPositionCurves())].sort()).toEqual(["QB", "RB", "TE", "WR"]);
+  });
+
+  it("draws one series per defensive position with its own points", () => {
+    const geometry = buildChartGeometry({ curves: defense, mode: "rank", width: WIDTH, height: HEIGHT, padding: PADDING });
+    expect(geometry.series.map((s) => s.position).sort()).toEqual(["DB", "DL", "LB"]);
+    expect(geometry.series.find((s) => s.position === "LB")!.points.length).toBe(5);
   });
 });

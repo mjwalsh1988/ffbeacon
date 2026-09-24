@@ -49,6 +49,7 @@ export function UpgradeWhatIfPanel({
   searchedUsername,
   focusedRosterId,
   availability,
+  positions = OFFENSE_POSITIONS,
 }: {
   sleeperLeagueId: string;
   /** Already resolved server-side. The page never mounts this without one. */
@@ -57,6 +58,12 @@ export function UpgradeWhatIfPanel({
   focusedRosterId: number | null;
   /** Resolved server-side (T-WAR-48 case 2: Power Pulse has no cached rows yet). */
   availability: UpgradePanelAvailability;
+  /**
+   * The positions the dropdown offers: every position this league has a curve
+   * for. The six by default; DL, LB and DB join only once the IDP switch has
+   * produced defensive curves (plan IDP-309).
+   */
+  positions?: readonly PulsePosition[];
 }) {
   const [position, setPosition] = useState<PulsePosition>("QB");
   const [pending, startTransition] = useTransition();
@@ -108,7 +115,7 @@ export function UpgradeWhatIfPanel({
                 disabled={pending}
                 className="min-h-11 w-full rounded-card border border-line bg-base/60 px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
               >
-                {OFFENSE_POSITIONS.map((pos) => (
+                {positions.map((pos) => (
                   <option key={pos} value={pos}>
                     {positionLabel(pos)}
                   </option>

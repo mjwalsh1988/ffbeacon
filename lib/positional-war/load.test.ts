@@ -108,12 +108,28 @@ function isCountQuery(calls: Call[]): boolean {
   return Boolean(opts?.count);
 }
 
+/**
+ * A column, or a dotted path into an embedded join ("players.position"), the
+ * way PostgREST resolves a filter on an `!inner` embed. A row whose embed is
+ * missing has no value there, so an inner-join filter drops it, as Postgres
+ * would.
+ */
+function valueAt(row: Row, key: string): unknown {
+  if (!key.includes(".")) return row[key];
+  let current: unknown = row;
+  for (const part of key.split(".")) {
+    if (current === null || typeof current !== "object") return undefined;
+    current = (current as Row)[part];
+  }
+  return current;
+}
+
 function applyFilters(rows: Row[], calls: Call[]): Row[] {
   let out = rows;
   for (const c of calls) {
     if (c.method === "eq") {
       const [key, value] = c.args as [string, unknown];
-      out = out.filter((r) => r[key] === value);
+      out = out.filter((r) => valueAt(r, key) === value);
     } else if (c.method === "gte") {
       const [key, value] = c.args as [string, number];
       out = out.filter((r) => (r[key] as number) >= value);
@@ -126,7 +142,7 @@ function applyFilters(rows: Row[], calls: Call[]): Row[] {
     } else if (c.method === "in") {
       const [key, values] = c.args as [string, unknown[]];
       const set = new Set(values);
-      out = out.filter((r) => set.has(r[key]));
+      out = out.filter((r) => set.has(valueAt(r, key)));
     } else if (c.method === "is") {
       const [key, value] = c.args as [string, unknown];
       out = out.filter((r) => r[key] === value);
@@ -184,10 +200,24 @@ function fakeClient(tables: Record<string, () => unknown>): SupabaseClient<Datab
   } as unknown as SupabaseClient<Database>;
 }
 
-function projectionRow(id: string, playerId: string, week: number, ppr: number, updatedAt: string): Row {
+/**
+ * One projection row, with the embedded `players` object the loader's
+ * `players!inner(position)` join returns. `position` defaults to RB, an
+ * offensive position, so a fixture that does not care lands in the offense
+ * slice the way every pre-IDP fixture did.
+ */
+function projectionRow(
+  id: string,
+  playerId: string,
+  week: number,
+  ppr: number,
+  updatedAt: string,
+  position = "RB",
+): Row {
   return {
     id,
     player_id: playerId,
+    players: { position },
     season: 2026,
     season_type: "regular",
     // The reader filters on source now, so a fixture without one would be
@@ -725,7 +755,7 @@ describe("loadWarUniverseUncached: one pass over the window", () => {
     activeClient = fakeClient({
       player_weekly_projections: table([
         projectionRow("1", "p1", 5, 15, "2026-08-26T14:00:00.000Z"),
-        projectionRow("2", "idp1", 5, 9, "2026-08-26T14:00:00.000Z"),
+        projectionRow("2", "idp1", 5, 9, "2026-08-26T14:00:00.000Z", "LB"),
       ]),
       players: table([playerRow("p1", "RB", "1001"), playerRow("idp1", "LB", "1003")]),
       player_projection_accuracy: table([]),
@@ -931,7 +961,7 @@ describe("the completeness guards", () => {
     });
     await expect(
       loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr", source: "sleeper" }),
-    ).rejects.toThrow(/week \d+ load incomplete/);
+    ).rejects.toThrow(/week \d+ \(offense\) load incomplete/);
   });
 
   it("throws when the summed slices fall short of the live window count", async () => {

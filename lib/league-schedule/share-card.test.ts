@@ -224,7 +224,7 @@ describe("what the card refuses to claim", () => {
     });
 
     const card = buildShareCard(idp, "L");
-    expect(card.footnote).toContain("1 IDP slot");
+    expect(card.footnote).toContain("1 slot League Pulse does not project");
   });
 });
 

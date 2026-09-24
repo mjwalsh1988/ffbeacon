@@ -120,7 +120,8 @@
  * every league until the tag was busted or the TTL expired.
  */
 
-import { OFFENSE_POSITIONS } from "@/lib/site";
+import { IDP_POSITIONS, OFFENSE_POSITIONS } from "@/lib/site";
+import { IDP_SCORING_KEY } from "@/lib/power-pulse/idp-reads";
 import { createHash } from "node:crypto";
 import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -172,7 +173,32 @@ const PLAYER_RESOLVE_CHUNK = 200;
 // were keyed on (season, week) alone and the query filtered on nothing, so the
 // day player_weekly_projections holds an ffbeacon row beside its sleeper one,
 // the same player-week comes back twice and the universe doubles.
-const CACHE_SHAPE_VERSION = "v2";
+//
+// v3 (plan IDP-308, hazard C) splits each week into a POSITION GROUP slice,
+// filtered at the query through the players join. Since IDP-114 the table
+// holds a defender row beside every offensive one, and measured on production
+// (2026 weeks 3 to 8, sleeper) defenders are 54 percent of each week: about
+// 1,300 of 2,400 rows. A v2 slice carried all of them and the assembly threw
+// them away, so every ordinary league paid for them on every cold read. Now
+// the offense slice holds offense only, and the defense slice is read only for
+// a league whose IDP switch is on and which starts a defensive slot. The
+// offense slice stays around the old 390 KiB; the defense slice is smaller
+// again (defender stat lines are about half the bytes: 146 to 168 KiB of raw
+// stat line a week against 276 to 302 for offense), so both sit well under
+// Next's 2 MiB item limit.
+const CACHE_SHAPE_VERSION = "v3";
+
+/**
+ * Which rows a week slice holds, by the PRIMARY position of the player the row
+ * belongs to. Two groups and never a third: every projectable position is in
+ * exactly one of them.
+ */
+export type UniverseGroup = "offense" | "defense";
+
+export const UNIVERSE_GROUP_POSITIONS: Record<UniverseGroup, readonly string[]> = {
+  offense: OFFENSE_POSITIONS,
+  defense: IDP_POSITIONS,
+};
 
 /** One projectable player, before any week is attached. */
 export type WarUniversePlayer = {
@@ -183,6 +209,12 @@ export type WarUniversePlayer = {
   team: string | null;
   position: PulsePosition;
   injuryStatus: string | null;
+  /**
+   * Every position Sleeper lets him start at (players.eligible_positions).
+   * Present only in a universe built with defenders included; absent, the
+   * optimiser reads his primary alone, exactly as before the switch.
+   */
+  eligible?: string[];
 };
 
 /** Everything buildWarPlayers() needs, for one (season, week window, scoring base). */
@@ -234,9 +266,13 @@ type ResolvedPlayers = {
   dropped: number;
 };
 
-/** The columns one projection row needs, shared by the walk and its count. */
+/**
+ * The columns one projection row needs, plus the inner join that lets the
+ * query filter on the player's position. The joined object is ignored once the
+ * filter has run.
+ */
 const PROJECTION_COLUMNS =
-  "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, availability, injury_status";
+  "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, availability, injury_status, players!inner(position)";
 
 /**
  * A stable digest of a player id set, for the cache keys of the two entries
@@ -309,7 +345,9 @@ async function readProjectionWeek(
   season: number,
   week: number,
   source: string,
+  group: UniverseGroup,
 ): Promise<ProjectionWeekSlice> {
+  const positions = [...UNIVERSE_GROUP_POSITIONS[group]];
   const walk = async (): Promise<ProjectionWeekSlice> => {
     const out: ProjectionRow[] = [];
     let readCount = 0;
@@ -322,6 +360,7 @@ async function readProjectionWeek(
         .eq("season_type", "regular")
         .eq("week", week)
         .eq("source", source)
+        .in("players.position", positions)
         .order("id", { ascending: true })
         .limit(PAGE);
       if (cursor !== null) q = q.gt("id", cursor);
@@ -356,11 +395,12 @@ async function readProjectionWeek(
     walk(),
     supabase
       .from("player_weekly_projections")
-      .select("id", { count: "exact", head: true })
+      .select("id, players!inner(position)", { count: "exact", head: true })
       .eq("season", season)
       .eq("season_type", "regular")
       .eq("week", week)
-      .eq("source", source),
+      .eq("source", source)
+      .in("players.position", positions),
   ]);
 
   if (countResult.error) {
@@ -369,7 +409,7 @@ async function readProjectionWeek(
   const expected = countResult.count;
   if (expected != null && walked.readCount < expected) {
     throw new Error(
-      `positional war week ${week} load incomplete: read ${walked.readCount} of ${expected} projection rows`,
+      `positional war week ${week} (${group}) load incomplete: read ${walked.readCount} of ${expected} projection rows`,
     );
   }
 
@@ -391,15 +431,17 @@ async function countWindowProjections(
   fromWeek: number,
   toWeek: number,
   source: string,
+  positions: readonly string[],
 ): Promise<number | null> {
   const { count, error } = await supabase
     .from("player_weekly_projections")
-    .select("id", { count: "exact", head: true })
+    .select("id, players!inner(position)", { count: "exact", head: true })
     .eq("season", season)
     .eq("season_type", "regular")
     .eq("source", source)
     .gte("week", fromWeek)
-    .lte("week", toWeek);
+    .lte("week", toWeek)
+    .in("players.position", [...positions]);
   if (error) {
     throw new Error(`positional war universe count failed: ${error.message}`);
   }
@@ -425,11 +467,12 @@ async function countWindowProjections(
  * length checks below still turn an empty string into null the way they did.
  */
 const PLAYER_COLUMNS =
-  "id, slug, first_name, last_name, full_name, position, team, sleeper_id:external_ids->>sleeper, injury_status:metadata->sleeper->>injury_status";
+  "id, slug, first_name, last_name, full_name, position, eligible_positions, team, sleeper_id:external_ids->>sleeper, injury_status:metadata->sleeper->>injury_status";
 
 /** The shape PLAYER_COLUMNS returns. The jsonb paths are text or null. */
 type ResolvedPlayerRow = {
   id: string;
+  eligible_positions?: string[] | null;
   slug: string;
   first_name: string | null;
   last_name: string | null;
@@ -441,10 +484,10 @@ type ResolvedPlayerRow = {
 };
 
 /**
- * Resolve player ids to name, slug, position, team, injury status and Sleeper
- * id. Drops anyone whose position is not one of QB, RB, WR, TE, K, DEF: those
- * are the only positions Sleeper projects (PULSE_POSITIONS), so anything else
- * cannot be scored here regardless of what slot a league might offer it.
+ * Resolve player ids to name, slug, position, team, injury status, Sleeper id
+ * and (with defenders in) eligibility. Drops anyone whose primary position is
+ * outside the groups this universe was asked for: the six offensive positions,
+ * plus DL, LB and DB when defenders are included.
  *
  * Returns the dropped count alongside the rows so the assembly can prove
  * nothing went missing. See ResolvedPlayers.
@@ -452,14 +495,16 @@ type ResolvedPlayerRow = {
 async function readUniversePlayers(
   supabase: ServiceClient,
   playerIds: string[],
+  includeDefenders: boolean,
 ): Promise<ResolvedPlayers> {
   const out = new Map<string, WarUniversePlayer>();
   if (playerIds.length === 0) return { players: [], dropped: 0 };
 
-  // Pinned to the six offensive positions until the IDP switch threads through
-  // the Positional WAR universe (phase 3, IDP-308). Widening it here alone
-  // would change the cached universe with nothing to seat a defender.
-  const valid = new Set<string>(OFFENSE_POSITIONS);
+  // The same groups the projection slices were read for, so a defender row can
+  // only ever reach the engine when the switch put it there (plan R-25).
+  const valid = new Set<string>(
+    includeDefenders ? [...OFFENSE_POSITIONS, ...IDP_POSITIONS] : OFFENSE_POSITIONS,
+  );
 
   const chunks: string[][] = [];
   for (let i = 0; i < playerIds.length; i += PLAYER_RESOLVE_CHUNK) {
@@ -495,6 +540,16 @@ async function readUniversePlayers(
         team: p.team,
         position: position as PulsePosition,
         injuryStatus,
+        // Carried only with defenders in the universe: the OFF universe stays
+        // byte-identical to what it was, and nothing reads eligibility there.
+        ...(includeDefenders
+          ? {
+              eligible:
+                Array.isArray(p.eligible_positions) && p.eligible_positions.length > 0
+                  ? p.eligible_positions
+                  : [position],
+            }
+          : {}),
       });
     }
   }
@@ -509,25 +564,33 @@ async function readUniversePlayers(
 
 /** The four reads the assembly needs, so it can run cached or direct. */
 type UniverseReaders = {
-  projectionWeek: (season: number, week: number) => Promise<ProjectionWeekSlice>;
-  players: (playerIds: string[]) => Promise<ResolvedPlayers>;
-  accuracy: (playerIds: string[], scoringBase: ScoringBase) => Promise<[string, AccuracyRow][]>;
-  defense: (scoringBase: ScoringBase, seasons: number[]) => Promise<[string, DefenseRow][]>;
+  projectionWeek: (season: number, week: number, group: UniverseGroup) => Promise<ProjectionWeekSlice>;
+  players: (playerIds: string[], includeDefenders: boolean) => Promise<ResolvedPlayers>;
+  /** keys: the league's base alone, or [base, "idp123"] with defenders in. */
+  accuracy: (playerIds: string[], keys: readonly string[]) => Promise<[string, AccuracyRow][]>;
+  defense: (keys: readonly string[], seasons: number[]) => Promise<[string, DefenseRow][]>;
 };
+
+/** One scoring key is passed as a bare string, the exact query the OFF path always made. */
+function keysArg(keys: readonly string[]): string | readonly string[] {
+  return keys.length === 1 ? keys[0] : keys;
+}
 
 /** Straight to Postgres. No data cache involved at any level. */
 function directReaders(supabase: ServiceClient, source: string): UniverseReaders {
   return {
-    projectionWeek: (season, week) => readProjectionWeek(supabase, season, week, source),
-    players: (playerIds) => readUniversePlayers(supabase, playerIds),
+    projectionWeek: (season, week, group) =>
+      readProjectionWeek(supabase, season, week, source, group),
+    players: (playerIds, includeDefenders) =>
+      readUniversePlayers(supabase, playerIds, includeDefenders),
     // Scoped to the SAME source the projections were read from, per migration
     // 0240: a reliability multiplier measured against Sleeper's projection is
     // only meaningful applied to Sleeper's projection.
-    accuracy: async (playerIds, scoringBase) => [
-      ...(await loadAccuracy(supabase, playerIds, scoringBase, source)).entries(),
+    accuracy: async (playerIds, keys) => [
+      ...(await loadAccuracy(supabase, playerIds, keysArg(keys), source)).entries(),
     ],
-    defense: async (scoringBase, seasons) => [
-      ...(await loadDefenseSplits(supabase, scoringBase, seasons)).entries(),
+    defense: async (keys, seasons) => [
+      ...(await loadDefenseSplits(supabase, keysArg(keys), seasons)).entries(),
     ],
   };
 }
@@ -542,37 +605,43 @@ function directReaders(supabase: ServiceClient, source: string): UniverseReaders
 function cachedReaders(supabase: ServiceClient, source: string): UniverseReaders {
   const direct = directReaders(supabase, source);
   return {
-    projectionWeek: (season, week) =>
+    projectionWeek: (season, week, group) =>
       withDataCache(
         [
           "positional-war-projection-week",
           CACHE_SHAPE_VERSION,
           source,
+          group,
           String(season),
           String(week),
         ],
-        () => direct.projectionWeek(season, week),
+        () => direct.projectionWeek(season, week, group),
       ),
-    players: (playerIds) =>
+    players: (playerIds, includeDefenders) =>
       withDataCache(
-        ["positional-war-players", CACHE_SHAPE_VERSION, playerIdSetDigest(playerIds)],
-        () => direct.players(playerIds),
+        [
+          "positional-war-players",
+          CACHE_SHAPE_VERSION,
+          includeDefenders ? "with-defense" : "offense",
+          playerIdSetDigest(playerIds),
+        ],
+        () => direct.players(playerIds, includeDefenders),
       ),
-    accuracy: (playerIds, scoringBase) =>
+    accuracy: (playerIds, keys) =>
       withDataCache(
         [
           "positional-war-accuracy",
           CACHE_SHAPE_VERSION,
           source,
-          scoringBase,
+          keys.join("+"),
           playerIdSetDigest(playerIds),
         ],
-        () => direct.accuracy(playerIds, scoringBase),
+        () => direct.accuracy(playerIds, keys),
       ),
-    defense: (scoringBase, seasons) =>
+    defense: (keys, seasons) =>
       withDataCache(
-        ["positional-war-defense", CACHE_SHAPE_VERSION, scoringBase, seasons.join("_")],
-        () => direct.defense(scoringBase, seasons),
+        ["positional-war-defense", CACHE_SHAPE_VERSION, keys.join("+"), seasons.join("_")],
+        () => direct.defense(keys, seasons),
       ),
   };
 }
@@ -593,6 +662,13 @@ export type WarUniverseParams = {
    * twice.
    */
   source: string;
+  /**
+   * Read the defense group too, and grade and split defenders under idp123
+   * (plan IDP-308). Pass lib/power-pulse/idp-reads.ts loadsDefenders: true only
+   * when the IDP switch is on AND the league starts a defensive slot. Absent
+   * or false: the offense slices only.
+   */
+  includeDefenders?: boolean;
 };
 
 /**
@@ -609,16 +685,30 @@ async function assembleUniverse(
   readers: UniverseReaders,
 ): Promise<SerializedWarUniverse> {
   const { season, fromWeek, toWeek, scoringBase } = params;
+  const includeDefenders = params.includeDefenders === true;
   const defenseSeasons = defenseSeasonsFor(season);
+  const groups: UniverseGroup[] = includeDefenders ? ["offense", "defense"] : ["offense"];
+  const keys: string[] = includeDefenders ? [scoringBase, IDP_SCORING_KEY] : [scoringBase];
 
-  const weeks: number[] = [];
-  for (let w = fromWeek; w <= toWeek; w++) weeks.push(w);
+  const slices: Array<{ week: number; group: UniverseGroup }> = [];
+  for (let w = fromWeek; w <= toWeek; w++) {
+    for (const group of groups) slices.push({ week: w, group });
+  }
 
-  // The window's rows, one slice per week, plus the live count that verifies
-  // them. Nothing here depends on anything else here.
+  // The window's rows, one slice per week and group, plus the live count that
+  // verifies them. Nothing here depends on anything else here.
   const [perWeek, expected] = await Promise.all([
-    mapWithConcurrency(weeks, DB_CHUNK_CONCURRENCY, (week) => readers.projectionWeek(season, week)),
-    countWindowProjections(supabase, season, fromWeek, toWeek, params.source),
+    mapWithConcurrency(slices, DB_CHUNK_CONCURRENCY, ({ week, group }) =>
+      readers.projectionWeek(season, week, group),
+    ),
+    countWindowProjections(
+      supabase,
+      season,
+      fromWeek,
+      toWeek,
+      params.source,
+      groups.flatMap((group) => UNIVERSE_GROUP_POSITIONS[group]),
+    ),
   ]);
 
   const windowProjections: ProjectionRow[] = [];
@@ -647,9 +737,9 @@ async function assembleUniverse(
   const projectedIds = [...projectedIdSet];
 
   const [resolved, accuracyEntries, defenseEntries] = await Promise.all([
-    readers.players(projectedIds),
-    readers.accuracy(projectedIds, scoringBase),
-    readers.defense(scoringBase, defenseSeasons),
+    readers.players(projectedIds, includeDefenders),
+    readers.accuracy(projectedIds, keys),
+    readers.defense(keys, defenseSeasons),
   ]);
 
   // The stored player entry must account for every id it was asked about, or
@@ -662,14 +752,9 @@ async function assembleUniverse(
 
   const playersMap = new Map(resolved.players);
 
-  // readUniversePlayers drops anyone outside PULSE_POSITIONS, so the rows are
-  // narrowed to the resolved players here rather than by a second query. This
-  // keeps `projections` exactly the set the previous id-filtered read
-  // returned. Since IDP-114 the table holds defender rows (about half of each
-  // week), and this is what keeps them out of the engine until IDP-308. A
-  // query-level filter would halve the cached week slices; it was tried in the
-  // phase 1 review round and left for IDP-308, which rewrites this loader and
-  // its test fakes anyway.
+  // The slices are already filtered to the asked-for groups at the query
+  // (plan IDP-308). This narrows them once more to the players that resolved,
+  // which covers the rare row whose player's position changed between reads.
   const projections = windowProjections.filter((row) => playersMap.has(row.playerId));
 
   // Accuracy is read for every projected id rather than only the resolved
@@ -891,6 +976,7 @@ export function buildWarPlayers(params: {
       team: player.team,
       position: player.position,
       injuryStatus: player.injuryStatus,
+      ...(player.eligible ? { eligible: player.eligible } : {}),
       byWeek,
     });
   }

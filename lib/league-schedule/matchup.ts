@@ -44,6 +44,7 @@ import type { ScoringSettings } from "@/lib/league-scoring";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import {
   buildOptimalLineup,
+  pulseEligibility,
   type LineupCandidate,
 } from "@/lib/power-pulse/lineup";
 import type {
@@ -57,7 +58,7 @@ import {
   projectPlayerWeek,
   reliabilityMultiplier,
 } from "@/lib/power-pulse/project";
-import { PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+import { slotEligibility } from "@/lib/power-pulse/types";
 // The one test for "has this week started". lib/league-lineups/status.ts
 // imports nothing, so reaching for it here closes no cycle, and a second copy
 // of the rule is how the Lineups board and this page would end up disagreeing
@@ -144,6 +145,13 @@ export type BuildMatchupInput = {
    * missing map means every player's venue reads as unknown rather than as home.
    */
   homeAwayByTeamWeek?: Map<string, boolean> | null;
+  /**
+   * The IDP switch, read once by the server loader (plan R-25). Absent or
+   * false: defensive slots are not projected, not optimised and never offered
+   * as a swap target, exactly as before. It must agree with the `projectable`
+   * flags on `slots`, which the same loader built from the same switch.
+   */
+  idpEnabled?: boolean;
 };
 
 /** A proposed swap, before the greedy pass thins the list out. */
@@ -197,6 +205,11 @@ function buildSide(
 ): MatchupSide {
   const reserve = new Set(side.reserveSleeperIds);
   const taxi = new Set(side.taxiSleeperIds);
+  const idpEnabled = input.idpEnabled === true;
+  const slotMap = slotEligibility(idpEnabled);
+  /** Every position a resolved player may be seated as under the map in force. */
+  const eligibleOf = (row: PlayerRow) =>
+    idpEnabled ? pulseEligibility(row.position, row.eligible) : [row.position];
 
   /**
    * What a player actually scored, once there are results to report. The
@@ -255,9 +268,9 @@ function buildSide(
     const reliability = reliabilityMultiplier(accuracy, input.settings);
     const projection = input.projections.get(row.playerId + "|" + input.week);
 
-    // An IDP slot never reaches projectPlayerWeek. Sleeper publishes no
-    // projections for those positions, and running the model over an absent
-    // stat line would produce a confident zero.
+    // A slot the map cannot fill never reaches projectPlayerWeek: a defensive
+    // slot while the IDP switch is off, or a token nobody projects. Running the
+    // model there would put a number in a slot the totals then leave out.
     const projected = projectable
       ? projectPlayerWeek({
           projection,
@@ -421,6 +434,7 @@ function buildSide(
     candidates.push({
       playerId: row.playerId,
       position: row.position,
+      ...(idpEnabled ? { eligible: eligibleOf(row) } : {}),
       points,
       sigma: player.sigma ?? 0,
     });
@@ -449,7 +463,7 @@ function buildSide(
   let optimalTotal: number | null = null;
   if (candidates.length > 0) {
     optimalTotal =
-      buildOptimalLineup(projectableTokens, candidates).total +
+      buildOptimalLineup(projectableTokens, candidates, slotMap).total +
       unprojectableSetGraded;
   }
 
@@ -491,8 +505,8 @@ function buildSide(
     let targetPoints = 0;
     let foundTarget = false;
     for (let i = 0; i < slotEntries.length; i += 1) {
-      const eligible = PULSE_SLOT_ELIGIBILITY[slotEntries[i].slot.token] ?? [];
-      if (!eligible.includes(row.position)) continue;
+      const slotTakes = slotMap[slotEntries[i].slot.token] ?? [];
+      if (!eligibleOf(row).some((position) => slotTakes.includes(position))) continue;
 
       const holder = slotEntries[i].player;
       // An occupied slot we cannot grade is not a target. Its holder scored or

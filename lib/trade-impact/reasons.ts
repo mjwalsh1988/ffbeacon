@@ -71,7 +71,32 @@ export type ReasonInput = {
   weakestSlot?: { label: string; before: number; after: number } | null;
   /** Position whose starter output dropped most, with the next-man-up gap. */
   depthCost?: { position: string; gap: number } | null;
+  /**
+   * Defensive players in the trade, both sides (plan R-5, IDP-311). No value
+   * source prices one, so the value figures leave them out and a reason says
+   * so. Absent or zero: no sentence.
+   */
+  unpricedDefenders?: number;
 };
+
+/**
+ * The defender caveat. A trade with a linebacker in it is judged on projected
+ * wins only for that player, and the reader is told so in words rather than
+ * left to wonder why he adds nothing to the value totals.
+ */
+function defenderReason(input: ReasonInput): TradeReason | null {
+  const count = input.unpricedDefenders ?? 0;
+  if (count <= 0) return null;
+  return {
+    kind: "defender-caveat",
+    label: "Defenders judged on wins",
+    detail:
+      count === 1
+        ? "The defensive player here is judged on projected wins only; no value source prices defenders, so the value totals leave him out."
+        : `The ${count} defensive players here are judged on projected wins only; no value source prices defenders, so the value totals leave them out.`,
+    tone: "neutral",
+  };
+}
 
 /** Tone rank for ordering. Good news reads first, costs read last. */
 const TONE_ORDER: Record<TradeReason["tone"], number> = {
@@ -625,6 +650,7 @@ export function buildTradeReasons(input: ReasonInput): TradeReason[] {
     fillsHoleReason(input),
     directionReason(input),
     gradeReason(input.grade),
+    defenderReason(input),
   ];
 
   const reasons = collected.filter((r): r is TradeReason => r !== null);

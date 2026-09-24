@@ -33,7 +33,8 @@ import {
   buildOptimalLineup,
   type LineupCandidate,
 } from "@/lib/power-pulse/lineup";
-import { PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+import { PULSE_SLOT_ELIGIBILITY, slotEligibility } from "@/lib/power-pulse/types";
+import { pulseEligibility, type SlotEligibilityMap } from "@/lib/power-pulse/lineup";
 import { alignedStartingSlots } from "@/lib/league-schedule/slots";
 import type {
   GradedWeek,
@@ -49,6 +50,12 @@ export type LedgerPlayer = {
   sleeperId: string;
   name: string;
   position: LedgerPosition;
+  /**
+   * Every position Sleeper lets him start at (players.eligible_positions).
+   * Read only when the IDP switch is on (plan R-3, IDP-310); with it off a
+   * player fills only the slots his primary does, exactly as before.
+   */
+  eligible?: readonly string[];
 };
 
 /** One roster's settled week, exactly as `league_matchups` stores it. */
@@ -88,6 +95,10 @@ export type WeekInput = {
 
 /** The startable slots split into the ones this model can grade and the rest. */
 export type SlotPlan = {
+  /** The IDP switch the plan was built under (plan R-25). Absent means off. */
+  idpEnabled?: boolean;
+  /** The slot map it was built from. Absent means the OFF map. */
+  slotMap?: SlotEligibilityMap;
   /** Index into Sleeper's `starters` array, paired with the slot token. */
   aligned: { index: number; token: string; gradable: boolean }[];
   gradableTokens: string[];
@@ -102,13 +113,19 @@ export type SlotPlan = {
  * every player below it into the wrong slot. See its header; that bug is the
  * reason the function exists.
  */
-export function planSlots(rosterPositions: string[]): SlotPlan {
-  const aligned = alignedStartingSlots(rosterPositions).map((slot) => ({
+export function planSlots(rosterPositions: string[], idpEnabled = false): SlotPlan {
+  // The IDP switch (plan R-25) decides which slots are gradable. With it off
+  // this is the OFF map and every defensive slot is ungradable, as before;
+  // with it on a defensive slot is graded on what its defenders scored.
+  const slotMap = slotEligibility(idpEnabled);
+  const aligned = alignedStartingSlots(rosterPositions, slotMap).map((slot) => ({
     index: slot.order,
     token: slot.token,
     gradable: slot.projectable,
   }));
   return {
+    idpEnabled,
+    slotMap,
     aligned,
     gradableTokens: aligned.filter((s) => s.gradable).map((s) => s.token),
     ungradableTokens: aligned.filter((s) => !s.gradable).map((s) => s.token),
@@ -136,10 +153,18 @@ function isRealId(id: string | undefined): id is string {
   return typeof id === "string" && id.length > 0 && id !== "0";
 }
 
-/** Can a player of this position legally occupy this slot? */
-function eligible(token: string, position: LedgerPosition): boolean {
-  const list = PULSE_SLOT_ELIGIBILITY[token];
-  return Array.isArray(list) && (list as string[]).includes(position);
+/**
+ * Can this player legally occupy this slot? His primary alone while the IDP
+ * switch is off; every position he is eligible for once it is on, so a DL/LB
+ * player can be the swap into an LB slot.
+ */
+function eligible(plan: SlotPlan, token: string, player: LedgerPlayer): boolean {
+  const list = (plan.slotMap ?? PULSE_SLOT_ELIGIBILITY)[token];
+  if (!Array.isArray(list)) return false;
+  const positions = plan.idpEnabled
+    ? pulseEligibility(player.position, player.eligible)
+    : [player.position];
+  return positions.some((position) => (list as readonly string[]).includes(position));
 }
 
 /**
@@ -189,7 +214,7 @@ export function biggestMiss(
     const outPoints = outReal ? (playerPoints.get(outId) ?? 0) : 0;
 
     for (const candidate of bench) {
-      if (!eligible(slot.token, candidate.player.position)) continue;
+      if (!eligible(plan, slot.token, candidate.player)) continue;
       const gain = candidate.points - outPoints;
       if (gain <= 0) continue;
       if (best && gain <= best.gain) continue;
@@ -247,9 +272,10 @@ export function gradeWeek(
     if (ineligible.has(id)) continue;
     const player = players.get(id);
     if (!player) continue;
-    const candidate = {
+    const candidate: LineupCandidate = {
       playerId: id,
       position: player.position,
+      ...(plan.idpEnabled ? { eligible: pulseEligibility(player.position, player.eligible) } : {}),
       points,
       sigma: 0,
     };
@@ -267,7 +293,7 @@ export function gradeWeek(
     setPoints += candidate.points;
   }
 
-  const optimal = buildOptimalLineup(plan.gradableTokens, candidates);
+  const optimal = buildOptimalLineup(plan.gradableTokens, candidates, plan.slotMap);
   const gradedSet = round2(setPoints);
   const gradedOptimal = round2(optimal.total);
   const pointsLeft = Math.max(0, round2(gradedOptimal - gradedSet));

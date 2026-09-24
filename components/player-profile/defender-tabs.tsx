@@ -17,6 +17,9 @@
  * Async server components.
  */
 
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { createAdminClient } from "@/lib/supabase/server";
 import { Scale } from "lucide-react";
 import { PageBody } from "@/components/app-shell/page-body";
 import { Panel } from "@/components/dashboard-panel";
@@ -137,6 +140,11 @@ export async function DefenderOverviewTab({
     loadLatestArticleCached(player.id),
   ]);
   const leagues = await loadReaderLeagues(data.season);
+  // Links into League Pulse only once the IDP switch is on (plan IDP-314): with
+  // it off, Lineups does not project him and the link would lead nowhere useful.
+  const leagueLinks = idpEnabledFrom(await loadPowerPulseSettings(createAdminClient()))
+    ? leagues.map((l) => ({ name: l.name, href: `/leagues/${l.sleeperLeagueId}/lineups` }))
+    : [];
   const engine = projectionSourceDisplay(data.projectionSource);
 
   const lastFull = data.seasons.find((s) => s.season < Number(currentNflSeason()) && s.games > 0);
@@ -198,6 +206,7 @@ export async function DefenderOverviewTab({
               accuracy={data.accuracy}
               playerName={playerName}
               engineDisplay={engine}
+              leagueLinks={leagueLinks}
             />
             <Panel
               eyebrow="Production"
@@ -223,6 +232,11 @@ export async function DefenderStatsTab({ player }: { player: PlayerRow }) {
   const playerName = nameOf(player);
   const data = await loadDefenderData(player);
   const leagues = await loadReaderLeagues(data.season);
+  // Links into League Pulse only once the IDP switch is on (plan IDP-314): with
+  // it off, Lineups does not project him and the link would lead nowhere useful.
+  const leagueLinks = idpEnabledFrom(await loadPowerPulseSettings(createAdminClient()))
+    ? leagues.map((l) => ({ name: l.name, href: `/leagues/${l.sleeperLeagueId}/lineups` }))
+    : [];
   const engine = projectionSourceDisplay(data.projectionSource);
   const noun = positionNoun(player.position, "plural");
 
@@ -237,6 +251,7 @@ export async function DefenderStatsTab({ player }: { player: PlayerRow }) {
               playerName={playerName}
               engineDisplay={engine}
               headingLevel={2}
+              leagueLinks={leagueLinks}
             />
             <Panel
               eyebrow="Career"

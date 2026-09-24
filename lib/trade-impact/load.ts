@@ -17,6 +17,8 @@ import {
   type RosterRow,
 } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, scoringKeysArg, type IdpReads } from "@/lib/power-pulse/idp-reads";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import type { ScheduleWeek } from "@/lib/power-pulse/types";
 import type { WeeklyDistribution } from "@/lib/power-pulse/what-if";
@@ -86,6 +88,11 @@ export type TradeImpactWorld = {
   defense: Map<string, DefenseRow>;
   defenseSeasons: number[];
   settings: PowerPulseSettings;
+  /**
+   * What the IDP switch decided for this league (plan R-25, IDP-311): the slot
+   * map every fill uses, and whether defenders are projected at all.
+   */
+  idpReads: IdpReads;
   schedule: ScheduleWeek[];
   /** Unplayed regular-season weeks, ascending. Empty means no season left. */
   remainingWeeks: number[];
@@ -226,10 +233,15 @@ export async function loadTradeImpactWorld(
       ]),
     ),
   );
-  const players = await loadPlayers(admin, sleeperIds);
+  const scoringBase = closestScoringBase(league.scoringSettings);
+  // The IDP switch, read once (plan R-25). Off, or a league with no defensive
+  // slot: the offense list and one scoring key, the reads this always made.
+  const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
+  const players = await loadPlayers(admin, sleeperIds, {
+    positions: idpReads.candidatePositions,
+  });
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 
-  const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(league.season);
 
   // The projection source is resolved, never assumed. See
@@ -246,8 +258,8 @@ export async function loadTradeImpactWorld(
 
   const [projectionRows, accuracy, defense, schedule, cachedWeekly] = await Promise.all([
     loadProjections(admin, playerIds, league.season, currentWeek, undefined, projectionSource),
-    loadAccuracy(admin, playerIds, scoringBase, projectionSource),
-    loadDefenseSplits(admin, scoringBase, defenseSeasons),
+    loadAccuracy(admin, playerIds, scoringKeysArg(idpReads), projectionSource),
+    loadDefenseSplits(admin, scoringKeysArg(idpReads), defenseSeasons),
     loadSchedule(admin, finder.leagueRowId, league.season),
     loadCachedWeekly(admin, finder.leagueRowId, league.season),
   ]);
@@ -276,6 +288,7 @@ export async function loadTradeImpactWorld(
       defense,
       defenseSeasons,
       settings,
+      idpReads,
       schedule: schedule.weeks,
       remainingWeeks,
       currentWeek,

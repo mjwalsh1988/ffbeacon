@@ -85,8 +85,6 @@ const ALLOWED = new Map<string, string>([
   ["lib/trade-finder/explain.ts", "value-side trade copy; folded in IDP-311"],
   ["lib/trade-finder/types.ts", "exported TRADE_POSITION_LABEL; folded in IDP-311"],
   ["lib/waiver-wire/reasons.ts", "waiver wire board is offense-only; 'defense' wording"],
-  ["components/league-lineups/slot-swap-dialog.tsx", "eligible-slot plurals; folded in IDP-305"],
-  ["components/league-schedule/player-detail-dialog.tsx", "already carries DL/LB/DB; folded in IDP-304"],
   ["components/team-card.tsx", "ValuedPosition headings; reworked in IDP-209"],
   ["components/waiver-wire/board-rail.tsx", "waiver wire board is offense-only"],
   ["components/waiver-wire/player-card.tsx", "waiver wire board is offense-only"],

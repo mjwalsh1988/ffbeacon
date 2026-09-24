@@ -23,6 +23,8 @@ import { resolveCurrentWeek } from "@/lib/league-matchups";
 import { loadLeague } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings, type PowerPulseSettings } from "@/lib/power-pulse/settings";
 import { startingSlots } from "@/lib/power-pulse/lineup";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor, type IdpReads } from "@/lib/power-pulse/idp-reads";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import {
@@ -214,6 +216,8 @@ type WarContext = {
   pulseSettings: PowerPulseSettings;
   /** "sleeper" or "ffbeacon", resolved once for the whole compute. */
   projectionSource: string;
+  /** What the IDP switch decided for this league (plan R-25). */
+  idpReads: IdpReads;
   fingerprintInput: WarFingerprintInput;
   fingerprint: string;
   digest: WarInputsDigest;
@@ -357,12 +361,21 @@ async function buildWarContext(
     };
   }
 
+  // Read once here and threaded as a boolean (plan R-25). Off, or on in a
+  // league with no defensive slot, the fingerprint is the one it always was.
+  const idpReads = idpReadsFor(
+    idpEnabledFrom(settings),
+    league.rosterPositions,
+    closestScoringBase(league.scoringSettings),
+  );
+
   const fingerprintInput: WarFingerprintInput = {
     season: league.season,
     fromWeek,
     toWeek,
     teamCount,
     rosterPositions: league.rosterPositions,
+    idpEnabled: idpReads.idpEnabled,
     scoringSettings: league.scoringSettings,
     pulseSettings: {
       reliability: settings.reliability,
@@ -393,6 +406,7 @@ async function buildWarContext(
     scoringSettings: league.scoringSettings,
     pulseSettings: settings,
     projectionSource,
+    idpReads,
     fingerprintInput,
     fingerprint: warFingerprint(fingerprintInput),
     digest: warInputsDigest(fingerprintInput),
@@ -710,7 +724,7 @@ export async function calculateLeaguePositionalWar(
   }
 
   const scoringBase = closestScoringBase(context.scoringSettings);
-  const slots = startingSlots(context.rosterPositions);
+  const slots = startingSlots(context.rosterPositions, context.idpReads.slotMap);
   const weeks: number[] = [];
   for (let w = context.fromWeek; w <= context.toWeek; w += 1) weeks.push(w);
 
@@ -733,6 +747,7 @@ export async function calculateLeaguePositionalWar(
         toWeek: context.toWeek,
         scoringBase,
         source: context.projectionSource,
+        includeDefenders: context.idpReads.loadsDefenders,
       });
       const players = buildWarPlayers({
         universe,
@@ -748,6 +763,7 @@ export async function calculateLeaguePositionalWar(
           teamCount: context.teamCount,
           fromWeek: context.fromWeek,
           toWeek: context.toWeek,
+          idpEnabled: context.idpReads.idpEnabled,
         },
         players,
         settings: context.fingerprintInput.warSettings,

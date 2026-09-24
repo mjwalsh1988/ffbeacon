@@ -102,6 +102,8 @@ const ALLOWLIST: Record<string, string> = {
     "Positional WAR's full-universe projection loader, feeding lib/positional-war/engine.ts computeCurves(), which also runs every row through projectPlayerWeek per lib/positional-war's own module map. Same shape as the two entries above.",
   "lib/positional-war/load.test.ts":
     "Tests lib/positional-war/load.ts's raw row shape directly; allow-listed alongside it.",
+  "lib/positional-war/load.idp.test.ts":
+    "The position-group slice tests for lib/positional-war/load.ts (plan IDP-308). Its fake rows carry the loader's raw row shape, the three columns included and all null; it reads nothing. Allow-listed alongside load.test.ts for the same reason.",
 
   "lib/projection-scoreboard.ts":
     "The Part 5 grading scoreboard (PE-T052, /admin/projections): its own header says it is 'deliberately NOT a read of player_projection_accuracy' and instead grades 'has this source's raw number been close', which requires the raw published number per source, not our adjusted opinion of it.",

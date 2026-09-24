@@ -21,6 +21,7 @@ import { projectPlayerWeek, reliabilityMultiplier } from "./project";
 import {
   buildOptimalLineup,
   lineupSigma,
+  pulseEligibility,
   scoreSetLineup,
   startingSlots,
 } from "./lineup";
@@ -46,12 +47,14 @@ import type {
   RosterRow,
 } from "./load";
 import {
+  NON_STARTING_SLOTS,
   PULSE_POSITIONS,
-  PULSE_SLOT_ELIGIBILITY,
+  slotEligibility,
   type PulsePosition,
   type ScheduleWeek,
   type SimulationResult,
 } from "./types";
+import { IDP_POSITIONS, isDefender } from "@/lib/site";
 
 export type PowerPulseInput = {
   league: LeagueRow;
@@ -93,6 +96,13 @@ export type PowerPulseInput = {
   /** First unplayed week. 1 during the preseason. */
   currentWeek: number;
   settings: PowerPulseSettings;
+  /**
+   * The IDP switch (plan R-25), read once by the server loader from
+   * `settings.idp.enabled` and passed here as a plain boolean. Absent or
+   * false: the OFF slot map, exactly the model that ran before defenders
+   * existed. True: DL, LB, DB and IDP_FLEX slots are filled.
+   */
+  idpEnabled?: boolean;
 };
 
 /**
@@ -203,6 +213,14 @@ export type PowerPulseTeamResult = {
     formRatio: number | null;
     /** How many settled weeks the form ratio was measured over. 0 when there is no ratio. */
     formWeeks: number;
+    /**
+     * Set only when form was deliberately not measured because the league
+     * starts slots this model cannot fill (defensive slots while the IDP
+     * switch is off). Its actual weekly totals include those players and the
+     * projection does not, so the ratio would call every team hot. Absent in
+     * every other case, so an ordinary league's row is unchanged.
+     */
+    formUnmeasured?: "unprojected-slots";
     usedLeagueScoring: boolean;
     weeksProjected: number;
   };
@@ -240,6 +258,7 @@ type TeamWork = {
   unfilledSlotRate: number;
   formRatio: number | null;
   formWeeks: number;
+  formUnmeasured: boolean;
   positionPoints: Record<PulsePosition, number>;
   starters: Array<{
     playerId: string;
@@ -256,7 +275,14 @@ export function computePowerPulse(
   const { league, rosters, players, settings, currentWeek } = input;
   if (rosters.length === 0) return [];
 
-  const slots = startingSlots(league.rosterPositions);
+  const idpEnabled = input.idpEnabled === true;
+  const slotMap = slotEligibility(idpEnabled);
+  const slots = startingSlots(league.rosterPositions, slotMap);
+  // Starting tokens the map cannot fill. Non-empty in an IDP league while the
+  // switch is off, where it is what keeps the form ratio honest (below).
+  const unprojectableSlotCount = league.rosterPositions.filter(
+    (token) => !NON_STARTING_SLOTS.has(token) && !(slotMap[token]?.length),
+  ).length;
 
   // ---------- chopped (guillotine) leagues ----------
   // A chopped league keeps the head to head slate Sleeper publishes for it and
@@ -366,6 +392,11 @@ export function computePowerPulse(
         out.push({
           playerId: player.playerId,
           position: player.position,
+          // Only with the switch on (plan R-25): the OFF path builds exactly
+          // the candidates it always did.
+          ...(idpEnabled
+            ? { eligible: pulseEligibility(player.position, player.eligible) }
+            : {}),
           points: pw.points,
           sigma: pw.sigma,
         });
@@ -381,9 +412,9 @@ export function computePowerPulse(
       TE: 0,
       K: 0,
       DEF: 0,
-      // Internal only. A defender is credited here only once the IDP switch
-      // seats one (phase 3, IDP-307); the result only carries positions the
-      // league's slots can start, so these zeros never reach a page.
+      // Credited only once the IDP switch seats a defender. The result only
+      // carries positions the league's slots can start, so with the switch
+      // off these zeros never reach a page.
       DL: 0,
       LB: 0,
       DB: 0,
@@ -402,7 +433,7 @@ export function computePowerPulse(
 
     for (const week of remainingWeeks) {
       const candidates = candidatesFor(week);
-      const lineup = buildOptimalLineup(slots, candidates);
+      const lineup = buildOptimalLineup(slots, candidates, slotMap);
       const unfilled = lineup.slots.filter((s) => s.playerId === null).length;
       weekLineups.push({
         week,
@@ -417,7 +448,9 @@ export function computePowerPulse(
       for (const slot of lineup.slots) {
         if (!slot.playerId) continue;
         const player = nameById.get(slot.playerId);
-        if (player) positionTotals[player.position] += slot.points;
+        // Credited to the position he was seated AS (plan R-3). With the
+        // switch off nobody is dual-seated, so this is his primary.
+        if (player) positionTotals[slot.playedAs ?? player.position] += slot.points;
       }
     }
 
@@ -439,7 +472,7 @@ export function computePowerPulse(
 
     // ----- lineup efficiency, graded on the upcoming week -----
     const upcomingCandidates = candidatesFor(currentWeek);
-    const upcomingLineup = buildOptimalLineup(slots, upcomingCandidates);
+    const upcomingLineup = buildOptimalLineup(slots, upcomingCandidates, slotMap);
 
     const setSleeperIds =
       input.setLineups.get(`${currentWeek}|${roster.sleeperRosterId}`) ??
@@ -479,10 +512,19 @@ export function computePowerPulse(
     // ----- depth: what happens when the best starter at a position misses -----
     // Removing a player and refilling the lineup measures real replaceability,
     // which is what depth means. Averaged across the four skill positions so one
-    // irreplaceable quarterback does not define the whole roster.
+    // irreplaceable quarterback does not define the whole roster, plus the
+    // three defensive ones once the switch seats defenders (plan R-9).
     const dropPcts: number[] = [];
     if (upcomingLineup.total > 0) {
-      for (const position of ["QB", "RB", "WR", "TE"] as PulsePosition[]) {
+      // A defensive position counts only when a starting slot takes it: a
+      // benched DL in a league whose defensive slots take only LB would add a
+      // zero drop and make the roster look deeper than it is. The offensive
+      // list is unchanged, so the switch-off path is too.
+      const depthPositions = (idpEnabled ? DEPTH_POSITIONS_IDP : DEPTH_POSITIONS).filter(
+        (position) =>
+          !isDefender(position) || slots.some((token) => (slotMap[token] ?? []).includes(position)),
+      );
+      for (const position of depthPositions) {
         const best = upcomingCandidates
           .filter((c) => c.position === position)
           .sort((a, b) => b.points - a.points)[0];
@@ -490,7 +532,7 @@ export function computePowerPulse(
         const without = upcomingCandidates.filter(
           (c) => c.playerId !== best.playerId,
         );
-        const reduced = buildOptimalLineup(slots, without);
+        const reduced = buildOptimalLineup(slots, without, slotMap);
         dropPcts.push(
           (upcomingLineup.total - reduced.total) / upcomingLineup.total,
         );
@@ -507,7 +549,12 @@ export function computePowerPulse(
     const completed = input.results.get(roster.sleeperRosterId) ?? [];
     let formRatio: number | null = null;
     let formWeeks = 0;
-    if (completed.length >= MIN_FORM_WEEKS && meanPoints > 0) {
+    // Like with like, or not at all (plan IDP-307). A settled week's total
+    // includes every starter the league scored, defenders in a defensive slot
+    // among them, and the projection here does not when those slots cannot be
+    // filled. The ratio would then call every team in the league hot.
+    const formUnmeasured = unprojectableSlotCount > 0 && completed.length >= MIN_FORM_WEEKS;
+    if (!formUnmeasured && completed.length >= MIN_FORM_WEEKS && meanPoints > 0) {
       const recent = completed.slice(-FORM_WINDOW_WEEKS).map((r) => r.points);
       formRatio = mean(recent) / meanPoints;
       formWeeks = recent.length;
@@ -527,6 +574,7 @@ export function computePowerPulse(
       unfilledSlotRate,
       formRatio,
       formWeeks,
+      formUnmeasured,
       positionPoints: positionTotals,
       starters,
       usedLeagueScoring,
@@ -749,7 +797,7 @@ export function computePowerPulse(
   // twelve-way tie for first that means nothing.
   const startablePositions = new Set<PulsePosition>();
   for (const slot of slots) {
-    for (const position of PULSE_SLOT_ELIGIBILITY[slot] ?? [])
+    for (const position of slotMap[slot] ?? [])
       startablePositions.add(position);
   }
 
@@ -832,6 +880,7 @@ export function computePowerPulse(
         unfilledSlotRate: round(team.unfilledSlotRate, 4),
         formRatio: team.formRatio === null ? null : round(team.formRatio, 4),
         formWeeks: team.formWeeks,
+        ...(team.formUnmeasured ? { formUnmeasured: "unprojected-slots" as const } : {}),
         usedLeagueScoring: team.usedLeagueScoring,
         weeksProjected: team.weekLineups.length,
       },
@@ -872,6 +921,10 @@ const CHOP_DANGER_PCT = 15;
 const CHOP_SAFE_PCT = 2;
 
 /** Error function, for the win probability shown in the weekly preview. */
+/** Positions the depth component knocks the best starter out of. */
+const DEPTH_POSITIONS: readonly PulsePosition[] = ["QB", "RB", "WR", "TE"];
+const DEPTH_POSITIONS_IDP: readonly PulsePosition[] = [...DEPTH_POSITIONS, ...IDP_POSITIONS];
+
 /** Settled weeks the form ratio looks back over. */
 const FORM_WINDOW_WEEKS = 3;
 /** Settled weeks before form is measured at all. One week is one draw. */

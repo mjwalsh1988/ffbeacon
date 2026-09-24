@@ -67,6 +67,7 @@
  * calendar.
  */
 
+import Link from "next/link";
 import { useCallback, useId, useMemo, useState } from "react";
 import { Armchair, HeartPulse, Repeat2, ShieldAlert } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
@@ -133,6 +134,7 @@ export function LineupBoard({
   positionalWarUnavailable,
   unprojectableSlotCount,
   unprojectedSlotCount,
+  idpEnabled = false,
 }: {
   groups: LineupGroup[];
   bench: LineupPlayer[];
@@ -155,6 +157,12 @@ export function LineupBoard({
   positionalWarUnavailable: boolean;
   unprojectableSlotCount: number;
   unprojectedSlotCount: number;
+  /**
+   * The IDP switch, from the server loader (plan R-25). Decides whether a
+   * defensive slot can be simulated and who may be swapped into it. This
+   * component never reads the settings document itself.
+   */
+  idpEnabled?: boolean;
 }) {
   const [openPlayer, setOpenPlayer] = useState<LineupPlayer | null>(null);
   const [swapTarget, setSwapTarget] = useState<SwapTarget | null>(null);
@@ -234,11 +242,17 @@ export function LineupBoard({
       for (const entry of group.entries) {
         if (!entry.slot.projectable) continue;
         if (counts.has(entry.slot.token)) continue;
-        counts.set(entry.slot.token, countSwapCandidates(bench, entry.slot.token));
+        counts.set(entry.slot.token, countSwapCandidates(bench, entry.slot.token, idpEnabled));
       }
     }
     return counts;
-  }, [bench, canSimulate, groups]);
+  }, [bench, canSimulate, groups, idpEnabled]);
+
+  // A league that starts defenders gets one plain link to what IDP scoring is
+  // (plan IDP-223, IDP-305). It sits in the footnotes rather than inside the
+  // group heading: that heading is a column-group header, and a link inside
+  // it would be read out again on every cell in the group.
+  const hasDefensiveGroup = groups.some((group) => group.group === "IDP");
 
   const benchSections: BenchSection[] = ([
     {
@@ -429,9 +443,20 @@ export function LineupBoard({
       <ul className="mt-3 space-y-1 px-1 text-[11px] leading-relaxed text-ink-muted">
         {unprojectableSlotCount > 0 && (
           <li>
-            Totals leave out {unprojectableSlotCount} defensive{" "}
-            {unprojectableSlotCount === 1 ? "slot" : "slots"}. Sleeper publishes no
-            projections for those positions.
+            Totals leave out {unprojectableSlotCount}{" "}
+            {unprojectableSlotCount === 1 ? "slot" : "slots"} League Pulse does not
+            project{idpEnabled ? "" : " yet, including every defensive slot"}.
+          </li>
+        )}
+        {hasDefensiveGroup && (
+          <li>
+            Defensive players score under this league&apos;s own IDP rules.{" "}
+            <Link
+              href="/guides/idp-fantasy-football"
+              className="font-semibold text-brand-cyan underline underline-offset-2 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              What is IDP scoring?
+            </Link>
           </li>
         )}
         {unprojectedSlotCount > 0 && (
@@ -479,6 +504,7 @@ export function LineupBoard({
         week={week}
         opponentName={opponent?.teamName ?? null}
         onClose={closeSwap}
+        idpEnabled={idpEnabled}
       />
     </>
   );

@@ -405,6 +405,8 @@ async function loadTeamSlate(
 /** A reader's own IDP league, offered in the scoring selector (R-16). */
 export type ReaderIdpLeague = {
   id: string;
+  /** The league deep view is keyed on this, for the This week links (IDP-314). */
+  sleeperLeagueId: string;
   name: string;
   scoring: Record<string, number>;
 };
@@ -454,7 +456,7 @@ export async function loadReaderIdpLeagues(
   const leagues = await fetchAllRowsInChunks(`reader leagues ${sleeperUserId}`, ids, (chunk, from, to) =>
     supabase
       .from("leagues")
-      .select("id, name, season, roster_positions, scoring_settings")
+      .select("id, sleeper_league_id, name, season, roster_positions, scoring_settings")
       .in("id", chunk)
       .eq("season", season)
       .order("id", { ascending: true })
@@ -468,7 +470,12 @@ export async function loadReaderIdpLeagues(
     if (!slots.some((s) => IDP_TOKENS.includes(s))) continue;
     const scoring = idpPartOfScoring(league.scoring_settings as Record<string, unknown> | null);
     if (Object.keys(scoring).length === 0) continue;
-    out.push({ id: league.id, name: league.name ?? "Your league", scoring });
+    out.push({
+      id: league.id,
+      sleeperLeagueId: league.sleeper_league_id,
+      name: league.name ?? "Your league",
+      scoring,
+    });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }

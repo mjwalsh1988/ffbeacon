@@ -156,14 +156,20 @@ export type PlayerRow = {
 export const NAMING_POSITIONS: readonly string[] = [...OFFENSE_POSITIONS, ...IDP_POSITIONS];
 
 /**
- * The FF Beacon ids whose projections a page should load: the offensive
- * players only, until the IDP switch threads defenders in (phase 3). A loader
- * that named defenders with NAMING_POSITIONS uses this so a defender carries a
- * name and no number, rather than a projection nothing else on the page uses.
+ * The FF Beacon ids whose projections a page should load. A loader that named
+ * defenders with NAMING_POSITIONS uses this so a defender carries a name and
+ * no number while the IDP switch is off (or the league starts no defensive
+ * slot), and a projection like everyone else once it is on and he can start
+ * (`includeDefenders`, from lib/power-pulse/idp-reads.ts loadsDefenders).
  */
-export function projectablePlayerIds(players: Map<string, PlayerRow>): string[] {
+export function projectablePlayerIds(
+  players: Map<string, PlayerRow>,
+  includeDefenders = false,
+): string[] {
   const ids = new Set<string>();
-  for (const p of players.values()) if (!isDefender(p.position)) ids.add(p.playerId);
+  for (const p of players.values()) {
+    if (includeDefenders || !isDefender(p.position)) ids.add(p.playerId);
+  }
   return [...ids];
 }
 
@@ -377,10 +383,11 @@ export async function loadPlayers(
   sleeperIds: string[],
   opts: {
     /**
-     * Which primary positions to keep. Defaults to the six offensive ones,
-     * which is what every candidate list must use until the IDP switch
-     * threads through (phase 3, IDP-301). NAMING_POSITIONS for a loader that
-     * only resolves names.
+     * Which primary positions to keep. Defaults to the six offensive ones. A
+     * loader that builds candidates passes
+     * lib/power-pulse/idp-reads.ts candidatePositions (the six, plus DL, LB
+     * and DB once the IDP switch is on in a league that starts them);
+     * NAMING_POSITIONS for a loader that only resolves names.
      */
     positions?: readonly string[];
   } = {},

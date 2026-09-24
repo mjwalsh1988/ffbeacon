@@ -96,6 +96,12 @@ export type PulseTeam = {
   positionRanks: Record<string, number | null>;
   starters: Array<{ playerId: string; name: string; position: string; points: number }>;
   depthDropoffPct: number | null;
+  /**
+   * True when form was deliberately not measured because the league starts
+   * slots Power Pulse does not fill (defensive slots while the IDP switch is
+   * off), so the page can say why the Form bar is missing.
+   */
+  formUnmeasured: boolean;
 
   weekly: PulseWeek[];
   drivers: PulseDriver[];
@@ -219,6 +225,7 @@ export async function loadPowerPulseView(
       positionRanks?: Record<string, number | null>;
       starters?: Array<{ playerId: string; name: string; position: string; points: number }>;
       depthDropoffPct?: number;
+      formUnmeasured?: string;
     };
 
     const pulseRank = row.pulse_rank === null ? null : Number(row.pulse_rank);
@@ -277,6 +284,7 @@ export async function loadPowerPulseView(
       positionRanks: components.positionRanks ?? {},
       starters: components.starters ?? [],
       depthDropoffPct: components.depthDropoffPct ?? null,
+      formUnmeasured: components.formUnmeasured === "unprojected-slots",
 
       weekly: ((row.weekly ?? []) as unknown as PulseWeek[]) ?? [],
       drivers: ((row.drivers ?? []) as unknown as PulseDriver[]) ?? [],

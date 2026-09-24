@@ -226,3 +226,26 @@ describe("filterWarRows", () => {
     expect(padded).toEqual(plain);
   });
 });
+
+describe("defensive rows (plan IDP-309, IDP-315)", () => {
+  const withDefense = flattenWarRows(
+    build({ curves: [curve("QB", 5), curve("LB", 5, 3)], values: new Map([["QB-1", 9500]]) }),
+  );
+
+  it("carries a null trade value for a defender, never a zero", () => {
+    const lb = withDefense.filter((r) => r.position === "LB");
+    expect(lb).toHaveLength(5);
+    expect(lb.every((r) => r.tradeValue === null)).toBe(true);
+  });
+
+  it("sorts every unpriced defender after the priced player on the value column", () => {
+    const sorted = sortWarRows(withDefense, "tradeValue", "desc");
+    expect(sorted[0].playerId).toBe("QB-1");
+    expect(sorted.slice(1).every((r) => r.tradeValue === null)).toBe(true);
+  });
+
+  it("filters a Defense chart's table to the defensive positions alone", () => {
+    const filtered = filterWarRows(withDefense, new Set<PulsePosition>(["DL", "LB", "DB"]), "");
+    expect(filtered.map((r) => r.position)).toEqual(["LB", "LB", "LB", "LB", "LB"]);
+  });
+});

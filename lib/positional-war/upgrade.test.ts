@@ -202,6 +202,26 @@ const PLAYER_DB: Record<string, PlayerRow> = {
     injuryStatus: null,
     depthOrder: 2,
   },
+  "s-lb1": {
+    playerId: "p-lb1",
+    sleeperId: "s-lb1",
+    name: "Owned LB",
+    position: "LB",
+    team: "AAA",
+    injuryStatus: null,
+    depthOrder: 1,
+    eligible: ["LB"],
+  },
+  "s-dl-target": {
+    playerId: "p-dl-target",
+    sleeperId: "s-dl-target",
+    name: "Target DL",
+    position: "DL",
+    team: "BBB",
+    injuryStatus: null,
+    depthOrder: 1,
+    eligible: ["DL", "LB"],
+  },
 };
 
 /** Points per remaining week, by FF Beacon player id. Deliberately static: no randomness anywhere in this file lives outside simulateSeason's seeded generator. */
@@ -212,6 +232,8 @@ const POINTS_BY_PLAYER: Record<string, number> = {
   "p-te1": 8,
   "p-qb-target": 24,
   "p-qb-second": 20,
+  "p-lb1": 7,
+  "p-dl-target": 11,
 };
 
 const CURVE_QB_DEFAULT: PositionCurve = {
@@ -386,11 +408,14 @@ vi.mock("@/lib/sleeper", async (importOriginal) => {
 
 let currentLeague = league();
 let currentRosters = ALL_ROSTERS;
+let idpSwitchOn = false;
+const loadPlayersOptions: unknown[] = [];
 
 vi.mock("@/lib/power-pulse/load", () => ({
   loadLeague: async () => currentLeague,
   loadRosters: async () => currentRosters,
-  loadPlayers: async (_supabase: unknown, sleeperIds: string[]) => {
+  loadPlayers: async (_supabase: unknown, sleeperIds: string[], options?: unknown) => {
+    loadPlayersOptions.push(options);
     const out = new Map<string, PlayerRow>();
     for (const id of sleeperIds) {
       const row = PLAYER_DB[id];
@@ -411,6 +436,7 @@ vi.mock("@/lib/power-pulse/settings", () => ({
   loadPowerPulseSettings: async () => ({
     ...DEFAULT_POWER_PULSE_SETTINGS,
     simulation: { runs: 300, seed: 424242 },
+    idp: { ...DEFAULT_POWER_PULSE_SETTINGS.idp, enabled: idpSwitchOn },
   }),
 }));
 
@@ -445,6 +471,8 @@ beforeEach(() => {
   supabaseState.leagueRow = { id: LEAGUE_ROW_ID, season: SEASON };
   currentLeague = league();
   currentRosters = ALL_ROSTERS;
+  idpSwitchOn = false;
+  loadPlayersOptions.length = 0;
   loadCachedWeeklyMock.mockImplementation(async () => defaultCachedWeekly());
   loadPositionalWarViewMock.mockImplementation(async () =>
     warView(CURVE_QB_DEFAULT),
@@ -562,6 +590,20 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
       focusedRosterId: null,
     });
     expect(outcome).toEqual({ ok: false, reason: "roster-mismatch" });
+    expect(claimWarUpgradeSlotMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a position with no stored curve before claiming a slot (IDP switch off)", async () => {
+    const { requestUpgradeWhatIf } =
+      await import("../../app/leagues/[league_id]/positional-war/actions");
+    const outcome = await requestUpgradeWhatIf({
+      sleeperLeagueId: SLEEPER_LEAGUE_ID,
+      position: "LB",
+      submittedRosterId: 1,
+      searchedUsername: "vieweruser",
+      focusedRosterId: null,
+    });
+    expect(outcome).toEqual({ ok: false, reason: "no-candidates" });
     expect(claimWarUpgradeSlotMock).not.toHaveBeenCalled();
   });
 });
@@ -842,5 +884,73 @@ describe("runUpgradeWhatIf", () => {
       rosterId: 1,
     });
     expect(outcome).toEqual({ ok: false, reason: "league-not-found" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The IDP switch (plan IDP-309, IDP-315).
+// ---------------------------------------------------------------------------
+
+describe("runUpgradeWhatIf and the IDP switch", () => {
+  const CURVE_DL: PositionCurve = {
+    ...CURVE_QB_DEFAULT,
+    position: "DL",
+    curve: [
+      {
+        ...CURVE_QB_DEFAULT.curve[0],
+        playerId: "p-dl-target",
+        sleeperId: "s-dl-target",
+        slug: "target-dl",
+        name: "Target DL",
+      },
+    ],
+  };
+
+  it("with the switch off, passes the OFF slot map, no eligibility and the offensive player read", async () => {
+    const { PULSE_SLOT_ELIGIBILITY } = await import("@/lib/power-pulse/types");
+    const spy = vi.spyOn(marginalModule, "computeLineupSwap");
+    const { runUpgradeWhatIf } = await loadModule();
+    const outcome = await runUpgradeWhatIf(fakeSupabase, {
+      sleeperLeagueId: SLEEPER_LEAGUE_ID,
+      position: "QB",
+      rosterId: 1,
+    });
+    expect(outcome.ok).toBe(true);
+    const input = spy.mock.calls[0][0];
+    expect(input.slotMap).toEqual(PULSE_SLOT_ELIGIBILITY);
+    expect(input).not.toHaveProperty("candidateEligible");
+    const positions = (loadPlayersOptions[0] as { positions: readonly string[] }).positions;
+    expect(positions).not.toContain("LB");
+  });
+
+  it("with the switch on in a league that starts defenders, seats a DL/LB target at LB", async () => {
+    const { IDP_SLOT_ELIGIBILITY } = await import("@/lib/power-pulse/types");
+    idpSwitchOn = true;
+    currentLeague = league({
+      rosterPositions: ["QB", "RB", "WR", "TE", "FLEX", "LB", "IDP_FLEX", "BN", "BN"],
+    });
+    currentRosters = [
+      { ...VIEWER_ROSTER, playerSleeperIds: [...VIEWER_ROSTER.playerSleeperIds, "s-lb1"] },
+      ...RIVAL_ROSTERS,
+    ];
+    loadPositionalWarViewMock.mockImplementation(async () => warView(CURVE_DL));
+    const spy = vi.spyOn(marginalModule, "computeLineupSwap");
+    const { runUpgradeWhatIf } = await loadModule();
+    const outcome = await runUpgradeWhatIf(fakeSupabase, {
+      sleeperLeagueId: SLEEPER_LEAGUE_ID,
+      position: "DL",
+      rosterId: 1,
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result.target.playerId).toBe("p-dl-target");
+    const input = spy.mock.calls[0][0];
+    expect(input.slotMap).toEqual(IDP_SLOT_ELIGIBILITY);
+    expect(input.candidateEligible).toEqual(["DL", "LB"]);
+    const positions = (loadPlayersOptions[0] as { positions: readonly string[] }).positions;
+    expect(positions).toEqual(expect.arrayContaining(["DL", "LB", "DB"]));
+    // No league slot takes a DL on its own, so the target can only add wins
+    // through the LB or IDP_FLEX slot his second eligibility opens.
+    expect(outcome.result.winsDelta).not.toBeNull();
   });
 });

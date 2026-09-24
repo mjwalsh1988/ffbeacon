@@ -54,6 +54,12 @@ export type EngineRoster = {
 export type EngineInput = {
   season: number;
   rosterPositions: string[];
+  /**
+   * The IDP switch, read once by the orchestrator (plan R-25, IDP-310). Absent
+   * or false: defensive slots are ungradable, exactly as before. True: they are
+   * graded on what their defenders actually scored.
+   */
+  idpEnabled?: boolean;
   rosters: EngineRoster[];
   /** One entry per (settled week, roster). */
   weeks: (WeekInput & { sleeperRosterId: number; startedIds: Set<string> })[];
@@ -107,7 +113,7 @@ export function computeLedger(input: EngineInput): LedgerResult | LedgerSkip {
   if (input.rosters.length === 0) {
     return { skipped: "no rosters stored for this league" };
   }
-  const plan = planSlots(input.rosterPositions);
+  const plan = planSlots(input.rosterPositions, input.idpEnabled === true);
   if (plan.gradableTokens.length === 0) {
     return { skipped: "league has no startable slots this model can grade" };
   }

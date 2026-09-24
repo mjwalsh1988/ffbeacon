@@ -13,6 +13,21 @@
  */
 
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
+import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
+import { positionNoun } from "@/lib/site";
+
+/**
+ * The positional rooms in a fixed order, offense first and then defense.
+ * Postgres stores the components as jsonb, which does not keep key order, so
+ * the order is decided here rather than inherited from the row.
+ */
+function orderedRooms(points: Record<string, number>): Array<[string, number]> {
+  const rank = (position: string) => {
+    const i = (PULSE_POSITIONS as string[]).indexOf(position);
+    return i === -1 ? PULSE_POSITIONS.length : i;
+  };
+  return Object.entries(points).sort((a, b) => rank(a[0]) - rank(b[0]));
+}
 
 export function ordinal(n: number): string {
   const mod10 = n % 10;
@@ -180,6 +195,16 @@ export function PulseDetail({
               hint="Recent results measured against what we projected."
             />
           )}
+          {team.scoreForm === null && team.formUnmeasured && (
+            <div>
+              <dt className="text-xs font-semibold text-ink">Form</dt>
+              <dd className="mt-1 text-[11px] leading-snug text-ink-subtle">
+                Not measured in this league. Its results include defensive players,
+                and this projection does not count them yet, so comparing the two
+                would call every team hot.
+              </dd>
+            </div>
+          )}
         </dl>
       </section>
 
@@ -276,7 +301,7 @@ export function PulseDetail({
             Positional rooms
           </h3>
           <dl className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
-            {Object.entries(team.positionPoints).map(([position, points]) => {
+            {orderedRooms(team.positionPoints).map(([position, points]) => {
               const rank = team.positionRanks[position] ?? null;
               return (
                 <div
@@ -285,6 +310,7 @@ export function PulseDetail({
                 >
                   <dt className="text-[10px] font-bold uppercase tracking-wide text-ink-subtle">
                     {position}
+                    <span className="sr-only">, {positionNoun(position, "plural")}</span>
                   </dt>
                   <dd className="mt-0.5 font-mono text-sm font-bold tabular-nums text-ink">
                     {num(points)}

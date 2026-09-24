@@ -3,6 +3,10 @@ import { Suspense, cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { isDefender } from "@/lib/site";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor } from "@/lib/power-pulse/idp-reads";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
@@ -902,6 +906,31 @@ async function TradeFinderSection({
  *   nothing. Reversing the two would charge the honest reader for the dishonest
  *   caller's traffic.
  */
+/**
+ * True when this league's trade builder may offer defenders (plan R-5,
+ * IDP-311): the IDP switch is on and the league starts a defensive slot. They
+ * join with "No market value" on the value side and are counted on the wins
+ * side. Suggested packages never include them; that engine is value-driven
+ * and has nothing to price a defender with.
+ */
+async function builderAcceptsDefenders(leagueRowId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  // Settings first and alone: they are memoised, so with the switch off this
+  // makes no read of its own.
+  const settings = await loadPowerPulseSettings(admin);
+  if (!idpEnabledFrom(settings)) return false;
+  const leagueRes = await admin
+    .from("leagues")
+    .select("roster_positions")
+    .eq("id", leagueRowId)
+    .maybeSingle();
+  const raw = leagueRes.data?.roster_positions;
+  const rosterPositions = Array.isArray(raw)
+    ? raw.filter((t): t is string => typeof t === "string")
+    : [];
+  return idpReadsFor(idpEnabledFrom(settings), rosterPositions, "pts_ppr").loadsDefenders;
+}
+
 async function BuildSection({
   sleeperLeagueId,
   leagueRowId,
@@ -944,15 +973,18 @@ async function BuildSection({
     );
   }
 
-  const finderLeague = await loadBuilderLeague(
-    sleeperLeagueId,
-    leagueRowId,
-    resynced,
-    sourceSlug,
-    searchedUsername,
-    viewerSleeperUserId,
-    rosterParam,
-  );
+  const [finderLeague, acceptsDefenders] = await Promise.all([
+    loadBuilderLeague(
+      sleeperLeagueId,
+      leagueRowId,
+      resynced,
+      sourceSlug,
+      searchedUsername,
+      viewerSleeperUserId,
+      rosterParam,
+    ),
+    builderAcceptsDefenders(leagueRowId),
+  ]);
 
   if (!finderLeague) {
     return (
@@ -990,17 +1022,21 @@ async function BuildSection({
     rosterId: team.rosterId,
     teamName: team.teamName,
     ownerHandle: team.ownerHandle,
-    // Only assets we hold a price for. A player with no value row cannot be put
-    // in a package by the engine either, and offering one here would produce a
-    // total that quietly understates the side he is on.
+    // Only assets we hold a price for, plus defenders once the IDP switch is on
+    // in a league that starts them. Any other player with no value row cannot
+    // be put in a package by the engine either, and offering one here would
+    // produce a total that quietly understates the side he is on. A defender
+    // is different: no value source prices one, so he carries "No market
+    // value" in words and is counted on the wins side (plan R-5, IDP-311).
     players: team.players
-      .filter((p) => p.hasValue)
+      .filter((p) => p.hasValue || (acceptsDefenders && isDefender(p.position)))
       .map((p) => ({
         playerId: p.playerId,
         name: p.name,
         position: p.position,
         team: p.team,
-        value: p.value,
+        value: p.hasValue ? p.value : 0,
+        ...(p.hasValue ? {} : { noValue: true }),
         projPoints: p.projPoints,
       })),
     picks: team.picks

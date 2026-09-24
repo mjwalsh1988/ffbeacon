@@ -38,6 +38,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { ArrowRight, Info } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
+import { positionNoun } from "@/lib/site";
 import { CHIP, fmtPoints, fmtSigned, opponentLabel, pctLabel } from "@/components/league-schedule/format";
 import {
   eligiblePositionsFor,
@@ -61,18 +62,12 @@ export type SwapTarget = {
   player: LineupPlayer | null;
 };
 
-/** "quarterbacks, running backs, receivers or tight ends" */
-const POSITION_PLURAL: Record<string, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "team defenses",
-};
-
-function eligibleWords(token: string): string {
-  const parts = eligiblePositionsFor(token).map((p) => POSITION_PLURAL[p] ?? `${p} players`);
+/** "quarterbacks, running backs, wide receivers or tight ends", from the one noun helper. */
+function eligibleWords(token: string, idpEnabled: boolean): string {
+  const parts = eligiblePositionsFor(token, idpEnabled).map((p) => {
+    const noun = positionNoun(p, "plural");
+    return noun === p ? `${p} players` : noun;
+  });
   if (parts.length === 0) return "no position we publish projections for";
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}`;
@@ -85,6 +80,7 @@ export function SlotSwapDialog({
   week,
   opponentName,
   onClose,
+  idpEnabled = false,
 }: {
   /** Null closes the dialog. */
   target: SwapTarget | null;
@@ -94,6 +90,8 @@ export function SlotSwapDialog({
   /** Named in the win probability row, so the figure has a subject. */
   opponentName: string | null;
   onClose: () => void;
+  /** The IDP switch, passed down from the server loader (plan R-25). */
+  idpEnabled?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const headingId = useId();
@@ -108,8 +106,8 @@ export function SlotSwapDialog({
   }, [token, target?.player?.sleeperId]);
 
   const candidates = useMemo(
-    () => (target ? swapCandidates(bench, target.token) : []),
-    [bench, target],
+    () => (target ? swapCandidates(bench, target.token, idpEnabled) : []),
+    [bench, target, idpEnabled],
   );
 
   if (!target) return null;
@@ -150,7 +148,7 @@ export function SlotSwapDialog({
             {title}
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-            This slot takes {eligibleWords(target.token)}. Pick anyone on your bench to see
+            This slot takes {eligibleWords(target.token, idpEnabled)}. Pick anyone on your bench to see
             what starting him there would do. Nothing here changes your lineup.
           </p>
         </header>
@@ -318,7 +316,7 @@ export function SlotSwapDialog({
           {candidates.length === 0 ? (
             <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
               Nobody on your bench can hold this slot. It takes{" "}
-              {eligibleWords(target.token)}, and injured reserve and the taxi squad are left
+              {eligibleWords(target.token, idpEnabled)}, and injured reserve and the taxi squad are left
               out because Sleeper will not let them start without a roster move.
             </p>
           ) : (

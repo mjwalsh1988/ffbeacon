@@ -14,7 +14,8 @@
  * gets" and Part 4.
  */
 
-import { OFFENSE_POSITIONS } from "@/lib/site";
+import { OFFENSE_POSITIONS, isDefender } from "@/lib/site";
+import { IDP_SCORING_KEY } from "@/lib/power-pulse/idp-reads";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { closestScoringBase, type ScoringSettings } from "@/lib/league-scoring";
@@ -71,12 +72,17 @@ export type AdjustedProjectionSummary = {
  * projection to produce. Null here reads the same as "no rows at all" to the
  * caller: absent from byPlayer rather than a fabricated zero.
  */
-function toPulsePosition(position: string | undefined | null): PulsePosition | null {
+function toPulsePosition(
+  position: string | undefined | null,
+  includeDefenders: boolean,
+): PulsePosition | null {
   const upper = (position ?? "").toUpperCase();
-  // Pinned to the six offensive positions until IDP-303 threads defenders in.
-  return (OFFENSE_POSITIONS as readonly string[]).includes(upper)
-    ? (upper as PulsePosition)
-    : null;
+  // The six offensive positions, plus DL/LB/DB only for a caller that has read
+  // the IDP switch and says defenders are candidates in its league (plan
+  // IDP-303). Every other caller keeps exactly the pool it had.
+  if ((OFFENSE_POSITIONS as readonly string[]).includes(upper)) return upper as PulsePosition;
+  if (includeDefenders && isDefender(upper)) return upper as PulsePosition;
+  return null;
 }
 
 /**
@@ -100,6 +106,13 @@ export async function loadAdjustedProjections(params: {
   injuryByPlayer?: Map<string, string | null>;
   /** The live NFL week, for the week-to-week injury discount. */
   currentWeek: number;
+  /**
+   * Project DL, LB and DB too, graded and split under idp123 (plan IDP-303).
+   * Pass lib/power-pulse/idp-reads.ts loadsDefenders, never true on its own:
+   * it is true only when the IDP switch is on AND the league starts a
+   * defensive slot. Absent or false: offense only, the reads this always made.
+   */
+  includeDefenders?: boolean;
 }): Promise<{
   source: string;
   byPlayer: Map<string, AdjustedProjectionSummary>;
@@ -115,6 +128,7 @@ export async function loadAdjustedProjections(params: {
     injuryByPlayer,
     currentWeek,
   } = params;
+  const includeDefenders = params.includeDefenders === true;
 
   // No players to project means no data to gather. resolveProjectionSource
   // with an empty `available` always answers SLEEPER_SOURCE (see ./source.ts),
@@ -159,8 +173,17 @@ export async function loadAdjustedProjections(params: {
     // per migration 0240: a multiplier measured against Sleeper's projection
     // is only meaningful applied to Sleeper's projection. See the comment on
     // loadAccuracy in lib/power-pulse/load.ts.
-    loadAccuracy(dbClient, playerIds, scoringBase, source),
-    loadDefenseSplits(dbClient, scoringBase, defenseSeasons),
+    loadAccuracy(
+      dbClient,
+      playerIds,
+      includeDefenders ? [scoringBase, IDP_SCORING_KEY] : scoringBase,
+      source,
+    ),
+    loadDefenseSplits(
+      dbClient,
+      includeDefenders ? [scoringBase, IDP_SCORING_KEY] : scoringBase,
+      defenseSeasons,
+    ),
   ]);
 
   // Grouped by player, then by week, before any scoring happens. A player who
@@ -177,7 +200,7 @@ export async function loadAdjustedProjections(params: {
   const byPlayer = new Map<string, AdjustedProjectionSummary>();
 
   for (const [playerId, weekMap] of byPlayerWeek) {
-    const position = toPulsePosition(positionByPlayer.get(playerId));
+    const position = toPulsePosition(positionByPlayer.get(playerId), includeDefenders);
     if (!position) continue;
 
     const accuracyRow = accuracy.get(playerId) ?? null;

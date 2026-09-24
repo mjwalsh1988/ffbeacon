@@ -899,3 +899,13 @@ describe("buildTradeCaveats", () => {
     expect(out[0]).toContain("No pick values are published for this league");
   });
 });
+
+describe("the defender caveat (plan IDP-311)", () => {
+  it("says a defender is judged on wins only, and is silent without one", () => {
+    const one = buildTradeReasons(baseInput({ unpricedDefenders: 1 }));
+    const caveat = one.find((r) => r.kind === "defender-caveat");
+    expect(caveat?.detail).toContain("no value source prices defenders");
+    expect(buildTradeReasons(baseInput({ unpricedDefenders: 3 })).find((r) => r.kind === "defender-caveat")?.detail).toContain("The 3 defensive players");
+    expect(buildTradeReasons(baseInput()).some((r) => r.kind === "defender-caveat")).toBe(false);
+  });
+});

@@ -102,6 +102,12 @@ export const powerPulseSettingsSchema = z
       seed: z.number().int(),
     }),
 
+    // The IDP switch (plan R-25). A boolean and nothing else: the loaders
+    // pass it down as one, so there is no other value to bound.
+    idp: z.object({
+      enabled: z.boolean(),
+    }),
+
     lineupRealism: z.object({
       enabled: z.boolean(),
       // 0 is the current behaviour (assume a perfect lineup); 1 applies the

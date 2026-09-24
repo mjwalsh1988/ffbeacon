@@ -53,6 +53,12 @@ export type BuilderPlayer = {
   position: string;
   team: string | null;
   value: number;
+  /**
+   * True for a defender the builder offers while the IDP switch is on (plan
+   * R-5): no value source prices him, so the page says "No market value" in
+   * words rather than printing a 0 that reads like a valuation.
+   */
+  noValue?: boolean;
   /** Projected points per week in this league's scoring. Null = unpublished. */
   projPoints: number | null;
 };
@@ -711,7 +717,7 @@ function AssetRow({
 
   const detail = [found.position, found.team].filter(Boolean).join(", ");
   const figures = [
-    `value ${fmtValue(found.value)}`,
+    "noValue" in found && found.noValue ? "No market value" : `value ${fmtValue(found.value)}`,
     found.projPoints !== null ? `${found.projPoints.toFixed(1)} pts/wk` : null,
   ].filter(Boolean) as string[];
 
@@ -974,7 +980,7 @@ function AssetPickerPanel({
                       <span className="block text-xs text-ink-muted">
                         {[player.position, player.team].filter(Boolean).join(", ")}
                         {". "}
-                        {fmtValue(player.value)}
+                        {player.noValue ? "No market value" : fmtValue(player.value)}
                         {player.projPoints !== null
                           ? `, ${player.projPoints.toFixed(1)} pts/wk`
                           : ""}

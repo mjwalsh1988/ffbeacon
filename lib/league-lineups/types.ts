@@ -78,6 +78,12 @@ export type LineupPlayer = SchedulePlayer & {
   environment: GameEnvironment | null;
   /** The band that implied total falls in, against the week's own average. */
   environmentTier: EnvironmentTier | null;
+  /**
+   * Every position he may be seated as, primary first. Present only while the
+   * IDP switch is on (plan R-25), so the what-if can offer a DL/LB player for
+   * an LB slot; absent otherwise, which keeps the OFF board byte-identical.
+   */
+  eligible?: string[];
 };
 
 /** One startable slot with whoever is in it. */
@@ -339,6 +345,12 @@ export type LineupView = {
    * projection engine produced the numbers on the page.
    */
   projectionSource: string;
+  /**
+   * The IDP switch as the loader read it (plan R-25). Handed to the board and
+   * the swap dialog as a prop, because both are client components and must
+   * never read the settings document themselves.
+   */
+  idpEnabled: boolean;
   /**
    * Who this team plays this week, for the lineup what-if's win probability.
    *
