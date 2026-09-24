@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { splitUnvaluedRoster } from "@/lib/league-view-roster-split";
 import type { Database, Json } from "@/lib/database.types";
 import { formatTeamLabel } from "@/lib/team-label";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
@@ -69,6 +70,12 @@ export type TeamShareCard = {
   picksValue: number;
   positions: ShareCardPositionGroup[];
   picks: ShareCardPick[];
+  /**
+   * Defensive players on the roster, by name (plan IDP-209). Only an IDP
+   * league rosters them, so this is empty everywhere else. No value: no
+   * source prices defenders.
+   */
+  defenders: string[];
 };
 
 /**
@@ -264,6 +271,11 @@ export async function loadTeamShareCard(
     picksValue,
     positions,
     picks,
+    defenders: splitUnvaluedRoster(
+      sleeperIds
+        .map((sid) => resolved.get(sid))
+        .filter((p): p is NonNullable<typeof p> => !!p),
+    ).defenders.map((p) => p.full_name),
   };
 }
 

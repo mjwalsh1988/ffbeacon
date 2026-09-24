@@ -201,9 +201,14 @@ async function loadMarketSnapshots(supabase: Client, season: number): Promise<Ma
         .from("player_market_snapshots")
         .select("player_id, adp")
         .eq("source", source)
+        .eq("season_type", "regular")
         .eq("season", season)
         .eq("snapshot_date", latest.snapshot_date)
         .not("player_id", "is", null)
+        // A fixed order, or range() pages can overlap or skip rows. The
+        // partition is several pages (offense and, since the IDP widening,
+        // defenders), so an unordered read could drop a ranked player's ADP.
+        .order("sleeper_player_id", { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) break;
       if (!data || data.length === 0) break;

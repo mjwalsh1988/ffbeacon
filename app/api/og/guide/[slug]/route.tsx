@@ -97,6 +97,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "What your playoff odds mean, luck against points for, buy or sell at the deadline, how much playoff schedules matter, and win-or-go-home lineups.",
     badge: "8 lessons",
   },
+  "idp-fantasy-football": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "IDP fantasy football:",
+    headlineBottom: "scoring decides the defense",
+    subhead:
+      "Linebackers, defensive linemen and defensive backs. How IDP scoring changes which of them matter, and how to draft and manage them.",
+    badge: "10 lessons",
+  },
   "chopped-league-strategy": {
     eyebrow: "Fantasy Football Guide",
     headlineTop: "Chopped and guillotine:",

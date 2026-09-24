@@ -1,5 +1,6 @@
 "use client";
 
+import { PositionChip } from "@/components/position-chip";
 import {
   useCallback,
   useEffect,
@@ -293,9 +294,9 @@ function PlayerTypeahead({
             <p className="truncate text-sm font-semibold text-ink">
               {selected.name}
             </p>
-            <p className="truncate text-xs text-ink-subtle">
-              {selected.position}
-              {selected.team ? `, ${selected.team}` : ""}
+            <p className="flex items-center gap-1.5 truncate text-xs text-ink-subtle">
+              <PositionChip position={selected.position} />
+              {selected.team ? <span>{selected.team}</span> : null}
             </p>
           </div>
           <button
@@ -388,9 +389,9 @@ function PlayerTypeahead({
                       <span className="min-w-0 flex-1 truncate text-ink">
                         {p.name}
                       </span>
-                      <span className="shrink-0 text-xs text-ink-subtle">
-                        {p.position}
-                        {p.team ? `, ${p.team}` : ""}
+                      <span className="flex shrink-0 items-center gap-1.5 text-xs text-ink-subtle">
+                        <PositionChip position={p.position} />
+                        {p.team ? <span>{p.team}</span> : null}
                       </span>
                     </li>
                   );

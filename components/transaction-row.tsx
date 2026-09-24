@@ -1,4 +1,5 @@
 import { Plus, Minus, ArrowRight, Coins, Layers } from "lucide-react";
+import { NO_VERDICT_LABEL, NO_VERDICT_REASON, partialGradeNote } from "@/lib/trade-grading/partial";
 import type { TradeAnalysis, TradeSide } from "@/lib/trade-analyzer";
 import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
@@ -176,7 +177,7 @@ function TypePill({ type, label }: { type: string; label: string }) {
 }
 
 function TradeAnalyzerBody({ analysis }: { analysis: TradeAnalysis }) {
-  const { sides, verdict, hasMissingValues, context } = analysis;
+  const { sides, verdict, hasMissingValues, context, partial, unpricedCount } = analysis;
   const verdictLabel = buildVerdictLabel(verdict, sides);
   // Player values come from the user-selected value source; mark them when
   // that source is FF Beacon. Draft pick values always come from KTC
@@ -215,7 +216,16 @@ function TradeAnalyzerBody({ analysis }: { analysis: TradeAnalysis }) {
         </p>
       )}
 
-      {hasMissingValues && (
+      {partial && (
+        <p className="text-xs text-ink-muted">
+          {partialGradeNote(unpricedCount)}
+          {verdict.label === "No verdict" ? ` ${NO_VERDICT_REASON}` : ""}
+        </p>
+      )}
+
+      {/* The generic caveat is for a value we expected and could not find. A
+          defender is not that, and the partial line above already says so. */}
+      {hasMissingValues && sides.some((s) => [...s.players, ...s.picks].some((a) => a.noValue && !("unpriced" in a && a.unpriced))) && (
         <p className="text-xs text-signal-warning" role="status">
           Some assets in this trade lack value data; differential may be incomplete.
         </p>
@@ -300,7 +310,11 @@ function TradeSideCard({
                 p.noValue ? "text-ink-muted italic" : "text-ink-muted"
               }`}
             >
-              {p.noValue ? (
+              {p.unpriced ? (
+                // A defender: no value source prices him (plan R-19). Words,
+                // one text node, the same for sight and screen reader.
+                <span className="font-sans text-xs not-italic text-ink-subtle">No market value</span>
+              ) : p.noValue ? (
                 <>
                   <span className="sr-only">value not available</span>
                   <span aria-hidden="true">-</span>
@@ -728,6 +742,7 @@ function buildVerdictLabel(
   sides: TradeAnalysis["sides"],
 ): string {
   if (verdict.label === "Even trade") return "Even trade";
+  if (verdict.label === "No verdict") return NO_VERDICT_LABEL;
   const winner = sides.find((s) => s.rosterId === verdict.winnerRosterId);
   // Both halves, because team names rotate through a season and handles do
   // not, and a reader coming back to an old trade needs the durable one without

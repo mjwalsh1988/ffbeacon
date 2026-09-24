@@ -31,6 +31,8 @@
  * paged.
  */
 
+import { isDefender } from "@/lib/site";
+import { idp123Points, idpLineCells } from "./datasets";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -74,8 +76,12 @@ const MOVER_CANDIDATES = 30;
 const WAIVER_CANDIDATES = 60;
 const EXAMPLE_PATH = path.join("docs", "beacon-brief", "examples", "week-1-2026-brief.json");
 
+/** The typed defensive columns (migration 0296), read beside the offensive ones. */
+const IDP_STAT_COLUMNS =
+  "def_snp, def_snap_pct, idp_tkl, idp_tkl_solo, idp_tkl_ast, idp_tkl_loss, idp_sack, idp_qb_hit, idp_pass_def, idp_int, idp_ff, idp_fum_rec, idp_def_td, idp_safe, idp_blk_kick";
+
 const STAT_COLUMNS =
-  "player_id, opponent, pts_ppr, pts_half_ppr, pts_std, pass_att, pass_cmp, pass_yd, pass_td, pass_int, rush_att, rush_yd, rush_td, rec_tgt, rec, rec_yd, rec_td, fum_lost, snap_pct";
+  `player_id, opponent, pts_ppr, pts_half_ppr, pts_std, pass_att, pass_cmp, pass_yd, pass_td, pass_int, rush_att, rush_yd, rush_td, rec_tgt, rec, rec_yd, rec_td, fum_lost, snap_pct, ${IDP_STAT_COLUMNS}` as const;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -321,14 +327,14 @@ async function loadWeekLines(admin: Admin, season: number, seasonType: string, w
   );
 }
 
-type SeasonTotals = Map<string, { games: number; pts_ppr: number }>;
+type SeasonTotals = Map<string, { games: number; pts_ppr: number; pts_idp123: number }>;
 
 /** Every player's regular-season PPR total and games through `week`. */
 async function loadSeasonToDate(admin: Admin, season: number, week: number): Promise<SeasonTotals> {
-  const rows = await pageAll<{ player_id: string; pts_ppr: number | null; gp: number }>((from, to) =>
+  const rows = await pageAll<{ player_id: string; pts_ppr: number | null; gp: number } & Record<string, unknown>>((from, to) =>
     admin
       .from("player_stats")
-      .select("player_id, pts_ppr, gp")
+      .select(`player_id, pts_ppr, gp, ${IDP_STAT_COLUMNS}`)
       .eq("season", season)
       .eq("season_type", "regular")
       .lte("week", week)
@@ -338,19 +344,35 @@ async function loadSeasonToDate(admin: Admin, season: number, week: number): Pro
   );
   const totals: SeasonTotals = new Map();
   for (const r of rows) {
-    const t = totals.get(r.player_id) ?? { games: 0, pts_ppr: 0 };
+    const t = totals.get(r.player_id) ?? { games: 0, pts_ppr: 0, pts_idp123: 0 };
     t.games += r.gp > 0 ? 1 : 0;
     t.pts_ppr += r.pts_ppr ?? 0;
+    t.pts_idp123 += idp123Points(r as unknown as WeekLine);
     totals.set(r.player_id, t);
   }
   return totals;
 }
 
 /** The week line as the bundle's plain record, without the player id. */
-function weekLineRecord(line: WeekLine, week: number): Record<string, number | string | null> {
+function weekLineRecord(
+  line: WeekLine,
+  week: number,
+  defender = false,
+): Record<string, number | string | null> {
+  // A defender's record carries his defensive line and IDP points only (plan
+  // IDP-213): handing the desk "0 receiving yards" for a linebacker invites a
+  // sentence about it.
+  if (defender) return { week, ...idpLineCells(line) };
   const { player_id: _playerId, ...rest } = line;
   void _playerId;
-  return { week, ...rest };
+  const out: Record<string, number | string | null> = { week };
+  for (const [key, value] of Object.entries(rest)) {
+    // The defensive columns are null on an offensive line; leave them out so
+    // the offensive record reads exactly as it did.
+    if (key.startsWith("idp_") || key === "def_snp" || key === "def_snap_pct") continue;
+    out[key] = value as number | string | null;
+  }
+  return out;
 }
 
 function readExample(): { slug: string; draft_payload: unknown } | null {
@@ -448,7 +470,10 @@ async function assemble(
     for (const [id, t] of seasonTotals) {
       const pos = positionOf.get(id);
       if (!pos) continue;
-      byPosition.set(pos, [...(byPosition.get(pos) ?? []), { id, pts: t.pts_ppr }]);
+      // A defender ranks among his position on Sleeper default IDP points,
+      // never on PPR, which is zero for every one of them (plan R-21).
+      const pts = isDefender(pos) ? t.pts_idp123 : t.pts_ppr;
+      byPosition.set(pos, [...(byPosition.get(pos) ?? []), { id, pts }]);
     }
     for (const list of byPosition.values()) {
       list.sort((a, b) => b.pts - a.pts || a.id.localeCompare(b.id));
@@ -497,16 +522,34 @@ async function assemble(
     if (!p) continue;
     const line = lineByPlayer.get(id) ?? null;
     const totals = seasonTotals?.get(id) ?? null;
+    const defender = isDefender(p.position);
     const value: Record<string, BundleFormatValue> = {};
-    for (const [i, slug] of EDITION_FORMAT_SLUGS.entries()) value[slug] = toFormatValue(trendIndexes[i], id);
+    for (const [i, slug] of EDITION_FORMAT_SLUGS.entries()) {
+      const v = toFormatValue(trendIndexes[i], id);
+      value[slug] = defender ? { ...v, coverage: "not_covered" } : v;
+    }
     bundlePlayers[id] = {
       slug: p.slug,
       full_name: p.name,
       position: p.position,
       team: p.team,
       value,
-      week_line: line && period.week !== null ? weekLineRecord(line, period.week) : null,
-      season_to_date: totals ? { games: totals.games, pts_ppr: Math.round(totals.pts_ppr * 10) / 10, rank_at_position: rankAtPosition.get(id) ?? null } : null,
+      week_line: line && period.week !== null ? weekLineRecord(line, period.week, defender) : null,
+      season_to_date: totals
+        ? defender
+          ? {
+              games: totals.games,
+              pts_ppr: null,
+              pts_idp123: Math.round(totals.pts_idp123 * 10) / 10,
+              rank_at_position: rankAtPosition.get(id) ?? null,
+              scoring: "idp123",
+            }
+          : {
+              games: totals.games,
+              pts_ppr: Math.round(totals.pts_ppr * 10) / 10,
+              rank_at_position: rankAtPosition.get(id) ?? null,
+            }
+        : null,
       next_week: projections.get(id) ?? null,
       // No league context, so no Positional WAR figure (see the header).
       positional_war_note: null,

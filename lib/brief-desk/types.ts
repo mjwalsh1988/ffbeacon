@@ -40,6 +40,12 @@ export interface BundleFormatValue {
   /** The source actually used for this format, after fall-through. */
   source_slug: string | null;
   source_display: string | null;
+  /**
+   * "not_covered" for a defensive player: no value source prices defenders,
+   * so every figure above is null by design, not missing (plan R-21). The
+   * instructions tell the desk how to say it.
+   */
+  coverage?: "not_covered";
 }
 
 export interface BundlePlayer {
@@ -49,7 +55,17 @@ export interface BundlePlayer {
   team: string | null;
   value: Record<string, BundleFormatValue>;
   week_line: Record<string, number | string | null> | null;
-  season_to_date: { games: number; pts_ppr: number; rank_at_position: number | null } | null;
+  season_to_date: {
+    games: number;
+    /** Null for a defender, whose offensive points mean nothing. */
+    pts_ppr: number | null;
+    /** A defender's Sleeper default IDP points (plan IDP-213). */
+    pts_idp123?: number;
+    /** 1-based, among the position, on pts_ppr (offense) or pts_idp123 (defense). */
+    rank_at_position: number | null;
+    /** Which points rank_at_position ranks on. */
+    scoring?: "ppr" | "idp123";
+  } | null;
   next_week: { week: number; opponent: string | null; projected_pts: number | null; beat_rate: number | null } | null;
   positional_war_note: string | null;
 }

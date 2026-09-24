@@ -22,6 +22,7 @@
  * carried into the DTO where a later change could surface them.
  */
 
+import { missingValueNote } from "@/lib/signal-check/copy";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { SleeperLeague } from "@/lib/sleeper";
@@ -34,7 +35,6 @@ import type { WarCurvePoint } from "@/lib/positional-war/types";
 import {
   BLENDED_PICKS_NOTE,
   ESTIMATED_PICKS_NOTE,
-  MISSING_VALUES_NOTE,
 } from "@/lib/signal-check/copy";
 import type { LeagueTradeSignalCheck } from "@/lib/league-signal-check";
 import { gradeLeagueTrades, tradeRosterPair, WYR_LEAGUE_COLUMNS, type WyrLeagueRow } from "./grade";
@@ -500,7 +500,8 @@ function verdictNotes(
   // prints a confident margin and a format chip naming a format that is not
   // this league's, and nothing says the substitution happened.
   if (formatNotice) notes.push(formatNotice);
-  if (view.hasMissingValues) notes.push(MISSING_VALUES_NOTE);
+  const missing = missingValueNote(view);
+  if (missing) notes.push(missing);
   if (view.hasEstimatedPicks) notes.push(ESTIMATED_PICKS_NOTE);
   if (view.hasBlendedPicks) notes.push(BLENDED_PICKS_NOTE);
   if (startup) {

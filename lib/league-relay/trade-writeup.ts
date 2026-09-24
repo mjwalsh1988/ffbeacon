@@ -31,6 +31,7 @@
  * Pure: takes plain data, returns a Writeup, touches no database and no clock.
  */
 
+import { NO_VERDICT_LABEL, NO_VERDICT_REASON, partialGradeNote } from "@/lib/trade-grading/partial";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { LeagueTradeAssetMeta } from "@/lib/league-signal-check";
 import type { SideKey } from "@/lib/signal-check/types";
@@ -95,7 +96,11 @@ function assetLines(view: BuilderView, side: SideKey): string {
   const assets = s?.assets ?? [];
   if (assets.length === 0) return "- _nothing_";
   return assets
-    .map((a) => (a.detail ? `- **${a.name}** (${a.detail})` : `- **${a.name}**`))
+    .map((a) => {
+      const line = a.detail ? `- **${a.name}** (${a.detail})` : `- **${a.name}**`;
+      // A defender (plan R-19): named, and said to have no market value.
+      return a.unpriced ? `${line}, no market value` : line;
+    })
     .join("\n");
 }
 
@@ -422,7 +427,12 @@ function buildFields(
   const winnerLabel = winnerName(view, teamA, teamB) ?? "Neither";
 
   const verdictBits = [
-    view.isNeutral ? "Too close to call" : `${winnerLabel} by ${view.marginPct.toFixed(1)}%`,
+    view.graded === false
+      ? NO_VERDICT_LABEL
+      : view.isNeutral
+        ? "Too close to call"
+        : `${winnerLabel} by ${view.marginPct.toFixed(1)}%`,
+    view.partial ? partialGradeNote(view.unpricedCount) : null,
     // Already a full phrase ("High confidence"); appending the noun again
     // produced "High confidence confidence" in the first real run.
     view.confidenceLabel,
@@ -493,7 +503,10 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
   // Saying "a four-for-three" instead is shorter, reads like a person wrote it,
   // and leaves the per-asset detail to the place built for it.
   const opener = voice.pick(TRADE_OPENERS) ?? "A trade has landed.";
-  const verdictOpener = view.isNeutral
+  // No verdict is not an even trade, so it gets no "too close" opener.
+  const verdictOpener = view.graded === false
+    ? null
+    : view.isNeutral
     ? voice.pick(EVEN_LINES)
     : view.isBlowout
       ? voice.pick(LOPSIDED_LINES)
@@ -528,7 +541,10 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
   const confidence = view.confidenceLabel
     ? `, at ${view.confidenceLabel.toLowerCase()}`
     : "";
-  const verdictSentence = winner
+  const ungraded = view.graded === false;
+  const verdictSentence = ungraded
+    ? `There is **no Signal Check verdict** on this one: ${NO_VERDICT_REASON.charAt(0).toLowerCase()}${NO_VERDICT_REASON.slice(1)}`
+    : winner
     ? `On ${view.formatDisplay} values it is **${winner}'s** deal, by ${view.marginPct.toFixed(
         1,
       )}%${confidence}.`
@@ -539,8 +555,12 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
     verdictSentence,
     // Signal Check's templates say "Side A". Everybody in this channel knows
     // these two people by name, and the writeup has already used those names in
-    // its first sentence, so the verdict uses them too.
-    dropRepeatedMargin(nameSides(view.explanation, teamA.name, teamB.name), view.marginPct),
+    // its first sentence, so the verdict uses them too. With no verdict the
+    // explanation only repeats the reason just given, so it is left out. A
+    // partial grade's explanation already carries the partial sentence.
+    ungraded
+      ? null
+      : dropRepeatedMargin(nameSides(view.explanation, teamA.name, teamB.name), view.marginPct),
   ]
     .filter((s): s is string => Boolean(s))
     .join(" ");

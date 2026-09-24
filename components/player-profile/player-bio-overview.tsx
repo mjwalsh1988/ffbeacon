@@ -6,6 +6,8 @@
  * Server component.
  */
 
+import { isDefender, positionNoun } from "@/lib/site";
+import { subPositionPhrase } from "@/lib/player-profile/defender-depth";
 import {
   CalendarDays,
   Cake,
@@ -49,6 +51,21 @@ function heightDisplay(player: PlayerRow, meta: Record<string, unknown>): string
   return str(meta.height);
 }
 
+/**
+ * The position fact. Offense keeps its code, as it always has. A defender is
+ * spelled out with his depth-chart sub-position ("Linebacker, inside
+ * linebacker, left"), because "LB" says little and the sub-position is what
+ * decides whether he makes tackles (plan IDP-204).
+ */
+function positionFact(position: string, meta: Record<string, unknown>): string {
+  if (!isDefender(position)) return position;
+  const noun = positionNoun(position);
+  const word = noun.charAt(0).toUpperCase() + noun.slice(1);
+  const code = typeof meta.depth_chart_position === "string" ? meta.depth_chart_position : null;
+  const sub = subPositionPhrase(code);
+  return sub ? `${word}, ${sub}` : word;
+}
+
 export function PlayerBioOverview({ player }: { player: PlayerRow }) {
   const meta = sleeperMeta(player);
 
@@ -87,7 +104,7 @@ export function PlayerBioOverview({ player }: { player: PlayerRow }) {
       : null;
 
   const facts: { icon: LucideIcon; label: string; value: string }[] = [
-    { icon: Shield, label: "Position", value: player.position },
+    { icon: Shield, label: "Position", value: positionFact(player.position, meta) },
     ...(player.team ? [{ icon: Shield, label: "Team", value: player.team }] : []),
     ...(ageDisplay ? [{ icon: CalendarDays, label: "Age", value: ageDisplay }] : []),
     ...(born ? [{ icon: Cake, label: "Born", value: born }] : []),

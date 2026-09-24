@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { isDefender } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -211,7 +212,9 @@ export async function GET(
         {/* Footer */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <p style={{ fontSize: 20, color: INK_SUBTLE, margin: 0 }}>
-            Fantasy outlook, stats and value trends
+            {isDefender(position)
+              ? "IDP stats, snap share and weekly game log"
+              : "Fantasy outlook, stats and value trends"}
           </p>
           <p style={{ fontSize: 20, color: INK_SUBTLE, margin: 0 }}>ffbeacon.com</p>
         </div>

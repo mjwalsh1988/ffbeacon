@@ -148,7 +148,8 @@ export const playerWeeksProjection: BeamCapability<Params, Result> = {
     const isRate =
       stat.aggregation.kind === "ratio" ||
       stat.aggregation.kind === "avgPerGame" ||
-      (stat.aggregation.kind === "fantasy" && stat.aggregation.perGame);
+      ((stat.aggregation.kind === "fantasy" || stat.aggregation.kind === "idpPoints") &&
+        stat.aggregation.perGame);
 
     const perGame = isRate ? null : value.value / games;
     const projected = perGame === null ? null : perGame * seasonGames;
@@ -156,13 +157,15 @@ export const playerWeeksProjection: BeamCapability<Params, Result> = {
     let finish: Result["finish"] = null;
     if (
       projected !== null &&
-      stat.aggregation.kind === "fantasy" &&
+      (stat.aggregation.kind === "fantasy" || stat.aggregation.kind === "idpPoints") &&
       params.player.position
     ) {
+      // A defender's finishes are ranked on Sleeper default IDP scoring
+      // (migration 0298), so his pace is measured against the same table.
       finish = await projectedFinish(
         ctx.supabase,
         params.season.season,
-        ctx.scoringKey,
+        stat.aggregation.kind === "idpPoints" ? "idp123" : ctx.scoringKey,
         params.player.position,
         projected,
       );

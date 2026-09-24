@@ -550,22 +550,35 @@ export async function resolveAdpSnapshot(
     if (!picked.date) continue;
 
     // Keys are internal constants (adpFormatKeyCandidates), never user input.
-    const { data, error } = await admin
-      .from("player_market_snapshots")
-      .select("sleeper_player_id, adp")
-      .eq("source", source)
-      .eq("snapshot_date", picked.date)
-      .not(`adp->>${key}`, "is", null)
-      .limit(PAGE);
-    if (error) throw new Error(`ADP snapshot lookup failed: ${error.message}`);
-    if (!data || data.length === 0) continue;
-
+    //
+    // PAGED, in a fixed order. This was one unordered .limit(PAGE) read, and
+    // the ppr key alone carries about 2,500 rows a night, so an arbitrary
+    // 1,000 came back and the rest of the board had no ADP, which a completed
+    // draft then froze into its snapshot. Found while widening the nightly
+    // market sync to defenders, which adds rows but did not cause it.
     const adpBySleeperId: Record<string, number> = {};
-    for (const row of data) {
-      const map = row.adp as Record<string, unknown> | null;
-      const v = Number(map?.[key]);
-      if (Number.isFinite(v) && v > 0)
-        adpBySleeperId[row.sleeper_player_id] = v;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await admin
+        .from("player_market_snapshots")
+        .select("sleeper_player_id, adp")
+        .eq("source", source)
+        // Every market row is a regular-season row today; pinning it keeps
+        // sleeper_player_id a unique, total order for the pages below.
+        .eq("season_type", "regular")
+        .eq("snapshot_date", picked.date)
+        .not(`adp->>${key}`, "is", null)
+        .order("sleeper_player_id", { ascending: true })
+        .order("season", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`ADP snapshot lookup failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      for (const row of data) {
+        const map = row.adp as Record<string, unknown> | null;
+        const v = Number(map?.[key]);
+        if (Number.isFinite(v) && v > 0)
+          adpBySleeperId[row.sleeper_player_id] = v;
+      }
+      if (data.length < PAGE) break;
     }
     if (Object.keys(adpBySleeperId).length === 0) continue;
 

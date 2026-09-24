@@ -12,11 +12,17 @@
  * the upsert's unique key (source, season_type, season, sleeper_player_id,
  * snapshot_date) updates that date's rows in place instead of duplicating.
  *
- * Row filter: Sleeper returns ~3300 players, most of which carry neither a real
- * ADP (999 is the "no data" sentinel) nor a points projection. Only rows with at
- * least one real ADP value or a projection are stored, so a nightly partition is
- * roughly 600-800 rows, not 3300 rows of sentinels. The FULL raw source object is
- * preserved per stored row in `metadata` (audit / backfill / diagnosis).
+ * Positions: every one Sleeper projects, QB, RB, WR, TE, K, DEF and the
+ * individual defensive players (DL, LB, DB), since 2026-09-24. Defenders carry
+ * Sleeper's IDP draft positions (adp keys "idp" for superflex IDP drafts and
+ * "idp_1qb" for one-quarterback ones). Readers that grade or rank offense drop
+ * DL/LB/DB themselves; the IDP guide reads the defender rows.
+ *
+ * Row filter: only rows with at least one real ADP value (999 is Sleeper's "no
+ * data" sentinel) or a points projection are stored. Measured 2026-09-24: about
+ * 3,200 offensive rows a night, plus roughly 1,100 defenders with a draft
+ * position. The FULL raw source object is preserved per stored row in
+ * `metadata` (audit / backfill / diagnosis).
  *
  * Failure posture (per project conventions): this is a real API, not a scraper,
  * so shape oddities are logged rather than fatal, but a ZERO-row write is always

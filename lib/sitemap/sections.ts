@@ -65,6 +65,8 @@
  *                       the same reason, from the same read (hasPublishedEditions).
  */
 
+import { idpRelevantPlayerIdSet } from "@/lib/player-search";
+import { IDP_POSITIONS } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/server";
 import { memoTtl } from "@/lib/memo-ttl";
 import { SITE } from "@/lib/site";
@@ -242,6 +244,35 @@ async function rankedPlayerSlugs(supabase: Admin): Promise<string[]> {
     if (!data || data.length < DB_PAGE_SIZE) break;
   }
   return [...slugs];
+}
+
+/**
+ * Defender profile slugs that pass the IDP relevance gate (plan R-15, R-17).
+ *
+ * No value source ranks a defender, so rankedPlayerSlugs never finds one. The
+ * gate is the defensive equivalent (a real season of snaps, or a depth chart
+ * spot), and a defender outside it is noindexed on the page itself, so the
+ * sitemap and the robots tag agree. Paged over the three positions and filtered
+ * in memory: an .in() over 1,500 ids is the URL-length failure described above.
+ */
+export async function idpPlayerSlugs(supabase: Admin): Promise<string[]> {
+  const gate = await idpRelevantPlayerIdSet(supabase);
+  const slugs: string[] = [];
+  for (let from = 0; ; from += DB_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("players")
+      .select("id, slug")
+      .in("position", [...IDP_POSITIONS])
+      .order("id", { ascending: true })
+      .range(from, from + DB_PAGE_SIZE - 1);
+    if (error) {
+      console.error("[sitemap] defender page failed", error);
+      break;
+    }
+    for (const row of data ?? []) if (row.slug && gate.has(row.id)) slugs.push(row.slug);
+    if (!data || data.length < DB_PAGE_SIZE) break;
+  }
+  return slugs;
 }
 
 /* ------------------------------------------------------------------ */
@@ -427,7 +458,11 @@ async function playersSection(supabase: Admin): Promise<SitemapUrl[]> {
     .limit(1);
   const rankingsUpdatedAt = newest([latestRanking?.[0]?.generated_at]);
 
-  const slugs = await rankedPlayerSlugs(supabase);
+  const [ranked, defenders] = await Promise.all([
+    rankedPlayerSlugs(supabase),
+    idpPlayerSlugs(supabase),
+  ]);
+  const slugs = [...new Set([...ranked, ...defenders])];
   return slugs.map((slug) => ({
     loc: `${SITE.url}/players/${slug}`,
     lastModified: rankingsUpdatedAt,

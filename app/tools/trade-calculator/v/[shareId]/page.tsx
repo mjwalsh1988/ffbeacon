@@ -180,6 +180,10 @@ export default async function SignalCheckSharePage({
                                 <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
                               )}
                             </span>
+                            {a.unpriced && (
+                              // A defender (plan R-19): words, never a number.
+                              <span className="shrink-0 text-xs text-ink-subtle">No market value</span>
+                            )}
                           </li>
                         );
                       })}

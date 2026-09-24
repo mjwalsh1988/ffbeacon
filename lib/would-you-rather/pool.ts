@@ -66,6 +66,9 @@ export function admitGradedTrade(
   settings: Pick<WouldYouRatherSettings["pool"], "include_startup_trades" | "require_player_asset">,
 ): boolean {
   if (result.view.hasMissingValues) return false;
+  // Belt and braces for R-19: a partial or ungraded view is refused even if a
+  // future change stops counting a defender as a missing value.
+  if (result.view.partial || result.view.graded === false) return false;
   if (result.startup !== null && !settings.include_startup_trades) return false;
   // A pick-for-pick trade grades fine and plays badly: there is nothing to
   // recognise and nothing to argue about. Checked against the GRADED sides,

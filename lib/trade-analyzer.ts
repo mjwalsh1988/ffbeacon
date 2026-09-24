@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDefender } from "@/lib/site";
+import { assessPartialGrade } from "@/lib/trade-grading/partial";
 import type { Database } from "@/lib/database.types";
 import type { LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
 import type { StartupPickIndex } from "@/lib/league-startup-picks";
@@ -52,6 +54,14 @@ export type TradePlayer = {
    * this to draw a muted/dashed chip instead of pretending the player is
    * worth literally zero. */
   noValue: boolean;
+  /**
+   * True for an individual defensive player (DL, LB, DB) with no value: no
+   * value source prices defenders (plan R-19). He is named and left out of the
+   * totals, and the grade says so, rather than reading as worth zero.
+   */
+  unpriced: boolean;
+  /** True when the Sleeper id matched no player row at all. */
+  unresolved: boolean;
 };
 
 export type TradePick = {
@@ -109,6 +119,11 @@ export type TradeAnalysis = {
   /** True when at least one player or pick lacked a value row. Tells the
    * UI to render a "Some values missing, analysis may be incomplete" note. */
   hasMissingValues: boolean;
+  /** Defensive players left out of the totals (plan R-19). */
+  partial: boolean;
+  unpricedCount: number;
+  /** Sleeper ids we could not match to a player. Counted apart from unpriced. */
+  unresolvedCount: number;
   /** Snapshot of the inputs used so the OG image route can re-render
    * identical content without re-querying. */
   context: {
@@ -123,6 +138,8 @@ export type TradeAnalysis = {
 
 export type TradeVerdict =
   | { label: "Even trade"; winnerRosterId: null; differential: 0; differentialPct: 0 }
+  /** A side with no priced piece and a defender on it: nothing to compare. */
+  | { label: "No verdict"; winnerRosterId: null; differential: 0; differentialPct: 0 }
   | {
       label: "Slight edge";
       winnerRosterId: number;
@@ -303,6 +320,8 @@ export async function analyzeTrade(
       team: meta?.team ?? null,
       value,
       noValue,
+      unpriced: noValue && isDefender(meta?.position ?? null),
+      unresolved: playerId === null,
     };
 
     const side = ensureSide(sideByRoster, rosterId, rosterIdentities);
@@ -407,11 +426,27 @@ export async function analyzeTrade(
   }
   combinedValue = round2(combinedValue);
 
+  const grade = assessPartialGrade(
+    sides.map((side) => [
+      ...side.players.map((p) => ({
+        noValue: p.noValue,
+        position: p.position,
+        resolved: !p.unresolved,
+      })),
+      ...side.picks.map((p) => ({ noValue: p.noValue, position: null })),
+    ]),
+  );
+
   return {
     sides,
     combinedValue,
-    verdict: computeVerdict(sides),
+    verdict: grade.graded
+      ? computeVerdict(sides)
+      : { label: "No verdict", winnerRosterId: null, differential: 0, differentialPct: 0 },
     hasMissingValues,
+    partial: grade.partial,
+    unpricedCount: grade.unpricedCount,
+    unresolvedCount: grade.unresolvedCount,
     context: {
       formatSlug: context.formatSlug,
       formatDisplay: context.formatDisplay,

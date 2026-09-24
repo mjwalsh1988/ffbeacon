@@ -18,17 +18,24 @@ export function DepthChartCard({
   viewedRole,
   position,
   playerName,
+  roomLabel = null,
 }: {
   room: DepthChartEntry[];
   viewedRole: string | null;
   position: string;
   playerName: string;
+  /** A defender's sub-position in words ("left inside linebacker"): his room. */
+  roomLabel?: string | null;
 }) {
   return (
     <Panel
       eyebrow="Situation"
       title="Depth chart"
-      helper={`Where ${playerName} sits in the ${position} room`}
+      helper={
+        roomLabel
+          ? `Where ${playerName} sits on the depth chart at ${roomLabel}`
+          : `Where ${playerName} sits in the ${position} room`
+      }
       action={viewedRole ? <RoleBadge role={viewedRole} /> : undefined}
     >
       <ol className="space-y-1.5">

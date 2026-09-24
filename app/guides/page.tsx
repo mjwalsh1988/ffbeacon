@@ -14,6 +14,7 @@ import {
   Hourglass,
   Trophy,
   Swords,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -204,6 +205,19 @@ const GUIDES: Guide[] = [
       "The survival arithmetic, and why a high-floor roster is the correct roster",
       "What to do with the money once the field shrinks, and the release cutoff that expires it",
       "The mistakes that get you chopped, and the tiebreaks nobody reads",
+    ],
+  },
+  {
+    icon: Shield,
+    title: "IDP fantasy football",
+    href: "/guides/idp-fantasy-football",
+    description:
+      "Leagues that start real defenders: linebackers, defensive linemen and defensive backs. How IDP scoring decides which of them matter, what repeats from one season to the next, and how to draft and manage them.",
+    bullets: [
+      "Four IDP scoring systems side by side, and the tackle rule that counts twice",
+      "The same real players ranked under each system",
+      "What carries over from year to year, measured on our own weekly stats",
+      "Setting up an IDP league, from one flex slot to a full defense",
     ],
   },
   {

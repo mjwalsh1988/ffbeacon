@@ -177,6 +177,18 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     updatedAt: "2026-09-22T17:00:00-04:00",
     priority: 0.8,
   },
+  {
+    slug: "idp-fantasy-football",
+    navLabel: "IDP Leagues",
+    title: "IDP fantasy football",
+    summary:
+      "What IDP leagues are, how IDP scoring changes which defenders matter, and how to draft and manage linebackers, defensive linemen and defensive backs",
+    // Plan docs/idp/idp-guide-and-data-plan.md section 7.3. Built 2026-09-24,
+    // published after the owner's review (IDP-224).
+    publishedAt: "2026-09-24T09:00:00-04:00",
+    updatedAt: "2026-09-24T09:00:00-04:00",
+    priority: 0.8,
+  },
 ];
 
 /**

@@ -93,6 +93,48 @@ const PAGE = 1000;
  */
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
+/**
+ * The three large reads are split into four id ranges read at the same time.
+ * Each page costs about half a second on player_stats, nearly all of it heap
+ * reads (EXPLAIN, 2026-09-24: 450 to 475 ms and 900-odd buffer reads per 1,000
+ * rows), so four streams overlap that wait instead of queueing it.
+ *
+ * Ranges are (lower, upper]: the first lower bound is ZERO_UUID, exactly where
+ * the single stream started, and the last range has no upper bound. Their
+ * union is therefore the same row set, and concatenating them in range order
+ * gives the same ascending id order the single stream produced, which matters
+ * for the projections: accumulate() sums floats in row order.
+ */
+const ID_RANGE_BOUNDS = [
+  "40000000-0000-0000-0000-000000000000",
+  "80000000-0000-0000-0000-000000000000",
+  "c0000000-0000-0000-0000-000000000000",
+] as const;
+
+/**
+ * Run `readRange` over every id range concurrently and return the rows in
+ * range order. Ranges are awaited in order, so a failure surfaces as the error
+ * the single stream would have reached first; the no-op catch only stops a
+ * later range's rejection being reported as unhandled while an earlier one is
+ * still being awaited. Nothing is written by a caller until this resolves, so a
+ * failure in any range still aborts the run before its delete.
+ */
+export async function readByIdRanges<T>(
+  readRange: (lowerExclusive: string, upperInclusive: string | null) => Promise<T[]>,
+): Promise<T[]> {
+  const lowers = [ZERO_UUID, ...ID_RANGE_BOUNDS];
+  const pending = lowers.map((lower, i) => {
+    const promise = readRange(lower, ID_RANGE_BOUNDS[i] ?? null);
+    promise.catch(() => {});
+    return promise;
+  });
+  const out: T[] = [];
+  for (const promise of pending) {
+    for (const row of await promise) out.push(row);
+  }
+  return out;
+}
+
 const SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std"] as const;
 /**
  * The three offensive bases plus idp123, Sleeper's default IDP scoring (plan
@@ -311,8 +353,16 @@ export async function runCalculateProjectionAccuracy(
 ): Promise<ProjectionAccuracyResult> {
   const started = Date.now();
 
-  const settings = await loadSettings(supabase);
+  // The settings and positions reads depend on nothing and are started now so
+  // they overlap the projection read. loadSettings never rejects. The positions
+  // promise is awaited only after the actuals, the point where the sequential
+  // version first ran it, so an earlier failure still surfaces first and an
+  // empty projection table still returns without depending on it.
+  const settingsPending = loadSettings(supabase);
+  const positionsPending = loadPositions(supabase);
+  positionsPending.catch(() => {});
   const projections = await loadProjections(supabase);
+  const settings = await settingsPending;
   if (projections.length === 0) {
     return {
       playersScored: 0,
@@ -344,7 +394,7 @@ export async function runCalculateProjectionAccuracy(
   // time (144 s against 142 s) and changed grading, because a special-teams
   // week with no defensive snap stopped counting as a game played.
   const actuals = await loadActuals(supabase, [...new Set([...offenseSeasons, ...idpOnlySeasons])]);
-  const positions = await loadPositions(supabase);
+  const positions = await positionsPending;
 
   // Index actuals for O(1) join.
   const actualByKey = new Map<string, ActualRow>();
@@ -795,83 +845,104 @@ async function loadSettings(supabase: ServiceClient) {
 }
 
 async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]> {
-  const out: ProjectionRow[] = [];
-  for (let lastId = ""; ; ) {
-    const { data, error } = await withRetry(
-      async () =>
-        await supabase
-          .from("player_weekly_projections")
-      .select("id, player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
-      .eq("season_type", "regular")
-      .not("player_id", "is", null)
-      // A row with no PPR figure grades on no offensive base (accumulate skips
-      // it): defenders, read with their stat line below, and unprojected weeks.
-      .not("projected_pts_ppr", "is", null)
-      // Ordered, because Postgres promises nothing about row order without one
-      // and .range() pages over whatever order it happens to give. On a table
-      // the projection sync rewrites daily that handed back 8,771 rows twice
-      // across forty pages and skipped as many, which graded some players on
-      // the same week two or three times and others on no week at all.
-      .order("id", { ascending: true })
-      .gt("id", lastId || ZERO_UUID)
-          .limit(PAGE),
-      { label: `accuracy projections after ${lastId || "start"}` },
-    );
-    if (error) throw new Error(`accuracy projection load failed: ${error.message}`);
-    if (!data || data.length === 0) break;
-    lastId = data[data.length - 1].id;
-    for (const row of data) {
-      if (!row.player_id) continue;
-      out.push({
-        playerId: row.player_id,
-        season: Number(row.season),
-        week: Number(row.week),
-        source: row.source,
-        ppr: numOrNull(row.projected_pts_ppr),
-        halfPpr: numOrNull(row.projected_pts_half_ppr),
-        std: numOrNull(row.projected_pts_std),
-        idp123: null,
-      });
+  const offenseRange = async (lower: string, upper: string | null): Promise<ProjectionRow[]> => {
+    const out: ProjectionRow[] = [];
+    for (let lastId = ""; ; ) {
+      const { data, error } = await withRetry(
+        async () => {
+          let q = supabase
+            .from("player_weekly_projections")
+            .select("id, player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
+            .eq("season_type", "regular")
+            .not("player_id", "is", null)
+            // A row with no PPR figure grades on no offensive base (accumulate skips
+            // it): defenders, read with their stat line below, and unprojected weeks.
+            .not("projected_pts_ppr", "is", null)
+            // Ordered, because Postgres promises nothing about row order without one
+            // and .range() pages over whatever order it happens to give. On a table
+            // the projection sync rewrites daily that handed back 8,771 rows twice
+            // across forty pages and skipped as many, which graded some players on
+            // the same week two or three times and others on no week at all.
+            .order("id", { ascending: true })
+            .gt("id", lastId || lower);
+          if (upper) q = q.lte("id", upper);
+          return await q.limit(PAGE);
+        },
+        { label: `accuracy projections after ${lastId || lower}` },
+      );
+      if (error) throw new Error(`accuracy projection load failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      lastId = data[data.length - 1].id;
+      for (const row of data) {
+        if (!row.player_id) continue;
+        out.push({
+          playerId: row.player_id,
+          season: Number(row.season),
+          week: Number(row.week),
+          source: row.source,
+          ppr: numOrNull(row.projected_pts_ppr),
+          halfPpr: numOrNull(row.projected_pts_half_ppr),
+          std: numOrNull(row.projected_pts_std),
+          idp123: null,
+        });
+      }
+      if (data.length < PAGE) break;
     }
-    if (data.length < PAGE) break;
-  }
+    return out;
+  };
 
   // Defenders, in a second read joined to their position. Their rows above
   // carry null in every offensive column and grade on nothing; the same rows
   // here carry the projected stat line, scored under idp123. Every source, like
   // the read above, because the grader runs once per source.
-  for (let lastId = ""; ; ) {
-    const { data, error } = await withRetry(
-      async () =>
-        await supabase
-          .from("player_weekly_projections")
-          .select("id, player_id, season, week, source, stat_line, players!inner(position)")
-          .eq("season_type", "regular")
-          .not("player_id", "is", null)
-          .in("players.position", ["DL", "LB", "DB"])
-          .order("id", { ascending: true })
-          .gt("id", lastId || ZERO_UUID)
-          .limit(PAGE),
-      { label: `accuracy defender projections after ${lastId || "start"}` },
-    );
-    if (error) throw new Error(`accuracy defender projection load failed: ${error.message}`);
-    if (!data || data.length === 0) break;
-    lastId = data[data.length - 1].id;
-    for (const row of data) {
-      if (!row.player_id) continue;
-      out.push({
-        playerId: row.player_id,
-        season: Number(row.season),
-        week: Number(row.week),
-        source: row.source,
-        ppr: null,
-        halfPpr: null,
-        std: null,
-        idp123: projectedIdp123(row.stat_line),
-      });
+  const defenderRange = async (lower: string, upper: string | null): Promise<ProjectionRow[]> => {
+    const out: ProjectionRow[] = [];
+    for (let lastId = ""; ; ) {
+      const { data, error } = await withRetry(
+        async () => {
+          let q = supabase
+            .from("player_weekly_projections")
+            .select("id, player_id, season, week, source, stat_line, players!inner(position)")
+            .eq("season_type", "regular")
+            .not("player_id", "is", null)
+            .in("players.position", ["DL", "LB", "DB"])
+            .order("id", { ascending: true })
+            .gt("id", lastId || lower);
+          if (upper) q = q.lte("id", upper);
+          return await q.limit(PAGE);
+        },
+        { label: `accuracy defender projections after ${lastId || lower}` },
+      );
+      if (error) throw new Error(`accuracy defender projection load failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      lastId = data[data.length - 1].id;
+      for (const row of data) {
+        if (!row.player_id) continue;
+        out.push({
+          playerId: row.player_id,
+          season: Number(row.season),
+          week: Number(row.week),
+          source: row.source,
+          ppr: null,
+          halfPpr: null,
+          std: null,
+          idp123: projectedIdp123(row.stat_line),
+        });
+      }
+      if (data.length < PAGE) break;
     }
-    if (data.length < PAGE) break;
-  }
+    return out;
+  };
+
+  // Both reads run at once and are joined offense first, defenders second: the
+  // order the two sequential loops produced. The defender read's rejection is
+  // held until the offense read has settled, so a failure in both still reports
+  // the offense error first, as before.
+  const offense = readByIdRanges(offenseRange);
+  const defenders = readByIdRanges(defenderRange);
+  defenders.catch(() => {});
+  const out = await offense;
+  for (const row of await defenders) out.push(row);
   return out;
 }
 
@@ -888,41 +959,44 @@ async function loadActuals(
   seasons: number[],
   opts: { defendersOnly?: boolean } = {},
 ): Promise<ActualRow[]> {
-  const out: ActualRow[] = [];
-  if (seasons.length === 0) return out;
-  for (let lastId = ""; ; ) {
-    const { data, error } = await withRetry(
-      async () => {
-        let q = supabase
-          .from("player_stats")
-          .select(ACTUAL_SELECT)
-          .eq("season_type", "regular")
-          .in("season", seasons);
-        // Defender weeks only: served by the partial index on def_snp.
-        if (opts.defendersOnly) q = q.not("def_snp", "is", null);
-        return await q.order("id", { ascending: true }).gt("id", lastId || ZERO_UUID).limit(PAGE);
-      },
-      { label: `accuracy actuals after ${lastId || "start"}` },
-    );
-    if (error) throw new Error(`accuracy actual load failed: ${error.message}`);
-    if (!data || data.length === 0) break;
-    lastId = data[data.length - 1].id;
-    for (const row of data) {
-      if (!row.player_id) continue;
-      out.push({
-        playerId: row.player_id,
-        season: Number(row.season),
-        week: Number(row.week),
-        gp: Number(row.gp ?? 0),
-        ppr: numOrNull(row.pts_ppr),
-        halfPpr: numOrNull(row.pts_half_ppr),
-        std: numOrNull(row.pts_std),
-        idp123: actualIdp123(row as unknown as Record<string, unknown>),
-      });
+  if (seasons.length === 0) return [];
+  return readByIdRanges(async (lower, upper) => {
+    const out: ActualRow[] = [];
+    for (let lastId = ""; ; ) {
+      const { data, error } = await withRetry(
+        async () => {
+          let q = supabase
+            .from("player_stats")
+            .select(ACTUAL_SELECT)
+            .eq("season_type", "regular")
+            .in("season", seasons);
+          // Defender weeks only: served by the partial index on def_snp.
+          if (opts.defendersOnly) q = q.not("def_snp", "is", null);
+          if (upper) q = q.lte("id", upper);
+          return await q.order("id", { ascending: true }).gt("id", lastId || lower).limit(PAGE);
+        },
+        { label: `accuracy actuals after ${lastId || lower}` },
+      );
+      if (error) throw new Error(`accuracy actual load failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      lastId = data[data.length - 1].id;
+      for (const row of data) {
+        if (!row.player_id) continue;
+        out.push({
+          playerId: row.player_id,
+          season: Number(row.season),
+          week: Number(row.week),
+          gp: Number(row.gp ?? 0),
+          ppr: numOrNull(row.pts_ppr),
+          halfPpr: numOrNull(row.pts_half_ppr),
+          std: numOrNull(row.pts_std),
+          idp123: actualIdp123(row as unknown as Record<string, unknown>),
+        });
+      }
+      if (data.length < PAGE) break;
     }
-    if (data.length < PAGE) break;
-  }
-  return out;
+    return out;
+  });
 }
 
 async function loadPositions(supabase: ServiceClient): Promise<Map<string, string>> {

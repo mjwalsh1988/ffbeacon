@@ -19,6 +19,9 @@ import {
   topBadgeLabel,
 } from "@/lib/roster-badges";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
+import { PositionChip } from "@/components/position-chip";
+import { positionNoun } from "@/lib/site";
+import { splitUnvaluedRoster } from "@/lib/league-view-roster-split";
 import type {
   DraftPickAsset,
   ResolvedPlayer,
@@ -135,6 +138,11 @@ export function TeamCard({
   } = data;
 
   const starterSet = useMemo(() => new Set(starterIds), [starterIds]);
+  // Rostered players with no value column (plan IDP-209, R-27): defenders get
+  // a group of their own, kickers and team defenses a named line. Before this
+  // they were dropped without a word.
+  const unvalued = useMemo(() => splitUnvaluedRoster(players), [players]);
+
   const grouped = useMemo(
     () => groupByPosition(players, trends),
     [players, trends],
@@ -474,7 +482,31 @@ export function TeamCard({
                 rosterIdToOwnerUsername={rosterIdToOwnerUsername}
               />
             )}
+            {unvalued.defenders.length > 0 && (
+              <DefenseColumn defenders={unvalued.defenders} starterSet={starterSet} />
+            )}
           </div>
+
+          {(unvalued.defenders.length > 0 || unvalued.specialists.length > 0) && (
+            <div className="space-y-1 px-4 pb-4 text-xs leading-relaxed text-ink-subtle sm:px-5">
+              {unvalued.defenders.length > 0 && (
+                <p>
+                  Values and ranks on this card cover offensive players
+                  {includePicks ? " and picks" : ""}. Defensive players are listed by name:
+                  no value source prices them.
+                </p>
+              )}
+              {unvalued.specialists.length > 0 && (
+                <p>
+                  Also on this roster, not valued here:{" "}
+                  {unvalued.specialists
+                    .map((p) => `${p.full_name} (${positionNoun(p.position)})`)
+                    .join(", ")}
+                  .
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Footer link */}
           {showViewTeamPageLink && (
@@ -625,6 +657,74 @@ function PositionColumn({
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * Defensive players, by name, with the position chip and "No market value"
+ * in words where a value would go (plan R-27). No rank, no total: there is
+ * nothing to rank them on.
+ */
+function DefenseColumn({
+  defenders,
+  starterSet,
+}: {
+  defenders: ResolvedPlayer[];
+  starterSet: Set<string>;
+}) {
+  return (
+    <section
+      aria-label={`Defense: ${defenders.length} defensive ${defenders.length === 1 ? "player" : "players"}, no market value`}
+      className="flex min-w-0 flex-col overflow-hidden rounded-card border border-t-2 border-line border-t-position-lb/70 bg-base"
+    >
+      <header className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink">Defense</h3>
+        <p className="text-[11px] text-ink-subtle">No market value</p>
+      </header>
+      <ul className="divide-y divide-line/60">
+        {defenders.map((p) => {
+          const starter = starterSet.has(p.id);
+          return (
+            <li key={p.id} className="flex items-center gap-2 px-3 py-1.5">
+              <span aria-hidden="true" className="shrink-0">
+                <PlayerHeadshot
+                  sleeperId={p.sleeper_id}
+                  name=""
+                  position={p.position}
+                  size={26}
+                  className="ring-1 ring-inset ring-white/10"
+                />
+              </span>
+              <PositionChip position={p.position} />
+              <span className="truncate text-sm font-medium text-ink" title={p.full_name}>
+                {p.full_name}
+              </span>
+              {/* aria-label on a plain span is not read by every screen
+                  reader, so the spoken words live in the element as text. */}
+              <span className="flex-shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-subtle">
+                {p.team ? (
+                  <>
+                    <span className="sr-only">Team </span>
+                    {p.team}
+                  </>
+                ) : (
+                  <>
+                    <span aria-hidden="true">FA</span>
+                    <span className="sr-only">Free agent</span>
+                  </>
+                )}
+              </span>
+              {starter && (
+                <span className="ml-auto flex-shrink-0 inline-flex items-center rounded-full bg-brand-cyan/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-brand-cyan">
+                  <span aria-hidden="true">ST</span>
+                  <span className="sr-only">Starter</span>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

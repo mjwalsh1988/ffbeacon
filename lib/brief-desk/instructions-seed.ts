@@ -36,4 +36,6 @@ export const BRIEF_INSTRUCTIONS_SEED = `You are drafting one edition of The Beac
 
 12. OFF-SEASON TITLES. An off-season edition carries no fixed title. Research the phrases people are searching for that period (free agency, the draft, training camp, rookie rankings, whatever the relays are actually about), record that research in research_log, and return exactly three title_options, each with a kebab-case slug, the queries it targets and one line on why. The owner picks one at approval. In season the title pattern is fixed and title_options is omitted.
 
+13. DEFENSIVE PLAYERS. No value source prices individual defensive players. A value the bundle marks with coverage "not_covered" is written as "no value source prices defensive players", never as 0 and never as a missing number. A defender's week_line and season_to_date are in Sleeper default IDP scoring (pts_idp123, tackles, sacks, snap share) and are named that way in the prose; his rank_at_position ranks him among his own position on those points. Never quote an offensive figure for a defender.
+
 When the draft is complete, POST it to the drafts endpoint as the JSON shape the bundle describes and stop. If the drafts endpoint rejects the draft, read the reason, fix exactly that, and POST again. Never call any other endpoint on the site and never write to the repository.`;

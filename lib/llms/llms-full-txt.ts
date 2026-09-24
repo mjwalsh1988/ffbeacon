@@ -125,7 +125,7 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h3("Player profiles");
   source("/players/{player-slug}");
   p(
-    "One profile per fantasy-relevant player, covering current trade value and its trend, weekly projections, career and game-log statistics, graded trades the player has been part of, and every Beacon Brief story that mentions them. Profiles are enumerated in the players sitemap rather than listed here, because the set changes with the rankings.",
+    "One profile per fantasy-relevant player. An offensive player's profile covers current trade value and its trend, weekly projections, career and game-log statistics, graded trades the player has been part of, and every Beacon Brief story that mentions them. An individual defensive player (defensive lineman, linebacker or defensive back) has no trade value, because no value source prices defenders. That profile carries tackles, sacks, snap share, a weekly game log scored under a choice of IDP scoring systems, the depth chart spot and season finishes in Sleeper default IDP scoring. Profiles are enumerated in the players sitemap rather than listed here, because the set changes with the rankings and the season.",
   );
 
   /* ---------------------------------------------------------------- */

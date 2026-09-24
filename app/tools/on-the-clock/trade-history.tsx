@@ -12,6 +12,7 @@
  * arrive as props.
  */
 
+import { partialGradeNote } from "@/lib/trade-grading/partial";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, RefreshCw, Scale, Sparkles, TrendingUp } from "lucide-react";
 import { formatEastern } from "@/lib/datetime";
@@ -256,7 +257,10 @@ function TradeCard({ entry }: { entry: HistoryEntry }) {
         {(entry.hasEstimates || entry.hasMissingValues) && (
           <p className="mt-2 text-xs text-ink-subtle">
             {entry.hasEstimates && "Picks marked est. are board projections. "}
-            {entry.hasMissingValues && "Assets shown as n/a had no FF Beacon value to count."}
+            {(entry.unpricedCount ?? 0) > 0 && `${partialGradeNote(entry.unpricedCount ?? 0)} `}
+            {entry.hasMissingValues &&
+              entry.sides.some((s) => s.assets.some((a) => a.noValue && !a.unpriced)) &&
+              "Assets marked No market value had no FF Beacon value to count."}
           </p>
         )}
       </div>

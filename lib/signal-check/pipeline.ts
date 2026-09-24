@@ -12,6 +12,7 @@
  * trade-shape logic are separate modules with separate traces.
  */
 
+import { assessPartialGrade, NO_VERDICT_LABEL } from "@/lib/trade-grading/partial";
 import type {
   AnalysisInput,
   PricedAsset,
@@ -83,11 +84,27 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
   );
 
   // 4. Verdict, on the effective totals so the consolidation credit counts.
-  const verdict = computeVerdict(
-    shaped.sides.a.effectiveTotal,
-    shaped.sides.b.effectiveTotal,
-    settings,
+  // A side with no priced piece and a defender on it gets NO verdict (plan
+  // R-19): comparing something against nothing is not a grade.
+  const grade = assessPartialGrade(
+    (["a", "b"] as SideKey[]).map((side) =>
+      priced.sides[side].map((asset) => ({
+        noValue: asset.noValue,
+        position: asset.kind === "player" ? asset.position : null,
+        resolved: asset.kind === "player" ? !asset.unresolved : true,
+      })),
+    ),
   );
+  const verdict = grade.graded
+    ? computeVerdict(shaped.sides.a.effectiveTotal, shaped.sides.b.effectiveTotal, settings)
+    : {
+        label: NO_VERDICT_LABEL,
+        winnerSide: null,
+        marginPct: 0,
+        marginRaw: 0,
+        isNeutral: true,
+        isBlowout: false,
+      };
 
   // 5. Trade-shape result object.
   const tradeShape: TradeShapeResult = {
@@ -122,6 +139,7 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
     sides: shaped.sides,
     trace: shaped.trace,
     hasMissingValues: priced.hasMissingValues,
+    grade,
   });
 
   const trace = [...priced.trace, ...calibrated.trace, ...shaped.trace];
@@ -141,6 +159,10 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
     hasMissingValues: priced.hasMissingValues,
     hasBlendedPicks: priced.hasBlendedPicks,
     hasEstimatedPicks: priced.hasEstimatedPicks,
+    partial: grade.partial,
+    unpricedCount: grade.unpricedCount,
+    unresolvedCount: grade.unresolvedCount,
+    graded: grade.graded,
     valueEngineVersion: VALUE_ENGINE_VERSION,
     ruleInterpreterVersion: RULE_INTERPRETER_VERSION,
     rulesetVersion,

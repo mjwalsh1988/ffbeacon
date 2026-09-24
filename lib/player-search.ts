@@ -1,6 +1,10 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/database.types";
 import { ELIGIBLE_POSITIONS } from "@/lib/ranking-boards";
 import { memoTtl } from "@/lib/memo-ttl";
+import { IDP_POSITIONS } from "@/lib/site";
+import { currentNflSeason } from "@/lib/nfl-season";
 
 /**
  * Shared player autocomplete search, used by every player search surface (the
@@ -138,6 +142,71 @@ export async function rankedPlayerIdSet(
 }
 
 /**
+ * Which search pool a surface draws from.
+ *
+ * "ranked" is every surface's default: the six offensive positions, filtered
+ * to players some value source ranks. "ranked+idp" adds the defenders who pass
+ * the relevance gate below. Only the header palette and the Free Agent Finder
+ * opt in (plan R-15). Signal Check, Beacon Breakdown, Who Should I Start,
+ * Signal Scout and My Rankings stay on "ranked", because each of them would
+ * have nothing to say about a linebacker once he was picked.
+ */
+export type SearchPool = "ranked" | "ranked+idp";
+
+/**
+ * Defender ids that are worth offering in search: a player_idp_seasons row for
+ * the current or previous season with at least one game at 20+ defensive
+ * snaps, OR a defender on an NFL team with a depth chart order.
+ *
+ * No value source ranks a defender, so the ranked-set test above would drop
+ * every one of them. This is its defensive equivalent: it keeps the 1,500 or
+ * so who actually play and drops the 2,800 practice-squad and long-gone names
+ * Sleeper still carries. The depth-chart arm catches a rookie or a new signing
+ * who has not logged a snap yet.
+ *
+ * Memoised on the same terms as rankedPlayerIdSet: it says nothing about who
+ * is asking, and it changes at most once a night. Both reads are paged.
+ */
+export async function idpRelevantPlayerIdSet(
+  supabase: SupabaseClient<Database>,
+): Promise<Set<string>> {
+  return memoTtl("ref:idp-relevant-ids", RANKED_SET_TTL_MS, async () => {
+    const season = Number(currentNflSeason());
+    const ids = new Set<string>();
+    for (let offset = 0; ; offset += RANKED_PAGE) {
+      const { data, error } = await supabase
+        .from("player_idp_seasons")
+        .select("player_id")
+        .in("season", [season, season - 1])
+        .gte("games_20_snaps", 1)
+        .order("player_id", { ascending: true })
+        .range(offset, offset + RANKED_PAGE - 1);
+      if (error) throw error;
+      const page = data ?? [];
+      for (const row of page) ids.add(row.player_id);
+      if (page.length < RANKED_PAGE) break;
+      if (offset > 200_000) break;
+    }
+    for (let offset = 0; ; offset += RANKED_PAGE) {
+      const { data, error } = await supabase
+        .from("players")
+        .select("id")
+        .in("position", [...IDP_POSITIONS])
+        .not("team", "is", null)
+        .not("metadata->sleeper->>depth_chart_order", "is", null)
+        .order("id", { ascending: true })
+        .range(offset, offset + RANKED_PAGE - 1);
+      if (error) throw error;
+      const page = data ?? [];
+      for (const row of page) ids.add(row.id);
+      if (page.length < RANKED_PAGE) break;
+      if (offset > 200_000) break;
+    }
+    return ids;
+  });
+}
+
+/**
  * Of the given player ids, return the subset that is currently fantasy relevant.
  *
  * A thin filter over `rankedPlayerIdSet`, kept so callers holding a candidate
@@ -181,9 +250,20 @@ export function normalizeSearchQuery(query: string): string {
  */
 export async function searchFantasyPlayers(
   supabase: ServerClient,
-  opts: { query: string; positions?: readonly string[]; limit: number },
+  opts: {
+    query: string;
+    positions?: readonly string[];
+    limit: number;
+    /** Defaults to "ranked". See SearchPool. */
+    pool?: SearchPool;
+  },
 ): Promise<FantasyPlayerRow[]> {
-  const positions = opts.positions ?? ELIGIBLE_POSITIONS;
+  const pool = opts.pool ?? "ranked";
+  const positions =
+    opts.positions ??
+    (pool === "ranked+idp"
+      ? [...ELIGIBLE_POSITIONS, ...IDP_POSITIONS]
+      : ELIGIBLE_POSITIONS);
   const normalized = normalizeSearchQuery(opts.query);
   // Normalizing can empty a query that was all punctuation. Nothing matches an
   // empty pattern usefully, so answer before spending a round trip on it.
@@ -191,6 +271,64 @@ export async function searchFantasyPlayers(
   const escaped = normalized.replace(/[%_]/g, (m) => `\\${m}`);
   const overfetch = Math.min(opts.limit * OVERFETCH_MULTIPLIER, MAX_OVERFETCH);
 
+  if (pool === "ranked+idp") {
+    // Two reads, one per side of the ball, each with its own over-fetch.
+    // Sharing one window let the ~4,300 defenders Sleeper carries (most of
+    // whom the gate then drops) crowd ranked offensive players out of it:
+    // "will" matches 116 offensive players and 236 in all, so with one
+    // alphabetical window of 144 every ranked Williams after the letter K
+    // silently vanished from the header palette.
+    const defensiveSet = new Set<string>(IDP_POSITIONS);
+    const offense = positions.filter((p) => !defensiveSet.has(p));
+    const defense = positions.filter((p) => defensiveSet.has(p));
+    const none: FantasyPlayerRow[] = [];
+    const [offRows, defRows] = await Promise.all([
+      offense.length > 0 ? nameMatches(supabase, escaped, offense, overfetch) : none,
+      defense.length > 0 ? nameMatches(supabase, escaped, defense, overfetch) : none,
+    ]);
+    const [ranked, idp] = await Promise.all([
+      offRows.length > 0 ? rankedPlayerIdSet(supabase) : new Set<string>(),
+      // A failed gate read costs the defenders, never the offensive results.
+      defRows.length > 0
+        ? idpRelevantPlayerIdSet(supabase).catch((err: unknown) => {
+            console.error("[player-search] IDP relevance gate failed", err);
+            return new Set<string>();
+          })
+        : new Set<string>(),
+    ]);
+    return [
+      ...offRows.filter((r) => ranked.has(r.id)),
+      ...defRows.filter((r) => idp.has(r.id)),
+    ]
+      .sort(byFullName)
+      .slice(0, opts.limit);
+  }
+
+  const rows = await nameMatches(supabase, escaped, positions, overfetch);
+  if (rows.length === 0) return [];
+
+  const ranked = await rankedPlayerIdSet(supabase);
+  return rows.filter((r) => ranked.has(r.id)).slice(0, opts.limit);
+}
+
+/** full_name ascending, nulls last: the order nameMatches reads in. */
+function byFullName(a: FantasyPlayerRow, b: FantasyPlayerRow): number {
+  if (a.full_name === b.full_name) return 0;
+  if (a.full_name === null) return 1;
+  if (b.full_name === null) return -1;
+  return a.full_name < b.full_name ? -1 : 1;
+}
+
+/**
+ * Name matches in the given positions, alphabetical, capped at `overfetch`.
+ * `escaped` is the normalized query with LIKE wildcards escaped.
+ */
+async function nameMatches(
+  supabase: ServerClient,
+  escaped: string,
+  positions: readonly string[],
+  overfetch: number,
+): Promise<FantasyPlayerRow[]> {
   // ONE COLUMN, ONE INDEX.
   //
   // This used to be an `or()` across full_name, first_name and last_name.
@@ -210,9 +348,5 @@ export async function searchFantasyPlayers(
     .limit(overfetch);
 
   if (error) throw error;
-  const rows = (data ?? []) as FantasyPlayerRow[];
-  if (rows.length === 0) return [];
-
-  const ranked = await rankedPlayerIdSet(supabase);
-  return rows.filter((r) => ranked.has(r.id)).slice(0, opts.limit);
+  return (data ?? []) as FantasyPlayerRow[];
 }

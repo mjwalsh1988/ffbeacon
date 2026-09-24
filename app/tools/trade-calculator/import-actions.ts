@@ -627,6 +627,15 @@ export async function importAndAnalyze(args: {
     });
     const view = toBuilderView(analysis, settings, teamLabels);
     const evidence = buildEvidence(sleeperLeague);
+    // Said before the result rather than discovered in it (plan R-19).
+    if (analysis.unpricedCount > 0) {
+      const n = analysis.unpricedCount;
+      notices.push(
+        `This trade includes ${n === 1 ? "a defensive player" : `${n} defensive players`}. No value source prices defensive players, so ${
+          n === 1 ? "he is" : "they are"
+        } named and left out of the grade.`,
+      );
+    }
 
     let shareUrl: string | null = null;
     if (args.makePublic && settings.shareLinksEnabled) {

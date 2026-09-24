@@ -30,6 +30,7 @@ import {
   type PlayerRow,
 } from "@/lib/player-profile";
 import { findPlayerTrades, type PlayerTrade } from "@/lib/player-trades";
+import { loadDefenderProfile, type DefenderProfileData } from "@/lib/player-profile/defender";
 
 export function loadPositionalFinishesCached(playerId: string) {
   return unstable_cache(
@@ -169,5 +170,35 @@ export function findPlayerTradesCached(sleeperId: string, limit: number): Promis
     () => findPlayerTrades(createCachedReadClient(), sleeperId, { limit }),
     ["player-trades", sleeperId, String(limit)],
     { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerTrades] },
+  )();
+}
+
+/**
+ * The defender profile's data (plan IDP-202). Keyed on the player, the season
+ * and the projection source, because the source decides which lines the page
+ * shows and a flip must not serve the old engine's rows for a day. "v1" is the
+ * shape version: bump it when DefenderProfileData changes shape so a cached
+ * entry in the old shape is never handed to new code.
+ */
+export function loadDefenderProfileCached(
+  player: { id: string; team: string | null },
+  season: number,
+  projectionSource: string,
+): Promise<DefenderProfileData> {
+  return unstable_cache(
+    () =>
+      loadDefenderProfile(createCachedReadClient(), player, { season, projectionSource }),
+    [
+      "player-defender-profile",
+      player.id,
+      "v1",
+      player.team ?? "none",
+      String(season),
+      projectionSource,
+    ],
+    {
+      revalidate: CACHE_TTL.daily,
+      tags: [CACHE_TAGS.playerStats, CACHE_TAGS.playerProjections],
+    },
   )();
 }

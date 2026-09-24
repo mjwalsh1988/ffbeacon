@@ -86,14 +86,16 @@ export async function GET(req: Request) {
   const supabase = await createClient();
   const escaped = query.replace(/[%_]/g, (m) => `\\${m}`);
 
-  // Players are filtered to active, currently-ranked (fantasy relevant) players
-  // in the six fantasy positions by the shared helper. We over-fetch so
+  // Players are filtered to currently-ranked (fantasy relevant) players in the
+  // six fantasy positions, plus defenders who pass the IDP relevance gate
+  // (pool "ranked+idp", plan R-15), by the shared helper. We over-fetch so
   // rankPlayers has room to promote prefix matches before we slice to
   // PLAYER_LIMIT.
   const [playerRows, articleRes] = await Promise.all([
     searchFantasyPlayers(supabase, {
       query,
       limit: PLAYER_LIMIT * 4,
+      pool: "ranked+idp",
     }).catch((err) => {
       console.error("[search] player query failed", err);
       return [];

@@ -34,7 +34,7 @@
     "beacon:outage": "tsx --env-file=.env.local scripts/beacon-outage-sim.ts",
     "beacon:board": "tsx --env-file=.env.local scripts/beacon-board-audit.ts",
     "beacon:ai-smoke": "tsx --env-file=.env.local scripts/beacon-ai-smoke.ts",
-    "beam:smoke": "tsx --env-file=.env.local scripts/beam-smoke.ts",
+    "beam:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/beam-smoke.ts",
     "img:beam-mascot": "tsx scripts/optimize-beam-mascot.ts",
     "img:brand": "tsx scripts/optimize-brand-images.ts",
     "beacon-brief": "tsx --env-file=.env.local scripts/beacon-brief.ts",
@@ -97,6 +97,7 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
     "sharp": "^0.35.1",
     "zod": "^4.4.3"
   },

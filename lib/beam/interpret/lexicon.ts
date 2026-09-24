@@ -206,6 +206,28 @@ const positionPhrases: PhraseEntry<string>[] = [
   { phrase: "defense", value: "DEF" },
   { phrase: "defence", value: "DEF" },
   { phrase: "team defense", value: "DEF" },
+  // Individual defensive players (plan IDP-214). "edge" and "safety" are left
+  // out on purpose: both are ordinary words in a football question ("the edge
+  // of the red zone", "a safety") far more often than a position.
+  { phrase: "dl", value: "DL" },
+  { phrase: "defensive line", value: "DL" },
+  { phrase: "defensive lineman", value: "DL" },
+  { phrase: "defensive linemen", value: "DL" },
+  { phrase: "lb", value: "LB" },
+  { phrase: "linebacker", value: "LB" },
+  { phrase: "linebackers", value: "LB" },
+  { phrase: "db", value: "DB" },
+  { phrase: "defensive back", value: "DB" },
+  { phrase: "defensive backs", value: "DB" },
+  { phrase: "cornerback", value: "DB" },
+  { phrase: "cornerbacks", value: "DB" },
+  { phrase: "corner", value: "DB" },
+  { phrase: "corners", value: "DB" },
+  // Any individual defensive player. Not a real position: rankings-top reads
+  // it as "defensive players", and as a resolver hint it matches nobody, so
+  // it is ignored there by construction (review item 32).
+  { phrase: "idp", value: "IDP" },
+  { phrase: "idp players", value: "IDP" },
 ];
 export const POSITION_MATCHER = new PhraseMatcher<string>(positionPhrases);
 

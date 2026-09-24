@@ -55,11 +55,44 @@
  *      list with three hundred are not the same claim.
  */
 
+import { isDefender, type IdpPosition } from "@/lib/site";
+import { readTradePosition } from "@/lib/trade-finder/types";
 import type { LeagueCategoryKey } from "@/lib/league-category";
 import type { TradePosition } from "@/lib/trade-finder/types";
 import type { ManagerPulseSettings } from "./default-settings";
 
 export type { TradePosition };
+
+/**
+ * A position as Manager Pulse reads it for the figures that are about what a
+ * manager DOES rather than what anything is worth: the shape of their first
+ * rounds and the players they keep going back to (plan IDP-208). Defenders
+ * belong in both. Value figures (appetite, overpays) stay on TradePosition,
+ * because no value source prices a defender.
+ */
+export type ManagerPosition = TradePosition | IdpPosition;
+
+/** The nine, in display order: offense, then defense. */
+export const MANAGER_POSITIONS: ManagerPosition[] = [
+  "QB",
+  "RB",
+  "WR",
+  "TE",
+  "K",
+  "DEF",
+  "DL",
+  "LB",
+  "DB",
+];
+
+/** Coerce a raw position to one of the nine, or null. */
+export function readManagerPosition(raw: unknown): ManagerPosition | null {
+  const offense = readTradePosition(raw);
+  if (offense) return offense;
+  if (typeof raw !== "string") return null;
+  const upper = raw.trim().toUpperCase();
+  return isDefender(upper) ? (upper as IdpPosition) : null;
+}
 
 /** Which league-type lens a report view is filtered to. */
 export type LeagueLens = "all" | "dynasty" | "redraft";
@@ -151,7 +184,7 @@ export type ManagerResults = {
 // ---------------------------------------------------------------------------
 
 /** Share of first-`earlyRoundCutoff`-round picks spent at each position. */
-export type DraftPositionShape = Partial<Record<TradePosition, number>>;
+export type DraftPositionShape = Partial<Record<ManagerPosition, number>>;
 
 /**
  * Whole-draft pace, as a fact about the ROOM, never attributed to a manager.
@@ -206,7 +239,7 @@ export type ManagerDrafting = {
 export type PlayerExposure = {
   playerId: string;
   name: string;
-  position: TradePosition | null;
+  position: ManagerPosition | null;
   /** Weighted by acquisition method: early draft counts most, waiver least, trade-in counts. */
   exposureScore: number;
   leagueSeasonsRostered: number;

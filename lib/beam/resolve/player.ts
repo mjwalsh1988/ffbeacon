@@ -37,7 +37,13 @@ import type { BeamSettings } from "@/lib/beam/default-settings";
 import { normalizeName } from "@/lib/beam/interpret/normalize";
 import { damerauLevenshtein, normalizedSimilarity } from "./distance";
 
-const FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
+// Individual defensive players joined in IDP-214 (plan R-20). Migration 0301
+// widens the trigram RPC to the same nine, so every tier sees one pool.
+const FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"] as const;
+
+function isIdpPosition(position: string | null): boolean {
+  return position === "DL" || position === "LB" || position === "DB";
+}
 
 /** Only these characters can reach a PostgREST filter. Asserted, not assumed. */
 const SAFE_QUERY = /^[a-z0-9 ]+$/;
@@ -314,6 +320,22 @@ export async function resolvePlayer(
     );
   }
   resolved = applyHint(resolved, (p) => p.team === opts.teamHint, opts.teamHint);
+
+  // Two people with exactly the same name, one of them a defender. Sleeper
+  // carries a linebacker named Justin Jefferson and defensive backs named
+  // Lamar Jackson and DeVonta Smith, so without this every question about
+  // those three offensive players became "which one did you mean?" once
+  // defenders joined the pool (IDP-214). The offensive player keeps the exact
+  // match. A reader who means the defender says so ("linebacker justin
+  // jefferson", "tackles"), and the hints above have already removed the
+  // offensive player by the time this runs.
+  const exactMatches = resolved.filter((p) => p.tier === "exact");
+  if (
+    exactMatches.some((p) => isIdpPosition(p.position)) &&
+    exactMatches.some((p) => !isIdpPosition(p.position))
+  ) {
+    resolved = resolved.filter((p) => !(p.tier === "exact" && isIdpPosition(p.position)));
+  }
 
   /* ---- pick the tier, then decide ------------------------------------ */
 

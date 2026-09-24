@@ -542,6 +542,19 @@ export async function RankingsView({
           </section>
         )}
 
+        {/* Plan R-18: the board stays offense-only, and says where defenders
+            are covered instead of leaving an IDP reader to wonder. */}
+        <p className="mt-8 text-sm text-ink-muted">
+          Individual defensive players are not on this board: no value source prices them. The{" "}
+          <Link
+            href="/guides/idp-fantasy-football"
+            className="font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            IDP guide
+          </Link>{" "}
+          covers how linebackers, defensive linemen and defensive backs score.
+        </p>
+
         {footerSlot}
       </PageBody>
 

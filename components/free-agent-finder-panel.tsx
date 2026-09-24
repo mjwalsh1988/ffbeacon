@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { SidePanel } from "@/components/side-panel";
 import { LeagueLogo } from "@/components/league-logo";
+import { PositionChip } from "@/components/position-chip";
 import { searchFreeAgent } from "@/app/my-beacon/sleeper-leagues/free-agent-actions";
 import {
   ROSTER_SLOT_LABEL,
@@ -248,7 +249,13 @@ function PlayerCombobox({
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const params = new URLSearchParams({ q: trimmed, limit: "20" });
+        // Defenders can be free agents too, so this search opts into the
+        // IDP pool (plan R-15). My Rankings, on the same route, does not.
+        const params = new URLSearchParams({
+          q: trimmed,
+          limit: "20",
+          pool: "ranked+idp",
+        });
         const res = await fetch(`/api/players/search?${params.toString()}`, {
           headers: FETCH_HEADERS,
         });
@@ -398,8 +405,10 @@ function PlayerCombobox({
                 >
                   <span className="min-w-0 flex-1 truncate">
                     <span className="text-ink">{p.name}</span>
-                    <span className="ml-2 text-xs text-ink-subtle">
-                      {[p.position, p.team].filter(Boolean).join(", ")}
+                    <span className="ml-2 inline-flex items-center gap-1.5 text-xs text-ink-subtle">
+                      <PositionChip position={p.position} />
+                      {p.position && p.team ? <span className="sr-only">, </span> : null}
+                      {p.team}
                     </span>
                   </span>
                 </li>

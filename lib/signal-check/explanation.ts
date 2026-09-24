@@ -7,6 +7,7 @@
  * here (the public toggle handles point display separately in the UI).
  */
 
+import { NO_VERDICT_LABEL, NO_VERDICT_REASON, partialGradeNote, type PartialGrade } from "@/lib/trade-grading/partial";
 import type {
   AnalyzedSide,
   BeaconVerdict,
@@ -16,6 +17,8 @@ import type {
 } from "./types";
 
 export interface ExplanationParams {
+  /** Partial-grade facts (plan R-19). Optional so older callers still work. */
+  grade?: PartialGrade;
   verdict: BeaconVerdict;
   tradeShape: TradeShapeResult;
   sides: Record<SideKey, AnalyzedSide>;
@@ -64,7 +67,12 @@ function asSentence(text: string): string {
 }
 
 export function buildExplanation(params: ExplanationParams): string {
-  const { verdict, tradeShape, sides, trace, hasMissingValues } = params;
+  const { verdict, tradeShape, sides, trace, hasMissingValues, grade } = params;
+  // No verdict: one side is only defensive players. Say why and stop; a
+  // "neither side comes out ahead" line would be a verdict by another name.
+  if (grade && !grade.graded) {
+    return `${asSentence(NO_VERDICT_LABEL)} ${NO_VERDICT_REASON}`;
+  }
   const sentences: string[] = [asSentence(verdict.label)];
 
   // Kept alongside the consolidation sentence rather than suppressed by it. The
@@ -99,7 +107,21 @@ export function buildExplanation(params: ExplanationParams): string {
     sentences.push(`The deal grades as ${indefiniteArticle(label)} ${label}.`);
   }
 
-  if (hasMissingValues) {
+  if (grade?.partial) sentences.push(partialGradeNote(grade.unpricedCount));
+
+  // The generic note is for a value we expected and did not find. Defenders
+  // are counted by the partial line above, so it fires only when something
+  // else is missing too.
+  // Without grade facts (an older caller) the note behaves as it always did.
+  const otherMissing =
+    hasMissingValues &&
+    (!grade?.partial ||
+      (["a", "b"] as const).some((side) =>
+        (sides[side]?.assets ?? []).some(
+          (r) => r.asset?.noValue && !(r.asset.kind === "player" && r.asset.unpriced),
+        ),
+      ));
+  if (otherMissing) {
     sentences.push(
       "Note: one or more assets had no FF Beacon value and were excluded from the totals.",
     );

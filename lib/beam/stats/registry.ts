@@ -74,6 +74,22 @@ export const BEAM_STAT_IDS = [
   "def_sack",
   "def_td",
   "pts_allow",
+  // Individual defensive players (plan IDP-214, R-20)
+  "idp_tkl",
+  "idp_tkl_solo",
+  "idp_tkl_ast",
+  "idp_tkl_loss",
+  "idp_sack",
+  "idp_qb_hit",
+  "idp_pass_def",
+  "idp_int",
+  "idp_ff",
+  "idp_fum_rec",
+  "idp_def_td",
+  "def_snp",
+  "def_snap_pct",
+  "idp_points",
+  "idp_points_per_game",
 ] as const;
 
 export type BeamStatId = (typeof BEAM_STAT_IDS)[number];
@@ -85,6 +101,8 @@ export function isBeamStatId(value: unknown): value is BeamStatId {
 /** The six fantasy positions, in the order they read naturally in copy. */
 export const SKILL_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 export const ALL_FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
+/** Individual defensive players. Their stats never apply to anyone else. */
+export const IDP_STAT_POSITIONS = ["DL", "LB", "DB"] as const;
 
 export type StatFormat = "count" | "decimal1" | "percent" | "yards";
 
@@ -102,7 +120,12 @@ export type StatAggregation =
   /** Fantasy points in the reader's scoring. The column is chosen per request. */
   | { kind: "fantasy"; perGame: boolean }
   /** Weeks the player was credited with a game. */
-  | { kind: "games" };
+  | { kind: "games" }
+  /**
+   * A defender's points in Sleeper default IDP scoring (idp123), computed from
+   * the typed IDP columns, never from a stored points column (plan R-4).
+   */
+  | { kind: "idpPoints"; perGame: boolean };
 
 /**
  * Columns this module is allowed to read from player_stats. Naming a column that
@@ -138,7 +161,23 @@ export type StatColumn =
   | "sack"
   | "interceptions"
   | "def_td"
-  | "pts_allow";
+  | "pts_allow"
+  | "def_snp"
+  | "tm_def_snp"
+  | "def_snap_pct"
+  | "idp_tkl"
+  | "idp_tkl_solo"
+  | "idp_tkl_ast"
+  | "idp_tkl_loss"
+  | "idp_sack"
+  | "idp_qb_hit"
+  | "idp_pass_def"
+  | "idp_int"
+  | "idp_ff"
+  | "idp_fum_rec"
+  | "idp_def_td"
+  | "idp_safe"
+  | "idp_blk_kick";
 
 export type BeamStat = {
   id: BeamStatId;
@@ -149,7 +188,16 @@ export type BeamStat = {
   /** Singular noun for "1 touchdown". */
   nounSingular: string | null;
   /** Group heading, used to build a stat-line answer and the clarify prompts. */
-  group: "Fantasy" | "Passing" | "Rushing" | "Receiving" | "Combined" | "Usage" | "Kicking" | "Defense";
+  group:
+    | "Fantasy"
+    | "Passing"
+    | "Rushing"
+    | "Receiving"
+    | "Combined"
+    | "Usage"
+    | "Kicking"
+    | "Defense"
+    | "Individual defense";
   positions: readonly string[];
   /**
    * The positions to prefer when this stat has to help decide WHICH player was
@@ -908,6 +956,181 @@ export const BEAM_STATS: readonly BeamStat[] = [
     verbs: ["allow", "allowed", "gave up", "give up", "given up"],
     bareUnit: "points",
   },
+
+  /* ---------------- Individual defensive players ---------------- */
+  // Phrases that a team defense or an offensive player already owns ("sacks",
+  // "interceptions", "touchdowns", "snap share", "fantasy points") stay with
+  // their owner and are swapped to these once the player is known to be a
+  // defender (POSITION_SWAPS below). The phrases here are ones nobody else
+  // uses.
+  {
+    id: "idp_tkl",
+    label: "Tackles",
+    nounPlural: "tackles",
+    nounSingular: "tackle",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_tkl"),
+    format: "count",
+    phrasings: ["tackles", "tackle", "total tackles", "combined tackles"],
+  },
+  {
+    id: "idp_tkl_solo",
+    label: "Solo tackles",
+    nounPlural: "solo tackles",
+    nounSingular: "solo tackle",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_tkl_solo"),
+    format: "count",
+    phrasings: ["solo tackles", "solo tackle", "unassisted tackles"],
+  },
+  {
+    id: "idp_tkl_ast",
+    label: "Assisted tackles",
+    nounPlural: "assisted tackles",
+    nounSingular: "assisted tackle",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_tkl_ast"),
+    format: "count",
+    phrasings: ["assisted tackles", "assisted tackle", "tackle assists"],
+  },
+  {
+    id: "idp_tkl_loss",
+    label: "Tackles for loss",
+    nounPlural: "tackles for loss",
+    nounSingular: "tackle for loss",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_tkl_loss"),
+    format: "count",
+    phrasings: ["tackles for loss", "tackle for loss", "tfl", "tfls"],
+  },
+  {
+    id: "idp_sack",
+    label: "Sacks",
+    nounPlural: "sacks",
+    nounSingular: "sack",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_sack"),
+    format: "decimal1",
+    phrasings: ["idp sacks"],
+  },
+  {
+    id: "idp_qb_hit",
+    label: "Quarterback hits",
+    nounPlural: "quarterback hits",
+    nounSingular: "quarterback hit",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_qb_hit"),
+    format: "count",
+    phrasings: ["qb hits", "qb hit", "quarterback hits", "quarterback hit"],
+  },
+  {
+    id: "idp_pass_def",
+    label: "Passes defended",
+    nounPlural: "passes defended",
+    nounSingular: "pass defended",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_pass_def"),
+    format: "count",
+    phrasings: ["passes defended", "passes defensed", "pass breakups", "pbus", "pass deflections"],
+  },
+  {
+    id: "idp_int",
+    label: "Interceptions",
+    nounPlural: "interceptions",
+    nounSingular: "interception",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_int"),
+    format: "count",
+    phrasings: ["idp interceptions"],
+  },
+  {
+    id: "idp_ff",
+    label: "Forced fumbles",
+    nounPlural: "forced fumbles",
+    nounSingular: "forced fumble",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_ff"),
+    format: "count",
+    phrasings: ["forced fumbles", "forced fumble", "fumbles forced"],
+  },
+  {
+    id: "idp_fum_rec",
+    label: "Fumble recoveries",
+    nounPlural: "fumble recoveries",
+    nounSingular: "fumble recovery",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_fum_rec"),
+    format: "count",
+    phrasings: ["fumble recoveries", "fumble recovery", "fumbles recovered"],
+  },
+  {
+    id: "idp_def_td",
+    label: "Defensive touchdowns",
+    nounPlural: "defensive touchdowns",
+    nounSingular: "defensive touchdown",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("idp_def_td"),
+    format: "count",
+    phrasings: ["idp touchdowns"],
+  },
+  {
+    id: "def_snp",
+    label: "Defensive snaps",
+    nounPlural: "defensive snaps",
+    nounSingular: "defensive snap",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: sum("def_snp"),
+    format: "count",
+    phrasings: ["defensive snaps", "snaps on defense", "defensive snap count"],
+  },
+  {
+    id: "def_snap_pct",
+    label: "Defensive snap share",
+    nounPlural: null,
+    nounSingular: null,
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    // Not an average of the stored 0 to 1 weekly share (that printed 0.8%).
+    // Snaps he played over snaps his defense was on the field, summed over
+    // the season, so a blowout week counts for what it was.
+    aggregation: { kind: "ratio", numerator: "def_snp", denominator: "tm_def_snp", scale: 100 },
+    format: "percent",
+    phrasings: ["defensive snap share", "defensive snap percentage", "snap share on defense"],
+  },
+  {
+    id: "idp_points",
+    label: "IDP points",
+    nounPlural: "IDP points",
+    nounSingular: "IDP point",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: { kind: "idpPoints", perGame: false },
+    format: "decimal1",
+    phrasings: ["idp points", "idp fantasy points", "idp production"],
+  },
+  {
+    id: "idp_points_per_game",
+    label: "IDP points per game",
+    nounPlural: "IDP points per game",
+    nounSingular: "IDP point per game",
+    group: "Individual defense",
+    positions: IDP_STAT_POSITIONS,
+    aggregation: { kind: "idpPoints", perGame: true },
+    format: "decimal1",
+    phrasings: ["idp points per game", "idp ppg"],
+  },
 ];
 
 const BY_ID = new Map<BeamStatId, BeamStat>(BEAM_STATS.map((s) => [s.id, s]));
@@ -945,7 +1168,40 @@ const POSITION_SWAPS: ReadonlyArray<{
   // is 0 on every team-defense row, so def_int was removed rather than ship a
   // stat that always answers zero.
   { from: "total_td", position: "DEF", to: "def_td" },
+  // Individual defensive players (plan IDP-214). The shared words resolve to
+  // the offensive or team-defense reading and swap here once the player is
+  // known to be a defender.
+  ...(["DL", "LB", "DB"] as const).flatMap((position) => [
+    { from: "def_sack" as BeamStatId, position, to: "idp_sack" as BeamStatId },
+    { from: "pass_sack" as BeamStatId, position, to: "idp_sack" as BeamStatId },
+    { from: "pass_int" as BeamStatId, position, to: "idp_int" as BeamStatId },
+    { from: "total_td" as BeamStatId, position, to: "idp_def_td" as BeamStatId },
+    { from: "def_td" as BeamStatId, position, to: "idp_def_td" as BeamStatId },
+    { from: "snap_pct" as BeamStatId, position, to: "def_snap_pct" as BeamStatId },
+    { from: "fantasy_points" as BeamStatId, position, to: "idp_points" as BeamStatId },
+    { from: "fantasy_points_per_game" as BeamStatId, position, to: "idp_points_per_game" as BeamStatId },
+  ]),
 ];
+
+/**
+ * Stats whose words a defender genuinely owns too: sacks, interceptions and
+ * touchdowns. For these the resolver's stat hint also admits DL, LB and DB,
+ * so "how many sacks did garrett have" can reach Myles Garrett (review item
+ * 31). Points and snap share are left out on purpose: they would stop the
+ * hint narrowing anything, and "how many points did gibbs score" means the
+ * running back.
+ */
+const IDP_SHARED_STATS: ReadonlySet<BeamStatId> = new Set<BeamStatId>([
+  "def_sack",
+  "pass_sack",
+  "pass_int",
+  "total_td",
+  "def_td",
+]);
+
+export function statSharedWithDefenders(statId: BeamStatId): boolean {
+  return IDP_SHARED_STATS.has(statId);
+}
 
 export function statForPosition(statId: BeamStatId, position: string | null): BeamStatId {
   if (!position) return statId;
@@ -972,7 +1228,24 @@ export function statLineFor(position: string | null): BeamStat[] {
             ? ["games_played", "fgm", "fga", "fg_pct", "xpm", "fantasy_points"]
             : pos === "DEF"
               ? ["games_played", "def_sack", "def_td", "pts_allow", "fantasy_points"]
-              : ["games_played", "total_yd", "total_td", "fantasy_points"];
+              : pos === "DL" || pos === "LB" || pos === "DB"
+                ? [
+                    "games_played",
+                    "def_snap_pct",
+                    "idp_tkl",
+                    "idp_tkl_solo",
+                    "idp_tkl_loss",
+                    "idp_sack",
+                    "idp_qb_hit",
+                    "idp_pass_def",
+                    "idp_int",
+                    "idp_ff",
+                    "idp_fum_rec",
+                    "idp_def_td",
+                    "idp_points",
+                    "idp_points_per_game",
+                  ]
+                : ["games_played", "total_yd", "total_td", "fantasy_points"];
   return ids.map(getStat);
 }
 
@@ -994,6 +1267,7 @@ export function bareUnitCandidates(
     return [getStat("total_yd")];
   }
   if (unit === "touchdowns") {
+    if (pos === "DL" || pos === "LB" || pos === "DB") return [getStat("idp_def_td")];
     if (pos === "QB") return [getStat("pass_td"), getStat("rush_td"), getStat("total_td")];
     if (pos === "RB") return [getStat("rush_td"), getStat("rec_td"), getStat("total_td")];
     if (pos === "WR" || pos === "TE") return [getStat("rec_td")];

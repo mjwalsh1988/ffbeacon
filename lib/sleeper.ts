@@ -811,7 +811,8 @@ export type SleeperSeasonProjection = {
  * Season-long projections + ADP for every fantasy-relevant position, from
  * Sleeper's undocumented (but stable, publicly read-only) projections host.
  * NOTE: this endpoint lives on api.sleeper.com WITHOUT the /v1 prefix, unlike
- * everything else in this file. One call returns the full player set (~3 MB),
+ * everything else in this file. One call returns the full player set, defenders
+ * included (about 7 MB),
  * so the timeout is raised above the default. Returns [] on any failure.
  */
 const PROJECTIONS_BASE = "https://api.sleeper.com";
@@ -819,10 +820,19 @@ const PROJECTION_POSITIONS = ["DEF", "K", "QB", "RB", "TE", "WR"] as const;
 
 /**
  * Individual defensive player positions Sleeper projects (RotoWire). They join
- * the WEEKLY fetch only, in the same URL as the six above, so one request per
- * week returns every row and the sync's stale-row rules see one complete set
- * (plan IDP-114, hazard A). The season/market fetch deliberately stays at six:
- * no value source prices defenders.
+ * both fetches, in the same URL as the six above:
+ *
+ * - WEEKLY: one request per week returns every row, so the sync's stale-row
+ *   rules see one complete set (plan IDP-114, hazard A).
+ * - SEASON/MARKET: the nightly ADP snapshot stores every position Sleeper
+ *   publishes a draft position for, defenders included (adp_idp, adp_idp_1qb),
+ *   so the market history covers IDP drafts too. No VALUE source prices a
+ *   defender; this is draft position, not value, and every reader of the
+ *   market tables that grades or ranks already drops DL/LB/DB itself.
+ *
+ * Sleeper's position filter takes DL, LB and DB only. Its finer labels (DE,
+ * DT, NT, ILB, OLB, CB, S, FS, SS) return nothing as filters and arrive INSIDE
+ * these three, measured 2026-09-24, so these three are every defender.
  */
 export const IDP_PROJECTION_POSITIONS = ["DL", "LB", "DB"] as const;
 
@@ -831,9 +841,10 @@ export async function getSleeperSeasonProjections(
   seasonType: SleeperSeasonType = "regular",
 ): Promise<SleeperSeasonProjection[]> {
   const params = new URLSearchParams({ season_type: seasonType, order_by: "adp_ppr" });
-  for (const pos of PROJECTION_POSITIONS) params.append("position[]", pos);
+  for (const pos of [...PROJECTION_POSITIONS, ...IDP_PROJECTION_POSITIONS]) params.append("position[]", pos);
   const url = `${PROJECTIONS_BASE}/projections/nfl/${encodeURIComponent(season)}?${params.toString()}`;
-  return (await safeFetch<SleeperSeasonProjection[]>(url, 45_000)) ?? [];
+  // About 7 MB with defenders (3 MB without); the timeout has the headroom.
+  return (await safeFetch<SleeperSeasonProjection[]>(url, 60_000)) ?? [];
 }
 
 /**

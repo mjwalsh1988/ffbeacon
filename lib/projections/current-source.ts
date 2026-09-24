@@ -62,47 +62,63 @@ export function currentProjectionSourceCached(window?: {
     ? `${window.season}|${window.fromWeek}|${window.toWeek ?? "end"}`
     : "latest-season";
 
-  return unstable_cache(
-    async (): Promise<string> => {
-      const admin = createAdminClient();
-      const settings = await loadPowerPulseSettings(admin);
-      if (!settings.beaconProjections?.enabled) return SLEEPER_SOURCE;
+  const resolve = async (): Promise<string> => {
+    const admin = createAdminClient();
+    const settings = await loadPowerPulseSettings(admin);
+    if (!settings.beaconProjections?.enabled) return SLEEPER_SOURCE;
 
-      if (window) {
-        return resolveProjectionSourceForWindow({
-          supabase: admin,
-          season: window.season,
-          fromWeek: window.fromWeek,
-          toWeek: window.toWeek,
-          settings: settings.beaconProjections,
-        });
-      }
-
-      // The newest season we hold projections FOR. Scoped to Sleeper because
-      // that is the coverage baseline: our own builder mirrors Sleeper's rows
-      // rather than adding seasons of its own, so this is the same answer
-      // through half the rows.
-      const { data } = await admin
-        .from("player_weekly_projections")
-        .select("season")
-        .eq("season_type", "regular")
-        .eq("source", SLEEPER_SOURCE)
-        .order("season", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const season = data ? Number(data.season) : null;
-      if (season === null || !Number.isFinite(season)) return SLEEPER_SOURCE;
-
+    if (window) {
       return resolveProjectionSourceForWindow({
         supabase: admin,
-        season,
-        fromWeek: 1,
+        season: window.season,
+        fromWeek: window.fromWeek,
+        toWeek: window.toWeek,
         settings: settings.beaconProjections,
       });
-    },
+    }
+
+    // The newest season we hold projections FOR. Scoped to Sleeper because
+    // that is the coverage baseline: our own builder mirrors Sleeper's rows
+    // rather than adding seasons of its own, so this is the same answer
+    // through half the rows.
+    const { data } = await admin
+      .from("player_weekly_projections")
+      .select("season")
+      .eq("season_type", "regular")
+      .eq("source", SLEEPER_SOURCE)
+      .order("season", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const season = data ? Number(data.season) : null;
+    if (season === null || !Number.isFinite(season)) return SLEEPER_SOURCE;
+
+    return resolveProjectionSourceForWindow({
+      supabase: admin,
+      season,
+      fromWeek: 1,
+      settings: settings.beaconProjections,
+    });
+  };
+
+  const cached = unstable_cache(
+    resolve,
     // The window is IN THE KEY. Without it every caller would share one entry
     // and the first one through the door would decide the answer for the rest.
     ["current-projection-source", key],
     { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerProjections] },
-  )();
+  );
+
+  // unstable_cache throws "incrementalCache missing" outside a Next request, so
+  // a script (npm run beam:smoke) importing a surface that names the engine
+  // crashed on it. Same fallback as lib/faab/priors-read.ts: read uncached. Only
+  // that one error is caught; anything else is a real failure and surfaces.
+  return cached().catch((error: unknown) => {
+    if (
+      error instanceof Error &&
+      /incrementalCache missing/i.test(error.message)
+    ) {
+      return resolve();
+    }
+    throw error;
+  });
 }

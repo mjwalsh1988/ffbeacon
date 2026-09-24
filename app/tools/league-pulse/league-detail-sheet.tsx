@@ -1,5 +1,7 @@
 "use client";
 
+import { IdpLeagueTag } from "@/components/idp-league-tag";
+import { leagueHasIdp } from "@/lib/league-format-tags";
 import { X, Users, CalendarDays, Trophy, ArrowRight } from "lucide-react";
 import { LeagueOpenLink } from "@/components/league-open-link";
 import { LeagueLogo } from "@/components/league-logo";
@@ -110,6 +112,7 @@ export function LeagueDetailSheet({
               <span className="text-xs text-ink-subtle">
                 {league.season}, {league.total_rosters} teams
               </span>
+              {leagueHasIdp(league.roster_positions) && <IdpLeagueTag />}
             </div>
           </div>
           <button

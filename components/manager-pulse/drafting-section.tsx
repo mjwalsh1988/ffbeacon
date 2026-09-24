@@ -19,9 +19,11 @@
  * unknown, never as "never used autopick".
  */
 
+import { MANAGER_POSITIONS, type ManagerPosition } from "@/lib/manager-pulse/types";
+import { positionNoun } from "@/lib/site";
 import type { IdpPosition } from "@/lib/site";
 import { ChartFigure, DataTable, Th, Td } from "@/components/chart-kit";
-import { TRADE_POSITIONS, type TradePosition } from "@/lib/trade-finder/types";
+import type { TradePosition } from "@/lib/trade-finder/types";
 import { SectionFrame } from "./section-frame";
 import { StatTile } from "./stat-tile";
 import {
@@ -104,13 +106,13 @@ function PositionalShape({
   sampleSize,
   lens,
 }: {
-  shape: Partial<Record<TradePosition, number>> | null;
+  shape: Partial<Record<ManagerPosition, number>> | null;
   sampleSize: number | null;
   lens: LeagueLens;
 }) {
-  const entries = TRADE_POSITIONS.map((pos) => ({ pos, share: shape?.[pos] ?? null })).filter(
+  const entries = MANAGER_POSITIONS.map((pos) => ({ pos, share: shape?.[pos] ?? null })).filter(
     (row) => row.share !== null,
-  ) as { pos: TradePosition; share: number }[];
+  ) as { pos: ManagerPosition; share: number }[];
   const leader = entries.length > 0 ? [...entries].sort((a, b) => b.share - a.share)[0] : null;
 
   return (
@@ -123,7 +125,7 @@ function PositionalShape({
       ) : (
         <ChartFigure
           title="Share of early picks by position"
-          summary={`Their first rounds lean toward ${leader.pos}, at ${formatPercent(
+          summary={`Their first rounds lean toward ${positionNoun(leader.pos, "plural")}, at ${formatPercent(
             leader.share,
           )} of early picks.`}
           titleLevel={4}
@@ -139,7 +141,10 @@ function PositionalShape({
             >
               {entries.map((row) => (
                 <tr key={row.pos}>
-                  <Td>{row.pos}</Td>
+                  <Td>
+                    <span aria-hidden="true">{row.pos}</span>
+                    <span className="sr-only">{positionNoun(row.pos)}</span>
+                  </Td>
                   <Td numeric>{formatPercent(row.share)}</Td>
                 </tr>
               ))}
@@ -149,7 +154,10 @@ function PositionalShape({
           <ul className="space-y-1.5">
             {entries.map((row) => (
               <li key={row.pos} className="flex items-center gap-2 text-xs">
-                <span className="w-8 shrink-0 font-semibold text-ink">{row.pos}</span>
+                <span className="w-8 shrink-0 font-semibold text-ink">
+                  <span aria-hidden="true">{row.pos}</span>
+                  <span className="sr-only">{positionNoun(row.pos)}</span>
+                </span>
                 <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-line/60">
                   <span
                     aria-hidden="true"

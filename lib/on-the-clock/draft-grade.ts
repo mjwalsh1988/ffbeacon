@@ -34,6 +34,8 @@
  * because every sentence here has to be traceable to a number above it.
  */
 
+import { isDefender } from "@/lib/site";
+import type { ShapedPick } from "./types";
 import { round, zScores, zToDisplay } from "@/lib/power-pulse/math";
 import type { DraftPulseTeam } from "./draft-pulse";
 import type { TeamRollup } from "./rosters";
@@ -89,6 +91,24 @@ export interface DraftGradeInput {
   settings: GradeSettings;
   /** True while the draft is still running, which softens the review copy. */
   inProgress: boolean;
+  /**
+   * Every pick in the draft. Optional: used only to count the defensive picks
+   * each roster made, which have no value and so never reach pickSurpluses
+   * (plan R-11). The market evidence names that count rather than grading on
+   * fewer picks without saying so.
+   */
+  picks?: ShapedPick[];
+}
+
+/** Made, non-keeper picks of individual defensive players, per roster. */
+export function defensivePickCounts(picks: ShapedPick[] | undefined): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const pick of picks ?? []) {
+    if (pick.rosterId === null || pick.isKeeper) continue;
+    if (!isDefender(pick.position)) continue;
+    out.set(pick.rosterId, (out.get(pick.rosterId) ?? 0) + 1);
+  }
+  return out;
 }
 
 const LABELS: Record<GradeComponentKey, string> = {
@@ -203,6 +223,7 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
   // surplus.ts already rolls these up, and it also computes the average, which
   // this used to do again a few lines later.
   const surplusTotals = surplusByRoster(pickSurpluses);
+  const defensiveCounts = defensivePickCounts(input.picks);
   const market: RawComponent = {
     key: "market",
     raw: new Map(),
@@ -220,11 +241,19 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
       id,
       50 + 50 * Math.max(-1, Math.min(1, perPick / MARKET_REFERENCE)),
     );
+    const defensive = defensiveCounts.get(id) ?? 0;
+    const defensiveNote =
+      defensive > 0
+        ? ` Graded on ${entry.count} of ${entry.count + defensive} picks; ${defensive} defensive ${
+            defensive === 1 ? "pick has" : "picks have"
+          } no value.`
+        : "";
     market.evidence.set(
       id,
-      entry.total >= 0
+      (entry.total >= 0
         ? `Picked up ${fmt(entry.total)} points of value over the market price of their ${entry.count} priced picks.`
-        : `Paid ${fmt(Math.abs(entry.total))} points over the market price of their ${entry.count} priced picks.`,
+        : `Paid ${fmt(Math.abs(entry.total))} points over the market price of their ${entry.count} priced picks.`) +
+        defensiveNote,
     );
   }
 

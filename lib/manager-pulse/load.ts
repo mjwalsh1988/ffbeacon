@@ -19,6 +19,7 @@
  * rest of the codebase's convention for exactly this bug.
  */
 
+import { readManagerPosition } from "@/lib/manager-pulse/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import {
@@ -33,7 +34,6 @@ import {
 } from "@/lib/sleeper";
 import { deriveLeagueFormat, mapToFormatSlug } from "@/lib/sleeper-to-format";
 import { classifyDraftPool } from "@/lib/startup-draft";
-import { readTradePosition } from "@/lib/trade-finder/types";
 import {
   analyzeLeagueTrades,
   type LeagueTradeInput,
@@ -1384,7 +1384,10 @@ export async function loadManagerPulseInput(
           let valueOut: number | null = null;
           let hasUnpricedPick = false;
 
-          if (graded && managerSide) {
+          // A trade with no verdict (one side only defensive players, which no
+          // value source prices, plan R-19) stays ungraded: marginPct null.
+          // Bucketing it as a clear win or loss on zeros was the defect.
+          if (graded && managerSide && graded.view.graded !== false) {
             const view = graded.view;
             const otherSide: SideKey = managerSide === "a" ? "b" : "a";
             marginPct =
@@ -1475,7 +1478,7 @@ export async function loadManagerPulseInput(
         playerId: id,
         sleeperId,
         name: row.full_name ?? `${row.first_name} ${row.last_name}`.trim(),
-        position: readTradePosition(row.position),
+        position: readManagerPosition(row.position),
         age: ageFromBirthDate(row.birth_date),
         marketValue: {
           dynasty: dynastyValues.get(id) ?? null,

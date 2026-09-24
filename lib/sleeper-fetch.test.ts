@@ -138,15 +138,18 @@ describe("safeFetch (via getSleeperUser)", () => {
 });
 
 describe("projection URLs (IDP-114)", () => {
-  it("asks for DL, LB and DB in the weekly fetch and not in the season fetch", async () => {
+  it("asks for every position, defenders included, in both the weekly and the season fetch", async () => {
+    // The season fetch feeds the nightly ADP snapshot. It stayed offense-only
+    // through phase 2 and was widened on 2026-09-24 so the market history
+    // carries Sleeper's IDP draft positions too.
     const { getSleeperWeeklyProjections, getSleeperSeasonProjections } = await import("./sleeper");
     fetchMock.mockResolvedValue(jsonResponse(200, []));
     await getSleeperWeeklyProjections(2026, 3);
     await getSleeperSeasonProjections("2026");
     const weekly = decodeURIComponent(String(fetchMock.mock.calls[0][0]));
     const seasonal = decodeURIComponent(String(fetchMock.mock.calls[1][0]));
-    for (const pos of ["DL", "LB", "DB", "WR", "QB"]) expect(weekly).toContain(`position[]=${pos}`);
-    for (const pos of ["DL", "LB", "DB"]) expect(seasonal).not.toContain(`position[]=${pos}`);
-    expect(seasonal).toContain("position[]=WR");
+    const every = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"];
+    for (const pos of every) expect(weekly).toContain(`position[]=${pos}`);
+    for (const pos of every) expect(seasonal).toContain(`position[]=${pos}`);
   });
 });

@@ -19,6 +19,7 @@ import { NflTeamLogo, nflTeamLogoUrl } from "@/components/nfl-team-logo";
 import { TeamAnthem } from "@/components/player-profile/team-anthem";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
 import { RoleBadge } from "@/components/player-profile/role-badge";
+import { positionNoun } from "@/lib/site";
 import type {
   NflTeamRow,
   PlayerRow,
@@ -46,13 +47,16 @@ export function PlayerHero({
   finishes,
   team,
   role,
+  variant = "offense",
 }: {
   player: PlayerRow;
   sleeperId: string | null;
   scoringLabel: string;
-  finishes: PositionalFinish[];
+  finishes: Array<Pick<PositionalFinish, "season" | "finish"> & { scoring?: string }>;
   team: NflTeamRow | null;
   role: string | null;
+  /** "defender" spells the position out for a screen reader (plan IDP-204). */
+  variant?: "offense" | "defender";
 }) {
   const fullName =
     player.full_name ??
@@ -143,7 +147,14 @@ export function PlayerHero({
                 className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-[0.16em]"
                 style={{ backgroundColor: `${accent}22`, color: accent }}
               >
-                {player.position}
+                {variant === "defender" ? (
+                  <>
+                    <span aria-hidden="true">{player.position}</span>
+                    <span className="sr-only">{positionNoun(player.position)}</span>
+                  </>
+                ) : (
+                  player.position
+                )}
               </span>
               {player.team && (
                 /* Crest chip: the team logo sits inside the team badge, the

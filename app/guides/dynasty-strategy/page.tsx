@@ -823,7 +823,12 @@ function AgeSection({ market }: { market: DynastyAgeMarket }) {
         <Link href="/guides/superflex-strategy#dynasty-heading" className={LINK_CLASS}>
           superflex guide
         </Link>{" "}
-        treats a 30-year-old quarterback as a long-term asset.
+        treats a 30-year-old quarterback as a long-term asset. Defenders follow their own
+        clock, set by role rather than age, and the{" "}
+        <Link href="/guides/idp-fantasy-football#dynasty-heading" className={LINK_CLASS}>
+          IDP guide
+        </Link>{" "}
+        covers them.
       </Para>
       <Para>
         The same logic sets your window. A roster is only as young as the

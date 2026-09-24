@@ -5,13 +5,14 @@ import {
   readSleeperId,
   type SearchablePlayer,
 } from "@/lib/ranking-boards";
-import { searchFantasyPlayers } from "@/lib/player-search";
-import type { Position } from "@/lib/site";
+import { searchFantasyPlayers, type SearchPool } from "@/lib/player-search";
+import { IDP_POSITIONS } from "@/lib/site";
 
 /**
  * GET /api/players/search?q=&position=&limit=
  *
- * Server-side player search backing the "My Rankings" add-player combobox.
+ * Server-side player search backing the "My Rankings" add-player combobox and
+ * the Free Agent Finder.
  * We do NOT ship the full ~8.6k active-player list to the client; the editor
  * queries this endpoint (debounced) instead.
  *
@@ -21,6 +22,11 @@ import type { Position } from "@/lib/site";
  *
  * Results: active players whose name matches `q`, restricted to fantasy
  * positions (or a single position when `position` is one of QB/RB/WR/TE/K/DEF).
+ *
+ * `pool=ranked+idp` adds defenders who pass the IDP relevance gate (plan R-15).
+ * Only the Free Agent Finder sends it: a defender can be a free agent, but My
+ * Rankings is a board of offensive values and stays on the default pool. Any
+ * other value is read as the default.
  */
 export async function GET(req: Request) {
   if (req.headers.get("x-requested-with") !== "ff-beacon") {
@@ -48,11 +54,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ players: [] satisfies SearchablePlayer[] });
   }
 
+  const pool: SearchPool =
+    url.searchParams.get("pool") === "ranked+idp" ? "ranked+idp" : "ranked";
+  const allowedPositions: readonly string[] =
+    pool === "ranked+idp"
+      ? [...ELIGIBLE_POSITIONS, ...IDP_POSITIONS]
+      : ELIGIBLE_POSITIONS;
   const positionParam = url.searchParams.get("position");
   const position =
-    positionParam && (ELIGIBLE_POSITIONS as readonly string[]).includes(positionParam)
-      ? (positionParam as Position)
-      : null;
+    positionParam && allowedPositions.includes(positionParam) ? positionParam : null;
 
   const limit = Math.min(
     Math.max(Number.parseInt(url.searchParams.get("limit") ?? "25", 10) || 25, 1),
@@ -64,7 +74,8 @@ export async function GET(req: Request) {
     rows = await searchFantasyPlayers(supabase, {
       query,
       limit,
-      positions: position ? [position] : ELIGIBLE_POSITIONS,
+      positions: position ? [position] : allowedPositions,
+      pool,
     });
   } catch (error) {
     console.error("[players/search] query failed", error);

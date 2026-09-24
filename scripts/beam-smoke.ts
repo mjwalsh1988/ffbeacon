@@ -85,6 +85,13 @@ const QUESTIONS = [
   "late round swings",
   // A named player next to a board word is a question about him, not the board.
   "is bijan robinson a steal",
+  // Individual defensive players (IDP-214): a real defensive line, a clarify
+  // between two Garretts, and a clean decline for a value or board question.
+  "how did myles garrett do in 2025",
+  "how many tackles did roquan smith have in 2025",
+  "how did garrett do in 2025",
+  "what is roquan smith worth",
+  "top 10 linebackers",
   // Dead ends.
   "who should i start this week in my league",
   "what is the weather in dallas",

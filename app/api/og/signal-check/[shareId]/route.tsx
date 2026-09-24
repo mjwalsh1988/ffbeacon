@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { partialGradeNote } from "@/lib/trade-grading/partial";
 import { createAdminClient } from "@/lib/supabase/server";
 import type { PublicSharePayload, SideKey } from "@/lib/signal-check/types";
 
@@ -140,6 +141,9 @@ export async function GET(
                     <p key={i} style={{ fontSize: 18, color: INK, margin: 0 }}>
                       {clip(a.name, 28)}
                       {a.detail ? <span style={{ color: INK_SUBTLE, marginLeft: 6 }}>{a.detail}</span> : null}
+                      {a.unpriced ? (
+                        <span style={{ color: "#8A8A9C", marginLeft: 8 }}>No market value</span>
+                      ) : null}
                     </p>
                   ))}
                   {side.assets.length > 5 ? (
@@ -151,8 +155,15 @@ export async function GET(
           })}
         </div>
 
-        {payload.valueSnapshotLabel ? (
-          <p style={{ fontSize: 14, color: INK_SUBTLE, marginTop: 16 }}>{clip(payload.valueSnapshotLabel, 60)}</p>
+        {payload.valueSnapshotLabel || payload.partial ? (
+          <p style={{ fontSize: 14, color: INK_SUBTLE, marginTop: 16 }}>
+            {[
+              payload.valueSnapshotLabel ? clip(payload.valueSnapshotLabel, 60) : null,
+              payload.partial ? partialGradeNote(payload.unpricedCount ?? 0) : null,
+            ]
+              .filter(Boolean)
+              .join(". ")}
+          </p>
         ) : null}
         <p style={{ position: "absolute", bottom: 24, right: 48, fontSize: 16, color: INK_SUBTLE, margin: 0 }}>
           ffbeacon.com

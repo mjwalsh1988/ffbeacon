@@ -28,7 +28,7 @@ import { ChartFigure, DataTable, Th, Td } from "@/components/chart-kit";
 import {
   POSITION_BADGE,
   POSITION_BADGE_FALLBACK,
-  normalizePositionColor,
+  positionColorKey,
 } from "@/lib/on-the-clock/position-colors";
 import { SectionFrame } from "./section-frame";
 import { RankedBars } from "./charts";
@@ -105,7 +105,7 @@ function PlayerTile({
   /** The largest league-season count in this list, so the bars are comparable. */
   maxSeasons: number;
 }) {
-  const colorKey = normalizePositionColor(player.position);
+  const colorKey = positionColorKey(player.position);
   const badgeClass = colorKey ? POSITION_BADGE[colorKey] : POSITION_BADGE_FALLBACK;
 
   const leadValue =

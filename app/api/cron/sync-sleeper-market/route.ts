@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runSleeperMarketSync } from "@/lib/sync-sleeper-market";
@@ -14,7 +16,9 @@ export const maxDuration = 300;
  *
  * Vercel Cron entry point for the nightly draft-market ADP refresh. Two syncs
  * feed the same player_market_snapshots table so one job produces all ADP:
- *   1. Sleeper ADP (every format Sleeper publishes) + season projection points.
+ *   1. Sleeper ADP (every format Sleeper publishes) + season projection points,
+ *      for every position Sleeper projects: QB, RB, WR, TE, K, DEF and the
+ *      individual defensive players (DL, LB, DB).
  *   2. Rookie ADP (FantasyPros dynasty rookie rankings via DynastyProcess),
  *      stored under source='dynastyprocess' + the adp "rookie" key. Sleeper's own
  *      adp_rookie field is a permanent 999 sentinel, so rookie order must come
@@ -37,6 +41,10 @@ export async function GET(req: Request) {
     const result = await recordCronRun(supabase, "sync-sleeper-market", () =>
       runSleeperMarketSync(supabase),
     );
+    // The IDP guide's draft-round figures read player_market_latest through a
+    // day-long cache on this tag; bust it so each morning's ADP shows up the
+    // same day rather than up to a day late.
+    revalidateTag(CACHE_TAGS.marketAdp);
 
     // Best-effort rookie ADP: never let it fail the primary Sleeper market sync.
     let rookie: unknown;

@@ -83,6 +83,14 @@ export interface PricedPlayer {
   baseValue: number;
   /** True when no FF Beacon value row exists for this player+format. */
   noValue: boolean;
+  /**
+   * An individual defensive player (DL, LB, DB) with no value. No value source
+   * prices defenders (plan R-19): he is named, left out of the totals, and the
+   * grade is marked partial. Optional so older frozen rows still type-check.
+   */
+  unpriced?: boolean;
+  /** The id matched no player row at all. Counted apart from unpriced. */
+  unresolved?: boolean;
 }
 
 export interface PricedPick {
@@ -275,6 +283,12 @@ export interface SignalCheckAnalysis {
   hasBlendedPicks: boolean;
   /** True when any pick's slot was estimated from projected standings. */
   hasEstimatedPicks: boolean;
+  /** Defensive players were left out of the totals (plan R-19). */
+  partial: boolean;
+  unpricedCount: number;
+  unresolvedCount: number;
+  /** False when a side has no priced piece and holds a defender: no verdict. */
+  graded: boolean;
   valueEngineVersion: string;
   ruleInterpreterVersion: string;
   rulesetVersion: number | null;
@@ -361,6 +375,14 @@ export interface PublicSidePayload {
     sleeperId: string | null;
     /** Draft round (pick assets only) for the pick badge. */
     round: number | null;
+    /**
+     * No value was found for this asset. Carried since IDP-207: the share page
+     * used to drop it, so a defender read as a plain priced asset. Optional
+     * because rows frozen before that lack it.
+     */
+    noValue?: boolean;
+    /** A defender no value source prices (plan R-19). */
+    unpriced?: boolean;
   }[];
   /**
    * Effective side total (assets plus any consolidation credit). Only present
@@ -394,4 +416,9 @@ export interface PublicSharePayload {
   sides: PublicSidePayload[];
   valueSnapshotLabel: string | null;
   createdAtIso: string;
+  /** Plan R-19. Optional: rows frozen before IDP-207 lack them. */
+  partial?: boolean;
+  unpricedCount?: number;
+  /** False when there is no verdict (a side with no priced piece). */
+  graded?: boolean;
 }

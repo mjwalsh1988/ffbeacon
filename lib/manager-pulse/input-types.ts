@@ -27,10 +27,10 @@
  * common way a report like this tells a confident lie.
  */
 
+import type { ManagerPosition } from "./types";
 import type {
   ManagerLeagueCategory,
   ManagerPulseSettings,
-  TradePosition,
 } from "./types";
 
 /* -------------------------------------------------------------------------- */
@@ -109,7 +109,8 @@ export type ManagerPlayerFacts = {
   playerId: string;
   sleeperId: string | null;
   name: string;
-  position: TradePosition | null;
+  /** Defenders included (plan IDP-208); value figures narrow to the six. */
+  position: ManagerPosition | null;
   /**
    * Age in years at report time, from players.birth_date. Null when we hold no
    * birth date, which is common for fringe players and always means the age

@@ -41,27 +41,6 @@ const schema = z.object({
 type Params = z.infer<typeof schema>;
 type Result = { aggregate: SeasonAggregate | null };
 
-/**
- * The answer for a defender, until BEAM has IDP stat lines (plan IDP-125, R-20).
- *
- * BEAM's direct and fuzzy lookups already skip defenders; an admin alias is the
- * one way one arrives here. The offensive stat line would read him back as a
- * row of zero rushing and receiving yards, which is a confident wrong answer,
- * so he gets a plain decline instead. Exported so the test can hold the words.
- */
-export function defenderStatLineAnswer(playerName: string): BeamAnswer {
-  const headline = `Defensive stat lines arrive with IDP support. We hold ${playerName}'s games but cannot read tackles and sacks back here yet.`;
-  const context = buildContext({ note: "Defenders will be scored on Sleeper default IDP scoring." });
-  return {
-    headline,
-    speech: buildSpeech({ headline, facts: [], caveats: [], context }),
-    facts: [],
-    context,
-    links: [],
-    caveats: [],
-  };
-}
-
 export const playerStatLine: BeamCapability<Params, Result> = {
   id: "player.stat.line",
   label: "Player season line",
@@ -85,8 +64,6 @@ export const playerStatLine: BeamCapability<Params, Result> = {
 
   async run(params, ctx) {
     if (seasonOutOfRange(params.season.season, ctx.clock)) return { aggregate: null };
-    // Nothing to read for a defender yet; see defenderStatLineAnswer.
-    if (isDefender(params.player.position)) return { aggregate: null };
     const aggregates = await loadSeasonAggregates(
       ctx.supabase,
       [params.player.id],
@@ -98,9 +75,7 @@ export const playerStatLine: BeamCapability<Params, Result> = {
 
   present(result, params, ctx): BeamAnswer {
     const player = params.player;
-    if (isDefender(player.position)) {
-      return { ...defenderStatLineAnswer(player.name), links: [playerLink(player)] };
-    }
+    const defender = isDefender(player.position);
     const season = params.season.season;
     const caveats: string[] = [];
 
@@ -145,12 +120,18 @@ export const playerStatLine: BeamCapability<Params, Result> = {
         ? `Here is ${player.name}'s ${season} season across ${formatStatValue(games, "count")} ${games === 1 ? "game" : "games"}.`
         : `Here is what we hold for ${player.name} in ${season}.`;
 
-    const coverage = coverageCaveat(aggregate);
+    // A defender's points come from his line, so the offensive coverage
+    // caveat (weeks missing a PPR figure) does not apply to him.
+    const coverage = defender ? null : coverageCaveat(aggregate);
     if (coverage) caveats.push(coverage);
 
     const context = buildContext({
-      formatDisplay: ctx.formatDisplay,
-      note: "Fantasy points use your selected scoring; the rest are raw season totals.",
+      // The reader's format is an offensive scoring setting; a defender's
+      // points are always in Sleeper default IDP scoring and say so.
+      formatDisplay: defender ? null : ctx.formatDisplay,
+      note: defender
+        ? "IDP points use Sleeper default IDP scoring; the rest are raw season totals."
+        : "Fantasy points use your selected scoring; the rest are raw season totals.",
     });
 
     return {

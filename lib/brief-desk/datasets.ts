@@ -23,6 +23,9 @@
  * column is never renamed here without the reader following.
  */
 
+import { isDefender } from "@/lib/site";
+import { scoreIdpLine } from "@/lib/idp/stat-line";
+import { IDP_PRESETS } from "@/lib/idp/scoring-presets";
 import type { FaabSettings } from "@/lib/faab/types";
 import { calculateFaabRecommendation } from "@/lib/faab/calculate-faab";
 import type { BundleDataset, BundleRelay } from "./types";
@@ -85,6 +88,73 @@ export interface WeekLine {
   rec_td: number;
   fum_lost: number;
   snap_pct: number | null;
+  /**
+   * The typed defensive columns (migration 0296). Null for an offensive
+   * player. Optional so a caller that builds a WeekLine by hand for an
+   * offensive player need not list them.
+   */
+  def_snp?: number | null;
+  def_snap_pct?: number | null;
+  idp_tkl?: number | null;
+  idp_tkl_solo?: number | null;
+  idp_tkl_ast?: number | null;
+  idp_tkl_loss?: number | null;
+  idp_sack?: number | null;
+  idp_qb_hit?: number | null;
+  idp_pass_def?: number | null;
+  idp_int?: number | null;
+  idp_ff?: number | null;
+  idp_fum_rec?: number | null;
+  idp_def_td?: number | null;
+  idp_safe?: number | null;
+  idp_blk_kick?: number | null;
+}
+
+/** The defensive columns a defender's line shows, in display order (plan IDP-213). */
+export const IDP_LINE_COLUMNS = [
+  "opponent",
+  "pts_idp123",
+  "idp_tkl",
+  "idp_tkl_solo",
+  "idp_tkl_ast",
+  "idp_tkl_loss",
+  "idp_sack",
+  "idp_qb_hit",
+  "idp_pass_def",
+  "idp_int",
+  "idp_ff",
+  "idp_fum_rec",
+  "idp_def_td",
+  "def_snap_pct",
+] as const;
+
+/** A line's Sleeper default IDP points, from its typed columns. */
+export function idp123Points(line: WeekLine): number {
+  const stats: Record<string, number> = {};
+  for (const [key, value] of Object.entries(line)) {
+    if (typeof value === "number" && Number.isFinite(value)) stats[key] = value;
+  }
+  return scoreIdpLine(stats, IDP_PRESETS.idp123);
+}
+
+/** A defender's line as dataset cells: defensive columns only, no offensive stat. */
+export function idpLineCells(line: WeekLine): Row {
+  return {
+    opponent: line.opponent,
+    pts_idp123: round1(idp123Points(line)),
+    idp_tkl: line.idp_tkl ?? null,
+    idp_tkl_solo: line.idp_tkl_solo ?? null,
+    idp_tkl_ast: line.idp_tkl_ast ?? null,
+    idp_tkl_loss: line.idp_tkl_loss ?? null,
+    idp_sack: line.idp_sack ?? null,
+    idp_qb_hit: line.idp_qb_hit ?? null,
+    idp_pass_def: line.idp_pass_def ?? null,
+    idp_int: line.idp_int ?? null,
+    idp_ff: line.idp_ff ?? null,
+    idp_fum_rec: line.idp_fum_rec ?? null,
+    idp_def_td: line.idp_def_td ?? null,
+    def_snap_pct: round1(line.def_snap_pct ?? null),
+  };
 }
 
 export type DatasetRelay = Pick<
@@ -307,20 +377,39 @@ export function buildBoxScoreLinesDataset(
 ): BundleDataset {
   const byPlayer = new Map(lines.map((l) => [l.player_id, l]));
   const rows: Row[] = [];
+  const defenderRows: Row[] = [];
   for (const id of playerIds) {
     const p = players.get(id);
     const line = byPlayer.get(id);
     if (!p || !line) continue;
-    rows.push({ ...playerCells(p), week, ...lineCells(line) });
+    // A defender's row carries the defensive columns and nothing offensive
+    // (plan IDP-213): a linebacker's zero receiving yards are not a stat line.
+    if (isDefender(p.position)) defenderRows.push({ ...playerCells(p), week, ...idpLineCells(line) });
+    else rows.push({ ...playerCells(p), week, ...lineCells(line) });
   }
   rows.sort((a, b) => Number(b.pts_ppr ?? -1) - Number(a.pts_ppr ?? -1));
+  defenderRows.sort((a, b) => Number(b.pts_idp123 ?? -1) - Number(a.pts_idp123 ?? -1));
+  const hasDefenders = defenderRows.length > 0;
   return {
     id: "box_score_lines",
     kind: "box_score_lines",
     title: `Week ${week} lines for the players in this edition`,
-    columns: ["player_id", "name", "slug", "position", "team", "week", ...LINE_COLUMNS],
-    rows,
-    source_note: `Week ${week} box scores from player_stats for the players the period's Relays name. A player with no line did not record a stat that week.`,
+    columns: [
+      "player_id",
+      "name",
+      "slug",
+      "position",
+      "team",
+      "week",
+      ...LINE_COLUMNS,
+      ...(hasDefenders ? IDP_LINE_COLUMNS.filter((c) => c !== "opponent") : []),
+    ],
+    rows: [...rows, ...defenderRows],
+    source_note: `Week ${week} box scores from player_stats for the players the period's Relays name. A player missing from the table has no stat row for the week.${
+      hasDefenders
+        ? " Defensive players carry defensive columns only, scored in Sleeper default IDP scoring (pts_idp123); their offensive columns are empty on purpose."
+        : ""
+    }`,
     computed_at: computedAt,
   };
 }

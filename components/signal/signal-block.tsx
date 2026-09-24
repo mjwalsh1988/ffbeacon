@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PositionChip } from "@/components/position-chip";
+import { positionNoun } from "@/lib/site";
 import {
   ArrowRight,
   ExternalLink,
@@ -294,7 +296,7 @@ export function FavoritesBlock({
               <Link
                 href={`/players/${player.slug}`}
                 className="inline-flex rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                aria-label={`${player.name}, ${player.position}${player.team ? `, ${player.team}` : ""}`}
+                aria-label={favoritePlayerLabel(player)}
               >
                 <span
                   style={fill}
@@ -304,9 +306,9 @@ export function FavoritesBlock({
                   {player.name}
                 </span>
               </Link>
-              <p className="mt-1 text-xs text-ink-muted">
-                {player.position}
-                {player.team ? `, ${player.team}` : ""}
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted">
+                <PositionChip position={player.position} />
+                {player.team ? <span>{player.team}</span> : null}
               </p>
             </dd>
           </div>
@@ -314,4 +316,19 @@ export function FavoritesBlock({
       </dl>
     </SignalBlock>
   );
+}
+
+/**
+ * The favourite player link's accessible name: "Roquan Smith, linebacker,
+ * BAL". The position is spelled out through positionNoun, the one copy, so a
+ * screen reader never reads "L B" (plan IDP-212).
+ */
+export function favoritePlayerLabel(player: {
+  name: string;
+  position: string | null;
+  team: string | null;
+}): string {
+  return [player.name, positionNoun(player.position), player.team]
+    .filter((part): part is string => Boolean(part))
+    .join(", ");
 }

@@ -20,10 +20,11 @@
  * whole set; the newest stamp is only what the answer reports as "updated".
  */
 
+import { isDefender, positionNoun as sitePositionNoun } from "@/lib/site";
 import { z } from "zod";
 import type { BeamAnswer, BeamCapability, BeamPlayerRow } from "@/lib/beam/types";
 import { readSleeperId } from "@/lib/player-profile";
-import { positionNoun, buildContext } from "@/lib/beam/answers/templates";
+import { buildContext } from "@/lib/beam/answers/templates";
 import { MAX_TOP_N } from "@/lib/beam/interpret/top-n";
 import { parseWith } from "./shared";
 
@@ -77,6 +78,9 @@ export const rankingsTop: BeamCapability<Params, Result> = {
   parse: (raw) => parseWith(schema, raw),
 
   async run(params, ctx): Promise<Result | null> {
+    // Nothing ranks a defender, so there is nothing to read (review item 33).
+    // present() says so in words.
+    if (isDefenseAsked(params.position)) return { rows: [], generatedAt: null };
     if (!ctx.formatConfigId || !ctx.sourceSlug) return null;
 
     // The freshest stamp on the board, for the "updated" line. Not a filter.
@@ -144,8 +148,24 @@ export const rankingsTop: BeamCapability<Params, Result> = {
   present(result, params, ctx): BeamAnswer {
     const caveats: string[] = [];
     const what = params.position
-      ? plural(positionNoun(params.position))
+      ? params.position === "IDP"
+        ? "defensive players"
+        : sitePositionNoun(params.position, "plural")
       : "players overall";
+
+    // No value source ranks a defender (plan R-18, R-20), so an empty board
+    // here is a fact about the market, not a gap in our data.
+    if (isDefenseAsked(params.position)) {
+      const headline = `No value source ranks ${what}, so there is no board for them. Our IDP guide covers how ${what} score and which ones repeat.`;
+      return {
+        headline,
+        speech: headline,
+        facts: [],
+        context: buildContext({}),
+        links: [{ href: "/guides/idp-fantasy-football", label: "Read the IDP guide" }],
+        caveats,
+      };
+    }
 
     if (result.rows.length === 0) {
       const headline = `We do not have a ${what} board in ${ctx.formatDisplay} right now.`;
@@ -208,7 +228,8 @@ export const rankingsTop: BeamCapability<Params, Result> = {
   },
 };
 
-/** "quarterback" to "quarterbacks". Every position noun we produce is regular. */
-function plural(noun: string): string {
-  return noun.endsWith("s") ? noun : `${noun}s`;
+
+/** DL, LB, DB, or the lexicon's "IDP" (any individual defensive player). */
+function isDefenseAsked(position: string | null): boolean {
+  return position === "IDP" || isDefender(position);
 }

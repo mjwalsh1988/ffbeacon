@@ -64,6 +64,8 @@ function buildSidePayload(
       kind: r.asset.kind,
       sleeperId: r.asset.kind === "player" ? r.asset.sleeperId : null,
       round: r.asset.kind === "pick" ? r.asset.round : null,
+      noValue: r.asset.noValue,
+      unpriced: r.asset.kind === "player" && Boolean(r.asset.unpriced),
     })),
     total: settings.showRawValues ? Math.round(s.effectiveTotal) : null,
     adjustment: credited && settings.showRawValues ? Math.round(s.consolidationAdjustment) : null,
@@ -86,10 +88,12 @@ export function buildPublicPayload(
     resultLabel: settings.resultLabel,
     verdictLabel: analysis.verdict.label,
     winnerSide: analysis.verdict.winnerSide,
-    marginPct: analysis.verdict.marginPct,
+    // No verdict means no margin: a 0% spread would read as an even trade.
+    marginPct: analysis.graded ? analysis.verdict.marginPct : null,
     formatDisplay: analysis.format.display,
     tradeShapeLabel: settings.showTradeShape ? analysis.tradeShape.label : null,
-    confidenceLabel: settings.showConfidence ? analysis.confidence.label : null,
+    confidenceLabel:
+      settings.showConfidence && analysis.graded !== false ? analysis.confidence.label : null,
     explanation: analysis.explanation,
     adjustmentLabel: analysis.consolidation.applied ? settings.qualityAdjustmentLabel : null,
     sides: [
@@ -98,6 +102,9 @@ export function buildPublicPayload(
     ],
     valueSnapshotLabel: snapshotLabel,
     createdAtIso,
+    partial: analysis.partial,
+    unpricedCount: analysis.unpricedCount,
+    graded: analysis.graded,
   };
 }
 
@@ -161,7 +168,7 @@ export function freezeAnalysis(params: FreezeParams): FrozenAnalysisRow {
     confidence: analysis.confidence.label,
     verdict_label: analysis.verdict.label,
     winner_side: analysis.verdict.winnerSide,
-    margin: analysis.verdict.marginPct,
+    margin: analysis.graded === false ? null : analysis.verdict.marginPct,
     sleeper_context: params.sleeperContext ?? null,
     public_payload: buildPublicPayload(analysis, settings, createdAtIso, params.teamLabels),
     value_captured_at: analysis.valueCapturedAt,

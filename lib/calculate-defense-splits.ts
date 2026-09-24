@@ -185,8 +185,21 @@ export async function runCalculateDefenseSplits(
   const seasons = options.seasons ?? (await recentSeasons(supabase));
   let rowsWritten = 0;
 
-  for (const season of seasons) {
-    const rows = await loadSeasonStats(supabase, season);
+  // Every season's read starts now and runs at once; the writes below still go
+  // season by season in the same order. Each read is the same single keyset
+  // stream as before, so its rows arrive in the same order. A read's rejection
+  // is held (the no-op catch) until the loop reaches that season, so the
+  // seasons before a failed one are written and the ones after are not,
+  // exactly as when each read started only after the previous season's writes.
+  const pendingReads = seasons.map((season) => {
+    const read = loadSeasonStats(supabase, season);
+    read.catch(() => {});
+    return read;
+  });
+
+  for (let index = 0; index < seasons.length; index += 1) {
+    const season = seasons[index];
+    const rows = await pendingReads[index];
     if (rows.length === 0) {
       console.log(`  ${season}: no stats, skipped`);
       continue;

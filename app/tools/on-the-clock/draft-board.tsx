@@ -26,6 +26,7 @@
  * enough to fit here would land well under the 44px tap-target floor.
  */
 
+import { isDefender } from "@/lib/site";
 import { memo } from "react";
 import { AlertTriangle, ArrowLeftRight, Gem, User, X } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
@@ -38,7 +39,7 @@ import {
   pickValueDelta,
 } from "@/lib/on-the-clock/adp";
 import {
-  normalizePositionColor,
+  positionColorKey,
   POSITION_CELL,
   POSITION_CELL_FALLBACK,
 } from "@/lib/on-the-clock/position-colors";
@@ -214,7 +215,9 @@ function DraftBoardInner({
                 // Position hue for a drafted cell: the entire made cell is tinted with
                 // its positional color so the board reads by position at a glance.
                 // Unknown positions fall back to the prior neutral fill.
-                const posKey = pick ? normalizePositionColor(pick.position) : null;
+                // positionColorKey, not the six-key normaliser: a defender pick
+                // in an IDP draft gets its own hue (R-22), never the grey.
+                const posKey = pick ? positionColorKey(pick.position) : null;
                 const posFill = pick
                   ? posKey
                     ? POSITION_CELL[posKey]
@@ -227,8 +230,10 @@ function DraftBoardInner({
                   : "";
 
                 // Value-vs-ADP indicator for made, non-keeper picks with a known ADP.
+                // A defender pick gets no value mark (plan R-11): there is no
+                // value behind it, and an ADP alone is not a value verdict.
                 const pickAdp =
-                  pick && !pick.isKeeper && pick.sleeperPlayerId
+                  pick && !pick.isKeeper && pick.sleeperPlayerId && !isDefender(pick.position)
                     ? (adpBySleeperId[pick.sleeperPlayerId] ?? null)
                     : null;
                 const adpDelta = pick ? pickValueDelta(pickNo, pickAdp) : null;

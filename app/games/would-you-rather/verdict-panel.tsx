@@ -19,6 +19,7 @@
  * margin, so the bar still means something without publishing the scale.
  */
 
+import { NO_VERDICT_REASON } from "@/lib/trade-grading/partial";
 import { Scale, ScrollText, Sparkles, Trophy } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
@@ -206,6 +207,7 @@ export function VerdictPanel({
 }
 
 function closenessTip(view: BuilderView): string {
+  if (view.graded === false) return NO_VERDICT_REASON;
   if (view.isNeutral) {
     return "This one is close. When the values are this even, the team's own needs usually matter more than the raw numbers.";
   }

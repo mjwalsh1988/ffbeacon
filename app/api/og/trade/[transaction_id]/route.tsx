@@ -1,3 +1,4 @@
+import { partialGradeNote } from "@/lib/trade-grading/partial";
 import { ImageResponse } from "next/og";
 import { formatTeamLabel } from "@/lib/team-label";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -344,6 +345,7 @@ export async function GET(
           {context.pickSource && context.pickSource.slug !== context.sourceSlug
             ? `, picks via ${context.pickSource.display}`
             : ""}
+          {analysis.partial ? `. ${partialGradeNote(analysis.unpricedCount)}` : ""}
         </p>
         <p
           style={{
@@ -373,6 +375,7 @@ function buildVerdictText(
   winnerName: string | null,
 ): string {
   if (verdict.label === "Even trade") return "Even trade";
+  if (verdict.label === "No verdict") return "No verdict: one side has no priced piece";
   if (!winnerName) return verdict.label;
   if (verdict.label === "Slight edge") {
     return `Slight edge to ${winnerName}`;

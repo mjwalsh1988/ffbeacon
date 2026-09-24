@@ -402,6 +402,12 @@ function PositionAppetiteChart({ shape }: { shape: PositionAppetite }) {
         .
       </p>
       <DivergingBars rows={rows} />
+      {/* Plan IDP-208: the chart prices players, and nothing prices a
+          defender, so a reader in an IDP league should not read an absent
+          linebacker bar as "never trades for one". */}
+      <p className="mt-2 text-[11px] text-ink-subtle">
+        Defensive players are left out: no value source prices them.
+      </p>
     </div>
   );
 }

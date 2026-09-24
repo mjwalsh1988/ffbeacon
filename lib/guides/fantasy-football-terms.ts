@@ -214,6 +214,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "IDP leagues start real defensive players, linebackers, defensive backs, and linemen, instead of or alongside a single team defense.",
           "Tackles, sacks, and interceptions score. Linebackers who play every snap and live near the ball dominate most IDP scoring the same way a workhorse running back dominates offense.",
         ],
+        link: {
+          href: "/guides/idp-fantasy-football",
+          label: "The full IDP guide",
+        },
       },
       {
         id: "devy",

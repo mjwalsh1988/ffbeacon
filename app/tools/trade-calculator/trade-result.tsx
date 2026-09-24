@@ -1,12 +1,13 @@
 "use client";
 
+import { missingValueNote } from "@/lib/signal-check/copy";
+import { NO_VERDICT_REASON } from "@/lib/trade-grading/partial";
 import { useEffect, useRef } from "react";
 import { Check, Copy, Lightbulb, ScrollText, Sparkles, Trophy } from "lucide-react";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import {
   BLENDED_PICKS_NOTE,
   ESTIMATED_PICKS_NOTE,
-  MISSING_VALUES_NOTE,
 } from "@/lib/signal-check/copy";
 import type { SideKey } from "@/lib/signal-check/types";
 import { AssetAvatar } from "./asset-avatar";
@@ -29,6 +30,7 @@ function sideLabel(view: BuilderView, side: SideKey): string {
 
 /** Plain-English read on how close the trade is. */
 function closenessTip(view: BuilderView): string {
+  if (view.graded === false) return NO_VERDICT_REASON;
   if (view.isNeutral) {
     return "This one is close. When the values are this even, your team's needs usually matter more than the raw numbers.";
   }
@@ -83,15 +85,18 @@ export function TradeResult({
     <div className="space-y-5">
       <ResultHero view={view} />
 
-      <TradeMarginGraph
-        marginPct={view.marginPct}
-        winnerSide={view.winnerSide}
-        isNeutral={view.isNeutral}
-        sideALabel={sideLabel(view, "a")}
-        sideBLabel={sideLabel(view, "b")}
-        totalA={totalA}
-        totalB={totalB}
-      />
+      {/* No verdict, no margin: a 0% bar would read as an even trade. */}
+      {view.graded !== false && (
+        <TradeMarginGraph
+          marginPct={view.marginPct}
+          winnerSide={view.winnerSide}
+          isNeutral={view.isNeutral}
+          sideALabel={sideLabel(view, "a")}
+          sideBLabel={sideLabel(view, "b")}
+          totalA={totalA}
+          totalB={totalB}
+        />
+      )}
 
       {/* Per-side breakdown */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -185,7 +190,7 @@ export function TradeResult({
         </ExplainerCard>
         {(view.hasMissingValues || view.hasBlendedPicks || view.hasEstimatedPicks) && (
           <ExplainerCard icon={Lightbulb} title="Good to know">
-            {view.hasMissingValues ? `${MISSING_VALUES_NOTE} ` : ""}
+            {missingValueNote(view) ? `${missingValueNote(view)} ` : ""}
             {view.hasEstimatedPicks ? `${ESTIMATED_PICKS_NOTE} ` : ""}
             {view.hasBlendedPicks ? BLENDED_PICKS_NOTE : ""}
           </ExplainerCard>
@@ -254,17 +259,20 @@ function ResultHero({ view }: { view: BuilderView }) {
             {view.verdictLabel}
           </h2>
 
-          <div className="shrink-0 sm:text-right">
-            <p
-              className="bg-clip-text text-4xl font-bold tabular-nums text-transparent sm:text-5xl"
-              style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-            >
-              {view.marginPct}%
-            </p>
-            <p className="text-xs text-ink-subtle">
-              {view.isNeutral ? "value spread" : "value margin"}
-            </p>
-          </div>
+          {/* No verdict, no margin (plan R-19): a 0% would read as an even trade. */}
+          {view.graded !== false && (
+            <div className="shrink-0 sm:text-right">
+              <p
+                className="bg-clip-text text-4xl font-bold tabular-nums text-transparent sm:text-5xl"
+                style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
+              >
+                {view.marginPct}%
+              </p>
+              <p className="text-xs text-ink-subtle">
+                {view.isNeutral ? "value spread" : "value margin"}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">

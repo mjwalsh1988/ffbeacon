@@ -31,6 +31,7 @@
  *   plainly rather than showing an empty chart.
  */
 
+import type { ManagerPosition } from "./types";
 import type {
   AutopickFact,
   DraftClockFact,
@@ -38,7 +39,6 @@ import type {
   DraftPositionShape,
   ManagerDrafting,
   PoolableStat,
-  TradePosition,
 } from "./types";
 import { lensForCategory } from "./types";
 import type {
@@ -149,7 +149,10 @@ function shapeForLens(
   earlyRoundCutoff: number,
   lens: Lens,
 ): { shape: DraftPositionShape; sampleSize: number } {
-  const counts: Partial<Record<TradePosition, number>> = {};
+  // Defenders count (plan IDP-208): a manager who spends early picks on
+  // linebackers has a shape, and dropping those picks from both halves of the
+  // share hid it.
+  const counts: Partial<Record<ManagerPosition, number>> = {};
   let total = 0;
 
   for (const pick of picks) {
@@ -164,7 +167,7 @@ function shapeForLens(
 
   if (total === 0) return { shape: {}, sampleSize: 0 };
   const shape: DraftPositionShape = {};
-  for (const position of Object.keys(counts) as TradePosition[]) {
+  for (const position of Object.keys(counts) as ManagerPosition[]) {
     shape[position] = (counts[position] ?? 0) / total;
   }
   return { shape, sampleSize: total };

@@ -45,6 +45,7 @@ import {
   inferPlayerPool,
 } from "./draft-derive";
 import { detectLeagueFormat, ffbeaconFormatCandidates } from "./format-detect";
+import { positionColorKey } from "./position-colors";
 import {
   deriveSnapshotConfidence,
   EMPTY_ADP,
@@ -412,9 +413,16 @@ export async function getOrCreateDraftSnapshot(
         ? valueBySleeperId.get(pk.sleeperPlayerId)
         : undefined) ??
       null;
-    const pickAdp = pk.sleeperPlayerId
-      ? (adp.adpBySleeperId[pk.sleeperPlayerId] ?? null)
-      : null;
+    // A defender has no place on the offensive market this snapshot reads.
+    // Since the nightly market sync began storing defenders, a handful carry a
+    // stray ppr or 2qb ADP, and a delta against that key would measure a
+    // defensive pick against an offensive board. The sub-labels Sleeper puts
+    // on a pick (DE, CB and so on) are folded before the test.
+    const pickIsDefender = ["DL", "LB", "DB"].includes(positionColorKey(pk.position) ?? "");
+    const pickAdp =
+      pk.sleeperPlayerId && !pickIsDefender
+        ? (adp.adpBySleeperId[pk.sleeperPlayerId] ?? null)
+        : null;
     const delta = pickValueDelta(pk.pickNo, pickAdp);
     // A value VERDICT needs a value behind it (plan IDP-131). The delta is ADP
     // alone, and a defender (or anyone no value source prices) used to be
@@ -561,6 +569,7 @@ export async function getOrCreateDraftSnapshot(
         isDynasty,
         settings: settings.grades,
         inProgress: false,
+        picks: cache.picks,
       })
     : [];
 

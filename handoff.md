@@ -1,55 +1,167 @@
 # Handoff
 
-## IDP phase 1 build (IDP-1xx), session of 2026-09-24. BUILT, IN REVIEW
+## NEXT SESSION: START IDP PHASE 3 HERE
 
-Plan: docs/idp/idp-guide-and-data-plan.md, section 6 (phase 1). Every task and
-its notes are at the END of progress.md under "IDP across FF Beacon, phase 1".
-NOT COMMITTED, NOT PUSHED, NO BRANCH, by instruction. Stop after phase 1; do
-not start phase 2 without the owner.
+State on 2026-09-24: IDP phases 1 and 2, the phase 2 follow-ups (IDP-2R1 to
+IDP-2R5) and the Sleeper ADP widening (ADP-201 to ADP-205) are COMMITTED AND
+PUSHED to main at the owner's instruction (the phase 2 commit is the one after
+e15e17c; see git log). Nothing is left uncommitted from this work. Last gate:
+typecheck green, npx vitest run 417 files / 6,129 tests, npm run build 57 of 57.
 
-State: IDP-101 to IDP-132 completed. One independent reviewer ran (the owner
-asked for one covering everything); no blockers; fixes applied and the rest
-explained in progress.md ("IDP-132 review round"). Typecheck green, 405 test
-files and 6,028 tests passing, build green. STOP: owner review before phase 2.
-Open owner decisions: review finding 8 (retire other unpriced Would You Rather
-trades?) and 12 (metadata shape for the one merged two-way player). Measure the
-stats cron's duration on a preview deploy (accuracy step about 141 s).
+What to read, in order:
+1. CLAUDE.md in the repo root and ~/.claude/CLAUDE.md. Read .env.local and echo
+   the variable names only.
+2. The plan: docs/idp/idp-guide-and-data-plan.md, all of it. Section 0 holds
+   every decision (do not reopen one without the owner), section 2 what the
+   audit corrected, section 8 is phase 3 (IDP-301 to IDP-317), section 9 the
+   gate and phase 4.
+3. progress.md, from the heading "IDP across FF Beacon, phase 1" to the end:
+   phase 1, phase 2, the IDP-2R follow-ups and the ADP-2xx tasks. Add phase 3's
+   tasks below them in the same format.
 
-ALREADY DONE TO PRODUCTION (cannot be undone by discarding the working tree):
-- Migrations 0296 to 0300 applied via MCP; lib/database.types.ts regenerated.
-- Data runs: players sync (eligible_positions), backfill:sleeper-stats for
-  2020 to 2025, backfill:idp-columns for every season, calculate:finishes,
-  calculate:idp-seasons --all, backfill:weekly-projections --idp-only 2020 to
-  2025, sync:weekly-projections (nightly path, now stores defenders),
-  calculate:projection-accuracy, build:projections, calculate:defense-splits,
-  faab:priors.
-- Three Would You Rather pool trades holding a defender retired (ids in
-  progress.md, IDP-130; none had votes).
-- IMPORTANT, until this code is deployed: the DEPLOYED nightly projection
-  sync still asks Sleeper for six positions, and its stale sweep clears every
-  row for a synced week that the run did not touch. It will therefore blank
-  the 2026 defender projection rows for the current and later weeks each night
-  (points and stat_line to null, availability "unprojected"). Nothing in the
-  deployed app reads those rows, so no page changes; the first run of this
-  code after deploy restores them. The 2020 to 2025 history is untouched,
-  because the nightly sync only sweeps the weeks it syncs.
+Facts the plan text does not have yet:
+- Migrations: latest applied AND on disk is 0302 (the plan's "Start here" still
+  says 0295). Next number is 0303. Regenerate lib/database.types.ts after any
+  schema change (memory note: extract .types, then prettier).
+- Phase 3 goal from the plan: every League Pulse model projects, seats, grades
+  and suggests defenders when settings.idp.enabled is true, and produces
+  byte-identical output when it is false. The switch does not exist yet
+  (IDP-301 creates it, default false).
+- Reviews: the plan says three phase-end review sub-agents (implementation,
+  accessibility, security). For phase 2 the owner asked for ONE reviewer
+  instead. Ask the owner which they want for phase 3 before dispatching.
+  Never pass `name` to the Agent tool.
+- Rules for the session: one atomic task at a time, typecheck and tests after
+  each, update progress.md after each, never chain shell commands, ASCII only,
+  do not commit or push unless the owner says so, do not start phase 4.
 
-- The same applies to three other nightly jobs on the deployed code: the
-  projection accuracy rebuild deletes and rewrites the whole table without
-  idp123 rows; the FAAB priors rebuild removes the DL/LB/DB cells as stale;
-  and the stats sync writes new weeks without the typed IDP columns (existing
-  rows keep theirs). After deploy, run once: npm run backfill:idp-columns --
-  --season 2026, npm run calculate:idp-seasons, npm run
-  calculate:projection-accuracy, npm run faab:priors. The finishes rebuild is
-  a database function, already updated, so it is correct either way.
+Carried INTO phase 3 (each is recorded in progress.md with its reason):
+- IDP-308: filter defender rows out of Positional WAR's projection read AT THE
+  QUERY (reverted once because 12 load-test fakes do not model the join; that
+  task rewrites the loader and its fakes). Also measure the per-week cache
+  entry against Next's 2 MB item limit.
+- IDP-305 renders the Lineups IDP group header; it carries the "What is IDP
+  scoring?" link to /guides/idp-fantasy-football (IDP-223 left it for then).
+- The players sync stored two defenders with position "DE" (Azur Kamara, no
+  team; Kendall Donnerson, inactive; Sleeper's fantasy position for both is
+  LB). Normalize DE/DT/NT/EDGE, ILB/OLB/MLB and CB/S/FS/SS in the players sync
+  when phase 3 touches positions; the IDP guide already folds them.
+- lib/site.test.ts allow-lists 22 older position-noun maps as a debt ledger;
+  a phase 3 task that touches one of those files folds it into positionNoun
+  and deletes its line.
+- Phase 2 review items left open for phase 3 or the owner (full text in
+  progress.md under "IDP-224 review round"): 8 PositionChip and the hero use
+  an aria-hidden code plus an sr-only noun twin, the pattern CLAUDE.md warns
+  about on the Lineups board (a cross-surface call, fix it where phase 3 adds
+  chips to League Pulse); 10 the reader's IDP leagues read is capped at 200
+  memberships; 21 draft grade "N of M" omits unvalued offensive picks; 22 On
+  The Clock detail repeats "No market value"; 34 Brief desk snap share is 0-1
+  under a % header (pre-existing); 41 offensive team-card span aria-labels
+  (pre-existing); 53 guide figure colours are hardcoded hex; 54 the OG team
+  card's defender footer needs a visual check; C6 the accuracy rebuild is
+  delete-then-insert and leaves a partial table mid-run (pre-existing); C7
+  defense-splits recentSeasons swallows an error; a covering index for the
+  accuracy scan was suggested, not applied (test on a branch first).
 
-Deviations from the plan (each explained in its progress.md entry): IDP-102
-guard allow-lists 22 pre-existing wording-variant maps; IDP-103 keeps
-PositionColorKey at six; IDP-113 narrows "usable IDP map" to bare IDP maps
-(goldens caught the plain OR); IDP-114 keeps out/unprojected semantics; IDP-116
-adds an IDP-only fetch; IDP-117 orchestrator is lib/calculate-idp-seasons.ts;
-IDP-119 skips the beacon calibration slope list; IDP-123 also skips defenders
-from the cut list; IDP-125 test lives beside the capability.
+After the deploy of this commit (owner steps, not phase 3 tasks):
+- Watch the first nightly stats cron: the projection-accuracy step was made
+  concurrent in the phase 2 review and has never run end to end. Check its
+  cron_runs record for a finish inside maxDuration 300 s.
+- IndexNow for the IDP guide and the defender profile slugs (about 1,558). From
+  this machine NEXT_PUBLIC_SITE_URL must be overridden, see the FAAB section
+  below for the exact form that works.
+- The guide's publishedAt is 2026-09-24; change it if it goes live later.
+- Nobody has opened the phase 2 screens in a browser at phone width or with a
+  screen reader: defender profiles, the guide's sliders, quiz and figures, the
+  Teams tab Defense group, league card IDP tags.
+- The Sleeper ADP cron (11:00 UTC) now stores every position; the IDP guide's
+  lesson 7 reads it and the cron busts CACHE_TAGS.marketAdp. Nothing to run.
+
+## Sleeper ADP for every position (session of 2026-09-24, fourth pass), DONE
+
+COMMITTED AND PUSHED with phase 2. Tasks ADP-201 to ADP-205 at the very end of progress.md.
+
+- The nightly cron /api/cron/sync-sleeper-market (11:00 UTC) now stores Sleeper ADP for QB, RB, WR, TE, K, DEF and DL, LB, DB. No migration: ADP is a jsonb map per row. Today's partition was filled by a manual run (4,584 rows).
+- The IDP guide's lesson 7 reads that data live; the cron busts CACHE_TAGS.marketAdp after each successful run, so the guide shows each morning's numbers. A manual npm run sync:market cannot bust it; the guide then catches up within a day.
+- Fixed on the way: On The Clock's ADP lookup was capped at 1,000 rows (about 2,500 exist), and two other market reads paged without a total order. Past draft snapshots are not rewritten.
+- Open: two players stored with position "DE" by the players sync (should be DL or LB). Guide handles it; sync should be fixed in phase 3.
+- After deploy: nothing to run. The next 11:00 UTC cron writes the next partition with defenders.
+
+## IDP build: phase 2 (session of 2026-09-24, second), DONE, history only
+
+Committed and pushed later the same day at the owner's instruction. Progress per task is at
+the very end of progress.md under "IDP across FF Beacon, phase 2". To resume:
+read the plan section 7, then the phase 2 block in progress.md, and continue
+with the first task not marked completed. When all of IDP-201 to IDP-223 are
+done: phase gate (typecheck, npm test, npm run build), then ONE reviewer
+sub-agent (bugs, security, speed, accessibility, plan adherence, plus the
+phase 1 stats/accuracy cron for safe speed-ups), apply its fixes, then STOP and
+give the owner a plain-language report. Do not start phase 3.
+
+PHASE 2 FOLLOW-UP DONE (2026-09-24, third pass), since committed and pushed. IDP-2R1 to IDP-2R5 all completed; details at the very end of progress.md. BEAM: a value, rank or projection question about an unranked player declines cleanly again, without catching bio questions; the projection-source helper no longer crashes outside a Next request. Guide: lesson 7 has sourced round ranges (Sleeper IDP ADP read 2026-09-24 as a dated snapshot, plus IDP+, Fantasy Life, Footballguys), and the replacement-level slider, chase-or-ignore quiz, Custom scoring sliders, rank-group and eligibility figures are built. One scoped reviewer ran; all 12 findings fixed. Gate: typecheck green, 417 files / 6,121 tests, build 57 of 57. NEXT: phase 3, see the top of this file.
+
+
+## IDP build: phase 1 DONE and LIVE (history only; phase 2 is also done)
+
+Plan: docs/idp/idp-guide-and-data-plan.md. Phase 2 is section 7 (IDP-201 to
+IDP-224): defenders across the whole site and the IDP guide. Phase 3 (League
+Pulse behind the IDP switch) and phase 4 (launch) follow, each with its own
+review stop. Phase 1's task notes are at the end of progress.md under "IDP
+across FF Beacon, phase 1"; add phase 2's tasks below them in the same format.
+
+Where things stand (2026-09-24):
+- Phase 1 (IDP-101 to IDP-132) is committed (e15e17c), pushed to main and
+  deployed. The owner asked for that commit and push explicitly; the plan's
+  default for phase 2 is still DO NOT COMMIT, DO NOT PUSH, NO BRANCH unless the
+  owner says so.
+- Migrations 0296 to 0300 applied; lib/database.types.ts regenerated. The next
+  migration number is 0301 (the plan reserves it for IDP-214's BEAM search RPC).
+- The post-deploy data runs are DONE (backfill:idp-columns 2026,
+  calculate:idp-seasons, calculate:projection-accuracy, faab:priors). Checked
+  after them: 13,018 current and future 2026 defender projection lines,
+  6,204 idp123 accuracy rows, 300 DL/LB/DB FAAB prior cells, 1,765 2026
+  defender season rows. Nothing further to run before phase 2.
+- Last full check: typecheck green, 405 test files and 6,028 tests passing,
+  npm run build green.
+
+Start-of-session steps for phase 2 (from the plan's "Start here"):
+1. Read CLAUDE.md and .env.local (echo the variable names), then the whole
+   plan, then the phase 1 section of progress.md.
+2. Re-run the section 4.6 live checks and record them. Expected now: defender
+   projection rows present (sleeper and ffbeacon), finishes outside the six
+   only under idp123, zero active Would You Rather trades holding a defender.
+3. Work IDP-201 onward in order; typecheck and tests after every task; phase
+   gate (typecheck, test, build) and the review at the end, then STOP.
+
+Carried into phase 2 and 3 (full reasons in progress.md, "IDP-132 review round"):
+- Owner decisions, settled 2026-09-24: (a) Would You Rather stays as built:
+  the pool refuses any trade with an unpriced asset, and only the three
+  defender trades were retired; no further retirement. (b) The two-way DB/WR
+  player's two projection rows stay merged into one metadata object.
+- Measure the nightly stats cron on production: maxDuration is 300 s and the
+  accuracy step alone takes 120 to 145 s beside finishes, splits and the new
+  defender seasons step. Check its cron_runs record for a timeout.
+- IDP-201: player_idp_seasons is upsert-only; make the rebuild delete rows for
+  players who are no longer DL/LB/DB before the search gate reads it.
+- IDP-207: rebuild the "No market value" renderers with real render tests (the
+  phase 1 tests are source-level), and add the partial flag to Would You
+  Rather's admitGradedTrade.
+- IDP-211: the live On The Clock room still computes its own ADP value marks
+  for a defender pick; the stored snapshot no longer does.
+- IDP-308: filter defender rows out of Positional WAR's projection read AT
+  THE QUERY (tried in the review round, reverted because 12 load-test fakes do
+  not model the join; that task rewrites the loader and its fakes). Also
+  measure the per-week cache entry against Next's 2 MB item limit.
+- lib/site.test.ts allow-lists 22 older position-noun maps as a debt ledger;
+  a phase 2 or 3 task that touches one of those files folds it into
+  positionNoun and deletes its line.
+- Deviations already made (each explained in progress.md): IDP-102 allow-list;
+  IDP-103 keeps PositionColorKey at six (the draft tracker types on it);
+  IDP-113 only a BARE IDP map counts as usable scoring; IDP-114 keeps the
+  out/unprojected split for defenders; IDP-116 added --idp-only to the
+  projection backfill; IDP-117 orchestrator is lib/calculate-idp-seasons.ts;
+  IDP-119 skipped the beacon calibration slope list; IDP-123 also keeps
+  defenders off the cut list until phase 3's seat test (R-5).
 
 ## Session of 2026-09-20 (part two): page widths and the League Pulse season switch
 

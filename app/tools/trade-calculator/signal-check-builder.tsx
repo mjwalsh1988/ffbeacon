@@ -8,6 +8,7 @@ import { LeagueFormatSelector } from "./league-format-selector";
 import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
 import { runSignalCheck } from "./actions";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
+import { NO_VERDICT_REASON } from "@/lib/trade-grading/partial";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
 import { currentSection, trackEvent } from "@/lib/analytics";
 
@@ -448,7 +449,9 @@ export function SignalCheckBuilder({
         {isPending
           ? "Checking the trade."
           : result
-            ? `Result ready. ${result.verdictLabel} Value ${result.isNeutral ? "spread" : "margin"} ${result.marginPct} percent.`
+            ? result.graded === false
+              ? `Result ready. ${result.verdictLabel}. ${NO_VERDICT_REASON}`
+              : `Result ready. ${result.verdictLabel} Value ${result.isNeutral ? "spread" : "margin"} ${result.marginPct} percent.`
             : ""}
       </p>
 

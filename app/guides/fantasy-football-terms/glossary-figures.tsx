@@ -120,7 +120,7 @@ export function FormatSpectrumFigure() {
 
 /* ---------- Roster and lineup: which slot takes which position ---------- */
 
-const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
+const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"] as const;
 type Pos = (typeof POSITIONS)[number];
 
 const SLOTS: { slot: string; label: string; takes: Pos[]; href: string }[] = [
@@ -138,6 +138,11 @@ const SLOTS: { slot: string; label: string; takes: Pos[]; href: string }[] = [
   },
   { slot: "K", label: "Kicker", takes: ["K"], href: "#kicker" },
   { slot: "DEF, D/ST", label: "Team defense", takes: ["DEF"], href: "#dst" },
+  // Individual defensive players (plan IDP-216). Sleeper's own slot tokens.
+  { slot: "DL", label: "Defensive lineman", takes: ["DL"], href: "#idp" },
+  { slot: "LB", label: "Linebacker", takes: ["LB"], href: "#idp" },
+  { slot: "DB", label: "Defensive back", takes: ["DB"], href: "#idp" },
+  { slot: "IDP, IDP_FLEX", label: "IDP flex", takes: ["DL", "LB", "DB"], href: "#idp" },
 ];
 
 export function LineupSlotsFigure() {
@@ -152,8 +157,9 @@ export function LineupSlotsFigure() {
       </figcaption>
       <p className="mt-3 text-sm leading-relaxed text-ink">
         A flex takes a running back, receiver or tight end. A superflex takes all of those plus a
-        quarterback, which is why it changes quarterback value so much. Bench, IR and taxi slots
-        hold any position but score nothing.
+        quarterback, which is why it changes quarterback value so much. In an IDP league the
+        defensive slots take real defenders, and an IDP flex takes any of the three. Bench, IR and
+        taxi slots hold any position but score nothing.
       </p>
       <div
         className="mt-3 overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
@@ -161,10 +167,11 @@ export function LineupSlotsFigure() {
         role="region"
         aria-label="Lineup slots and the positions each accepts"
       >
-        <table className="w-full min-w-[26rem] border-collapse text-left text-xs">
+        <table className="w-full min-w-[36rem] border-collapse text-left text-xs">
           <caption className="sr-only">
             Lineup slot labels, and whether each slot accepts a quarterback, running back, wide
-            receiver, tight end, kicker or team defense.
+            receiver, tight end, kicker, team defense, defensive lineman, linebacker or defensive
+            back.
           </caption>
           <thead>
             <tr className="border-b border-line text-[10px] uppercase tracking-wide text-ink-subtle">

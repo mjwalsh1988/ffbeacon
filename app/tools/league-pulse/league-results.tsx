@@ -1,5 +1,7 @@
 "use client";
 
+import { IdpLeagueTag, idpLabelPart } from "@/components/idp-league-tag";
+import { leagueHasIdp } from "@/lib/league-format-tags";
 import {
   useEffect,
   useId,
@@ -891,7 +893,7 @@ function DesktopPublicList({
                   sleeperUsername,
                   league.name,
                 )}
-                ariaLabel={`Open ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
+                ariaLabel={`Open ${league.name}, ${label}, ${league.total_rosters} teams${idpLabelPart(league)}. ${describeTeamStanding(summary, league.total_rosters)}`}
                 className="col-span-4 grid grid-cols-subgrid items-center py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan"
               >
                 {/* Decorative, and the name is right beside it, so it adds
@@ -909,8 +911,9 @@ function DesktopPublicList({
                       className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
                     />
                   </span>
-                  <span className="mt-0.5 block text-xs text-ink-subtle">
+                  <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-subtle">
                     {league.season} season
+                    {leagueHasIdp(league.roster_positions) && <IdpLeagueTag />}
                   </span>
                 </span>
                 <span className="flex justify-center">
@@ -1031,7 +1034,7 @@ function MobilePublicList({
                 type="button"
                 onClick={() => onOpen(league.league_id)}
                 aria-haspopup="dialog"
-                aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
+                aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams${idpLabelPart(league)}. ${describeTeamStanding(summary, league.total_rosters)}`}
                 className={`grid w-full items-center gap-3 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan ${MOBILE_GRID}`}
               >
                 <span className="min-w-0">
@@ -1044,6 +1047,7 @@ function MobilePublicList({
                       className="h-3 w-3 text-brand-cyan"
                     />
                     {league.total_rosters} teams, {league.season}
+                    {leagueHasIdp(league.roster_positions) && <IdpLeagueTag />}
                   </span>
                 </span>
                 <span className="flex justify-end text-ink-subtle">
@@ -1181,7 +1185,7 @@ function DesktopDashboardTable({
                         sleeperUsername,
                         league.name,
                       )}
-                      ariaLabel={`Open ${league.name} deep view`}
+                      ariaLabel={`Open ${league.name} deep view${idpLabelPart(league)}`}
                       className="group inline-flex min-w-0 max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                     >
                       <span className="inline-flex max-w-full items-center gap-2 text-base font-semibold text-ink group-hover:text-brand-purple">
@@ -1191,8 +1195,9 @@ function DesktopDashboardTable({
                           className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
                         />
                       </span>
-                      <span className="text-xs text-ink-subtle">
+                      <span className="flex items-center gap-1.5 text-xs text-ink-subtle">
                         {league.season} season
+                        {leagueHasIdp(league.roster_positions) && <IdpLeagueTag />}
                       </span>
                     </LeagueOpenLink>
                   </div>
@@ -1307,7 +1312,7 @@ function MobileDashboardCards({
               type="button"
               onClick={() => onOpen(league.league_id)}
               aria-haspopup="dialog"
-              aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. ${isFeatured ? "Featured." : "Not featured."} ${isShown ? "Shown on profile." : "Hidden from profile."} ${describeTeamStanding(summary, league.total_rosters, bulkStatus)}`}
+              aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams${idpLabelPart(league)}. ${isFeatured ? "Featured." : "Not featured."} ${isShown ? "Shown on profile." : "Hidden from profile."} ${describeTeamStanding(summary, league.total_rosters, bulkStatus)}`}
               className="block w-full pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
             >
               <span className="flex flex-wrap items-start justify-between gap-2">
@@ -1323,6 +1328,7 @@ function MobileDashboardCards({
               <span className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
                 <Users aria-hidden="true" className="h-3 w-3 text-brand-cyan" />
                 {league.total_rosters} teams, {league.season}
+                {leagueHasIdp(league.roster_positions) && <IdpLeagueTag />}
               </span>
             </button>
             <div className="pb-4 pt-3">

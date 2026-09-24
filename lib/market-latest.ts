@@ -58,6 +58,11 @@ export async function refreshMarketLatest(
           .eq("season_type", seasonType)
           // Newest first, so the first row seen for a player is the one to keep.
           .order("snapshot_date", { ascending: false })
+          // A tiebreak so the order is total. One date's rows span several
+          // pages, and an order on the date alone let range() pages overlap or
+          // skip, dropping a player back to an older date's row.
+          .order("sleeper_player_id", { ascending: true })
+          .order("season", { ascending: true })
           .range(offset, offset + PAGE - 1);
         if (result.error) throw result.error;
         return result;

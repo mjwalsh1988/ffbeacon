@@ -46,7 +46,7 @@ const UNSUPPORTED_MESSAGE: Record<BeamUnsupportedReason, string> = {
   "out-of-scope":
     "BEAM cannot see your league yet, so it cannot answer questions about your roster or your matchups.",
   "not-ranked":
-    "That player is not currently ranked, so we have no live value or ranking for him. Season stats still work.",
+    "That player is not in the current rankings, so BEAM has no live value, rank or projection answer for him. Season stats still work.",
   "too-many-players": "BEAM can handle two players at a time. Try asking about a pair.",
   "capability-disabled": "That kind of question is switched off right now.",
   error: "Something went wrong working that one out.",

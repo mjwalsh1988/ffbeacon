@@ -40,6 +40,8 @@ import type {
 import { enabledCapabilities } from "@/lib/beam/capabilities";
 import { DEFAULT_BOARD_COUNT } from "@/lib/beam/capabilities/draft-board";
 import {
+  SKILL_POSITIONS,
+  statSharedWithDefenders,
   bareUnitCandidates,
   getStat,
   statForPosition,
@@ -62,7 +64,7 @@ import { seasonsForSpan, spanLabel } from "./season-span";
 import { DEFAULT_TOP_N } from "./top-n";
 import { normalizeText } from "./normalize";
 import { scoreCapabilities, subjectCount } from "./score";
-import { looksOutOfScope, type SeasonToken } from "./lexicon";
+import { looksOutOfScope, type ConceptTag, type SeasonToken } from "./lexicon";
 
 /** How many readings to try before giving up. */
 const MAX_ATTEMPTS = 4;
@@ -73,6 +75,25 @@ const MAX_ATTEMPTS = 4;
  * a rambling sentence from fanning out into a dozen lookups.
  */
 const MAX_PROBE_SPANS = 4;
+
+/**
+ * Readings whose whole answer IS a value, a rank or a projection, with the
+ * word that has to be IN the question for that to be what was asked. When the
+ * best reading is one of these, the question carries its word and names no
+ * statistic, and the player has no rank, the decline is the answer: falling
+ * through to his stat line would answer a question nobody asked.
+ *
+ * The word matters. "What is Roquan Smith's age" scores the value reading
+ * level with the bio reading on the "what is" head alone, and the value
+ * reading wins the tie on registry order; without the word test it declined a
+ * bio question that used to answer. "Where does he rank in tackles" names a
+ * statistic, so the season-stat reading below it still gets its turn.
+ */
+const NOT_RANKED_IS_FINAL: Readonly<Record<string, ConceptTag>> = {
+  "player.value": "value",
+  "player.rank": "rank",
+  "player.projection": "projection",
+};
 
 /**
  * Everything the route needs back, beyond the interpretation itself: what was
@@ -174,6 +195,7 @@ export class DeterministicInterpreter implements BeamInterpreter {
     // reports "we could not find that player" rather than a generic shrug.
     let bestFailure: BeamUnsupportedReason = "no-intent";
     let bestClarification: BeamClarification | null = null;
+    let notRanked = false;
 
     const attempts = viable.slice(0, MAX_ATTEMPTS);
     for (let i = 0; i < attempts.length; i++) {
@@ -186,6 +208,15 @@ export class DeterministicInterpreter implements BeamInterpreter {
         resolutionCache,
       );
 
+      if (
+        attempt.kind === "request" &&
+        notRanked &&
+        attempt.matchedPlayers.length === 0
+      ) {
+        // A weaker reading that names nobody (the glossary, the help list)
+        // cannot answer a question about a player we already identified.
+        continue;
+      }
       if (attempt.kind === "request") {
         return {
           interpretation: { kind: "request", request: attempt.request },
@@ -213,9 +244,46 @@ export class DeterministicInterpreter implements BeamInterpreter {
         }
         if (!bestClarification) bestClarification = attempt.clarification;
       }
+      // We know exactly who was meant and he has no live value or rank. Only a
+      // weaker reading that reads HIS history (a stat line, say) can improve on
+      // that; one that names nobody cannot. "What is Roquan Smith worth" fell
+      // through to the glossary and answered that no definition existed.
+      // Defenders made this common (IDP-214); it was always wrong.
+      //
+      // Except when the question asked for exactly what he lacks. "What is
+      // Roquan Smith worth" is a value question, and a stat line is the wrong
+      // question answered, so a value, rank or projection reading that finds
+      // him unranked is final. The plan keeps the clean decline for those.
+      if (attempt.kind === "unsupported" && attempt.reason === "not-ranked") {
+        const askedFor = NOT_RANKED_IS_FINAL[candidate.capability.id];
+        if (
+          i === 0 &&
+          askedFor !== undefined &&
+          entities.concepts.includes(askedFor) &&
+          entities.statIds.length === 0
+        ) {
+          return {
+            interpretation: { kind: "unsupported", reason: "not-ranked" },
+            matchedPlayers: [],
+            normalized: entities.normalized,
+            trace,
+          };
+        }
+        notRanked = true;
+        continue;
+      }
       if (attempt.kind === "unsupported" && bestFailure === "no-intent") {
         bestFailure = attempt.reason;
       }
+    }
+
+    if (notRanked) {
+      return {
+        interpretation: { kind: "unsupported", reason: "not-ranked" },
+        matchedPlayers: [],
+        normalized: entities.normalized,
+        trace,
+      };
     }
 
     // A clarification beats an unsupported: asking one question is a better dead
@@ -279,9 +347,28 @@ export class DeterministicInterpreter implements BeamInterpreter {
     // The statistic narrows WHO was meant. "How many yards did brock throw for"
     // has four Brocks in the six fantasy positions and exactly one quarterback,
     // and the verb already told us it is a quarterback question.
-    const statPositionHint =
-      entities.statIds.length > 0
-        ? (getStat(entities.statIds[0]).resolutionPositions ?? null)
+    //
+    // Falls back to the positions the stat can exist for at all, and a bare
+    // offensive unit to the four skill positions. Since defenders joined the
+    // name pool (IDP-214) that is what keeps "how many yards did gibbs have"
+    // about Jahmyr Gibbs rather than asking about a linebacker named Gibbs,
+    // and what points "how many tackles did smith have" at the defenders. A
+    // hint that leaves nobody is ignored, so it never hides the only match.
+    const primaryStat =
+      entities.statIds.length > 0 ? getStat(entities.statIds[0]) : null;
+    const statPositionHint: readonly string[] | null = primaryStat
+      ? statSharedWithDefenders(primaryStat.id)
+        ? [
+            ...(primaryStat.resolutionPositions ?? primaryStat.positions),
+            "DL",
+            "LB",
+            "DB",
+          ]
+        : (primaryStat.resolutionPositions ?? primaryStat.positions)
+      : entities.ambiguousUnit === "yards" ||
+          entities.ambiguousUnit === "catches" ||
+          entities.ambiguousUnit === "attempts"
+        ? SKILL_POSITIONS
         : null;
 
     const positionHint = entities.positions[0] ?? null;

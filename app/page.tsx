@@ -24,6 +24,7 @@ import {
   Calculator,
   Scale,
   Swords,
+  Shield,
   UserSearch,
   Timer,
   ArrowRight,
@@ -1267,6 +1268,16 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
       "Luck against points for, and the all-play record",
       "Buy, hold or sell at the deadline, by odds rather than record",
       "Floor when favored, ceiling when you are the underdog",
+    ],
+  },
+  "idp-fantasy-football": {
+    icon: Shield,
+    hint: "Leagues that start real defenders",
+    lessons: [
+      "Read your league's defensive scoring before anything else",
+      "The same defenders ranked under four scoring systems",
+      "Snap share and role repeat; sacks and interceptions swing",
+      "Setting up an IDP league, from one flex slot to a full defense",
     ],
   },
   "chopped-league-strategy": {

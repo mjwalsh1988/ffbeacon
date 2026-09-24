@@ -31,6 +31,9 @@ export const CACHE_TAGS = {
   /** faab_market_priors: the anonymous clearing-price cells, rebuilt at most
    *  every few days by the derived-data cron or by npm run faab:priors. */
   faabPriors: "faab-priors",
+  /** player_market_latest reads (Sleeper ADP), refreshed by the nightly
+   *  sync-sleeper-market cron, which busts this tag when it writes. */
+  marketAdp: "market-adp",
 } as const;
 
 export const CACHE_TTL = {

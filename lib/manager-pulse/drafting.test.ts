@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readManagerPosition } from "./types";
 import { computeDrafting } from "./drafting";
 import {
   DEFAULT_MANAGER_PULSE_SETTINGS,
@@ -203,6 +204,29 @@ describe("computeDrafting: positional shape", () => {
     const total = Object.values(shape).reduce((sum, v) => sum + (v ?? 0), 0);
     expect(total).toBeCloseTo(1, 10);
     expect(result.firstRoundsSampleSize.dynasty).toBe(3);
+  });
+
+  it("counts an early linebacker under LB and the shares still sum to 1 (plan IDP-208)", () => {
+    const players = {
+      p1: makePlayer({ playerId: "p1", position: "RB" }),
+      p2: makePlayer({ playerId: "p2", position: "LB" }),
+    };
+    const picks = [
+      makePick({ pickNo: 1, round: 1, playerId: "p1" }),
+      makePick({ pickNo: 2, round: 2, playerId: "p2" }),
+    ];
+    const result = computeDrafting(makeInput({ picks, players }));
+    expect(result.firstRoundsShape.dynasty).toEqual({ RB: 0.5, LB: 0.5 });
+    expect(result.firstRoundsSampleSize.dynasty).toBe(2);
+  });
+});
+
+describe("readManagerPosition", () => {
+  it("keeps the six and the three defensive positions, and nothing else", () => {
+    expect(readManagerPosition("dst")).toBe("DEF");
+    expect(readManagerPosition("LB")).toBe("LB");
+    expect(readManagerPosition("db")).toBe("DB");
+    expect(readManagerPosition("OL")).toBeNull();
   });
 });
 

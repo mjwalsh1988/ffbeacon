@@ -180,6 +180,36 @@ describe("top scorers and box score lines", () => {
     const d = buildBoxScoreLinesDataset(["p1", "p4", "p2"], lines, players, 2, AT);
     expect(d.rows.map((r) => r.player_id)).toEqual(["p2", "p1"]);
   });
+
+  it("box score lines give a defender his defensive line and no offensive column (plan IDP-213)", () => {
+    const withLb = new Map(players);
+    withLb.set("lb", P("lb", "Golf Backer", "LB"));
+    const lbLine = line("lb", 0, {
+      idp_tkl: 15,
+      idp_tkl_solo: 8,
+      idp_tkl_ast: 7,
+      idp_tkl_loss: 3,
+      idp_qb_hit: 2,
+      idp_fum_rec: 1,
+      idp_def_td: 1,
+      def_snap_pct: 0.93,
+    });
+    const d = buildBoxScoreLinesDataset(["p1", "lb"], [...lines, lbLine], withLb, 2, AT);
+    const lbRow = d.rows.find((r) => r.player_id === "lb")!;
+    expect(lbRow.pts_idp123).toBe(40);
+    expect(lbRow.idp_tkl).toBe(15);
+    expect(lbRow).not.toHaveProperty("rec_yd");
+    expect(lbRow).not.toHaveProperty("pts_ppr");
+    expect(d.columns).toContain("pts_idp123");
+    expect(d.source_note).toContain("Sleeper default IDP scoring");
+    // The source note no longer claims a missing row means no stat.
+    expect(d.source_note).not.toContain("did not record a stat");
+  });
+
+  it("an offense-only table carries no IDP column", () => {
+    const d = buildBoxScoreLinesDataset(["p1", "p2"], lines, players, 2, AT);
+    expect(d.columns.some((c) => c.startsWith("idp_") || c === "pts_idp123")).toBe(false);
+  });
 });
 
 describe("parseReturnTimeline", () => {

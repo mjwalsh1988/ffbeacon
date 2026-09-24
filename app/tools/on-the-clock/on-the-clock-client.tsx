@@ -2584,6 +2584,7 @@ export function OnTheClockClient({
             startingSlotCount: pulse?.slots.length ?? 0,
             isDynasty,
             settings: settings.grades,
+            picks: draftCache.picks,
             inProgress: draftInProgress,
           })
         : NO_GRADES;

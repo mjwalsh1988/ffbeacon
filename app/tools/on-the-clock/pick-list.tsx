@@ -21,7 +21,8 @@ import {
   describePickValue,
   pickValueDelta,
 } from "@/lib/on-the-clock/adp";
-import { normalizePositionColor, POSITION_ROW } from "@/lib/on-the-clock/position-colors";
+import { positionColorKey, POSITION_ROW } from "@/lib/on-the-clock/position-colors";
+import { isDefender } from "@/lib/site";
 import { EmptyCard } from "./states";
 
 function fullName(pick: ShapedPick): string {
@@ -98,15 +99,18 @@ export function PickList({
           {ordered.map((p) => {
             const pickInRound = teams ? ((p.pickNo - 1) % teams) + 1 : p.pickNo;
             const yours = p.pickedBy === connectedUserId;
+            const defender = isDefender(p.position);
             const adp =
-              !p.isKeeper && p.sleeperPlayerId
+              !p.isKeeper && p.sleeperPlayerId && !defender
                 ? (adpBySleeperId[p.sleeperPlayerId] ?? null)
                 : null;
             const delta = pickValueDelta(p.pickNo, adp);
             const verdict = classifyPickValue(delta, adpThreshold);
             const verdictText = p.isKeeper
               ? "Keeper"
-              : adp === null
+              : defender
+                ? "Defensive pick, not graded"
+                : adp === null
                 ? "No ADP data"
                 : describePickValue(delta, verdict);
             const verdictClass =
@@ -118,7 +122,7 @@ export function PickList({
             // Faint position hue behind the row so the list matches the board's
             // color coding. Ownership stays signalled by the purple bar on the
             // pick cell below (not a row fill), so the two never conflict.
-            const posKey = normalizePositionColor(p.position);
+            const posKey = positionColorKey(p.position);
             const rowTint = posKey ? POSITION_ROW[posKey] : "";
             return (
               <tr key={p.pickNo}>

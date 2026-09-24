@@ -251,3 +251,15 @@ function formatScoring(n: number): string {
   if (Number.isInteger(n)) return String(n);
   return String(parseFloat(n.toFixed(2)));
 }
+
+/** Sleeper's individual defensive player slot tokens. */
+const IDP_SLOTS = new Set(["DL", "LB", "DB", "IDP_FLEX"]);
+
+/**
+ * True when a league starts individual defensive players (plan R-28). Read
+ * from the live `roster_positions`, so a reader knows before opening a league
+ * that its lineups include defenders. Bench-like slots never count.
+ */
+export function leagueHasIdp(rosterPositions: unknown): boolean {
+  return getStartingPositions(rosterPositions).some((slot) => IDP_SLOTS.has(slot));
+}

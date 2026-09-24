@@ -20,6 +20,8 @@
  * coverage is partial.
  */
 
+import { scoreIdpLine } from "@/lib/idp/stat-line";
+import { IDP_PRESETS } from "@/lib/idp/scoring-presets";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ScoringKey } from "@/lib/player-profile";
@@ -61,6 +63,24 @@ const STAT_SELECT = [
   "pts_ppr",
   "pts_half_ppr",
   "pts_std",
+  // The typed IDP columns (migration 0296). A defender's points are computed
+  // from these under Sleeper default IDP scoring, never read from pts_*.
+  "def_snp",
+  "tm_def_snp",
+  "def_snap_pct",
+  "idp_tkl",
+  "idp_tkl_solo",
+  "idp_tkl_ast",
+  "idp_tkl_loss",
+  "idp_sack",
+  "idp_qb_hit",
+  "idp_pass_def",
+  "idp_int",
+  "idp_ff",
+  "idp_fum_rec",
+  "idp_def_td",
+  "idp_safe",
+  "idp_blk_kick",
 ].join(", ");
 
 /** An inclusive stretch of weeks inside one season. */
@@ -86,6 +106,12 @@ export type SeasonAggregate = {
     /** Weeks that carried a number for the active scoring base. */
     weeksWithPoints: number;
   };
+  /**
+   * Sleeper default IDP points (idp123), from the typed columns. Only weeks
+   * that carry at least one IDP figure count, so an offensive player reads
+   * zero weeks here and every IDP stat is null for him.
+   */
+  idp: { total: number; weeks: number };
 };
 
 type StatRow = Record<string, number | null> & { week: number };
@@ -121,7 +147,26 @@ const ZERO_COLUMNS: StatColumn[] = [
   "interceptions",
   "def_td",
   "pts_allow",
+  "def_snp",
+  "tm_def_snp",
+  "def_snap_pct",
+  "idp_tkl",
+  "idp_tkl_solo",
+  "idp_tkl_ast",
+  "idp_tkl_loss",
+  "idp_sack",
+  "idp_qb_hit",
+  "idp_pass_def",
+  "idp_int",
+  "idp_ff",
+  "idp_fum_rec",
+  "idp_def_td",
+  "idp_safe",
+  "idp_blk_kick",
 ];
+
+/** The IDP columns, for deciding whether a week carries a defensive line. */
+const IDP_COLUMNS: StatColumn[] = ZERO_COLUMNS.filter((c) => c.startsWith("idp_"));
 
 function emptyRecord(): Record<StatColumn, number> {
   const out = {} as Record<StatColumn, number>;
@@ -182,6 +227,7 @@ export async function loadSeasonAggregates(
       maxes: emptyRecord(),
       present: emptyRecord(),
       fantasy: { total: 0, weeksWithPoints: 0 },
+      idp: { total: 0, weeks: 0 },
     });
   }
 
@@ -202,6 +248,16 @@ export async function loadSeasonAggregates(
     if (typeof points === "number" && Number.isFinite(points)) {
       agg.fantasy.total += points;
       agg.fantasy.weeksWithPoints += 1;
+    }
+
+    if (IDP_COLUMNS.some((c) => typeof raw[c] === "number")) {
+      const line: Record<string, number> = {};
+      for (const c of IDP_COLUMNS) {
+        const v = raw[c];
+        if (typeof v === "number" && Number.isFinite(v)) line[c] = v;
+      }
+      agg.idp.total += scoreIdpLine(line, IDP_PRESETS.idp123);
+      agg.idp.weeks += 1;
     }
   }
 
@@ -291,6 +347,15 @@ export function computeStat(stat: BeamStat, agg: SeasonAggregate): StatValue {
       const games = agg.gamesPlayed > 0 ? agg.gamesPlayed : agg.fantasy.weeksWithPoints;
       if (games <= 0) return nullValue;
       return { statId: stat.id, value: agg.fantasy.total / games, isTrueZero: false };
+    }
+    case "idpPoints": {
+      if (agg.idp.weeks === 0) return nullValue;
+      if (!stat.aggregation.perGame) {
+        return { statId: stat.id, value: agg.idp.total, isTrueZero: agg.idp.total === 0 };
+      }
+      const games = agg.gamesPlayed > 0 ? agg.gamesPlayed : agg.idp.weeks;
+      if (games <= 0) return nullValue;
+      return { statId: stat.id, value: agg.idp.total / games, isTrueZero: false };
     }
     default:
       return nullValue;

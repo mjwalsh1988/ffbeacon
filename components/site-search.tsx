@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Search, X, ArrowRight } from "lucide-react";
 import { SEARCHABLE_TOOLS, type SearchableTool } from "@/lib/site";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { PositionChip } from "@/components/position-chip";
 import { formatEasternDate } from "@/lib/datetime";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
@@ -536,7 +537,7 @@ function PlayerOption({
   onNavigate: () => void;
   describedBy: string;
 }) {
-  const detail = [result.position, result.team].filter(Boolean).join(", ");
+  const hasDetail = Boolean(result.position || result.team);
   return (
     <OptionRow
       id={id}
@@ -556,8 +557,12 @@ function PlayerOption({
         <span className="block truncate text-sm font-medium text-ink">
           {result.name}
         </span>
-        {detail && (
-          <span className="block truncate text-xs text-ink-subtle">{detail}</span>
+        {hasDetail && (
+          <span className="flex items-center gap-1.5 truncate text-xs text-ink-subtle">
+            <PositionChip position={result.position} />
+            {result.position && result.team ? <span className="sr-only">, </span> : null}
+            {result.team && <span className="truncate">{result.team}</span>}
+          </span>
         )}
       </span>
       <ArrowRight

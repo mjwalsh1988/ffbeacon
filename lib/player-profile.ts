@@ -25,6 +25,8 @@ import {
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { lineFromProjection, type StatLine } from "@/components/player-profile/stat-shaping";
+import { IDP_POSITIONS, isDefender } from "@/lib/site";
+import { defenderDepthRole, subPositionLabel } from "@/lib/player-profile/defender-depth";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -790,6 +792,8 @@ export type DepthChartEntry = {
   injuryStatus: string | null;
   isViewed: boolean;
   role: string | null;
+  /** A defender's sub-position ("Inside linebacker, left"); null on offense. */
+  subPosition?: string | null;
 };
 
 function intOrNull(v: unknown): number | null {
@@ -815,6 +819,9 @@ function intOrNull(v: unknown): number | null {
 export function depthRoleLabel(position: string, order: number | null): string | null {
   if (order == null) return null;
   const pos = (position || "").toUpperCase();
+  // Defenders never take the offensive ladder (plan R-24): a defense is charted
+  // per sub-position, and a third linebacker is a reserve, not a "Dart Throw".
+  if (isDefender(pos)) return defenderDepthRole(order);
   if (pos === "DEF" || pos === "DST") return null;
   if (pos === "QB") return order === 1 ? "Starter" : order === 2 ? "Backup" : "Dart Throw";
   if (pos === "RB") return order === 1 ? "Starter" : order === 2 ? "Handcuff" : "Depth Piece";
@@ -845,13 +852,30 @@ export async function loadDepthChart(
 ): Promise<{ room: DepthChartEntry[]; viewedRole: string | null } | null> {
   if (!player.team) return null;
   const db = supabase as SupabaseClient<Database>;
+  const defender = isDefender(player.position);
+  // A defender's room is his SUB-position across all three defensive fantasy
+  // positions (plan R-24): a 3-4 outside linebacker Sleeper lists as DL shares
+  // his room with the outside linebackers it lists as LB.
   const { data } = await db
     .from("players")
     .select("slug, full_name, first_name, last_name, external_ids, metadata")
     .eq("team", player.team)
-    .eq("position", player.position);
+    .in("position", defender ? [...IDP_POSITIONS] : [player.position]);
 
-  const entries = (data ?? []).map((r) => {
+  let rows = data ?? [];
+  let viewedSub: string | null = null;
+  if (defender) {
+    const subOf = (r: (typeof rows)[number]) => {
+      const code = sleeperMeta(r as unknown as Pick<PlayerRow, "metadata">).depth_chart_position;
+      return typeof code === "string" ? code.toUpperCase() : null;
+    };
+    viewedSub = subOf(rows.find((r) => r.slug === player.slug) ?? ({} as (typeof rows)[number]));
+    // No sub-position for the viewed player means no room to place him in.
+    if (!viewedSub) return null;
+    rows = rows.filter((r) => subOf(r) === viewedSub);
+  }
+
+  const entries = rows.map((r) => {
     const row = r as unknown as Pick<
       PlayerRow,
       "slug" | "full_name" | "first_name" | "last_name" | "external_ids" | "metadata"
@@ -896,6 +920,7 @@ export async function loadDepthChart(
     injuryStatus: e.injuryStatus,
     isViewed: e.isViewed,
     role: depthRoleLabel(player.position, e.order),
+    subPosition: defender ? subPositionLabel(viewedSub) : null,
   }));
   return { room: roomOut, viewedRole: roomOut.find((e) => e.isViewed)?.role ?? null };
 }

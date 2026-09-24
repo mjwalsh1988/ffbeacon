@@ -6,6 +6,14 @@
  * Writes one snapshot_date partition into player_market_snapshots per run;
  * re-running on the same date updates that partition in place (idempotent).
  *
+ * Stores every position Sleeper projects, defenders included (DL, LB, DB).
+ *
+ * A manual run CANNOT refresh the IDP guide. The cron route busts the
+ * CACHE_TAGS.marketAdp tag after it writes; a script outside Next has no way to
+ * call revalidateTag, so after a manual run the guide's draft rounds catch up
+ * at the next morning's cron or when the day-long cache expires, whichever
+ * comes first.
+ *
  * Run:
  *   npm run sync:market
  *   npm run sync:market -- --season 2026

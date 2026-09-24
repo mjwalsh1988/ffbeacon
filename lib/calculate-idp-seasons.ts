@@ -99,7 +99,84 @@ export async function runCalculateIdpSeasons(
       );
     }
     written += rows.length;
+
+    // The upsert above cannot remove a row, so a player the players sync has
+    // since relabelled (a DB now listed WR) would keep his old season here and
+    // stay inside the search relevance gate (IDP-201). Skipped when the run
+    // produced nothing: an empty read is far more likely a bad moment than a
+    // season with no defenders, and pruning on it would empty the table.
+    if (rows.length > 0) {
+      await pruneUnproducedRows(supabase, season, rows, computedAt);
+    }
   }
 
   return { seasons, weekRows, rows: written };
+}
+
+const PRUNE_DELETE_CHUNK = 100;
+
+/**
+ * Delete this season's rows whose (player, season type) this run did not
+ * produce. Only KEYS the run did not produce are deleted, never a row merely
+ * older than computedAt: two overlapping runs (a retried cron tick, or the CLI
+ * during the cron) can each overwrite the other's rows, and a prune keyed on
+ * the timestamp alone lets the later-stamped run delete every row the
+ * earlier-stamped one rewrote after it, which empties the season. The
+ * computed_at guard stays as a second condition so a row another run wrote
+ * after this one started is left alone.
+ *
+ * A short or failed key read can only mean fewer deletions: a failure throws
+ * before anything is deleted, and a key never seen is never deleted.
+ */
+async function pruneUnproducedRows(
+  supabase: ServiceClient,
+  season: number,
+  produced: ReadonlyArray<{ player_id: string; season_type: string }>,
+  computedAt: string,
+): Promise<void> {
+  const keep = new Set(produced.map((r) => `${r.player_id}|${r.season_type}`));
+  const staleByType = new Map<string, string[]>();
+  for (let from = 0; ; from += PAGE) {
+    const pageFrom = from;
+    const data = await withRetry(
+      async () => {
+        const { data: existing, error } = await supabase
+          .from("player_idp_seasons")
+          .select("player_id, season_type")
+          .eq("season", season)
+          .order("player_id", { ascending: true })
+          .order("season_type", { ascending: true })
+          .range(pageFrom, pageFrom + PAGE - 1);
+        if (error) throw error;
+        return existing ?? [];
+      },
+      { label: `player_idp_seasons prune read ${season} ${pageFrom}` },
+    );
+    for (const row of data) {
+      if (keep.has(`${row.player_id}|${row.season_type}`)) continue;
+      const list = staleByType.get(row.season_type) ?? [];
+      list.push(row.player_id);
+      staleByType.set(row.season_type, list);
+    }
+    if (data.length < PAGE) break;
+  }
+
+  for (const [seasonType, playerIds] of staleByType) {
+    for (let i = 0; i < playerIds.length; i += PRUNE_DELETE_CHUNK) {
+      const chunk = playerIds.slice(i, i + PRUNE_DELETE_CHUNK);
+      await withRetry(
+        async () => {
+          const { error } = await supabase
+            .from("player_idp_seasons")
+            .delete()
+            .eq("season", season)
+            .eq("season_type", seasonType)
+            .in("player_id", chunk)
+            .lt("computed_at", computedAt);
+          if (error) throw error;
+        },
+        { label: `player_idp_seasons prune ${season} ${seasonType} ${i}` },
+      );
+    }
+  }
 }

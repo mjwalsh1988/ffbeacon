@@ -15,6 +15,8 @@ export interface BuilderAssetView {
   detail: string | null;
   value: number | null;
   noValue: boolean;
+  /** A defender no value source prices: renders "No market value". */
+  unpriced: boolean;
 }
 
 export interface BuilderSideView {
@@ -49,6 +51,11 @@ export interface BuilderView {
   hasMissingValues: boolean;
   hasBlendedPicks: boolean;
   hasEstimatedPicks: boolean;
+  /** Defensive players left out of the totals (plan R-19). */
+  partial: boolean;
+  unpricedCount: number;
+  /** False when there is no verdict to show. */
+  graded: boolean;
   showRawValues: boolean;
   /** Row label for the consolidation credit. Null when none applied. */
   adjustmentLabel: string | null;
@@ -90,6 +97,7 @@ export function toBuilderView(
         detail: assetDetail(r.asset),
         value: settings.showRawValues ? Math.round(r.adjustedValue) : null,
         noValue: r.asset.noValue,
+        unpriced: r.asset.kind === "player" && Boolean(r.asset.unpriced),
       })),
       total: settings.showRawValues ? Math.round(s.effectiveTotal) : null,
       adjustment: credited && settings.showRawValues ? Math.round(s.consolidationAdjustment) : null,
@@ -107,13 +115,17 @@ export function toBuilderView(
     isBlowout: analysis.verdict.isBlowout,
     formatDisplay: analysis.format.display,
     tradeShapeLabel: analysis.tradeShape.label,
-    confidenceLabel: analysis.confidence.label,
+    // No verdict, no confidence in it (review item 19).
+    confidenceLabel: analysis.graded === false ? null : analysis.confidence.label,
     confidenceLevel: analysis.confidence.level,
     explanation: analysis.explanation,
     sides,
     hasMissingValues: analysis.hasMissingValues,
     hasBlendedPicks: analysis.hasBlendedPicks,
     hasEstimatedPicks: analysis.hasEstimatedPicks,
+    partial: analysis.partial,
+    unpricedCount: analysis.unpricedCount,
+    graded: analysis.graded,
     showRawValues: settings.showRawValues,
     adjustmentLabel: consolidation.applied ? settings.qualityAdjustmentLabel : null,
   };

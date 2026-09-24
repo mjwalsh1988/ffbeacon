@@ -347,6 +347,22 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     ],
   },
   {
+    label: "IDP Leagues",
+    href: "/guides/idp-fantasy-football",
+    description: "IDP scoring, positions and strategy for leagues that start real defenders",
+    keywords: [
+      "idp",
+      "idp fantasy football",
+      "idp scoring",
+      "individual defensive player",
+      "defensive player",
+      "linebacker",
+      "linebackers",
+      "defensive lineman",
+      "defensive back",
+    ],
+  },
+  {
     label: "Trade Guide",
     href: "/guides/fantasy-football-trade-guide",
     description: "How to judge any fantasy football trade before you send it",

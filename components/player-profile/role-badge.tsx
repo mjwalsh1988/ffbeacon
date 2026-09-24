@@ -12,6 +12,8 @@ const ROLE_CLASS: Record<string, string> = {
   Backup: "bg-signal-warning/15 text-signal-warning",
   "Depth Piece": "bg-ink-subtle/15 text-ink-muted",
   "Dart Throw": "bg-brand-purple/15 text-brand-purple",
+  // Defenders (plan R-24): a third man at a sub-position is a reserve.
+  Reserve: "bg-ink-subtle/15 text-ink-muted",
 };
 
 export function roleBadgeClass(role: string): string {

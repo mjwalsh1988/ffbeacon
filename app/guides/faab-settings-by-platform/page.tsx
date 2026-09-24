@@ -754,6 +754,12 @@ function CommissionerSection() {
             for how much to bid once the settings are sorted.
           </li>
           <li>
+            <Link href="/guides/idp-fantasy-football" className={LINK_CLASS}>
+              IDP fantasy football
+            </Link>{" "}
+            if your league also starts defensive players.
+          </li>
+          <li>
             <Link href="/tools/faab" className={LINK_CLASS}>
               The FAAB calculator
             </Link>{" "}

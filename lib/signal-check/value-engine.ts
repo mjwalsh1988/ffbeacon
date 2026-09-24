@@ -12,6 +12,7 @@
  * and we throw rather than silently dropping or zero-valuing it.
  */
 
+import { isDefender } from "@/lib/site";
 import type {
   AssetInput,
   PricedAsset,
@@ -112,6 +113,7 @@ function pricePlayer(
         sleeperId: null,
         baseValue: 0,
         noValue: true,
+        unresolved: true,
       },
       capturedAt: null,
     };
@@ -128,6 +130,7 @@ function pricePlayer(
       sleeperId: resolved.sleeperId ?? null,
       baseValue: resolved.value ?? 0,
       noValue,
+      unpriced: noValue && isDefender(resolved.position),
     },
     capturedAt: resolved.capturedAt,
   };

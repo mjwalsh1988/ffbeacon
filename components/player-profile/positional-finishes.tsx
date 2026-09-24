@@ -5,6 +5,8 @@
  * sidebar; the statistics tab renders its own multi-format matrix.
  */
 
+import { isDefender, positionNoun } from "@/lib/site";
+import { ordinal } from "@/lib/beam/answers/format";
 import { SCORING_KEYS, type PositionalFinish, type ScoringKey } from "@/lib/player-profile";
 
 const POS_CLASS: Record<string, string> = {
@@ -38,7 +40,9 @@ export function LastThreeFinishes({
   compact = false,
 }: {
   position: string;
-  finishes: PositionalFinish[];
+  /** A defender's idp123 finishes carry no PPR scoring key, so only the
+   *  season and the finish are required. */
+  finishes: Array<Pick<PositionalFinish, "season" | "finish"> & { scoring?: string }>;
   emptyLabel?: string;
   /** Compact mode: on mobile the cards shrink and split the row evenly so all
    *  three fit on one line; at sm and up they restore to their natural size. */
@@ -53,13 +57,17 @@ export function LastThreeFinishes({
         const label = finishLabel(position, f.finish);
         return (
           <li
-            key={`${f.season}-${f.scoring}`}
+            key={`${f.season}-${f.scoring ?? "idp123"}`}
             className={`rounded-card border border-line bg-surface/60 text-center ${
               compact
                 ? "min-w-0 flex-1 px-2 py-1.5 sm:flex-none sm:px-3 sm:py-2"
                 : "px-3 py-2"
             }`}
-            aria-label={`${f.season} finish: ${label}`}
+            aria-label={
+              isDefender(position)
+                ? `${f.season} finish: ${ordinal(f.finish)} among ${positionNoun(position, "plural")}`
+                : `${f.season} finish: ${label}`
+            }
           >
             <p
               className={`font-semibold uppercase tracking-wide text-ink-subtle ${

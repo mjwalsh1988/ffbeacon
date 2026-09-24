@@ -345,6 +345,9 @@ export async function GET(
           {context.pickSource && context.pickSource.slug !== context.sourceSlug
             ? `, picks via ${context.pickSource.display}`
             : ""}
+          {team.defenders.length > 0
+            ? `. Defense, no market value: ${defenderLine(team.defenders)}`
+            : ""}
         </p>
         {/* A shared image carries no tooltip, so the two marks explain
               themselves here or they are decoration nobody can read. */}
@@ -773,4 +776,15 @@ function ordinal(n: number): string {
   if (mod10 === 2) return `${n}nd`;
   if (mod10 === 3) return `${n}rd`;
   return `${n}th`;
+}
+
+/**
+ * Defenders by name for the footer line (plan IDP-209). The image has no room
+ * for a sixth column, so the first four names are printed and the rest are
+ * counted rather than silently cut.
+ */
+function defenderLine(names: string[]): string {
+  const shown = names.slice(0, 4).join(", ");
+  const more = names.length - 4;
+  return more > 0 ? `${shown} and ${more} more` : shown;
 }

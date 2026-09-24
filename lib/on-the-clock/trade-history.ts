@@ -20,6 +20,8 @@
  * 5% is fair, within 15% is a lean, beyond is strong.
  */
 
+import { isDefender } from "@/lib/site";
+import { assessPartialGrade, NO_VERDICT_LABEL, NO_VERDICT_REASON } from "@/lib/trade-grading/partial";
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { CurrentDraftPick } from "./pick-ownership";
 import { buildPickValueLookup, lookupPickValue, bucketSlot, FALLBACK_PICK_VALUE } from "./trade-analyzer";
@@ -84,6 +86,12 @@ export interface HistoryAsset {
   /** True when we could not resolve any FF Beacon value for the asset. */
   noValue: boolean;
   /**
+   * A defender (a made pick that became a DL, LB or DB): no value source prices
+   * defenders (plan R-19), so he is named, left out of the totals, and the
+   * verdict is partial. Optional: absent means priced or merely missing.
+   */
+  unpriced?: boolean;
+  /**
    * The roster that GAVE this asset up in the trade (the receiving roster is the
    * HistorySide that holds it). null when Sleeper did not record an origin. Used by
    * the awards computation to net each roster's give/get without re-valuing assets.
@@ -124,6 +132,11 @@ export interface HistoryEntry {
   verdict: HistoryVerdict;
   hasEstimates: boolean;
   hasMissingValues: boolean;
+  /**
+   * Defensive players left out of the totals (plan R-19). Optional because a
+   * snapshot stored before IDP-207 carries entries without it.
+   */
+  unpricedCount?: number;
 }
 
 /** Board + draft context the analyzer values every trade against. */
@@ -241,14 +254,21 @@ export function analyzeTradeTransaction(
           val = valBySleeperId.get(mp.sleeperPlayerId)!;
         }
         const posLabel = mp.position ? `, ${mp.position}` : "";
+        const unpriced = val === null && isDefender(mp.position);
         return {
           key: `mp-${cp.overall}`,
           kind: "made-pick",
           label: `${cp.round}.${pad2(cp.pickInRound)} - ${madeName(mp)}`,
-          detail: val !== null ? `Pick used${posLabel}` : `Pick used${posLabel} - no FF Beacon value`,
+          detail:
+            val !== null
+              ? `Pick used${posLabel}`
+              : unpriced
+                ? `Pick used${posLabel} - No market value`
+                : `Pick used${posLabel} - no FF Beacon value`,
           value: val ?? 0,
           estimated: false,
           noValue: val === null,
+          ...(unpriced ? { unpriced: true } : {}),
           fromRosterId: pick.previousOwnerRosterId,
         };
       }
@@ -368,7 +388,25 @@ export function analyzeTradeTransaction(
     };
   });
 
-  const verdict = computeVerdict(sides);
+  // A side with no priced piece and a defender on it gets no verdict (R-19).
+  const grade = assessPartialGrade(
+    sides.map((s) =>
+      s.assets.map((a) => ({
+        noValue: a.noValue,
+        // The asset has no position field; an unpriced asset is a defender by
+        // construction, which is all the rule needs to know.
+        position: a.unpriced ? "LB" : null,
+      })),
+    ),
+  );
+  const verdict: HistoryVerdict = grade.graded
+    ? computeVerdict(sides)
+    : {
+        lean: "empty",
+        headline: NO_VERDICT_LABEL,
+        detail: NO_VERDICT_REASON,
+        winnerRosterId: null,
+      };
   for (const s of sides) s.leads = verdict.winnerRosterId != null && s.rosterId === verdict.winnerRosterId;
 
   return {
@@ -379,6 +417,7 @@ export function analyzeTradeTransaction(
     verdict,
     hasEstimates: sides.some((s) => s.hasEstimates),
     hasMissingValues: sides.some((s) => s.hasMissingValues),
+    unpricedCount: grade.unpricedCount,
   };
 }
 

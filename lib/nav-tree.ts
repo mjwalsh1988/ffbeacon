@@ -171,6 +171,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "settings",
       },
       {
+        id: "/guides/idp-fantasy-football",
+        label: "IDP Leagues",
+        href: "/guides/idp-fantasy-football",
+        hint: "Linebackers, linemen and defensive backs",
+        icon: "shield",
+      },
+      {
         id: "/guides/chopped-league-strategy",
         label: "Chopped Leagues",
         href: "/guides/chopped-league-strategy",

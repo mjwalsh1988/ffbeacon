@@ -12,6 +12,8 @@
  * sr-only prose summary so the graph is not color-only.
  */
 
+import { missingValueNote } from "@/lib/signal-check/copy";
+import { NO_VERDICT_REASON } from "@/lib/trade-grading/partial";
 import { Scale, Trophy, ScrollText, Sparkles, Layers } from "lucide-react";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { SideKey } from "@/lib/signal-check/types";
@@ -22,7 +24,6 @@ import type {
 import {
   BLENDED_PICKS_NOTE,
   ESTIMATED_PICKS_NOTE,
-  MISSING_VALUES_NOTE,
 } from "@/lib/signal-check/copy";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
@@ -187,17 +188,20 @@ export function SignalCheckTradeCard({
             <h3 className="max-w-xl text-xl font-semibold leading-tight tracking-tight text-ink sm:text-2xl">
               {view.verdictLabel}
             </h3>
-            <div className="shrink-0 sm:text-right">
-              <p
-                className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
-                style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-              >
-                {view.marginPct}%
-              </p>
-              <p className="text-[11px] text-ink-subtle">
-                {view.isNeutral ? "value spread" : "value margin"}
-              </p>
-            </div>
+            {/* No verdict, no margin (plan R-19): a 0% would read as an even trade. */}
+            {view.graded !== false && (
+              <div className="shrink-0 sm:text-right">
+                <p
+                  className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
+                  style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
+                >
+                  {view.marginPct}%
+                </p>
+                <p className="text-[11px] text-ink-subtle">
+                  {view.isNeutral ? "value spread" : "value margin"}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -209,16 +213,18 @@ export function SignalCheckTradeCard({
           </div>
         </div>
 
-        {/* Value balance graph. */}
-        <ValueBalance
-          marginPct={view.marginPct}
-          winnerSide={view.winnerSide}
-          isNeutral={view.isNeutral}
-          sideALabel={sideLabel(view, "a")}
-          sideBLabel={sideLabel(view, "b")}
-          totalA={totalA}
-          totalB={totalB}
-        />
+        {/* Value balance graph. Absent with no verdict: nothing to balance. */}
+        {view.graded !== false && (
+          <ValueBalance
+            marginPct={view.marginPct}
+            winnerSide={view.winnerSide}
+            isNeutral={view.isNeutral}
+            sideALabel={sideLabel(view, "a")}
+            sideBLabel={sideLabel(view, "b")}
+            totalA={totalA}
+            totalB={totalB}
+          />
+        )}
 
         {/* Per-side breakdown. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -361,7 +367,7 @@ export function SignalCheckTradeCard({
           // role="note" dropped for the same reason as the startup note above:
           // no major screen reader announces it, so it produced no difference.
           <p className="text-xs text-ink-subtle">
-            {view.hasMissingValues ? `${MISSING_VALUES_NOTE} ` : ""}
+            {missingValueNote(view) ? `${missingValueNote(view)} ` : ""}
             {view.hasEstimatedPicks ? `${ESTIMATED_PICKS_NOTE} ` : ""}
             {view.hasBlendedPicks ? BLENDED_PICKS_NOTE : ""}
           </p>
@@ -407,6 +413,7 @@ function sideLabel(view: BuilderView, side: SideKey): string {
 }
 
 function closenessTip(view: BuilderView): string {
+  if (view.graded === false) return NO_VERDICT_REASON;
   if (view.isNeutral) {
     return "This one is close. When the values are this even, your team's needs usually matter more than the raw numbers.";
   }

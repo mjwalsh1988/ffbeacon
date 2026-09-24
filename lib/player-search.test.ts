@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   searchFantasyPlayers,
   fantasyRelevantPlayerIds,
+  idpRelevantPlayerIdSet,
   normalizeSearchQuery,
 } from "./player-search";
 import { bustMemo } from "./memo-ttl";
@@ -33,6 +34,10 @@ type Recorded = {
 function makeClient(opts: {
   players: Array<{ id: string; full_name: string; position: string; status: string }>;
   rankedIds: string[];
+  /** player_idp_seasons rows that pass the relevance gate. */
+  idpSeasonIds?: string[];
+  /** Defenders on a team with a depth chart order (the players id-only read). */
+  depthIds?: string[];
 }) {
   const recorded: Recorded[] = [];
 
@@ -40,8 +45,12 @@ function makeClient(opts: {
     const rec: Recorded = { table, columns: "", filters: [] };
     recorded.push(rec);
 
-    const rows =
-      table === "players"
+    const rowsFor = (): unknown[] =>
+      table === "player_idp_seasons"
+        ? (opts.idpSeasonIds ?? []).map((id) => ({ player_id: id }))
+        : table === "players" && rec.columns === "id"
+          ? (opts.depthIds ?? []).map((id) => ({ id }))
+          : table === "players"
         ? opts.players.map((p) => ({
             id: p.id,
             slug: p.full_name.toLowerCase().replace(/\s+/g, "-"),
@@ -72,6 +81,7 @@ function makeClient(opts: {
         return api;
       },
       then(resolve: (v: { data: unknown; error: null }) => unknown) {
+        const rows = rowsFor();
         const page = rows.slice(from, Math.min(to + 1, rows.length));
         return Promise.resolve(resolve({ data: page, error: null }));
       },
@@ -172,6 +182,82 @@ describe("searchFantasyPlayers", () => {
     const rows = await searchFantasyPlayers(client, { query: "...", limit: 10 });
     expect(rows).toEqual([]);
     expect(recorded).toHaveLength(0);
+  });
+});
+
+describe("searchFantasyPlayers, the IDP pool (plan R-15)", () => {
+  const WITH_DEFENDERS = [
+    ...PLAYERS,
+    { id: "p-garrett", full_name: "Myles Garrett", position: "DL", status: "active" },
+    { id: "p-rookie", full_name: "Rookie Linebacker", position: "LB", status: "active" },
+    { id: "p-gone", full_name: "Retired Safety", position: "DB", status: "active" },
+  ];
+
+  beforeEach(() => {
+    bustMemo("ref:ranked-ids");
+    bustMemo("ref:idp-relevant-ids");
+  });
+
+  function made() {
+    return makeClient({
+      players: WITH_DEFENDERS,
+      rankedIds: ["p-pearsall", "p-mahomes"],
+      idpSeasonIds: ["p-garrett"],
+      depthIds: ["p-rookie"],
+    });
+  }
+
+  it("admits a gated defender under ranked+idp", async () => {
+    const { client } = made();
+    const rows = await searchFantasyPlayers(client, {
+      query: "a",
+      limit: 20,
+      pool: "ranked+idp",
+    });
+    const names = rows.map((r) => r.full_name);
+    expect(names).toContain("Myles Garrett");
+    // A rookie with no snaps yet gets in through the depth chart arm.
+    expect(names).toContain("Rookie Linebacker");
+    // A defender in neither arm stays out, the way an unranked retiree does.
+    expect(names).not.toContain("Retired Safety");
+    // Offense is unchanged: ranked players in, unranked out.
+    expect(names).toContain("Ricky Pearsall");
+    expect(names).not.toContain("Adrian Peterson");
+  });
+
+  it("asks for the three defensive positions only under ranked+idp, in a read of their own", async () => {
+    const { client, recorded } = made();
+    await searchFantasyPlayers(client, { query: "a", limit: 20, pool: "ranked+idp" });
+    // One name read per side of the ball, so defenders cannot crowd ranked
+    // offensive players out of a shared over-fetch window.
+    const searches = recorded.filter((r) => r.table === "players" && r.columns !== "id");
+    const positionLists = searches.map(
+      (s) => s.filters.find((f) => f.op === "in" && f.args[0] === "position")?.args[1],
+    );
+    expect(positionLists).toContainEqual(["QB", "RB", "WR", "TE", "K", "DEF"]);
+    expect(positionLists).toContainEqual(["DL", "LB", "DB"]);
+    expect(searches).toHaveLength(2);
+  });
+
+  it("keeps defenders out on the default pool, and never reads the gate", async () => {
+    const { client, recorded } = made();
+    const rows = await searchFantasyPlayers(client, { query: "a", limit: 20 });
+    expect(rows.map((r) => r.full_name)).not.toContain("Myles Garrett");
+    const search = recorded.find((r) => r.table === "players");
+    const pos = search?.filters.find((f) => f.op === "in" && f.args[0] === "position");
+    expect(pos?.args[1]).toEqual(["QB", "RB", "WR", "TE", "K", "DEF"]);
+    expect(recorded.some((r) => r.table === "player_idp_seasons")).toBe(false);
+  });
+
+  it("builds the gate from both arms, paged", async () => {
+    const { client, recorded } = made();
+    const ids = await idpRelevantPlayerIdSet(client);
+    expect([...ids].sort()).toEqual(["p-garrett", "p-rookie"]);
+    const seasons = recorded.find((r) => r.table === "player_idp_seasons");
+    expect(seasons?.filters.some((f) => f.op === "range")).toBe(true);
+    expect(
+      seasons?.filters.find((f) => f.op === "gte")?.args,
+    ).toEqual(["games_20_snaps", 1]);
   });
 });
 

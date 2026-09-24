@@ -64,7 +64,12 @@
  *   not one of the priced or aged players inside it.
  */
 
-import { TRADE_POSITIONS, TRADE_POSITION_LABEL, type TradePosition } from "@/lib/trade-finder/types";
+import {
+  TRADE_POSITIONS,
+  TRADE_POSITION_LABEL,
+  readTradePosition,
+  type TradePosition,
+} from "@/lib/trade-finder/types";
 import { lensForCategory } from "./types";
 import type {
   ManagerTrading,
@@ -204,10 +209,12 @@ function addPositionValue(
   lens: Lens,
   sign: 1 | -1,
 ): void {
-  if (!player || !player.position) return;
+  // Value figures stay on the six: a defender has no market value (R-19).
+  const position = player ? readTradePosition(player.position) : null;
+  if (!player || !position) return;
   const value = player.marketValue[lens];
   if (value === null) return;
-  totals[player.position] = (totals[player.position] ?? 0) + sign * value;
+  totals[position] = (totals[position] ?? 0) + sign * value;
 }
 
 function positionAppetiteForLens(
@@ -247,10 +254,11 @@ function dominantIncomingPosition(
   const totals = new Map<TradePosition, number>();
   for (const playerId of trade.incomingPlayerIds) {
     const player = players[playerId];
-    if (!player || !player.position) continue;
+    const position = player ? readTradePosition(player.position) : null;
+    if (!player || !position) continue;
     const value = player.marketValue[lens];
     if (value === null) continue;
-    totals.set(player.position, (totals.get(player.position) ?? 0) + value);
+    totals.set(position, (totals.get(position) ?? 0) + value);
   }
   let best: TradePosition | null = null;
   let bestValue = -Infinity;
@@ -499,7 +507,7 @@ function overpaysForLens(
       kind: "player",
       // Never invented: a player we hold no position for gets null and the
       // card renders no chip rather than a guessed one.
-      position: player?.position ?? null,
+      position: readTradePosition(player?.position ?? null),
       avgMarginPct: mean,
       sampleSize: graded.length,
     });

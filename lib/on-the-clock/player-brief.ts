@@ -18,6 +18,7 @@
 
 import "server-only";
 
+import { isDefender } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { scoringKeyForType, type ScoringKey } from "@/lib/player-profile";
@@ -39,7 +40,17 @@ export interface PlayerBrief {
   playerId: string;
   /** Newest first, capped at BRIEF_SEASONS. Empty for a rookie. */
   finishes: SeasonFinish[];
+  /**
+   * Set when the brief is refused rather than empty: a defensive player has
+   * no offensive finish to cite, and an empty list would read as a rookie
+   * (plan R-11). The sentence is the one the UI shows.
+   */
+  refused?: string;
 }
+
+/** Why a defender gets no brief. */
+export const DEFENDER_BRIEF_REFUSAL =
+  "Defensive players are not graded on this board, so there is no finish history to show here.";
 
 export interface PlayerBriefResult {
   /** The scoring the finishes were read for, so the UI can label them. */
@@ -88,12 +99,18 @@ export async function loadPlayerBriefs(
     return { scoringKey, scoringLabel: SCORING_LABEL[scoringKey], briefs: [] };
   }
 
-  const { data, error } = await supabase
-    .from("player_positional_finishes")
-    .select("player_id, season, finish, players_ranked")
-    .in("player_id", ids)
-    .eq("scoring", scoringKey)
-    .order("season", { ascending: false });
+  const [{ data, error }, { data: positions }] = await Promise.all([
+    supabase
+      .from("player_positional_finishes")
+      .select("player_id, season, finish, players_ranked")
+      .in("player_id", ids)
+      .eq("scoring", scoringKey)
+      .order("season", { ascending: false }),
+    supabase.from("players").select("id, position").in("id", ids),
+  ]);
+  const defenders = new Set(
+    (positions ?? []).filter((p) => isDefender(p.position)).map((p) => p.id),
+  );
 
   if (error || !data) {
     throw new Error(`otc player-brief finish load failed: ${error?.message ?? "no rows returned"}`);
@@ -114,9 +131,10 @@ export async function loadPlayerBriefs(
   return {
     scoringKey,
     scoringLabel: SCORING_LABEL[scoringKey],
-    briefs: ids.map((playerId) => ({
-      playerId,
-      finishes: bySeasonDesc.get(playerId) ?? [],
-    })),
+    briefs: ids.map((playerId) =>
+      defenders.has(playerId)
+        ? { playerId, finishes: [], refused: DEFENDER_BRIEF_REFUSAL }
+        : { playerId, finishes: bySeasonDesc.get(playerId) ?? [] },
+    ),
   };
 }

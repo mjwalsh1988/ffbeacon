@@ -12,7 +12,6 @@
  * beam_queries, and beam_learning_requests have no client policies at all.
  */
 
-import { isDefender } from "@/lib/site";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -138,14 +137,6 @@ export async function addPlayerAlias(input: {
     .eq("slug", slug)
     .maybeSingle();
   if (!player) return { ok: false, error: "No player with that slug." };
-  // An alias is the only way a defender reaches BEAM, and BEAM cannot answer
-  // for one yet (plan IDP-125): refused rather than stored.
-  if (isDefender(player.position)) {
-    return {
-      ok: false,
-      error: "BEAM cannot answer questions about defensive players yet, so they cannot have an alias.",
-    };
-  }
 
   // A bare surname must not become an alias.
   //
