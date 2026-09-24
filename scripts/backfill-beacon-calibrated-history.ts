@@ -143,7 +143,11 @@ async function loadSourceWindow(
               .eq("format_config_id", formatId)
               .eq("source", source)
               .gte("captured_at", sinceIso)
+              // captured_at alone has ties (one row per player per snapshot).
+              // With format and source fixed, (captured_at, player_id) is
+              // unique, so offset pages neither repeat nor skip a row.
               .order("captured_at", { ascending: true })
+              .order("player_id", { ascending: true })
               .range(offset, offset + PAGE - 1);
             if (error) throw error;
             return data ?? [];

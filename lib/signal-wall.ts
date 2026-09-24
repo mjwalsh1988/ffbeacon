@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { signalMediaUrl } from "@/lib/signal-profile";
 import type { ReactionType } from "@/lib/signal/reactions";
 
@@ -175,14 +176,18 @@ export async function loadCommentsForPosts(
     .select(
       "id, post_id, author_user_id, body, hidden, hidden_reason, created_at, edited_at, gif",
     )
-    .in("post_id", postIds)
-    .order("created_at", { ascending: true })
-    .limit(500);
+    .in("post_id", postIds);
 
   if (!includeHidden) query = query.eq("hidden", false);
 
-  const { data } = await query;
-  const rows = data ?? [];
+  // The NEWEST 500, put back in oldest-first order for display. Ascending with
+  // the cap dropped the newest comments first, which are the ones on the posts
+  // at the top of the wall.
+  const { data } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(500);
+  const rows = (data ?? []).reverse();
   if (rows.length === 0) return byPost;
 
   // Resolve author display from their Signal in one query.
@@ -348,12 +353,26 @@ export async function loadReactionsForTargets(
     ids: string[],
   ): Promise<void> => {
     if (ids.length === 0) return;
-    const { data } = await supabase
-      .from("signal_reaction_counts")
-      .select("target_id, reaction_type_id, count")
-      .eq("target_type", targetType)
-      .in("target_id", ids);
-    for (const row of data ?? []) {
+    // Chunked and paged: up to 600 targets times several reaction types passes
+    // 1000 rows, and 600 ids is past the URL limit for one .in().
+    let rows;
+    try {
+      rows = await fetchAllRowsInChunks(`reaction counts ${targetType}`, ids, (chunk, from, to) =>
+        supabase
+          .from("signal_reaction_counts")
+          .select("target_id, reaction_type_id, count")
+          .eq("target_type", targetType)
+          .in("target_id", chunk)
+          .order("target_id", { ascending: true })
+          .order("reaction_type_id", { ascending: true })
+          .range(from, to),
+      );
+    } catch (err) {
+      // Unchanged posture: the wall renders with no counts rather than failing.
+      console.error("[signal-wall] reaction counts read failed", err);
+      return;
+    }
+    for (const row of rows) {
       if (row.count <= 0) continue;
       const type = typeById.get(row.reaction_type_id);
       if (!type) continue;
@@ -368,13 +387,23 @@ export async function loadReactionsForTargets(
     ids: string[],
   ): Promise<void> => {
     if (!viewerUserId || ids.length === 0) return;
-    const { data } = await supabase
-      .from("signal_reactions")
-      .select("target_id, reaction_type_id")
-      .eq("target_type", targetType)
-      .eq("user_id", viewerUserId)
-      .in("target_id", ids);
-    for (const row of data ?? []) {
+    let rows;
+    try {
+      rows = await fetchAllRowsInChunks(`viewer reactions ${targetType}`, ids, (chunk, from, to) =>
+        supabase
+          .from("signal_reactions")
+          .select("target_id, reaction_type_id")
+          .eq("target_type", targetType)
+          .eq("user_id", viewerUserId)
+          .in("target_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+    } catch (err) {
+      console.error("[signal-wall] viewer reactions read failed", err);
+      return;
+    }
+    for (const row of rows) {
       const entry = byTarget.get(reactionTargetKey(targetType, row.target_id));
       if (!entry) continue;
       entry.viewerReactionTypeIds.push(row.reaction_type_id);

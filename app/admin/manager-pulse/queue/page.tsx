@@ -128,8 +128,10 @@ async function loadRecentCalls(
       .not("finished_at", "is", null)
       .gte("finished_at", cutoff)
       .order("finished_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, to);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`manager pulse recent calls: read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
     rows.push(...(data as RecentCallRow[]));
     if (data.length < to - from + 1) break;
     if (to + 1 >= RECENT_CALLS_SAMPLE_CAP) capped = true;
@@ -154,8 +156,10 @@ async function loadPendingOwners(
       .select("user_id, manager_run_id, job_kind, manager_pulse_runs(sleeper_handle)")
       .eq("status", "pending")
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`manager pulse pending owners: read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
     rows.push(...(data as PendingOwnerRow[]));
     if (data.length < to - from + 1) break;
     if (to + 1 >= PENDING_OWNER_SAMPLE_CAP) capped = true;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatEastern, formatRelative } from "@/lib/datetime";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { loadLeagueRelaySettings } from "@/lib/league-relay/settings";
 import { RELAY_MESSAGE_LABEL } from "@/lib/league-relay/default-settings";
 import {
@@ -54,13 +55,17 @@ export default async function LeagueRelayPage() {
   // Posts in the last seven days, per league. One grouped read rather than one
   // per row, so a page with twenty leagues still makes one query.
   const since = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString();
-  const { data: recentCounts } = await admin
-    .from("league_relay_posts")
-    .select("league_id")
-    .eq("status", "posted")
-    .gte("created_at", since);
+  const recentCounts = await fetchAllRows("league relay post counts", (from, to) =>
+    admin
+      .from("league_relay_posts")
+      .select("league_id")
+      .eq("status", "posted")
+      .gte("created_at", since)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   const postCounts = new Map<string, number>();
-  for (const row of recentCounts ?? []) {
+  for (const row of recentCounts) {
     postCounts.set(row.league_id, (postCounts.get(row.league_id) ?? 0) + 1);
   }
 

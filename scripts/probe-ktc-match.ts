@@ -1,4 +1,5 @@
 import { getServiceClient } from "./_supabase";
+import { fetchAllRows } from "../lib/supabase/fetch-all";
 
 function normalizeName(name: string): string {
   return name
@@ -24,11 +25,16 @@ async function main() {
     team: string;
   }>;
 
-  const { data: players } = await supabase
-    .from("players")
-    .select("first_name, last_name, position");
+  // Paged: a bare select stops at 1000 rows.
+  const players = await fetchAllRows("players", (from, to) =>
+    supabase
+      .from("players")
+      .select("first_name, last_name, position")
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   const keys = new Set<string>();
-  for (const p of players ?? []) {
+  for (const p of players) {
     keys.add(`${normalizeName(`${p.first_name} ${p.last_name}`)}|${p.position}`);
   }
 

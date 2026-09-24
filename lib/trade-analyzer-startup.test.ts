@@ -90,18 +90,19 @@ function stub() {
         return { select: () => chain };
       }
       if (table === "draft_pick_values") {
-        const chain = {
-          eq: () => chain,
-          order: () =>
-            Promise.resolve({
-              data: [
-                { season: 2026, round: 1, pick_position: "early", value: 6358, captured_at: "t" },
-                { season: 2026, round: 1, pick_position: "mid", value: 5354, captured_at: "t" },
-                { season: 2026, round: 1, pick_position: "late", value: 4791, captured_at: "t" },
-              ],
-              error: null,
-            }),
+        const at = "2026-09-24T09:30:00.000Z";
+        const result = {
+          data: [
+            { season: 2026, round: 1, pick_position: "early", value: 6358, captured_at: at },
+            { season: 2026, round: 1, pick_position: "mid", value: 5354, captured_at: at },
+            { season: 2026, round: 1, pick_position: "late", value: 4791, captured_at: at },
+          ],
+          error: null,
         };
+        const chain: Record<string, unknown> = {
+          then: (resolve: (v: typeof result) => unknown) => Promise.resolve(resolve(result)),
+        };
+        for (const op of ["eq", "in", "gte", "order", "limit", "range"]) chain[op] = () => chain;
         return { select: () => chain };
       }
       throw new Error(`unexpected table ${table}`);

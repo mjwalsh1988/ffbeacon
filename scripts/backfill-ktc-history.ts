@@ -283,6 +283,7 @@ async function main() {
     const { data, error } = await supabase
       .from("players")
       .select("id, external_ids, first_name, last_name, position, team")
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;

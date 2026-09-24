@@ -25,6 +25,7 @@ import { formatEasternShortDate } from "@/lib/datetime";
 import {
   loadFreshestRankingsGeneratedAt,
   loadRankingsBoardCached,
+  RANKINGS_OVERALL_ROW_CAP,
 } from "@/lib/rankings-board";
 import { isBestBall } from "@/lib/rankings-formats";
 import { ALL_TERMS } from "@/lib/guides/fantasy-football-terms";
@@ -189,7 +190,7 @@ export async function RankingsView({
   // format and source only, so one cache entry serves every position filter.
   const filtered = position
     ? enriched.filter((r) => r.position === position)
-    : enriched;
+    : enriched.slice(0, RANKINGS_OVERALL_ROW_CAP);
 
   // FIELD BY FIELD, NOT A SPREAD. RankingsTable is a client component, so
   // every property on every one of up to 500 rows is serialized into the

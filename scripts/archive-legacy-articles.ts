@@ -39,6 +39,7 @@ async function main() {
       // can still publish into the layout this build retired.
       .not("status", "eq", "archived")
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + 999);
     if (error) throw new Error(error.message);
     articles.push(...(data ?? []));

@@ -153,13 +153,15 @@ async function recheckHidden(admin: ReturnType<typeof getServiceClient>, apply: 
   >;
   const rows: HiddenRelay[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data: page } = await admin
+    const { data: page, error } = await admin
       .from("relays")
       .select("id, ingestion_id, headline, facts, timeline")
       .eq("status", "hidden")
       .eq("status_reason", "grounding")
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + 999);
+    if (error) throw new Error(`hidden relays read failed at row ${from}: ${error.message}`);
     rows.push(...(page ?? []));
     if ((page?.length ?? 0) < 1000) break;
   }
@@ -234,6 +236,7 @@ async function main() {
       .in("status", BACKFILL_STATUSES)
       .order("is_revision", { ascending: true })
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + 999);
     if (error) throw new Error(error.message);
     rows.push(...(data ?? []));

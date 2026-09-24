@@ -23,6 +23,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { loadManagerPulseInput } from "./load";
 import { computeFootprint } from "./engine";
 import { buildTendency, tendencySamples } from "./tendencies";
@@ -196,26 +197,26 @@ type RunLeague = {
 /** The league-seasons this run decided the report covers. Paged. */
 async function readRunLeagues(admin: Admin, runId: string): Promise<RunLeague[]> {
   const out: RunLeague[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await admin
+  // Throws on a failed page, so the run closes as an error rather than
+  // finalizing over a partial league list.
+  const rows = await fetchAllRows("manager-pulse run leagues", (from, to) =>
+    admin
       .from("manager_pulse_run_leagues")
       .select("sleeper_league_id, season, league_name, league_category, status")
       .eq("run_id", runId)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      // A league we could not read contributes nothing rather than contributing
-      // a hole the report would have to explain twice.
-      if (row.status === "failed" || row.status === "skipped") continue;
-      out.push({
-        sleeperLeagueId: row.sleeper_league_id,
-        season: row.season,
-        leagueName: row.league_name,
-        category: (row.league_category as ManagerLeagueCategory | null) ?? null,
-      });
-    }
-    if (data.length < PAGE) break;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    // A league we could not read contributes nothing rather than contributing
+    // a hole the report would have to explain twice.
+    if (row.status === "failed" || row.status === "skipped") continue;
+    out.push({
+      sleeperLeagueId: row.sleeper_league_id,
+      season: row.season,
+      leagueName: row.league_name,
+      category: (row.league_category as ManagerLeagueCategory | null) ?? null,
+    });
   }
   return out;
 }

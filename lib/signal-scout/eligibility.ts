@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { SignalScoutSettings, SignalTier } from "./types";
 
 export type EligibilityCheckKey =
@@ -179,11 +180,6 @@ export function evaluatePlayerEligibility(input: PlayerEligibilityInput): Player
  */
 const RANKINGS_WINDOW_DAYS = 90;
 
-// Explicit high limits to override PostgREST's 1000-row default (see
-// lib/player-search.ts fantasyRelevantPlayerIds for the same pattern).
-const MAX_CANDIDATE_PLAYERS = 20000;
-const MAX_RANKED_PLAYER_IDS = 50000;
-
 export type PlayerEligibilityInputWithoutCoverage = Omit<PlayerEligibilityInput, "clueCoverage">;
 
 /**
@@ -197,24 +193,27 @@ export async function loadEligiblePool(
 ): Promise<PlayerEligibilityInputWithoutCoverage[]> {
   const eligiblePositions: string[] = settings.pool.eligible_positions;
 
-  const { data: players, error: playersError } = await supabase
-    .from("players")
-    .select("id, position, birth_date, years_experience, height_inches, weight_lbs")
-    .in("position", eligiblePositions)
-    .limit(MAX_CANDIDATE_PLAYERS);
-  if (playersError) throw playersError;
-
-  const pool = players ?? [];
+  // Paged: .limit() cannot lift PostgREST's 1000-row cap.
+  const pool = await fetchAllRows("signal scout candidate players", (from, to) =>
+    supabase
+      .from("players")
+      .select("id, position, birth_date, years_experience, height_inches, weight_lbs")
+      .in("position", eligiblePositions)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   if (pool.length === 0) return [];
 
   const cutoff = new Date(Date.now() - RANKINGS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const { data: rankedRows, error: rankingsError } = await supabase
-    .from("rankings")
-    .select("player_id")
-    .gte("generated_at", cutoff)
-    .limit(MAX_RANKED_PLAYER_IDS);
-  if (rankingsError) throw rankingsError;
-  const rankedIds = new Set((rankedRows ?? []).map((row) => row.player_id));
+  const rankedRows = await fetchAllRows("signal scout ranked players", (from, to) =>
+    supabase
+      .from("rankings")
+      .select("player_id")
+      .gte("generated_at", cutoff)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const rankedIds = new Set(rankedRows.map((row) => row.player_id));
 
   const { data: hiddenRows, error: hiddenError } = await supabase
     .from("signal_scout_player_overrides")

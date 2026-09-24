@@ -53,6 +53,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { adpFormatKeyCandidates } from "@/lib/on-the-clock/adp";
 import { FFBEACON_SOURCE_SLUG } from "@/lib/signal-check/format";
 import { loadAdjustedProjections, type AdjustedProjectionSummary } from "@/lib/projections/read";
@@ -146,6 +147,8 @@ async function loadAccuracy(
       .is("season", null)
       .eq("scoring", scoringBase)
       .eq("source", source)
+      // A unique order, so offset pages cannot repeat or skip rows.
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`projection accuracy read failed: ${error.message}`);
     if (!data || data.length === 0) break;
@@ -275,13 +278,24 @@ async function loadRoomAdp(
   season: number,
 ): Promise<Map<string, { adp: number; picks: number }>> {
   const out = new Map<string, { adp: number; picks: number }>();
-  const { data, error } = await supabase
-    .from("draft_market_adp")
-    .select("player_id, adp, picks_sampled")
-    .eq("format_slug", formatSlug)
-    .eq("player_pool", "everyone")
-    .eq("season", season);
-  if (error || !data) return out;
+  // Paged (a format holds more than 1000 rows). player_id completes the
+  // primary key under these filters. A failed read returns the empty map.
+  let data: Array<{ player_id: string; adp: number; picks_sampled: number }>;
+  try {
+    data = await fetchAllRows("draft room adp", (from, to) =>
+      supabase
+        .from("draft_market_adp")
+        .select("player_id, adp, picks_sampled")
+        .eq("format_slug", formatSlug)
+        .eq("player_pool", "everyone")
+        .eq("season", season)
+        .order("player_id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (error) {
+    console.error("[draft-value] room adp read failed", error);
+    return out;
+  }
   for (const row of data) {
     out.set(row.player_id, { adp: Number(row.adp), picks: row.picks_sampled });
   }
@@ -438,6 +452,8 @@ export async function runBuildDraftValue(
           .eq("season", latestRanking.season)
           .is("week", null)
           .order("overall_rank", { ascending: true })
+          // Tiebreak: overall_rank can tie, and pages over a tie repeat or skip rows.
+          .order("id", { ascending: true })
           .range(from, from + PAGE - 1);
         if (error) throw new Error(`rankings read failed: ${error.message}`);
         if (!data || data.length === 0) break;

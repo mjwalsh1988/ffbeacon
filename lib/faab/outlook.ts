@@ -132,7 +132,9 @@ async function playerIdsAtPosition(
       .eq("players.position", position)
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+    // A partial universe would be cached for a day as if complete, so throw.
+    if (error) throw new Error(`faab outlook ${position} ids read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
 
     for (const row of data as unknown as Array<{ player_id: string | null }>) {
       if (row.player_id) ids.add(row.player_id);

@@ -26,6 +26,7 @@
 
 import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 
 /** One searchable player, as the calculator's combobox needs it. */
@@ -91,6 +92,8 @@ async function loadFaabPlayerList({
     .eq("format_config_id", formatConfigId)
     .eq("source", rankingsSource)
     .order("overall_rank")
+    // Tiebreak, so the player at the cutoff does not change between reads.
+    .order("id", { ascending: true })
     .limit(SEARCHABLE_PLAYERS);
 
   const rows = (data ?? []) as unknown as RankedRow[];
@@ -111,14 +114,25 @@ async function loadFaabPlayerList({
   // One row per player rather than one row per player per nightly snapshot.
   if (valueSource) {
     const byId = new Map(players.map((p) => [p.player_id as string, p]));
-    const { data: trends } = await supabase
-      .from("player_value_trends")
-      .select("player_id, current_value")
-      .eq("format_config_id", formatConfigId)
-      .eq("source", valueSource)
-      .in("player_id", [...byId.keys()]);
+    // Chunked: 800 uuids in one .in() is past the URL limit. A failed read
+    // leaves every value null rather than some of them.
+    let trends: Array<{ player_id: string; current_value: number }> = [];
+    try {
+      trends = await fetchAllRowsInChunks("faab player list values", [...byId.keys()], (chunk, from, to) =>
+        supabase
+          .from("player_value_trends")
+          .select("player_id, current_value")
+          .eq("format_config_id", formatConfigId)
+          .eq("source", valueSource)
+          .in("player_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+    } catch (error) {
+      console.error("[faab] player list value read failed", error);
+    }
 
-    for (const trend of trends ?? []) {
+    for (const trend of trends) {
       const player = byId.get(trend.player_id);
       if (player && typeof trend.current_value === "number") {
         player.value = trend.current_value;
@@ -189,8 +203,15 @@ async function loadRankedUniverse({
       .eq("format_config_id", formatConfigId)
       .eq("source", source)
       .order("overall_rank")
+      // Tiebreak: overall_rank can tie, and pages over a tie repeat or skip rows.
+      .order("id", { ascending: true })
       .range(from, from + size - 1);
-    if (error || !data || data.length === 0) break;
+    if (error) {
+      // No universe rather than a partial one.
+      console.error("[faab] ranked universe read failed", error);
+      return [];
+    }
+    if (!data || data.length === 0) break;
 
     for (const row of data as unknown as RankedRow[]) {
       const p = row.players as RankedRow["players"] & { full_name?: string | null };

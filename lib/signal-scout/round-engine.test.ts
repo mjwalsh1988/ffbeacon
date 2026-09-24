@@ -83,6 +83,10 @@ function makeMockSupabase(responses: Record<string, MockResult[]>) {
         record("limit", a);
         return builder;
       },
+      range: (...a: unknown[]) => {
+        record("range", a);
+        return builder;
+      },
       maybeSingle: () => Promise.resolve(result),
       single: () => Promise.resolve(result),
       then: (resolve: (v: MockResult) => unknown, reject?: (e: unknown) => unknown) =>

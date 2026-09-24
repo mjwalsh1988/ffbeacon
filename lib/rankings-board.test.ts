@@ -52,9 +52,11 @@ function trendRow(n: number) {
 }
 
 type MockOptions = {
-  /** How many ranked players the board query returns (capped at 500 by the
-   *  real query; the mock honours whatever it is given). */
+  /** How many ranked players exist for the (format, source). The mock pages
+   *  them under the same 1,000 row cap as the trends read. */
   rankedCount: number;
+  /** Position for ranked player n. Defaults to WR for everyone. */
+  positionOf?: (n: number) => string;
   /** How many trends rows exist in total for the (format, source). */
   trendCount: number;
   /** Page index (0-based) whose request should fail. */
@@ -75,13 +77,21 @@ function mockSupabase(opts: MockOptions) {
 
     const result = () => {
       if (table === "rankings") {
+        const [from, to] = state.range ?? [0, SERVER_MAX_ROWS - 1];
         record();
+        const width = Math.min(to - from + 1, SERVER_MAX_ROWS);
         return {
-          data: Array.from({ length: opts.rankedCount }, (_, i) => ({
-            overall_rank: i + 1,
-            position_rank: i + 1,
-            players: player(i),
-          })),
+          data: Array.from(
+            { length: Math.max(0, Math.min(width, opts.rankedCount - from)) },
+            (_, i) => ({
+              overall_rank: from + i + 1,
+              position_rank: from + i + 1,
+              players: {
+                ...player(from + i),
+                position: opts.positionOf?.(from + i) ?? "WR",
+              },
+            }),
+          ),
           error: null,
         };
       }
@@ -179,9 +189,9 @@ describe("loadRankingsBoard trends paging", () => {
     expect(mock.trendPages()[1].range).toEqual([1000, 1999]);
   });
 
-  it("keeps the pages it already has when a later page fails", async () => {
-    // A partial board degrades to dashes, which is the design. Throwing would
-    // take the whole page down over a trend column.
+  it("drops every trend row when a later page fails, rather than keeping some", async () => {
+    // The board still renders (a missing trend degrades to a dash), but it
+    // never mixes players with movement columns and players silently without.
     const mock = mockSupabase({
       rankedCount: 1400,
       trendCount: 1400,
@@ -189,12 +199,29 @@ describe("loadRankingsBoard trends paging", () => {
     });
     const board = await load(mock);
 
+    expect(board.rows).toHaveLength(1400);
     expect(board.rows.find((r) => r.slug === "player-10")?.show_trend_30d).toBe(
-      true,
+      false,
     );
     expect(
       board.rows.find((r) => r.slug === "player-1200")?.show_trend_30d,
     ).toBe(false);
+  });
+
+  it("returns every ranked player, so a position view is not cut at rank 500", async () => {
+    // Every third player is a TE. Before paging, the read stopped at 500 and
+    // the in-memory position filter lost every TE ranked below it.
+    const mock = mockSupabase({
+      rankedCount: 1200,
+      trendCount: 0,
+      positionOf: (n) => (n % 3 === 0 ? "TE" : "WR"),
+    });
+    const board = await load(mock);
+
+    expect(board.rows).toHaveLength(1200);
+    const tes = board.rows.filter((r) => r.position === "TE");
+    expect(tes).toHaveLength(400);
+    expect(tes.at(-1)?.overall_rank).toBe(1198);
   });
 
   it("makes no trends request at all when there is no value source", async () => {

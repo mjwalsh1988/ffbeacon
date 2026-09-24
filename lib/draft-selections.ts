@@ -33,6 +33,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { mapSleeperToPlayerIds } from "@/lib/players/sleeper-map";
 import { sanitizeSleeperPlayerId, isValidDraftId } from "@/lib/on-the-clock/validation";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 
 type Client = SupabaseClient<Database>;
 export type DraftSelectionInsert = Database["public"]["Tables"]["draft_selections"]["Insert"];
@@ -224,6 +225,9 @@ export async function recordDraftSelections(
  * report its later drafts as unseen and re-fetch them forever. Every real draft
  * has a pick 1, so this is exactly one row per already-captured draft.
  *
+ * The id list is chunked: several hundred ids in one `.in()` overflow the
+ * request URL, which failed every time and made every draft look unseen.
+ *
  * Returns an empty set on any failure, which makes the caller re-fetch rather
  * than silently skip: a wasted Sleeper call is a much cheaper mistake than
  * permanently missing picks.
@@ -236,15 +240,19 @@ export async function draftIdsWithSelections(
   const ids = [...new Set(sleeperDraftIds)];
   if (ids.length === 0) return found;
   try {
-    const { data, error } = await admin
-      .from("draft_selections")
-      .select("sleeper_draft_id")
-      .in("sleeper_draft_id", ids)
-      .eq("pick_no", 1);
-    if (error || !data) return found;
-    for (const row of data) found.add(row.sleeper_draft_id);
+    const rows = await fetchAllRowsInChunks("draft ids with selections", ids, (chunk, from, to) =>
+      admin
+        .from("draft_selections")
+        .select("sleeper_draft_id")
+        .in("sleeper_draft_id", chunk)
+        .eq("pick_no", 1)
+        .order("sleeper_draft_id", { ascending: true })
+        .range(from, to),
+    );
+    for (const row of rows) found.add(row.sleeper_draft_id);
     return found;
-  } catch {
-    return found;
+  } catch (err) {
+    console.error("[draft-selections] captured-draft lookup failed", err);
+    return new Set<string>();
   }
 }

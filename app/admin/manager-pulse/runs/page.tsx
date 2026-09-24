@@ -92,8 +92,10 @@ async function loadJobTelemetry(
       .not("finished_at", "is", null)
       .gte("finished_at", cutoff)
       .order("finished_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, to);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`manager pulse job telemetry: read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
     rows.push(...(data as TelemetryRow[]));
     if (data.length < to - from + 1) break;
     if (to + 1 >= TELEMETRY_ROW_CAP) capped = true;
@@ -162,8 +164,9 @@ const LEAGUE_PAGE_SIZE = 1000;
 const RUN_LEAGUE_ROW_CAP = 5000;
 
 /** Every manager_pulse_run_leagues row for the given run ids, paged up to
- *  RUN_LEAGUE_ROW_CAP, deterministically ordered (season desc, then league id
- *  as a tiebreaker) so paging never returns overlapping or skipped rows. */
+ *  RUN_LEAGUE_ROW_CAP, ordered season desc, league id, then row id (the same
+ *  league can appear in two runs) so paging never overlaps or skips rows. A
+ *  failed page throws rather than returning the rows read so far. */
 async function loadRunLeagues(
   admin: ReturnType<typeof createAdminClient>,
   runIds: string[],
@@ -179,8 +182,10 @@ async function loadRunLeagues(
       .in("run_id", runIds)
       .order("season", { ascending: false })
       .order("sleeper_league_id", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`manager pulse run leagues: read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
     rows.push(...(data as RunLeagueRow[]));
     if (data.length < to - from + 1) break;
     if (to + 1 >= RUN_LEAGUE_ROW_CAP) capped = true;

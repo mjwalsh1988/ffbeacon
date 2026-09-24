@@ -2,9 +2,11 @@
  * Every database read Manager Pulse makes. The only module in this feature
  * that touches Supabase.
  *
- * NEVER THROWS. A read that fails is logged with console.warn and contributes
- * an empty array (or a field's honest null), never a thrown error that takes
- * the whole report down with it.
+ * A FAILED READ THROWS. Every paged read goes through lib/supabase/fetch-all.ts,
+ * so a failed page is an error rather than a partial set, and the caller
+ * (finalize.ts, live-report.ts) closes the run as an error instead of
+ * computing a report from half the rows. Only the documented best-effort
+ * reads (roster exposure, the trade grader) still degrade quietly.
  *
  * NEVER SELECT *. Every query below names its columns, because two of the
  * tables this reads (`manager_pulse_cache.report`, `league_matchups.player_points`)
@@ -15,8 +17,8 @@
  *
  * PAGES EVERYTHING. PostgREST truncates a plain `select()` at 1000 rows with
  * no error, so every read that can plausibly return more than that pages with
- * `.range()`, and every `.in()` filter is chunked at 200 ids, matching the
- * rest of the codebase's convention for exactly this bug.
+ * `.range()` over a unique order, and every `.in()` filter is chunked at 200
+ * ids, matching the rest of the codebase's convention for exactly this bug.
  */
 
 import { readManagerPosition } from "@/lib/manager-pulse/types";
@@ -40,6 +42,7 @@ import {
 } from "@/lib/league-signal-check";
 import type { SideKey } from "@/lib/signal-check/types";
 import { resolveSourceForFormat, type SourceRegistryRow } from "@/lib/source";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import type {
   ManagerDraftFacts,
   ManagerDraftPick,
@@ -57,8 +60,6 @@ import type { ManagerLeagueCategory, ManagerPulseSettings } from "./types";
 
 type Client = SupabaseClient<Database>;
 
-/** PostgREST's silent truncation point. Every multi-row read pages past it. */
-const PAGE = 1000;
 /** How many ids go into one `.in()` filter, matching the rest of the codebase. */
 const CHUNK = 200;
 
@@ -229,29 +230,15 @@ async function fetchLeagueRows(
   sleeperLeagueIds: string[],
 ): Promise<Map<string, LeagueRow>> {
   const out = new Map<string, LeagueRow>();
-  try {
-    for (const idChunk of chunk(sleeperLeagueIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("leagues")
-          .select(
-            "id, sleeper_league_id, season, name, status, total_rosters, roster_positions, metadata",
-          )
-          .in("sleeper_league_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchLeagueRows", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data) out.set(row.sleeper_league_id, row as LeagueRow);
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchLeagueRows", err);
-  }
+  const rows = await fetchAllRowsInChunks("manager-pulse leagues", sleeperLeagueIds, (idChunk, from, to) =>
+    admin
+      .from("leagues")
+      .select("id, sleeper_league_id, season, name, status, total_rosters, roster_positions, metadata")
+      .in("sleeper_league_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) out.set(row.sleeper_league_id, row as LeagueRow);
   return out;
 }
 
@@ -261,32 +248,20 @@ async function fetchLeagueRows(
 
 async function fetchRosters(admin: Client, leagueRowIds: string[]): Promise<Map<string, RosterRow[]>> {
   const out = new Map<string, RosterRow[]>();
-  try {
-    for (const idChunk of chunk(leagueRowIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("rosters")
-          .select(
-            "league_id, sleeper_roster_id, owner_user_id, co_owners, wins, losses, ties, points_for, points_against",
-          )
-          .in("league_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchRosters", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data as RosterRow[]) {
-          const list = out.get(row.league_id) ?? [];
-          list.push(row);
-          out.set(row.league_id, list);
-        }
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchRosters", err);
+  const rows = await fetchAllRowsInChunks("manager-pulse rosters", leagueRowIds, (idChunk, from, to) =>
+    admin
+      .from("rosters")
+      .select(
+        "league_id, sleeper_roster_id, owner_user_id, co_owners, wins, losses, ties, points_for, points_against",
+      )
+      .in("league_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows as RosterRow[]) {
+    const list = out.get(row.league_id) ?? [];
+    list.push(row);
+    out.set(row.league_id, list);
   }
   return out;
 }
@@ -447,30 +422,18 @@ async function fetchLeagueUsers(
 ): Promise<Map<string, Map<string, string>>> {
   // leagueRowId -> (sleeper_user_id -> display_name)
   const out = new Map<string, Map<string, string>>();
-  try {
-    for (const idChunk of chunk(leagueRowIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("league_users")
-          .select("league_id, sleeper_user_id, display_name")
-          .in("league_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchLeagueUsers", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data) {
-          const map = out.get(row.league_id) ?? new Map<string, string>();
-          if (row.display_name) map.set(row.sleeper_user_id, row.display_name);
-          out.set(row.league_id, map);
-        }
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchLeagueUsers", err);
+  const rows = await fetchAllRowsInChunks("manager-pulse league_users", leagueRowIds, (idChunk, from, to) =>
+    admin
+      .from("league_users")
+      .select("league_id, sleeper_user_id, display_name")
+      .in("league_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    const map = out.get(row.league_id) ?? new Map<string, string>();
+    if (row.display_name) map.set(row.sleeper_user_id, row.display_name);
+    out.set(row.league_id, map);
   }
   return out;
 }
@@ -491,27 +454,15 @@ type DraftRow = {
 
 async function fetchDrafts(admin: Client, leagueRowIds: string[]): Promise<DraftRow[]> {
   const out: DraftRow[] = [];
-  try {
-    for (const idChunk of chunk(leagueRowIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("league_drafts")
-          .select("league_id, sleeper_draft_id, season, type, start_time, settings, metadata")
-          .in("league_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchDrafts", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        out.push(...(data as DraftRow[]));
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchDrafts", err);
-  }
+  const rows = await fetchAllRowsInChunks("manager-pulse league_drafts", leagueRowIds, (idChunk, from, to) =>
+    admin
+      .from("league_drafts")
+      .select("league_id, sleeper_draft_id, season, type, start_time, settings, metadata")
+      .in("league_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  out.push(...(rows as DraftRow[]));
   return out;
 }
 
@@ -533,29 +484,17 @@ type SelectionRow = {
 
 async function fetchSelections(admin: Client, draftIds: string[]): Promise<SelectionRow[]> {
   const out: SelectionRow[] = [];
-  try {
-    for (const idChunk of chunk(draftIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("draft_selections")
-          .select(
-            "sleeper_draft_id, pick_no, round, roster_id, player_id, sleeper_player_id, is_keeper, player_pool, format_slug",
-          )
-          .in("sleeper_draft_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchSelections", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        out.push(...(data as SelectionRow[]));
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchSelections", err);
-  }
+  const rows = await fetchAllRowsInChunks("manager-pulse draft_selections", draftIds, (idChunk, from, to) =>
+    admin
+      .from("draft_selections")
+      .select(
+        "sleeper_draft_id, pick_no, round, roster_id, player_id, sleeper_player_id, is_keeper, player_pool, format_slug",
+      )
+      .in("sleeper_draft_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  out.push(...(rows as SelectionRow[]));
   return out;
 }
 
@@ -572,30 +511,22 @@ async function fetchMarketAdp(
   // key: `${format_slug}|${player_pool}|${season}|${player_id}` -> adp
   const out = new Map<string, number>();
   if (playerIds.length === 0 || formatSlugs.length === 0 || seasons.length === 0) return out;
-  try {
-    for (const idChunk of chunk(playerIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("draft_market_adp")
-          .select("player_id, adp, format_slug, player_pool, season")
-          .in("player_id", idChunk)
-          .in("format_slug", formatSlugs)
-          .in("season", seasons)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchMarketAdp", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data) {
-          out.set(`${row.format_slug}|${row.player_pool}|${row.season}|${row.player_id}`, Number(row.adp));
-        }
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchMarketAdp", err);
+  // Ordered by the full primary key, so offset pages cannot overlap.
+  const rows = await fetchAllRowsInChunks("manager-pulse draft_market_adp", playerIds, (idChunk, from, to) =>
+    admin
+      .from("draft_market_adp")
+      .select("player_id, adp, format_slug, player_pool, season")
+      .in("player_id", idChunk)
+      .in("format_slug", formatSlugs)
+      .in("season", seasons)
+      .order("format_slug", { ascending: true })
+      .order("player_pool", { ascending: true })
+      .order("season", { ascending: true })
+      .order("player_id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    out.set(`${row.format_slug}|${row.player_pool}|${row.season}|${row.player_id}`, Number(row.adp));
   }
   return out;
 }
@@ -607,36 +538,24 @@ async function fetchMarketAdp(
 async function fetchPickObservations(admin: Client, draftIds: string[]): Promise<ManagerPickObservation[]> {
   const out: ManagerPickObservation[] = [];
   if (draftIds.length === 0) return out;
-  try {
-    for (const idChunk of chunk(draftIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("draft_pick_observations")
-          .select("sleeper_draft_id, pick_no, first_seen_at, observation_gap_ms, was_autopick")
-          .in("sleeper_draft_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchPickObservations", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data) {
-          const ms = Date.parse(row.first_seen_at);
-          if (!Number.isFinite(ms)) continue;
-          out.push({
-            sleeperDraftId: row.sleeper_draft_id,
-            pickNo: Number(row.pick_no),
-            firstSeenAtMs: ms,
-            observationGapMs: row.observation_gap_ms ?? null,
-            wasAutopick: row.was_autopick,
-          });
-        }
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchPickObservations", err);
+  const rows = await fetchAllRowsInChunks("manager-pulse draft_pick_observations", draftIds, (idChunk, from, to) =>
+    admin
+      .from("draft_pick_observations")
+      .select("sleeper_draft_id, pick_no, first_seen_at, observation_gap_ms, was_autopick")
+      .in("sleeper_draft_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    const ms = Date.parse(row.first_seen_at);
+    if (!Number.isFinite(ms)) continue;
+    out.push({
+      sleeperDraftId: row.sleeper_draft_id,
+      pickNo: Number(row.pick_no),
+      firstSeenAtMs: ms,
+      observationGapMs: row.observation_gap_ms ?? null,
+      wasAutopick: row.was_autopick,
+    });
   }
   return out;
 }
@@ -662,30 +581,18 @@ type TransactionRow = {
 
 async function fetchTransactions(admin: Client, leagueRowIds: string[]): Promise<TransactionRow[]> {
   const out: TransactionRow[] = [];
-  try {
-    for (const idChunk of chunk(leagueRowIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("league_transactions")
-          .select(
-            "league_id, sleeper_transaction_id, season, week, type, status, adds, drops, draft_picks, roster_ids, metadata, created_at_sleeper",
-          )
-          .in("league_id", idChunk)
-          .eq("status", "complete")
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchTransactions", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        out.push(...(data as TransactionRow[]));
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchTransactions", err);
-  }
+  const rows = await fetchAllRowsInChunks("manager-pulse league_transactions", leagueRowIds, (idChunk, from, to) =>
+    admin
+      .from("league_transactions")
+      .select(
+        "league_id, sleeper_transaction_id, season, week, type, status, adds, drops, draft_picks, roster_ids, metadata, created_at_sleeper",
+      )
+      .in("league_id", idChunk)
+      .eq("status", "complete")
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  out.push(...(rows as TransactionRow[]));
   return out;
 }
 
@@ -719,27 +626,15 @@ type PlayerRow = {
 
 async function fetchPlayers(admin: Client, playerIds: string[]): Promise<Map<string, PlayerRow>> {
   const out = new Map<string, PlayerRow>();
-  try {
-    for (const idChunk of chunk(playerIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("players")
-          .select("id, full_name, first_name, last_name, position, birth_date, external_ids, draft_year")
-          .in("id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchPlayers", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data as PlayerRow[]) out.set(row.id, row);
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchPlayers", err);
-  }
+  const rows = await fetchAllRowsInChunks("manager-pulse players", playerIds, (idChunk, from, to) =>
+    admin
+      .from("players")
+      .select("id, full_name, first_name, last_name, position, birth_date, external_ids, draft_year")
+      .in("id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows as PlayerRow[]) out.set(row.id, row);
   return out;
 }
 
@@ -752,10 +647,7 @@ async function mapSleeperPlayerIds(admin: Client, sleeperIds: string[]): Promise
       if (idChunk.length === 0) continue;
       const ors = idChunk.map((id) => `external_ids->>sleeper.eq.${id}`).join(",");
       const { data, error } = await admin.from("players").select("id, external_ids").or(ors);
-      if (error) {
-        warn("mapSleeperPlayerIds", error);
-        continue;
-      }
+      if (error) throw new Error(`mapSleeperPlayerIds: ${error.message}`);
       for (const row of data ?? []) {
         const ext = row.external_ids as Record<string, unknown> | null;
         const sid = ext?.sleeper;
@@ -764,6 +656,7 @@ async function mapSleeperPlayerIds(admin: Client, sleeperIds: string[]): Promise
     }
   } catch (err) {
     warn("mapSleeperPlayerIds", err);
+    throw err;
   }
   return map;
 }
@@ -857,30 +750,23 @@ async function fetchMarketValues(
 
     async function fill(formatId: string | null, source: string | null, target: Map<string, number>) {
       if (!formatId || !source) return;
-      for (const idChunk of chunk(playerIds)) {
-        if (idChunk.length === 0) continue;
-        for (let from = 0; ; from += PAGE) {
-          const { data, error } = await admin
-            .from("player_value_trends")
-            .select("player_id, current_value")
-            .eq("format_config_id", formatId)
-            .eq("source", source)
-            .in("player_id", idChunk)
-            .range(from, from + PAGE - 1);
-          if (error) {
-            warn("fetchMarketValues values", error);
-            break;
-          }
-          if (!data || data.length === 0) break;
-          for (const row of data) target.set(row.player_id, Number(row.current_value));
-          if (data.length < PAGE) break;
-        }
-      }
+      const rows = await fetchAllRowsInChunks("manager-pulse market values", playerIds, (idChunk, from, to) =>
+        admin
+          .from("player_value_trends")
+          .select("player_id, current_value")
+          .eq("format_config_id", formatId)
+          .eq("source", source)
+          .in("player_id", idChunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+      for (const row of rows) target.set(row.player_id, Number(row.current_value));
     }
 
     await Promise.all([fill(dynastyFormatId, dynastySource, dynasty), fill(redraftFormatId, redraftSource, redraft)]);
   } catch (err) {
     warn("fetchMarketValues", err);
+    throw err;
   }
 
   return { dynasty, redraft };
@@ -912,29 +798,17 @@ type LedgerRow = {
 async function fetchLedgerRows(admin: Client, leagueRowIds: string[]): Promise<LedgerRow[]> {
   const out: LedgerRow[] = [];
   if (leagueRowIds.length === 0) return out;
-  try {
-    for (const idChunk of chunk(leagueRowIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("league_manager_ledger_cache")
-          .select(
-            "league_id, season, sleeper_roster_id, weeks_graded, lineup_efficiency, waiver_moves, waiver_hits, waiver_faab_spent, waiver_points_started, waiver_points_on_roster, wins_left_on_bench, best_lineup_wins, best_lineup_losses, best_lineup_ties, efficiency_rank, scoring_rank",
-          )
-          .in("league_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchLedgerRows", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        out.push(...(data as LedgerRow[]));
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchLedgerRows", err);
-  }
+  const rows = await fetchAllRowsInChunks("manager-pulse ledger cache", leagueRowIds, (idChunk, from, to) =>
+    admin
+      .from("league_manager_ledger_cache")
+      .select(
+        "league_id, season, sleeper_roster_id, weeks_graded, lineup_efficiency, waiver_moves, waiver_hits, waiver_faab_spent, waiver_points_started, waiver_points_on_roster, wins_left_on_bench, best_lineup_wins, best_lineup_losses, best_lineup_ties, efficiency_rank, scoring_rank",
+      )
+      .in("league_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  out.push(...(rows as LedgerRow[]));
   return out;
 }
 
@@ -956,30 +830,18 @@ async function fetchMatchupsForManager(
 ): Promise<Map<string, MatchupRow[]>> {
   const out = new Map<string, MatchupRow[]>();
   if (leagueRowIds.length === 0) return out;
-  try {
-    for (const idChunk of chunk(leagueRowIds)) {
-      if (idChunk.length === 0) continue;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await admin
-          .from("league_matchups")
-          .select("league_id, sleeper_roster_id, week, is_final, starter_ids")
-          .in("league_id", idChunk)
-          .range(from, from + PAGE - 1);
-        if (error) {
-          warn("fetchMatchupsForManager", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        for (const row of data as MatchupRow[]) {
-          const list = out.get(row.league_id) ?? [];
-          list.push(row);
-          out.set(row.league_id, list);
-        }
-        if (data.length < PAGE) break;
-      }
-    }
-  } catch (err) {
-    warn("fetchMatchupsForManager", err);
+  const rows = await fetchAllRowsInChunks("manager-pulse league_matchups", leagueRowIds, (idChunk, from, to) =>
+    admin
+      .from("league_matchups")
+      .select("league_id, sleeper_roster_id, week, is_final, starter_ids")
+      .in("league_id", idChunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows as MatchupRow[]) {
+    const list = out.get(row.league_id) ?? [];
+    list.push(row);
+    out.set(row.league_id, list);
   }
   return out;
 }
@@ -1607,7 +1469,10 @@ export async function loadManagerPulseInput(
       leagueSeasonsSkipped: params.leagueSeasonsSkipped,
     };
   } catch (err) {
+    // A report built from partial rows would be cached as complete. Throw so
+    // the caller closes the run as an error (finalize) or keeps the previous
+    // live report (live-report).
     warn("loadManagerPulseInput", err);
-    return empty;
+    throw err;
   }
 }

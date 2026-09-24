@@ -38,6 +38,7 @@
  */
 
 import { getServiceClient } from "./_supabase";
+import { fetchAllRows } from "../lib/supabase/fetch-all";
 import { loadBeaconBriefSettings } from "../lib/beacon-brief/settings";
 import { runStructuredCall } from "../lib/beacon-brief/ai";
 import type { Json } from "../lib/database.types";
@@ -106,15 +107,17 @@ async function main() {
 
   // Pull every article plus the source post it came from. The source post is the
   // model's `post` input; the current article becomes its `research_notes`.
-  const { data: rows, error } = await admin
-    .from("articles")
-    .select(
-      "id, slug, title, meta_description, tl_dr, content_md, metadata, news_ingestions(text, author_handle, quoted, retweeted)",
-    )
-    .order("published_at", { ascending: true });
-  if (error) throw new Error(`article read failed: ${error.message}`);
-
-  const all = rows ?? [];
+  // Paged: a bare select stops at 1000 rows.
+  const all = await fetchAllRows("articles", (from, to) =>
+    admin
+      .from("articles")
+      .select(
+        "id, slug, title, meta_description, tl_dr, content_md, metadata, news_ingestions(text, author_handle, quoted, retweeted)",
+      )
+      .order("published_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   const pending = all.filter((r) => {
     if (force) return true;
     const md = (r.metadata ?? {}) as Record<string, unknown>;

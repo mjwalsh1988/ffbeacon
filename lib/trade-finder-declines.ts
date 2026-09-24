@@ -19,6 +19,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { isValidSuggestionKey } from "@/lib/trade-finder/fingerprint";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 
 type SessionClient =
   | SupabaseClient<Database>
@@ -43,6 +44,9 @@ export async function loadDeclinedKeys(
       .select("suggestion_key")
       .eq("sleeper_league_id", sleeperLeagueId)
       .gt("expires_at", new Date().toISOString())
+      // Newest passes first, so the ceiling keeps the most recent ones.
+      .order("declined_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(MAX_DECLINES_PER_LEAGUE);
     return (data ?? []).map((row) => row.suggestion_key);
   } catch {
@@ -55,8 +59,11 @@ export async function loadDeclinedKeys(
 /**
  * Live passes across several leagues at once, keyed by Sleeper league id.
  *
- * One query rather than one per league, because the cross-league surface asks
- * this about every league the reader is in.
+ * One paged read rather than one per league, because the cross-league surface
+ * asks this about every league the reader is in. The per-league ceiling is
+ * applied here, newest first, so each league gets exactly what
+ * loadDeclinedKeys would give it. A failed page returns nothing rather than a
+ * partial list.
  */
 export async function loadDeclinedKeysForLeagues(
   supabase: SessionClient,
@@ -64,20 +71,27 @@ export async function loadDeclinedKeysForLeagues(
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (sleeperLeagueIds.length === 0) return out;
+  const nowIso = new Date().toISOString();
   try {
-    const { data } = await supabase
-      .from("trade_suggestion_declines")
-      .select("sleeper_league_id, suggestion_key")
-      .in("sleeper_league_id", sleeperLeagueIds)
-      .gt("expires_at", new Date().toISOString())
-      .limit(MAX_DECLINES_PER_LEAGUE * 4);
-    for (const row of data ?? []) {
+    const rows = await fetchAllRowsInChunks("trade finder declines", sleeperLeagueIds, (ids, from, to) =>
+      (supabase as SupabaseClient<Database>)
+        .from("trade_suggestion_declines")
+        .select("sleeper_league_id, suggestion_key")
+        .in("sleeper_league_id", ids)
+        .gt("expires_at", nowIso)
+        .order("declined_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    );
+    for (const row of rows) {
       const list = out.get(row.sleeper_league_id) ?? [];
+      if (list.length >= MAX_DECLINES_PER_LEAGUE) continue;
       list.push(row.suggestion_key);
       out.set(row.sleeper_league_id, list);
     }
-  } catch {
-    return out;
+  } catch (err) {
+    console.error("[trade-finder-declines] cross-league read failed:", (err as Error).message);
+    return new Map();
   }
   return out;
 }

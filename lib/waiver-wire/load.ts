@@ -38,6 +38,7 @@
 
 import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
+import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 import { resolveSeasonClock } from "@/lib/start-sit/clock";
 import { loadAdjustedProjections } from "@/lib/projections/read";
@@ -62,9 +63,6 @@ import {
   type RosterRate,
   type WaiverBoard,
 } from "./types";
-
-/** PostgREST caps an unbounded select at 1,000 rows. Page past it explicitly. */
-const PAGE = 1000;
 
 /**
  * How many candidates we take the trouble to project.
@@ -138,25 +136,32 @@ function numeric(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Every roster-rate row for a season, paged. About 2,400 rows in practice. */
+/**
+ * Every roster-rate row for a season, paged. About 2,400 rows in practice.
+ * A failed page returns nothing (the "no roster rates" board), never a
+ * partial set: a missing row reads as "rostered nowhere".
+ */
 async function loadRosterRates(
   supabase: ReturnType<typeof createCachedReadClient>,
   season: number,
 ): Promise<RosterRateRow[]> {
-  const out: RosterRateRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("player_roster_rates")
-      .select(
-        "sleeper_player_id, player_id, leagues_rostered, leagues_total, dynasty_rostered, dynasty_total, redraft_rostered, redraft_total, computed_at",
-      )
-      .eq("season", season)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    out.push(...(data as unknown as RosterRateRow[]));
-    if (data.length < PAGE) break;
+  try {
+    const rows = await fetchAllRows("waiver board roster rates", (from, to) =>
+      supabase
+        .from("player_roster_rates")
+        .select(
+          "sleeper_player_id, player_id, leagues_rostered, leagues_total, dynasty_rostered, dynasty_total, redraft_rostered, redraft_total, computed_at",
+        )
+        .eq("season", season)
+        // (season, sleeper_player_id) is the primary key.
+        .order("sleeper_player_id", { ascending: true })
+        .range(from, to),
+    );
+    return rows as unknown as RosterRateRow[];
+  } catch (error) {
+    console.error("[waiver-wire] roster rates read failed", error);
+    return [];
   }
-  return out;
 }
 
 /**
@@ -181,33 +186,41 @@ async function loadStatLines(
 
   const columns = `player_id, week, rec_tgt, rush_att, off_snp, tm_off_snp, gp, ${params.scoringBase}`;
 
-  for (let i = 0; i < params.playerIds.length; i += 200) {
-    const chunk = params.playerIds.slice(i, i + 200);
-    const { data, error } = await supabase
-      .from("player_stats")
-      .select(columns)
-      .eq("season", params.season)
-      .eq("season_type", "regular")
-      .gte("week", params.fromWeek)
-      .lte("week", params.toWeek)
-      .in("player_id", chunk);
-    if (error || !data) continue;
+  // Chunked and paged. A failed chunk empties the whole map rather than
+  // leaving some players with stat lines and others silently without.
+  let rows: Record<string, unknown>[];
+  try {
+    rows = (await fetchAllRowsInChunks("waiver board stat lines", params.playerIds, (chunk, from, to) =>
+      supabase
+        .from("player_stats")
+        .select(columns)
+        .eq("season", params.season)
+        .eq("season_type", "regular")
+        .gte("week", params.fromWeek)
+        .lte("week", params.toWeek)
+        .in("player_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )) as unknown as Record<string, unknown>[];
+  } catch (error) {
+    console.error("[waiver-wire] stat lines read failed", error);
+    return byPlayer;
+  }
 
-    for (const raw of data as unknown as Record<string, unknown>[]) {
-      const playerId = String(raw.player_id);
-      const line: StatLine = {
-        week: Number(raw.week),
-        targets: numeric(raw.rec_tgt),
-        carries: numeric(raw.rush_att),
-        offSnaps: numeric(raw.off_snp),
-        teamOffSnaps: numeric(raw.tm_off_snp),
-        points: numeric(raw[params.scoringBase]),
-        gamesPlayed: numeric(raw.gp),
-      };
-      const list = byPlayer.get(playerId);
-      if (list) list.push(line);
-      else byPlayer.set(playerId, [line]);
-    }
+  for (const raw of rows) {
+    const playerId = String(raw.player_id);
+    const line: StatLine = {
+      week: Number(raw.week),
+      targets: numeric(raw.rec_tgt),
+      carries: numeric(raw.rush_att),
+      offSnaps: numeric(raw.off_snp),
+      teamOffSnaps: numeric(raw.tm_off_snp),
+      points: numeric(raw[params.scoringBase]),
+      gamesPlayed: numeric(raw.gp),
+    };
+    const list = byPlayer.get(playerId);
+    if (list) list.push(line);
+    else byPlayer.set(playerId, [line]);
   }
 
   return byPlayer;

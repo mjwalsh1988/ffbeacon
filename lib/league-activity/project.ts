@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { normalizeDraftPicks } from "@/lib/sleeper-draft-picks";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { writeActivity } from "./record";
 import type { ActivityKind, ActivityPickRef, PendingActivity } from "./types";
 
@@ -51,9 +52,6 @@ type ServiceClient = SupabaseClient<Database>;
  * those up; the unique dedupe key makes the overlap free.
  */
 const TRANSACTION_OVERLAP_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Bounds a first-run backfill so one cold page load cannot read a whole era. */
-const TRANSACTION_BACKFILL_LIMIT = 2000;
 
 /** Sleeper's own ceiling. Matches MAX_MATCHUP_WEEK in lib/league-matchups.ts. */
 const MAX_PROJECTED_WEEK = 18;
@@ -115,27 +113,32 @@ async function projectTransactions(
     .limit(1)
     .maybeSingle();
 
-  let query = supabase
-    .from("league_transactions")
-    // NOT `metadata`. That column holds the FULL raw Sleeper transaction, and
-    // the only thing this needs out of it is one number. Selecting the whole
-    // object made a routine resync pull a couple of hundred kilobytes of JSON
-    // to discover that every row was already recorded. PostgREST can project
-    // the single field instead, so the row comes back with a scalar on it.
-    .select(
-      "sleeper_transaction_id, type, status, week, season, adds, drops, draft_picks, waiver_budget, roster_ids, created_at_sleeper, waiver_bid:metadata->settings->waiver_bid",
-    )
-    .eq("league_id", leagueRowId)
-    .not("created_at_sleeper", "is", null)
-    .order("created_at_sleeper", { ascending: false })
-    .limit(TRANSACTION_BACKFILL_LIMIT);
+  const windowStart = newest?.occurred_at
+    ? new Date(new Date(newest.occurred_at).getTime() - TRANSACTION_OVERLAP_MS).toISOString()
+    : null;
 
-  if (newest?.occurred_at) {
-    const from = new Date(
-      new Date(newest.occurred_at).getTime() - TRANSACTION_OVERLAP_MS,
-    ).toISOString();
-    query = query.gte("created_at_sleeper", from);
-  }
+  // Paged: a first backfill of a busy league reads more than 1000 rows, and a
+  // single capped read silently dropped the oldest ones.
+  const readTransactions = () =>
+    fetchAllRows("league activity transactions", (from, to) => {
+      let page = supabase
+        .from("league_transactions")
+        // NOT `metadata`. That column holds the FULL raw Sleeper transaction, and
+        // the only thing this needs out of it is one number. Selecting the whole
+        // object made a routine resync pull a couple of hundred kilobytes of JSON
+        // to discover that every row was already recorded. PostgREST can project
+        // the single field instead, so the row comes back with a scalar on it.
+        .select(
+          "sleeper_transaction_id, type, status, week, season, adds, drops, draft_picks, waiver_budget, roster_ids, created_at_sleeper, waiver_bid:metadata->settings->waiver_bid",
+        )
+        .eq("league_id", leagueRowId)
+        .not("created_at_sleeper", "is", null);
+      if (windowStart) page = page.gte("created_at_sleeper", windowStart);
+      return page
+        .order("created_at_sleeper", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to);
+    });
 
   // THE KEYS WE ALREADY HOLD FOR THAT SAME WINDOW, read in the same wave.
   //
@@ -158,12 +161,11 @@ async function projectTransactions(
         )
     : null;
 
-  const [{ data: rows, error }, keyResult] = await Promise.all([
-    query,
+  const [rows, keyResult] = await Promise.all([
+    readTransactions(),
     keysQuery ?? Promise.resolve({ data: [] as Array<{ dedupe_key: string }>, error: null }),
   ]);
-  if (error) throw new Error(error.message);
-  if (!rows || rows.length === 0) return 0;
+  if (rows.length === 0) return 0;
 
   const known = new Set((keyResult.data ?? []).map((r) => r.dedupe_key));
   const events: PendingActivity[] = [];

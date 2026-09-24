@@ -166,6 +166,7 @@ export async function runFantasyCalcSync(
     const { data, error } = await supabase
       .from("players")
       .select("id, slug, external_ids, first_name, last_name, position")
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;

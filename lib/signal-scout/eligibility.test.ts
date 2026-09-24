@@ -214,10 +214,23 @@ describe("evaluatePlayerEligibility", () => {
 
 /**
  * Minimal chainable Supabase mock matching the three queries loadEligiblePool
- * issues: players.select().in().limit(), rankings.select().gte().limit(), and
- * signal_scout_player_overrides.select().eq(). Mirrors the mocking style in
- * lib/signal-scout/settings.test.ts (one canned resolved value per table).
+ * issues: players.select().in().order().range(), rankings.select().gte()
+ * .order().range(), and signal_scout_player_overrides.select().eq(). The two
+ * paged reads slice by range and cap a page at 1,000 rows, like PostgREST.
+ * Mirrors the mocking style in lib/signal-scout/settings.test.ts.
  */
+function pagedRows<T>(rows: T[], error: unknown) {
+  return {
+    order: () => ({
+      range: (from: number, to: number) =>
+        Promise.resolve({
+          data: error ? null : rows.slice(from, Math.min(to + 1, from + 1000)),
+          error: error ?? null,
+        }),
+    }),
+  };
+}
+
 function mockSupabase(opts: {
   players?: Array<{
     id: string;
@@ -236,21 +249,16 @@ function mockSupabase(opts: {
   const tables: Record<string, unknown> = {
     players: {
       select: () => ({
-        in: () => ({
-          limit: () =>
-            Promise.resolve({ data: opts.players ?? [], error: opts.playersError ?? null }),
-        }),
+        in: () => pagedRows(opts.players ?? [], opts.playersError),
       }),
     },
     rankings: {
       select: () => ({
-        gte: () => ({
-          limit: () =>
-            Promise.resolve({
-              data: (opts.rankedPlayerIds ?? []).map((id) => ({ player_id: id })),
-              error: opts.rankingsError ?? null,
-            }),
-        }),
+        gte: () =>
+          pagedRows(
+            (opts.rankedPlayerIds ?? []).map((id) => ({ player_id: id })),
+            opts.rankingsError,
+          ),
       }),
     },
     signal_scout_player_overrides: {
@@ -330,6 +338,25 @@ describe("loadEligiblePool", () => {
 
     const pool = await loadEligiblePool(supabase, DEFAULT_SIGNAL_SCOUT_SETTINGS);
     expect(pool[0].hiddenOverride).toBe(true);
+  });
+
+  it("reads every candidate and ranked id past the 1,000 row cap", async () => {
+    const players = Array.from({ length: 1500 }, (_, i) => ({
+      id: `p${i}`,
+      position: "WR",
+      birth_date: "1998-01-01",
+      years_experience: 3,
+      height_inches: 72,
+      weight_lbs: 200,
+    }));
+    const supabase = mockSupabase({
+      players,
+      rankedPlayerIds: players.map((p) => p.id),
+    });
+
+    const pool = await loadEligiblePool(supabase, DEFAULT_SIGNAL_SCOUT_SETTINGS);
+    expect(pool).toHaveLength(1500);
+    expect(pool.find((p) => p.id === "p1400")?.inRankingsWindow).toBe(true);
   });
 
   it("throws when the players query errors", async () => {

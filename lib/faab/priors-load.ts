@@ -10,7 +10,8 @@
  *
  * PAGINATION IS NOT OPTIONAL. PostgREST truncates a select at 1,000 rows and
  * says nothing about it, and this table holds tens of thousands. Every read
- * below pages with .range() until a short page comes back.
+ * below pages with .range() over a unique order until a short page comes
+ * back, and a failed page throws rather than feeding the builder a partial set.
  *
  * Nothing identifying leaves this module: the league id travels only so the
  * builder can count distinct leagues, and the builder stores the count rather
@@ -19,6 +20,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import {
   groupAuctions,
   type AuctionTransactionRow,
@@ -29,7 +31,6 @@ import type { PriorAuction, PriorLeagueKind } from "./priors-build";
 type ServiceClient = SupabaseClient<Database>;
 
 const PAGE = 1000;
-const PLAYER_CHUNK = 500;
 
 type LeagueFacts = {
   id: string;
@@ -86,7 +87,8 @@ async function loadLeagueFacts(supabase: ServiceClient): Promise<Map<string, Lea
       // quantiles. Same reason lib/faab/outlook.ts orders by id.
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`faab priors leagues read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
 
     for (const row of data) {
       const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
@@ -114,7 +116,8 @@ async function loadLeagueFacts(supabase: ServiceClient): Promise<Map<string, Lea
       .select("league_id, sleeper_roster_id, metadata")
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`faab priors rosters read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
 
     for (const row of data) {
       const league = leagues.get(row.league_id);
@@ -139,19 +142,19 @@ async function loadPositions(
   sleeperIds: string[],
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (let i = 0; i < sleeperIds.length; i += PLAYER_CHUNK) {
-    const chunk = sleeperIds.slice(i, i + PLAYER_CHUNK);
-    const { data, error } = await supabase
+  const rows = await fetchAllRowsInChunks("faab priors positions", sleeperIds, (chunk, from, to) =>
+    supabase
       .from("players")
       .select("position, external_ids")
-      .in("external_ids->>sleeper", chunk);
-    if (error || !data) continue;
-    for (const row of data) {
-      const ext = (row.external_ids ?? {}) as Record<string, unknown>;
-      const sleeperId = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      if (!sleeperId || !row.position) continue;
-      out.set(sleeperId, String(row.position).toUpperCase());
-    }
+      .in("external_ids->>sleeper", chunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    const ext = (row.external_ids ?? {}) as Record<string, unknown>;
+    const sleeperId = typeof ext.sleeper === "string" ? ext.sleeper : null;
+    if (!sleeperId || !row.position) continue;
+    out.set(sleeperId, String(row.position).toUpperCase());
   }
   return out;
 }
@@ -190,7 +193,8 @@ export async function loadAuctionUniverse(supabase: ServiceClient): Promise<Auct
       .eq("type", "waiver")
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`faab priors waiver transactions read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
 
     for (const row of data) {
       const leagueId = (row as { league_id: string }).league_id;

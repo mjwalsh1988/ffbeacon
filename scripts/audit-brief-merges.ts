@@ -115,6 +115,7 @@ async function main() {
       .eq("is_revision", true)
       .not("revision_of_ingestion_id", "is", null)
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) break;

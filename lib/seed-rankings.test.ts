@@ -26,7 +26,11 @@ type Upserted = Record<string, unknown>[];
 type Deleted = { table: string; filters: Array<[string, unknown]> }[];
 
 /** Minimal query-builder fake covering only the calls runSeedRankings makes. */
-function makeClient(upserted: Upserted, deleted: Deleted = []) {
+function makeClient(
+  upserted: Upserted,
+  deleted: Deleted = [],
+  historyReads: Array<Array<[string, unknown]>> = [],
+) {
   const formats = [
     { id: "fmt-dynasty", slug: "dynasty-ppr-sflex" },
   ];
@@ -74,12 +78,13 @@ function makeClient(upserted: Upserted, deleted: Deleted = []) {
         return Promise.resolve({ data: null, error: null });
       },
       then(resolve: (v: { data: unknown; error: null }) => unknown) {
+        if (table === "player_value_history") historyReads.push(filters);
         const data =
           table === "format_configs" ? formats : table === "source_registry" ? sources : history;
         return Promise.resolve(resolve({ data, error: null }));
       },
     };
-    for (const op of ["eq", "in", "gte", "lte", "order", "limit", "not", "is", "range", "neq"]) {
+    for (const op of ["eq", "in", "gte", "lte", "order", "limit", "not", "is", "range", "neq", "lt"]) {
       api[op] = (col: string, val: unknown) => {
         filters.push([`${op}:${col}`, val]);
         return api;
@@ -133,6 +138,37 @@ describe("runSeedRankings", () => {
   });
 });
 
+describe("which rows make the board", () => {
+  it("reads only the newest capture window, paged with a unique tiebreak", async () => {
+    // An unpaged, unwindowed read saw the newest 1000 rows of the whole
+    // history, so a capture over 1000 rows was cut short.
+    const upserted: Upserted = [];
+    const reads: Array<Array<[string, unknown]>> = [];
+    const client = makeClient(upserted, [], reads);
+    await runSeedRankings(client);
+    const paged = reads.find((f) => f.some(([op]) => op === "range:0"));
+    expect(paged, "the history read was not paged").toBeTruthy();
+    expect(paged).toContainEqual(["gte:captured_at", "2026-08-25T01:00:00.000Z"]);
+    expect(paged).toContainEqual(["order:id", { ascending: true }]);
+  });
+
+  it("removes rows for players no longer in the source", async () => {
+    // The upsert only touches players in this run, so a player the source
+    // dropped kept an old overall_rank that collided with a current one.
+    const upserted: Upserted = [];
+    const deleted: Deleted = [];
+    await runSeedRankings(makeClient(upserted, deleted));
+    const sweep = deleted.find(
+      (d) => d.table === "rankings" && d.filters.some(([f]) => f === "lt:generated_at"),
+    );
+    expect(sweep, "no sweep of dropped players ran").toBeTruthy();
+    expect(sweep!.filters).toContainEqual(["eq:source", "ktc"]);
+    expect(sweep!.filters).toContainEqual(["eq:format_config_id", "fmt-dynasty"]);
+    expect(sweep!.filters).toContainEqual(["eq:season", rankingsSeason()]);
+    expect(sweep!.filters).toContainEqual(["lt:generated_at", upserted[0].generated_at]);
+  });
+});
+
 describe("the season is derived, not typed in", () => {
   it("uses the live NFL season rather than a constant", () => {
     // It was `const SEASON = 2025` in three files while the site ran the 2026
@@ -156,7 +192,9 @@ describe("the season is derived, not typed in", () => {
     const upserted: Upserted = [];
     const deleted: Deleted = [];
     await runSeedRankings(makeClient(upserted, deleted));
-    const sweep = deleted.find((d) => d.table === "rankings");
+    const sweep = deleted.find(
+      (d) => d.table === "rankings" && d.filters.some(([f]) => f === "neq:season"),
+    );
     expect(sweep, "no sweep of previous seasons ran").toBeTruthy();
     expect(sweep!.filters).toContainEqual(["neq:season", rankingsSeason()]);
   });

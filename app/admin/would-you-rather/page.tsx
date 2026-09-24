@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatEastern, formatRelative } from "@/lib/datetime";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { describeSchedule } from "@/lib/would-you-rather/schedule";
 import { describeRouting } from "@/lib/would-you-rather/routing";
 import {
@@ -65,11 +66,16 @@ export default async function WouldYouRatherAdminPage() {
     // The Discord total comes off the POLL rows, which are one per post, rather
     // than off every trade in the pool. Reading the pool for it was an unbounded
     // select that PostgREST truncates at 1,000 rows, so the figure would have
-    // quietly started under-reporting the moment the pool passed that.
-    admin
-      .from("would_you_rather_discord_polls")
-      .select("ingested_votes_a, ingested_votes_b")
-      .not("results_ingested_at", "is", null),
+    // quietly started under-reporting the moment the pool passed that. The poll
+    // rows are paged too, for the same reason.
+    fetchAllRows("would you rather discord totals", (from, to) =>
+      admin
+        .from("would_you_rather_discord_polls")
+        .select("ingested_votes_a, ingested_votes_b")
+        .not("results_ingested_at", "is", null)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ).then((data) => ({ data })),
     admin
       .from("would_you_rather_discord_polls")
       .select(

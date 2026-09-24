@@ -42,6 +42,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { RankedPlayer } from "@/lib/on-the-clock/board-types";
 import type { ShapedPick } from "@/lib/on-the-clock/types";
 import { excludeDrafted } from "@/lib/on-the-clock/draft-derive";
@@ -363,39 +364,25 @@ async function loadSelections(
   const safeIds = draftIds.filter((id) => /^[A-Za-z0-9_-]{1,64}$/.test(id));
   if (safeIds.length === 0) return [];
 
-  const out: Array<{
-    sleeper_draft_id: string;
-    pick_no: number;
-    player_id: string | null;
-    sleeper_player_id: string | null;
-    player_pool: string | null;
-  }> = [];
-
   // A 12-team 33-round startup is 396 rows and a league can carry several
   // drafts, so this can run past 1000. PostgREST truncates silently at that cap,
-  // which would look exactly like "these picks were never captured".
-  const PAGE = 1000;
-  const MAX_PAGES = 20;
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const offset = page * PAGE;
-    const { data, error } = await client
-      .from("draft_selections")
-      .select("sleeper_draft_id, pick_no, player_id, sleeper_player_id, player_pool")
-      .in("sleeper_draft_id", safeIds)
-      .order("sleeper_draft_id", { ascending: true })
-      .order("pick_no", { ascending: true })
-      .range(offset, offset + PAGE - 1);
-    if (error) {
-      // A partial read is indistinguishable from an uncaptured draft downstream,
-      // so it has to be visible here or it is invisible everywhere.
-      console.error("[startup-picks] draft_selections read failed", error.message);
-      break;
-    }
-    if (!data || data.length === 0) break;
-    out.push(...data);
-    if (data.length < PAGE) break;
-  }
-  return out;
+  // which would look exactly like "these picks were never captured". A failed
+  // page, or more than 20,000 rows, throws: a partial read is indistinguishable
+  // from an uncaptured draft downstream, so the index build's catch falls back
+  // to the old path for every pick instead. (sleeper_draft_id, pick_no) is
+  // unique, so the order is total.
+  return fetchAllRows(
+    "startup-picks draft_selections",
+    (from, to) =>
+      client
+        .from("draft_selections")
+        .select("sleeper_draft_id, pick_no, player_id, sleeper_player_id, player_pool")
+        .in("sleeper_draft_id", safeIds)
+        .order("sleeper_draft_id", { ascending: true })
+        .order("pick_no", { ascending: true })
+        .range(from, to),
+    { maxRows: 20_000 },
+  );
 }
 
 /**

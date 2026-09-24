@@ -14,6 +14,7 @@
  */
 
 import { getServiceClient } from "./_supabase";
+import { fetchAllRows } from "../lib/supabase/fetch-all";
 import { calculateLeaguePowerRankings } from "../lib/league-power-rankings";
 
 async function main() {
@@ -41,9 +42,11 @@ async function main() {
     }
     leagueIds = [data.id];
   } else {
-    const { data, error } = await supabase.from("leagues").select("id");
-    if (error) throw error;
-    leagueIds = (data ?? []).map((r) => r.id);
+    // Paged: a plain select() stops at 1000 rows without an error.
+    const rows = await fetchAllRows("leagues", (from, to) =>
+      supabase.from("leagues").select("id").order("id", { ascending: true }).range(from, to),
+    );
+    leagueIds = rows.map((r) => r.id);
   }
 
   console.log(`[power-rankings] calculating for ${leagueIds.length} league(s)`);

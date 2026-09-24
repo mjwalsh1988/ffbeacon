@@ -50,6 +50,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import type { ClueTierLimits, ScoringSettings, SignalScoutSettings } from "./types";
 import {
   loadEligiblePool,
@@ -255,9 +256,6 @@ export const MAX_TARGET_ATTEMPTS = 5;
  */
 const TARGET_RANK_FORMAT_SLUG = "dynasty-ppr-sflex";
 const TARGET_RANK_SOURCE = "ffbeacon";
-// Explicit high limit to override PostgREST's 1000-row default (see
-// lib/player-search.ts and eligibility.ts for the same pattern).
-const MAX_RANKING_ROWS = 50000;
 const RECENT_TARGET_LOOKBACK_ROWS = 200;
 
 /** Structural-only eligibility (position, rankings window, required fields, not-hidden); clue coverage is not yet known. */
@@ -278,19 +276,22 @@ async function loadLatestOverallRanks(supabase: Client, poolIds: string[]): Prom
   if (formatError) throw formatError;
   if (!formatRow) return ranks;
 
-  const { data, error } = await supabase
-    .from("rankings")
-    .select("player_id, overall_rank, generated_at")
-    .in("player_id", poolIds)
-    .eq("format_config_id", formatRow.id)
-    .eq("source", TARGET_RANK_SOURCE)
-    .order("generated_at", { ascending: false })
-    .limit(MAX_RANKING_ROWS);
-  if (error) throw error;
+  // Chunked and paged: the pool can hold hundreds of ids and many rows each.
+  const data = await fetchAllRowsInChunks("signal scout target ranks", poolIds, (chunk, from, to) =>
+    supabase
+      .from("rankings")
+      .select("player_id, overall_rank, generated_at")
+      .in("player_id", chunk)
+      .eq("format_config_id", formatRow.id)
+      .eq("source", TARGET_RANK_SOURCE)
+      .order("generated_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
-  // Rows are ordered newest first, so the first row seen per player_id is
-  // that player's latest overall_rank.
-  for (const row of data ?? []) {
+  // Rows are ordered newest first within each chunk, and a player lives in
+  // exactly one chunk, so the first row seen per player_id is the latest.
+  for (const row of data) {
     if (!ranks.has(row.player_id) && row.overall_rank !== null) {
       ranks.set(row.player_id, row.overall_rank);
     }

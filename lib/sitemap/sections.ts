@@ -69,6 +69,7 @@ import { idpRelevantPlayerIdSet } from "@/lib/player-search";
 import { IDP_POSITIONS } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/server";
 import { memoTtl } from "@/lib/memo-ttl";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { SITE } from "@/lib/site";
 import { PUBLISHED_GUIDES } from "@/lib/guides/published";
 import { resolveSeasonClock } from "@/lib/start-sit/clock";
@@ -101,13 +102,6 @@ export type SitemapSection = (typeof SITEMAP_SECTIONS)[number];
 export function sectionPath(section: SitemapSection): string {
   return `/sitemaps/${section}.xml`;
 }
-
-/**
- * Supabase caps an unbounded select() at 1000 rows and does it silently, so any query
- * here that can exceed that has to page explicitly. `rankings` is well past it (about
- * 11k rows across the relevance window).
- */
-const DB_PAGE_SIZE = 1000;
 
 /** Core public pages that are not data-driven. */
 const STATIC_PATHS: Array<{ path: string; priority: number }> = [
@@ -169,14 +163,19 @@ const articleChangedAt = (a: {
  * ahead of the master switch (lib/beacon-brief/index-quality.ts).
  */
 async function publishedEditions(supabase: Admin): Promise<ArticleRow[]> {
-  const { data } = await supabase
-    .from("articles")
-    .select("id, slug, article_type, last_updated, published_at, category_id")
-    .eq("status", "published")
-    .eq("article_type", "brief")
-    .order("published_at", { ascending: false })
-    .limit(5000);
-  return (data ?? []) as ArticleRow[];
+  // Paged: a .limit() above 1000 still returns 1000. A failed read throws, so
+  // the route errors rather than serving a file with articles missing.
+  const rows = await fetchAllRows("[sitemap] brief editions", (from, to) =>
+    supabase
+      .from("articles")
+      .select("id, slug, article_type, last_updated, published_at, category_id")
+      .eq("status", "published")
+      .eq("article_type", "brief")
+      .order("published_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows as ArticleRow[];
 }
 
 /**
@@ -222,26 +221,24 @@ async function rankedPlayerSlugs(supabase: Admin): Promise<string[]> {
   const cutoff = new Date(
     Date.now() - RELEVANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const slugs = new Set<string>();
-  for (let from = 0; ; from += DB_PAGE_SIZE) {
-    const { data, error } = await supabase
+  // Ordered by id so pages neither overlap nor skip. A failed page throws: a
+  // player file missing half its profiles reads to Google as pages removed.
+  const rows = await fetchAllRows("[sitemap] ranked players", (from, to) =>
+    supabase
       .from("rankings")
       .select("player_id, players!inner(slug)")
       .gte("generated_at", cutoff)
-      .range(from, from + DB_PAGE_SIZE - 1);
-    if (error) {
-      console.error("[sitemap] ranked player page failed", error);
-      break;
-    }
-    for (const row of data ?? []) {
-      // PostgREST returns a to-one embed as an object or a single-element array
-      // depending on inferred cardinality. Normalize both.
-      const embed = (row as { players?: unknown }).players;
-      const player = Array.isArray(embed) ? embed[0] : embed;
-      const slug = (player as { slug?: string | null } | null)?.slug;
-      if (slug) slugs.add(slug);
-    }
-    if (!data || data.length < DB_PAGE_SIZE) break;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const slugs = new Set<string>();
+  for (const row of rows) {
+    // PostgREST returns a to-one embed as an object or a single-element array
+    // depending on inferred cardinality. Normalize both.
+    const embed = (row as { players?: unknown }).players;
+    const player = Array.isArray(embed) ? embed[0] : embed;
+    const slug = (player as { slug?: string | null } | null)?.slug;
+    if (slug) slugs.add(slug);
   }
   return [...slugs];
 }
@@ -257,21 +254,16 @@ async function rankedPlayerSlugs(supabase: Admin): Promise<string[]> {
  */
 export async function idpPlayerSlugs(supabase: Admin): Promise<string[]> {
   const gate = await idpRelevantPlayerIdSet(supabase);
-  const slugs: string[] = [];
-  for (let from = 0; ; from += DB_PAGE_SIZE) {
-    const { data, error } = await supabase
+  const rows = await fetchAllRows("[sitemap] defenders", (from, to) =>
+    supabase
       .from("players")
       .select("id, slug")
       .in("position", [...IDP_POSITIONS])
       .order("id", { ascending: true })
-      .range(from, from + DB_PAGE_SIZE - 1);
-    if (error) {
-      console.error("[sitemap] defender page failed", error);
-      break;
-    }
-    for (const row of data ?? []) if (row.slug && gate.has(row.id)) slugs.push(row.slug);
-    if (!data || data.length < DB_PAGE_SIZE) break;
-  }
+      .range(from, to),
+  );
+  const slugs: string[] = [];
+  for (const row of rows) if (row.slug && gate.has(row.id)) slugs.push(row.slug);
   return slugs;
 }
 
@@ -472,15 +464,18 @@ async function playersSection(supabase: Admin): Promise<SitemapUrl[]> {
 
 /** Live Signal profiles. Drafts and private profiles are excluded by contract. */
 async function profilesSection(supabase: Admin): Promise<SitemapUrl[]> {
-  const { data } = await supabase
-    .from("signals")
-    .select("handle, updated_at")
-    .eq("status", "published")
-    .eq("visibility", "public")
-    .eq("hidden", false)
-    .order("updated_at", { ascending: false })
-    .limit(5000);
-  return (data ?? []).map((profile) => ({
+  const rows = await fetchAllRows("[sitemap] signal profiles", (from, to) =>
+    supabase
+      .from("signals")
+      .select("handle, updated_at")
+      .eq("status", "published")
+      .eq("visibility", "public")
+      .eq("hidden", false)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows.map((profile) => ({
     loc: `${SITE.url}/${profile.handle}`,
     lastModified: newest([profile.updated_at]),
     priority: 0.6,

@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../database.types";
 import { withRetry } from "../../supabase/retry";
+import { fetchAllRows } from "../../supabase/fetch-all";
 import { staleCutoffMs, staleDaysFor, type StaleDays } from "../freshness";
 import type { SourcePlayerValue } from "../normalize";
 
@@ -69,20 +70,24 @@ async function latestFresh(
   formatId: string,
   cutoffIso: string,
 ): Promise<SourcePlayerValue[]> {
+  // Paged: a daily source holds several thousand rows inside the cutoff, and
+  // an unpaged read returned only the newest 1000.
+  const label = `source_value ${source}/${formatId}`;
   const rows = await withRetry(
-    async () => {
-      const { data, error } = await supabase
-        .from("player_value_history")
-        .select("player_id, value, captured_at")
-        .eq("format_config_id", formatId)
-        .eq("source", source)
-        .neq("source", "ffbeacon") // self-reference guard (belt-and-suspenders)
-        .gte("captured_at", cutoffIso) // staleness gate
-        .order("captured_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-    { label: `source_value ${source}/${formatId}` },
+    () =>
+      fetchAllRows(label, (from, to) =>
+        supabase
+          .from("player_value_history")
+          .select("player_id, value, captured_at")
+          .eq("format_config_id", formatId)
+          .eq("source", source)
+          .neq("source", "ffbeacon") // self-reference guard (belt-and-suspenders)
+          .gte("captured_at", cutoffIso) // staleness gate
+          .order("captured_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
+    { label },
   );
   const latest = new Map<string, number>();
   for (const r of rows) {

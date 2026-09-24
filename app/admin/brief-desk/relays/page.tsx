@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { BriefDeskPageShell } from "@/components/admin/brief-desk-page-shell";
 import { RelaysManager, type RelayAdminRow } from "@/components/admin/brief-desk/relays-manager";
 import { RELAY_KINDS, RELAY_KIND_LABELS, RELAY_STATUSES, parseRelayFacts } from "@/lib/relays/types";
@@ -32,17 +33,17 @@ function pageHref(params: Params, page: number): string {
  * rows, so this is one page in practice.
  */
 async function loadAllWeeks(admin: ReturnType<typeof createAdminClient>): Promise<number[]> {
-  const weeks = new Set<number>();
-  for (let from = 0; ; from += 1000) {
-    const { data } = await admin
+  const rows = await fetchAllRows("relay weeks", (from, to) =>
+    admin
       .from("relays")
       .select("week")
       .not("week", "is", null)
       .order("week", { ascending: false })
-      .range(from, from + 999);
-    for (const r of data ?? []) if (typeof r.week === "number") weeks.add(r.week);
-    if ((data?.length ?? 0) < 1000) break;
-  }
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const weeks = new Set<number>();
+  for (const r of rows) if (typeof r.week === "number") weeks.add(r.week);
   return [...weeks].sort((a, b) => b - a);
 }
 

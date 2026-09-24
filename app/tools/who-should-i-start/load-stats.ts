@@ -12,6 +12,7 @@ import type { Database } from "@/lib/database.types";
 import type { WeeklyStatRow } from "@/lib/player-profile";
 import { aggregateSeasons, type GameRow } from "@/components/player-profile/stat-shaping";
 import type { PlayerStatsPayload } from "./stats-data";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -20,13 +21,10 @@ type AnySupabase =
 /** A single player's identity fields the payload needs for labeling. */
 type StatsPlayer = { id: string; name: string; position: string };
 
-/** How many rows a paged read asks for at a time. PostgREST caps a plain
- *  select() at 1000 rows and truncates silently past it (see
- *  lib/manager-ledger/load.ts for the same pattern). Two to eight players'
- *  worth of weekly regular-season rows can pass 1000 combined even though no
- *  single player's history does, so this loader pages rather than trusting
- *  one unbounded select(). */
-const PAGE = 1000;
+/* PostgREST caps a plain select() at 1000 rows and truncates silently past
+ * it. Two to eight players' worth of weekly regular-season rows can pass 1000
+ * combined even though no single player's history does, so the read below is
+ * paged through fetchAllRows rather than trusting one unbounded select(). */
 
 type PlayerStatRow = WeeklyStatRow & { player_id: string };
 
@@ -96,24 +94,30 @@ async function loadWeeklyStatsForPlayers(
   const byPlayer = new Map<string, WeeklyStatRow[]>(ids.map((id) => [id, []]));
   if (ids.length === 0) return byPlayer;
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("player_stats")
-      .select(STATS_COLUMNS)
-      .in("player_id", ids)
-      .eq("season_type", "regular")
-      .order("player_id", { ascending: true })
-      .order("season", { ascending: false })
-      .order("week", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-
-    for (const row of data as unknown as PlayerStatRow[]) {
-      byPlayer.get(row.player_id)?.push(row);
-    }
-    if (data.length < PAGE) break;
+  // A failed page empties the tab rather than showing some seasons as if they
+  // were every season.
+  let rows: PlayerStatRow[];
+  try {
+    rows = await fetchAllRows("start/sit weekly stats", (from, to) =>
+      supabase
+        .from("player_stats")
+        .select(STATS_COLUMNS)
+        .in("player_id", ids)
+        .eq("season_type", "regular")
+        .order("player_id", { ascending: true })
+        .order("season", { ascending: false })
+        .order("week", { ascending: false })
+        .range(from, to)
+        .then(({ data, error }) => ({ data: data as unknown as PlayerStatRow[] | null, error })),
+    );
+  } catch (err) {
+    console.error("[who-should-i-start] weekly stats read failed:", err);
+    return new Map<string, WeeklyStatRow[]>(ids.map((id) => [id, []]));
   }
 
+  for (const row of rows) {
+    byPlayer.get(row.player_id)?.push(row);
+  }
   return byPlayer;
 }
 

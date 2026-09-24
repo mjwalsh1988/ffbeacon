@@ -16,6 +16,7 @@ import { Pager } from "@/components/admin/pager";
 import { formatRelative, formatEastern, formatDuration } from "@/lib/datetime";
 import { checkDataFreshness, staleOnly, type FreshnessResult } from "@/lib/data-freshness";
 import type { Json } from "@/lib/database.types";
+import type { User } from "@supabase/supabase-js";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -39,10 +40,9 @@ type UserRow = {
 
 const USERS_PAGE_SIZE = 10;
 // Users are sorted newest-first in application code (the Auth admin API has
-// no sort param), so we pull a generous window up front and paginate that
-// in memory. Revisit with real .range()-based pagination against auth.users
-// if the user base grows past this.
-const USERS_FETCH_CAP = 500;
+// no sort param), so every user is read, a page of this size at a time, and
+// the sorted list is paginated in memory.
+const USERS_FETCH_PAGE = 500;
 const AVATAR_SIGNED_URL_TTL = 60 * 60; // 1 hour, display-only
 
 export default async function AdminOverviewPage({
@@ -118,12 +118,21 @@ export default async function AdminOverviewPage({
   // last sign-in, created at). user_preferences rows are created lazily
   // (only once a user saves a preference), so not every signed-up user has
   // one. Same avatar/display-name resolution as the "Edit profile" page.
-  const { data: authUsersPage } = await admin.auth.admin.listUsers({
-    page: 1,
-    perPage: USERS_FETCH_CAP,
-  });
-  const allAuthUsers = (authUsersPage?.users ?? [])
-    .slice()
+  // Every page of the Auth admin API, so the newest-first sort sees every user.
+  const fetchedUsers: User[] = [];
+  for (let page = 1; ; page += 1) {
+    const { data: authUsersPage, error: authUsersError } = await admin.auth.admin.listUsers({
+      page,
+      perPage: USERS_FETCH_PAGE,
+    });
+    if (authUsersError) {
+      throw new Error(`admin user list: page ${page} failed: ${authUsersError.message}`);
+    }
+    const batch = authUsersPage?.users ?? [];
+    fetchedUsers.push(...batch);
+    if (batch.length < USERS_FETCH_PAGE) break;
+  }
+  const allAuthUsers = fetchedUsers
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const usersTotalPages = Math.max(1, Math.ceil(allAuthUsers.length / USERS_PAGE_SIZE));

@@ -2,6 +2,8 @@
 
 ## NEXT SESSION: START IDP PHASE 3 HERE
 
+SIDE QUEST DONE, COMMITTED AND PUSHED (2026-09-24, fifth pass): every Supabase read that could silently stop at 1000 rows is fixed through the shared helper lib/supabase/fetch-all.ts (RC-T01 to RC-T06 at the end of progress.md, gate green). Phase 3 code should use fetchAllRows / fetchAllRowsInChunks for any read that can pass 1000 rows. After deploy, watch the three items in RC-T06.
+
 State on 2026-09-24: IDP phases 1 and 2, the phase 2 follow-ups (IDP-2R1 to
 IDP-2R5) and the Sleeper ADP widening (ADP-201 to ADP-205) are COMMITTED AND
 PUSHED to main at the owner's instruction (the phase 2 commit is the one after

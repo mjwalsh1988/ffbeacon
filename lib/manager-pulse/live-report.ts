@@ -26,6 +26,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { coalesce } from "@/lib/request-coalesce";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { loadManagerPulseInput } from "./load";
 import { computeFootprint } from "./engine";
 import type { ManagerLeagueCategory, ManagerPulseSettings, ManagerReport } from "./types";
@@ -81,24 +82,23 @@ type FinishedRunLeague = {
 /** The league-seasons this run has ALREADY finished reading. Paged. */
 async function readFinishedRunLeagues(admin: Admin, runId: string): Promise<FinishedRunLeague[]> {
   const out: FinishedRunLeague[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await admin
+  // Throws on a failed page, so no checkpoint is written over a partial list.
+  const rows = await fetchAllRows("manager-pulse finished run leagues", (from, to) =>
+    admin
       .from("manager_pulse_run_leagues")
       .select("sleeper_league_id, season, league_name, league_category, status")
       .eq("run_id", runId)
       .in("status", ["fresh", "done"])
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      out.push({
-        sleeperLeagueId: row.sleeper_league_id,
-        season: row.season,
-        leagueName: row.league_name,
-        category: (row.league_category as ManagerLeagueCategory | null) ?? null,
-      });
-    }
-    if (data.length < PAGE) break;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    out.push({
+      sleeperLeagueId: row.sleeper_league_id,
+      season: row.season,
+      leagueName: row.league_name,
+      category: (row.league_category as ManagerLeagueCategory | null) ?? null,
+    });
   }
   return out;
 }

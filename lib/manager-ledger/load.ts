@@ -243,7 +243,9 @@ export async function loadLedgerTransactions(
       .eq("status", "complete")
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+    // A partial history would grade a manager on half their moves, so throw.
+    if (error) throw new Error(`ledger transactions read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
 
     for (const row of data) {
       const week = Number(row.week);
@@ -313,8 +315,11 @@ export async function loadLedgerDraftPicks(
       .eq("sleeper_league_id", sleeperLeagueId)
       .eq("season", season)
       .order("pick_no", { ascending: true })
+      // pick_no repeats when a league has two drafts in a season.
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`ledger draft picks read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
 
     for (const row of data) {
       const rosterId = Number(row.roster_id);

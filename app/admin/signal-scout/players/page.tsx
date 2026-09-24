@@ -3,6 +3,7 @@ import Link from "next/link";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { SignalScoutSubnav } from "@/components/admin/signal-scout-subnav";
 import { Pager } from "@/components/admin/pager";
 import {
@@ -24,8 +25,6 @@ export const metadata: Metadata = { title: "Signal Scout Players" };
 const PAGE_SIZE = 25;
 /** Mirrors RANKINGS_WINDOW_DAYS in lib/signal-scout/eligibility.ts (not exported there). */
 const RANKINGS_WINDOW_DAYS = 90;
-/** Guard on the per-page target-count query; the .in() scope already bounds it to PAGE_SIZE ids. */
-const MAX_ROUND_COUNT_ROWS = 10000;
 const NOTE_EXCERPT_LENGTH = 40;
 
 const playerIdParamSchema = z.string().uuid();
@@ -93,23 +92,27 @@ async function loadPoolPlayers(
   admin: ReturnType<typeof createAdminClient>,
   settings: SignalScoutSettings,
 ): Promise<{ poolPlayers: PoolPlayer[]; overrides: OverrideRow[] }> {
-  const [rawPool, displayRes, overridesRes] = await Promise.all([
+  // Paged: both reads can pass PostgREST's 1000-row cap.
+  const [rawPool, displayRows, overrides] = await Promise.all([
     loadEligiblePool(admin, settings),
-    admin
-      .from("players")
-      .select("id, full_name, first_name, last_name, position, team")
-      .in("position", settings.pool.eligible_positions)
-      .limit(20000),
-    admin
-      .from("signal_scout_player_overrides")
-      .select("player_id, is_hidden, admin_note, updated_by, updated_at"),
+    fetchAllRows("signal scout admin display players", (from, to) =>
+      admin
+        .from("players")
+        .select("id, full_name, first_name, last_name, position, team")
+        .in("position", settings.pool.eligible_positions)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllRows("signal scout admin overrides", (from, to) =>
+      admin
+        .from("signal_scout_player_overrides")
+        .select("player_id, is_hidden, admin_note, updated_by, updated_at")
+        .order("player_id", { ascending: true })
+        .range(from, to),
+    ),
   ]);
 
-  if (displayRes.error) throw displayRes.error;
-  if (overridesRes.error) throw overridesRes.error;
-
-  const overrides = overridesRes.data ?? [];
-  const displayById = new Map<string, DisplayRow>((displayRes.data ?? []).map((row) => [row.id, row]));
+  const displayById = new Map<string, DisplayRow>(displayRows.map((row) => [row.id, row]));
 
   const poolIds = new Set(rawPool.map((p) => p.id));
   const missingHiddenIds = overrides
@@ -119,18 +122,29 @@ async function loadPoolPlayers(
   const extraInputs: PlayerEligibilityInputWithoutCoverage[] = [];
   if (missingHiddenIds.length > 0) {
     const cutoff = new Date(Date.now() - RANKINGS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const [extraPlayersRes, extraRankedRes] = await Promise.all([
-      admin
-        .from("players")
-        .select("id, full_name, first_name, last_name, position, birth_date, years_experience, height_inches, weight_lbs, team")
-        .in("id", missingHiddenIds),
-      admin.from("rankings").select("player_id").in("player_id", missingHiddenIds).gte("generated_at", cutoff),
+    const [extraPlayers, extraRanked] = await Promise.all([
+      fetchAllRowsInChunks("signal scout admin hidden players", missingHiddenIds, (chunk, from, to) =>
+        admin
+          .from("players")
+          .select("id, full_name, first_name, last_name, position, birth_date, years_experience, height_inches, weight_lbs, team")
+          .in("id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
+      // One player holds many ranking rows in the window, so this is paged too.
+      fetchAllRowsInChunks("signal scout admin hidden ranked", missingHiddenIds, (chunk, from, to) =>
+        admin
+          .from("rankings")
+          .select("player_id")
+          .in("player_id", chunk)
+          .gte("generated_at", cutoff)
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
     ]);
-    if (extraPlayersRes.error) throw extraPlayersRes.error;
-    if (extraRankedRes.error) throw extraRankedRes.error;
 
-    const extraRankedIds = new Set((extraRankedRes.data ?? []).map((r) => r.player_id));
-    for (const p of extraPlayersRes.data ?? []) {
+    const extraRankedIds = new Set(extraRanked.map((r) => r.player_id));
+    for (const p of extraPlayers) {
       displayById.set(p.id, p);
       extraInputs.push({
         id: p.id,
@@ -240,18 +254,25 @@ export default async function SignalScoutPlayersPage({
   const pageItems = sorted.slice(from, from + PAGE_SIZE);
 
   const pageIds = pageItems.map((p) => p.id);
-  const { data: targetRows, error: targetError } = pageIds.length
-    ? await admin
-        .from("signal_scout_rounds")
-        .select("target_player_id")
-        .in("target_player_id", pageIds)
-        .limit(MAX_ROUND_COUNT_ROWS)
-    : { data: [], error: null };
-  if (targetError) {
-    console.error("[signal-scout-admin] players target-count query failed", targetError);
+  // Paged so a popular target's count is not capped at 1000. A failed read
+  // leaves every count empty rather than showing a partial one.
+  let targetRows: { target_player_id: string }[] = [];
+  if (pageIds.length) {
+    try {
+      targetRows = await fetchAllRows("signal scout admin target counts", (from, to) =>
+        admin
+          .from("signal_scout_rounds")
+          .select("target_player_id")
+          .in("target_player_id", pageIds)
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+    } catch (targetError) {
+      console.error("[signal-scout-admin] players target-count query failed", targetError);
+    }
   }
   const targetCountById = new Map<string, number>();
-  for (const row of targetRows ?? []) {
+  for (const row of targetRows) {
     targetCountById.set(row.target_player_id, (targetCountById.get(row.target_player_id) ?? 0) + 1);
   }
 

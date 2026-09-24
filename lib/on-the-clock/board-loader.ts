@@ -29,16 +29,110 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { FFBEACON_SOURCE_SLUG, FFBEACON_SOURCE_DISPLAY } from "@/lib/signal-check/format";
 import { computeAgeDecimal } from "@/lib/player-age";
+import { mapLimit } from "@/lib/sleeper";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { BoardResult, DraftPosition, PickBucketValue, RankedPlayer } from "./board-types";
 
 type Client = SupabaseClient<Database>;
 
-// The board must include every ranked player for the format, including K/DEF,
-// which sit low by value (overall_rank ~500-800 for FF Beacon dynasty-SF: 797
-// ranked total, K/DEF starting ~509). A 500 cap would truncate K/DEF out, so the
-// cap is generous headroom over the largest current board (~800). The available
-// list is paginated client-side, so the larger row count costs nothing visually.
-const BOARD_ROW_CAP = 1500;
+// The board includes every ranked player for the format, K/DEF included (they
+// sit low by value, overall_rank ~500-800 for FF Beacon dynasty-SF), so every
+// board read below pages rather than capping.
+
+/** Concurrent single-player lookups for values missing from the newest capture. */
+const VALUE_LOOKUP_CONCURRENCY = 16;
+
+/** The newest captured_at for a (table, format, ffbeacon), or null when none. */
+async function newestCapturedAt(
+  supabase: Client,
+  table: "player_value_history" | "draft_pick_values",
+  formatId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("captured_at")
+    .eq("format_config_id", formatId)
+    .eq("source", FFBEACON_SOURCE_SLUG)
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`${table} newest capture: ${error.message}`);
+  return data?.captured_at ?? null;
+}
+
+/**
+ * The latest ffbeacon value per player. A capture holds only the players whose
+ * value was written that run (about 600 of 817 ranked), so the newest capture
+ * is read whole and each ranked player it lacks is looked up on its own.
+ * Reading history newest-first under a row cap dropped those players to 0.
+ */
+async function loadLatestValues(
+  supabase: Client,
+  formatId: string,
+  playerIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const newest = await newestCapturedAt(supabase, "player_value_history", formatId);
+  if (!newest) return out;
+  const rows = await fetchAllRows("board values, newest capture", (from, to) =>
+    supabase
+      .from("player_value_history")
+      .select("player_id, value")
+      .eq("format_config_id", formatId)
+      .eq("source", FFBEACON_SOURCE_SLUG)
+      .eq("captured_at", newest)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) out.set(row.player_id, row.value);
+
+  const missing = Array.from(new Set(playerIds.filter((id) => !out.has(id))));
+  await mapLimit(missing, VALUE_LOOKUP_CONCURRENCY, async (playerId) => {
+    const { data, error } = await supabase
+      .from("player_value_history")
+      .select("value")
+      .eq("format_config_id", formatId)
+      .eq("source", FFBEACON_SOURCE_SLUG)
+      .eq("player_id", playerId)
+      .order("captured_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`board value for ${playerId}: ${error.message}`);
+    if (data) out.set(playerId, data.value);
+  });
+  return out;
+}
+
+/** The newest ffbeacon pick-value capture for a format. Each capture carries
+ *  the full (season, round, bucket) set, so it is the latest value per key. */
+async function loadLatestPickRows(
+  supabase: Client,
+  formatId: string,
+): Promise<{ season: number; round: number; pick_position: string; value: number }[]> {
+  const newest = await newestCapturedAt(supabase, "draft_pick_values", formatId);
+  if (!newest) return [];
+  return fetchAllRows("board pick values, newest capture", (from, to) =>
+    supabase
+      .from("draft_pick_values")
+      .select("season, round, pick_position, value")
+      .eq("format_config_id", formatId)
+      .eq("source", FFBEACON_SOURCE_SLUG)
+      .eq("captured_at", newest)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+}
+
+/** A best-effort read: logged and empty on failure, so the board still renders. */
+async function bestEffort<T>(label: string, read: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await read();
+  } catch (err) {
+    console.error(`[on-the-clock/board-loader] ${label} failed`, err);
+    return [];
+  }
+}
 
 /** Coerce a raw players.position to one of the six draftable buckets, or null. */
 export function toDraftPosition(pos: string | null | undefined): DraftPosition | null {
@@ -230,74 +324,76 @@ export async function loadRankedBoard(
     }
     const seasonToUse = latestRow.season as number;
 
-    // Rankings (with the player fields the cockpit needs) + values + trends, all
-    // for source='ffbeacon', in parallel. We do NOT filter player_value_history by
-    // player id: with hundreds of UUIDs the PostgREST URL overflows; the (format,
-    // source) pair already bounds the rows (mirrors the Rankings Board note).
-    const [rankingsResult, valuesResult, trendsResult, picksResult, stealsResult] = await Promise.all([
-      supabase
-        .from("rankings")
-        .select(
-          "overall_rank, position_rank, tier, players!inner(id, first_name, last_name, position, team, external_ids, draft_year, years_experience, birth_date)",
-        )
-        .eq("format_config_id", format.id)
-        .eq("source", FFBEACON_SOURCE_SLUG)
-        .eq("season", seasonToUse)
-        .is("week", null)
-        .order("overall_rank")
-        .limit(BOARD_ROW_CAP),
-      supabase
-        .from("player_value_history")
-        .select("player_id, value, captured_at")
-        .eq("format_config_id", format.id)
-        .eq("source", FFBEACON_SOURCE_SLUG)
-        .order("captured_at", { ascending: false }),
-      supabase
-        .from("player_value_trends")
-        .select("player_id, change_7d, change_7d_pct, trend_7d, show_trend_7d")
-        .eq("format_config_id", format.id)
-        .eq("source", FFBEACON_SOURCE_SLUG),
+    // Rankings (with the player fields the cockpit needs) + trends + picks +
+    // steals, all for source='ffbeacon', in parallel. Rankings throw on a failed
+    // page (the catch below returns the error state); the other three are
+    // best-effort, as they were, but a failure is now logged.
+    const [rankingsRows, trendsRows, pickRows, stealsRows] = await Promise.all([
+      fetchAllRows("board rankings", (from, to) =>
+        supabase
+          .from("rankings")
+          .select(
+            "overall_rank, position_rank, tier, players!inner(id, first_name, last_name, position, team, external_ids, draft_year, years_experience, birth_date)",
+          )
+          .eq("format_config_id", format.id)
+          .eq("source", FFBEACON_SOURCE_SLUG)
+          .eq("season", seasonToUse)
+          .is("week", null)
+          .order("overall_rank")
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
+      bestEffort("trends", () =>
+        fetchAllRows("board trends", (from, to) =>
+          supabase
+            .from("player_value_trends")
+            .select("player_id, change_7d, change_7d_pct, trend_7d, show_trend_7d")
+            .eq("format_config_id", format.id)
+            .eq("source", FFBEACON_SOURCE_SLUG)
+            .order("id", { ascending: true })
+            .range(from, to),
+        ),
+      ),
       // FF Beacon draft-pick values for this format (forced ffbeacon source, never
-      // KTC). Latest snapshot per (season, round, bucket) is taken in shapePickValues.
-      // Empty for redraft formats, which publish no future picks; the Trade Analyzer
-      // then simply offers no future-pick buckets.
-      supabase
-        .from("draft_pick_values")
-        .select("season, round, pick_position, value, captured_at")
-        .eq("format_config_id", format.id)
-        .eq("source", FFBEACON_SOURCE_SLUG)
-        .order("captured_at", { ascending: false }),
+      // KTC), newest capture only. Empty for redraft formats, which publish no
+      // future picks; the Trade Analyzer then simply offers no future-pick buckets.
+      bestEffort("pick values", () => loadLatestPickRows(supabase, format.id)),
       // Beacon Steals, precomputed nightly. The live room reads the SAME rows
       // the draft guide renders, so a player's verdict cannot differ between
       // the two. Absent (a format with no ADP market, or before the first
       // nightly build) simply leaves the fields undefined and the room falls
       // back to its original rank-vs-ADP line.
-      // Scoped to the NEWEST season on the board and ordered, both deliberately.
-      // The primary key is (format_slug, season, player_id) and the build prunes
-      // per season, so last season's rows survive; filtering on format alone
-      // would let the Map below keep whichever season happened to arrive last.
-      // The order also makes the BOARD_ROW_CAP truncation point deterministic
-      // instead of arbitrary.
-      supabase
-        .from("draft_value_targets")
-        .select("player_id, beacon_pick, steal_score, category, verdict, confidence, season")
-        .eq("format_slug", format.slug)
-        .order("season", { ascending: false })
-        .order("steal_score", { ascending: false })
-        .limit(BOARD_ROW_CAP),
+      // Ordered newest season first, deliberately. The primary key is
+      // (format_slug, season, player_id) and the build prunes per season, so
+      // last season's rows survive; the Map below keeps the first row per
+      // player, which must be the newest season's. player_id ends the order so
+      // pages cannot overlap.
+      bestEffort("steals", () =>
+        fetchAllRows("board steals", (from, to) =>
+          supabase
+            .from("draft_value_targets")
+            .select("player_id, beacon_pick, steal_score, category, verdict, confidence, season")
+            .eq("format_slug", format.slug)
+            .order("season", { ascending: false })
+            .order("steal_score", { ascending: false })
+            .order("player_id", { ascending: true })
+            .range(from, to),
+        ),
+      ),
     ]);
 
-    const rankings = (rankingsResult.data ?? []) as unknown as RankingJoinRow[];
+    const rankings = rankingsRows as unknown as RankingJoinRow[];
 
-    const valueByPlayer = new Map<string, number>();
-    for (const v of valuesResult.data ?? []) {
-      if (!valueByPlayer.has(v.player_id)) valueByPlayer.set(v.player_id, v.value);
-    }
+    const valueByPlayer = await loadLatestValues(
+      supabase,
+      format.id,
+      rankings.map((r) => r.players.id),
+    );
     const trendByPlayer = new Map<
       string,
       { change_7d: number | null; change_7d_pct: number | null; trend_7d: string | null; show_trend_7d: boolean }
     >();
-    for (const t of trendsResult.data ?? []) trendByPlayer.set(t.player_id, t);
+    for (const t of trendsRows) trendByPlayer.set(t.player_id, t);
 
     const stealByPlayer = new Map<
       string,
@@ -311,7 +407,7 @@ export async function loadRankedBoard(
     >();
     // Rows arrive newest season first, so the first row per player is the
     // current one and a later season's row can never overwrite it.
-    for (const s of stealsResult.data ?? []) {
+    for (const s of stealsRows) {
       if (!stealByPlayer.has(s.player_id)) stealByPlayer.set(s.player_id, s);
     }
 
@@ -364,7 +460,7 @@ export async function loadRankedBoard(
       valueSourceSlug: FFBEACON_SOURCE_SLUG,
       sourceActive,
       season: String(seasonToUse),
-      pickValues: shapePickValues(picksResult.data ?? []),
+      pickValues: shapePickValues(pickRows),
     };
   } catch (err) {
     console.error("[on-the-clock/board-loader] failed", err);

@@ -258,6 +258,7 @@ export async function loadPlayerLookup(
         const { data, error } = await supabase
           .from("players")
           .select("id, external_ids, first_name, last_name, position")
+          .order("id", { ascending: true })
           .range(offset, offset + PAGE - 1);
         if (error) throw error;
         return (data ?? []) as Array<{

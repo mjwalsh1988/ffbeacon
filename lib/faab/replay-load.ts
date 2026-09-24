@@ -17,13 +17,15 @@
  * sibling that reads the same tables for its own purpose.
  *
  * PAGINATION IS NOT OPTIONAL. PostgREST truncates a select at 1,000 rows and
- * says nothing about it. Every read below pages until a short page comes back.
+ * says nothing about it. Every read below pages through fetchAllRows, over a
+ * unique order, and a failed page throws rather than returning a partial set.
  *
  * Runs from a script and from an admin action, never from a page render.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { groupAuctions, type AuctionTransactionRow } from "./league-load";
 import type { PriorLeagueKind } from "./priors-build";
 import { aliveFractionFor, isSuperflexShape, leagueKindFor } from "./priors-load";
@@ -31,9 +33,6 @@ import { toPriorCell, type PriorCell } from "./priors-math";
 import type { ReplayAuction, ReplayBid } from "./replay";
 
 type ServiceClient = SupabaseClient<Database>;
-
-const PAGE = 1000;
-const PLAYER_CHUNK = 500;
 
 /**
  * Deliberately the same shape priors-load.ts keeps for a league, so
@@ -62,52 +61,46 @@ function numberFrom(value: unknown): number | null {
 async function loadLeagueFacts(supabase: ServiceClient): Promise<Map<string, LeagueFacts>> {
   const leagues = new Map<string, LeagueFacts>();
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  const leagueRows = await fetchAllRows("faab replay leagues", (from, to) =>
+    supabase
       .from("leagues")
       .select("id, season, metadata, roster_positions")
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-
-    for (const row of data) {
-      const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
-      const totalBudget = numberFrom(meta.settings?.waiver_budget);
-      // A league with no published budget cannot be expressed as a share of
-      // one, and a bid graded against nothing is not a grade.
-      if (totalBudget === null || totalBudget <= 0) continue;
-      leagues.set(row.id, {
-        id: row.id,
-        season: Number(row.season),
-        totalBudget,
-        kind: leagueKindFor(numberFrom(meta.settings?.type)),
-        superflex: isSuperflexShape(row.roster_positions),
-        rosterCount: 0,
-        eliminatedByRoster: new Map(),
-      });
-    }
-
-    if (data.length < PAGE) break;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of leagueRows) {
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    const totalBudget = numberFrom(meta.settings?.waiver_budget);
+    // A league with no published budget cannot be expressed as a share of
+    // one, and a bid graded against nothing is not a grade.
+    if (totalBudget === null || totalBudget <= 0) continue;
+    leagues.set(row.id, {
+      id: row.id,
+      season: Number(row.season),
+      totalBudget,
+      kind: leagueKindFor(numberFrom(meta.settings?.type)),
+      superflex: isSuperflexShape(row.roster_positions),
+      rosterCount: 0,
+      eliminatedByRoster: new Map(),
+    });
   }
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  const rosterRows = await fetchAllRows("faab replay rosters", (from, to) =>
+    supabase
       .from("rosters")
       .select("league_id, sleeper_roster_id, metadata")
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-
-    for (const row of data) {
-      const league = leagues.get(row.league_id);
-      if (!league) continue;
-      league.rosterCount += 1;
-      const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
-      const eliminated = numberFrom(meta.settings?.eliminated);
-      if (eliminated !== null && eliminated > 0) {
-        league.eliminatedByRoster.set(Number(row.sleeper_roster_id), eliminated);
-      }
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rosterRows) {
+    const league = leagues.get(row.league_id);
+    if (!league) continue;
+    league.rosterCount += 1;
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    const eliminated = numberFrom(meta.settings?.eliminated);
+    if (eliminated !== null && eliminated > 0) {
+      league.eliminatedByRoster.set(Number(row.sleeper_roster_id), eliminated);
     }
-
-    if (data.length < PAGE) break;
   }
 
   return leagues;
@@ -119,19 +112,19 @@ async function loadPositions(
   sleeperIds: string[],
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (let i = 0; i < sleeperIds.length; i += PLAYER_CHUNK) {
-    const chunk = sleeperIds.slice(i, i + PLAYER_CHUNK);
-    const { data, error } = await supabase
+  const rows = await fetchAllRowsInChunks("faab replay positions", sleeperIds, (chunk, from, to) =>
+    supabase
       .from("players")
       .select("position, external_ids")
-      .in("external_ids->>sleeper", chunk);
-    if (error || !data) continue;
-    for (const row of data) {
-      const ext = (row.external_ids ?? {}) as Record<string, unknown>;
-      const sleeperId = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      if (!sleeperId || !row.position) continue;
-      out.set(sleeperId, String(row.position).toUpperCase());
-    }
+      .in("external_ids->>sleeper", chunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    const ext = (row.external_ids ?? {}) as Record<string, unknown>;
+    const sleeperId = typeof ext.sleeper === "string" ? ext.sleeper : null;
+    if (!sleeperId || !row.position) continue;
+    out.set(sleeperId, String(row.position).toUpperCase());
   }
   return out;
 }
@@ -144,20 +137,16 @@ async function loadPositions(
  * wants today's cells anyway: it usually runs right after a rebuild.
  */
 export async function loadPriorCellsForReplay(supabase: ServiceClient): Promise<PriorCell[]> {
-  const out: PriorCell[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  const rows = await fetchAllRows("faab replay market cells", (from, to) =>
+    supabase
       .from("faab_market_priors")
       .select(
         "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at",
       )
       .order("cell_key", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) out.push(toPriorCell(row as unknown as Record<string, unknown>));
-    if (data.length < PAGE) break;
-  }
-  return out;
+      .range(from, to),
+  );
+  return rows.map((row) => toPriorCell(row as unknown as Record<string, unknown>));
 }
 
 /**
@@ -170,23 +159,20 @@ export async function loadReplayAuctions(supabase: ServiceClient): Promise<Repla
   const leagues = await loadLeagueFacts(supabase);
 
   const rowsByLeague = new Map<string, AuctionTransactionRow[]>();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  const waiverRows = await fetchAllRows("faab replay waiver transactions", (from, to) =>
+    supabase
       .from("league_transactions")
       .select("league_id, season, week, type, status, adds, roster_ids, metadata")
       .eq("type", "waiver")
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-
-    for (const row of data) {
-      const leagueId = (row as { league_id: string }).league_id;
-      if (!leagues.has(leagueId)) continue;
-      const list = rowsByLeague.get(leagueId) ?? [];
-      list.push(row as AuctionTransactionRow);
-      rowsByLeague.set(leagueId, list);
-    }
-
-    if (data.length < PAGE) break;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of waiverRows) {
+    const leagueId = (row as { league_id: string }).league_id;
+    if (!leagues.has(leagueId)) continue;
+    const list = rowsByLeague.get(leagueId) ?? [];
+    list.push(row as AuctionTransactionRow);
+    rowsByLeague.set(leagueId, list);
   }
 
   const grouped = new Map<string, ReturnType<typeof groupAuctions>>();

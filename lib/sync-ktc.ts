@@ -148,6 +148,7 @@ export async function runKtcSync(
         const { data, error } = await supabase
           .from("players")
           .select("id, external_ids, first_name, last_name, position, team")
+          .order("id", { ascending: true })
           .range(pageOffset, pageOffset + PAGE_SIZE - 1);
         if (error) throw error;
         return data ?? [];

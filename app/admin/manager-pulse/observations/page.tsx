@@ -54,8 +54,10 @@ async function loadObservationRows(
       .from("draft_pick_observations")
       .select("sleeper_draft_id, season, observation_gap_ms")
       .order("first_seen_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, to);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`draft pick observations: read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
     rows.push(...(data as ObservationRow[]));
     if (data.length < to - from + 1) break;
     if (to + 1 >= MAX_OBSERVATION_ROWS) capped = true;

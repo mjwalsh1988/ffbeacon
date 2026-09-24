@@ -59,6 +59,7 @@ import type { BundleOverride } from "./override";
 import { loadBriefDeskSettings, type BriefDeskSettings } from "./settings";
 import { isInSeasonPhase, requiredSlugPrefix } from "./slug";
 import type { Bundle, BundleFormatValue, BundleNotDue, BundlePlayer, BundleRelay } from "./types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 type Admin = SupabaseClient<Database>;
 
@@ -66,8 +67,6 @@ export type { BundleOverride } from "./override";
 
 export const BUNDLE_MEMO_PREFIX = "brief-desk:bundle:";
 const BUNDLE_TTL_MS = 10 * 60_000;
-const PAGE = 1000;
-const MAX_PAGES = 80;
 const ID_BATCH = 300;
 /** How far back an off-season period may be extended to cover skipped periods. */
 const MAX_ROLL_BACK_MS = 90 * 86_400_000;
@@ -92,21 +91,14 @@ function chunk<T>(items: T[], size: number): T[][] {
 /**
  * Page a query to completion. The factory builds a fresh query per page
  * because a PostgREST builder mutates as filters are added. Pages are ordered
- * by the caller; a page shorter than PAGE is the last one.
+ * by the caller on a unique key. This used to stop silently at 80 pages (80k
+ * rows) and return what it had; fetchAllRows throws instead of returning a
+ * partial set.
  */
-async function pageAll<T>(
+function pageAll<T>(
   factory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
 ): Promise<T[]> {
-  const out: T[] = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const from = page * PAGE;
-    const { data, error } = await factory(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    const rows = data ?? [];
-    out.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return out;
+  return fetchAllRows("brief desk bundle", factory);
 }
 
 function playerName(p: { full_name: string | null; first_name: string; last_name: string }): string {

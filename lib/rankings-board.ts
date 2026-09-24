@@ -25,17 +25,24 @@
  * `idx_rankings_generated_at` index was built to serve.
  *
  * Position is deliberately NOT part of the cache key. The board query is
- * unfiltered by position (up to 500 rows, the existing cap) so one cache
+ * unfiltered by position and returns EVERY ranked player, paged, so one cache
  * entry serves every position filter for a (format, source) pair; the caller
  * filters the returned rows in memory. Keying by position too would multiply
  * cache entries roughly tenfold for no benefit, since the underlying read
  * pulls every position either way.
+ *
+ * The read used to stop at 500 rows. Because the position filter runs AFTER
+ * the read, that cap silently dropped every player at a position ranked below
+ * 500 overall (287 of 817 on 2026-09-24). The overall board's 500-row display
+ * cap is RANKINGS_OVERALL_ROW_CAP, for the caller to apply to the unfiltered
+ * view only.
  */
 
 import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { createCachedReadClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
 /**
@@ -49,6 +56,10 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
  */
 const FALLBACK_WINDOW_DAYS = 30;
 const FALLBACK_PLAYER_CHUNK = 25;
+
+/** How many rows the unfiltered (all positions) board shows. A position view
+ *  shows every player at that position, however low he ranks overall. */
+export const RANKINGS_OVERALL_ROW_CAP = 500;
 
 /** 15 minutes. lib/cache-tags.ts's CACHE_TTL has no entry at this cadence
  *  (its options are 5 minutes, 1 hour, or 1 day), and this module does not own
@@ -92,7 +103,8 @@ export type RankingsBoardRow = {
 };
 
 export type RankingsBoardData = {
-  /** Every ranked player for the (format, source), unfiltered by position. */
+  /** Every ranked player for the (format, source), unfiltered by position
+   *  and uncapped. Apply RANKINGS_OVERALL_ROW_CAP to the unfiltered view. */
   rows: RankingsBoardRow[];
   /** Freshest player_value_history.captured_at for this (format, source),
    *  for the "Updated" stat. Null when there is no value-history source. */
@@ -145,9 +157,10 @@ export async function loadFreshestRankingsGeneratedAt(
  * there might be more. `order("player_id")` is what makes the paging sound:
  * `range()` over an unordered result can repeat or skip rows between pages.
  *
- * Same shape as the house pattern in lib/beacon/derive.ts.
+ * A failed page THROWS. loadRankingsBoard catches it and drops every trend
+ * row, so the board never mixes players with movement columns and players
+ * silently without them.
  */
-const TRENDS_PAGE = 1000;
 
 type TrendRow = {
   player_id: string;
@@ -168,9 +181,8 @@ async function loadTrendRows(
   formatConfigId: string,
   source: string,
 ): Promise<TrendRow[]> {
-  const rows: TrendRow[] = [];
-  for (let from = 0; ; from += TRENDS_PAGE) {
-    const { data, error } = await supabase
+  const rows = await fetchAllRows("rankings board trends", (from, to) =>
+    supabase
       .from("player_value_trends")
       .select(
         "player_id, current_value, change_30d_pct, trend_30d, rank_change_30d, show_trend_30d, high_30d, low_30d, change_7d_pct, rank_change_7d, show_trend_7d",
@@ -178,17 +190,50 @@ async function loadTrendRows(
       .eq("format_config_id", formatConfigId)
       .eq("source", source)
       .order("player_id", { ascending: true })
-      .range(from, from + TRENDS_PAGE - 1);
-    // A failed page returns what we have rather than throwing: the board's
-    // whole design is that a missing trend row degrades to a dash, and the
-    // history fallback below still recovers the values. Failing the render
-    // outright would be a worse answer than a partial board.
-    if (error) break;
-    const page = (data ?? []) as TrendRow[];
-    rows.push(...page);
-    if (page.length < TRENDS_PAGE) break;
-  }
-  return rows;
+      .range(from, to),
+  );
+  return rows as TrendRow[];
+}
+
+type RankedBoardRow = {
+  overall_rank: number;
+  position_rank: number;
+  players: {
+    id: string;
+    slug: string;
+    first_name: string;
+    last_name: string;
+    position: string;
+    team: string | null;
+    status: string;
+    external_ids: Record<string, unknown> | null;
+  };
+};
+
+/**
+ * Every ranked player for one (format, source), paged. Uncapped on purpose:
+ * see the module comment on why a cap here empties the position views.
+ */
+async function loadRankedRows(
+  supabase: SupabaseClient<Database>,
+  formatConfigId: string,
+  source: string,
+): Promise<RankedBoardRow[]> {
+  const rows = await fetchAllRows("rankings board", (from, to) =>
+    supabase
+      .from("rankings")
+      .select(
+        "overall_rank, position_rank, players!inner(id, slug, first_name, last_name, position, team, status, external_ids)",
+      )
+      .eq("format_config_id", formatConfigId)
+      .eq("source", source)
+      .is("week", null)
+      .order("overall_rank")
+      // Tiebreak, so pages over a tied rank cannot repeat or skip a player.
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows as unknown as RankedBoardRow[];
 }
 
 /**
@@ -203,22 +248,23 @@ export async function loadRankingsBoard(
   // never applied one: lib/seed-rankings.ts sweeps every other season out of the
   // table, so it holds exactly one. Pinning a constant here risks this reader and
   // that writer drifting apart.
-  const rankingsQuery = supabase
-    .from("rankings")
-    .select(
-      "overall_rank, position_rank, players!inner(id, slug, first_name, last_name, position, team, status, external_ids)",
-    )
-    .eq("format_config_id", formatConfigId)
-    .eq("source", rankingsSource ?? "__none__")
-    .is("week", null)
-    .order("overall_rank")
-    .limit(500);
-
-  const [rankingsResult, trendRows, capturedResult] = await Promise.all([
-    rankingsSource ? rankingsQuery : Promise.resolve({ data: [] as never }),
+  const [rankedRows, trendRows, capturedResult] = await Promise.all([
+    rankingsSource
+      ? loadRankedRows(supabase, formatConfigId, rankingsSource).catch((error) => {
+          // Same posture as before paging: an empty board, never a partial one.
+          console.error("[rankings-board] rankings read failed", error);
+          return [] as RankedBoardRow[];
+        })
+      : Promise.resolve([] as RankedBoardRow[]),
     valueHistorySource
-      ? loadTrendRows(supabase, formatConfigId, valueHistorySource)
-      : Promise.resolve([]),
+      ? loadTrendRows(supabase, formatConfigId, valueHistorySource).catch((error) => {
+          // A missing trend row degrades to a dash and the history fallback
+          // below still recovers every value, so a failed trends read drops
+          // ALL trend rows rather than failing the render or keeping some.
+          console.error("[rankings-board] trends read failed", error);
+          return [] as TrendRow[];
+        })
+      : Promise.resolve([] as TrendRow[]),
     // ONE ROW, for the "Values as of" date and nothing else. See the note in
     // the previous version of this read (now here) for why the trends row's
     // own updated_at is the wrong timestamp for that chip.
@@ -246,11 +292,8 @@ export async function loadRankingsBoard(
   // how many players are uncovered. See FALLBACK_WINDOW_DAYS above.
   const uncovered = [
     ...new Set(
-      (rankingsResult.data ?? [])
-        .map(
-          (r) =>
-            (r as unknown as { players: { id: string } }).players?.id ?? null,
-        )
+      rankedRows
+        .map((r) => r.players?.id ?? null)
         .filter((id): id is string => Boolean(id) && !valueByPlayer.has(id)),
     ),
   ];
@@ -312,21 +355,8 @@ export async function loadRankingsBoard(
     });
   }
 
-  const rows: RankingsBoardRow[] = (rankingsResult.data ?? []).map((r) => {
-    const player = (
-      r as unknown as {
-        players: {
-          id: string;
-          slug: string;
-          first_name: string;
-          last_name: string;
-          position: string;
-          team: string | null;
-          status: string;
-          external_ids: Record<string, unknown> | null;
-        };
-      }
-    ).players;
+  const rows: RankingsBoardRow[] = rankedRows.map((r) => {
+    const player = r.players;
     const value = valueByPlayer.get(player.id);
     const trend = trendByPlayer.get(player.id);
     const sleeperExt = player.external_ids?.sleeper;

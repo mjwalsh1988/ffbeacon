@@ -40,14 +40,18 @@ async function scanModelVersions(
 ): Promise<{ versions: Set<string>; truncated: boolean }> {
   const versions = new Set<string>();
   let truncated = false;
+  // Each table's primary key, as the tiebreak that makes the order total.
+  const keyColumn = table === "manager_pulse_tendencies" ? "sleeper_user_id" : "id";
   for (let from = 0; from < VERSION_SCAN_ROW_CAP; from += VERSION_SCAN_PAGE_SIZE) {
     const to = Math.min(from + VERSION_SCAN_PAGE_SIZE, VERSION_SCAN_ROW_CAP) - 1;
     const { data, error } = await admin
       .from(table)
       .select("model_version")
       .order("generated_at", { ascending: false })
+      .order(keyColumn, { ascending: true })
       .range(from, to);
-    if (error || !data || data.length === 0) break;
+    if (error) throw new Error(`${table} version scan: read failed at row ${from}: ${error.message}`);
+    if (!data || data.length === 0) break;
     for (const row of data) versions.add(row.model_version);
     if (data.length < to - from + 1) break;
     if (to + 1 >= VERSION_SCAN_ROW_CAP) truncated = true;

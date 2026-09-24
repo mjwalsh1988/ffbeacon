@@ -39,6 +39,16 @@
 
 import { readFileSync } from "node:fs";
 import { getServiceClient } from "./_supabase";
+import { fetchAllRowsInChunks } from "../lib/supabase/fetch-all";
+
+/** Ids per `.in()` write, so a long slug list never overflows a request URL. */
+const IN_CHUNK = 200;
+
+function chunks<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += IN_CHUNK) out.push(items.slice(i, i + IN_CHUNK));
+  return out;
+}
 
 function arg(name: string): string | null {
   const i = process.argv.indexOf(`--${name}`);
@@ -71,13 +81,16 @@ async function main() {
 
   const supabase = getServiceClient();
 
-  const { data: articles, error } = await supabase
-    .from("articles")
-    .select("id, slug, title, status")
-    .in("slug", slugs);
-  if (error) throw new Error(error.message);
+  const articles = await fetchAllRowsInChunks("articles by slug", slugs, (chunk, from, to) =>
+    supabase
+      .from("articles")
+      .select("id, slug, title, status")
+      .in("slug", chunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
-  const found = new Map((articles ?? []).map((a) => [a.slug, a]));
+  const found = new Map(articles.map((a) => [a.slug, a]));
   const missing = slugs.filter((s) => !found.has(s));
 
   console.log(
@@ -91,12 +104,18 @@ async function main() {
   if (found.size === 0) return;
 
   const ids = [...found.values()].map((a) => a.id);
-  const { data: ingestions } = await supabase
-    .from("news_ingestions")
-    .select("id, article_id, discord_message_id")
-    .in("article_id", ids);
-  const ingestionIds = (ingestions ?? []).map((i) => i.id);
-  const withCards = (ingestions ?? []).filter(
+  // A failed read throws: an empty list here would delete the articles and
+  // leave their ingestions unmarked, losing the dedup guard.
+  const ingestions = await fetchAllRowsInChunks("ingestions by article", ids, (chunk, from, to) =>
+    supabase
+      .from("news_ingestions")
+      .select("id, article_id, discord_message_id")
+      .in("article_id", chunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const ingestionIds = ingestions.map((i) => i.id);
+  const withCards = ingestions.filter(
     (i) => i.discord_message_id,
   ).length;
 
@@ -130,36 +149,42 @@ async function main() {
     if (qErr)
       throw new Error(`queue cleanup failed for ${id}: ${qErr.message}`);
   }
-  if (ingestionIds.length > 0) {
+  for (const chunk of chunks(ingestionIds)) {
     const { error: mErr } = await supabase
       .from("beacon_brief_moderation")
       .delete()
-      .in("ingestion_id", ingestionIds);
+      .in("ingestion_id", chunk);
     if (mErr) throw new Error(`moderation cleanup failed: ${mErr.message}`);
   }
 
-  const { error: delErr } = await supabase
-    .from("articles")
-    .delete()
-    .in("id", ids);
-  if (delErr) throw new Error(`article delete failed: ${delErr.message}`);
+  for (const chunk of chunks(ids)) {
+    const { error: delErr } = await supabase
+      .from("articles")
+      .delete()
+      .in("id", chunk);
+    if (delErr) throw new Error(`article delete failed: ${delErr.message}`);
+  }
 
-  if (ingestionIds.length > 0) {
+  for (const chunk of chunks(ingestionIds)) {
     const { error: uErr } = await supabase
       .from("news_ingestions")
       .update({ status: "deleted", article_id: null })
-      .in("id", ingestionIds);
+      .in("id", chunk);
     if (uErr) throw new Error(`ingestion update failed: ${uErr.message}`);
   }
 
   console.log(`\nDeleted ${ids.length} article(s).`);
 
-  const { data: remaining } = await supabase
-    .from("articles")
-    .select("slug")
-    .in("slug", slugs);
+  const remaining = await fetchAllRowsInChunks("remaining articles", slugs, (chunk, from, to) =>
+    supabase
+      .from("articles")
+      .select("slug")
+      .in("slug", chunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   console.log(
-    remaining && remaining.length > 0
+    remaining.length > 0
       ? `WARNING: ${remaining.length} still present: ${remaining.map((r) => r.slug).join(", ")}`
       : "Verified: none of the requested slugs remain.",
   );

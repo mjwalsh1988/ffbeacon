@@ -62,6 +62,7 @@ function emptyState(): FilterState {
  */
 function makeBuilder(table: string, tables: Tables, headProbes?: string[]) {
   const state = emptyState();
+  let range: { from: number; to: number } | null = null;
 
   function rowsFor(): Row[] {
     let rows = tables[table] ?? [];
@@ -139,6 +140,11 @@ function makeBuilder(table: string, tables: Tables, headProbes?: string[]) {
       state.limit = n;
       return builder;
     },
+    // Paged reads (loadDefenseSplits): the page is a slice of the filtered rows.
+    range(from: number, to: number) {
+      range = { from, to };
+      return builder;
+    },
     maybeSingle() {
       state.maybeSingle = true;
       return builder;
@@ -147,7 +153,8 @@ function makeBuilder(table: string, tables: Tables, headProbes?: string[]) {
       resolve: (v: { data: unknown; count?: number; error: null }) => void,
       _reject?: (e: unknown) => void,
     ) {
-      const rows = rowsFor();
+      const all = rowsFor();
+      const rows = range ? all.slice(range.from, range.to + 1) : all;
       if (state.head) {
         resolve({ data: null, count: rows.length, error: null });
       } else if (state.maybeSingle) {

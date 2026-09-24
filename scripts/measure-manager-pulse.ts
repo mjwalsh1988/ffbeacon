@@ -748,6 +748,7 @@ async function fetchAllRows(
       .from(table)
       .select(column)
       .eq("run_id", runId)
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`${table} read failed: ${error.message}`);
     const page = data ?? [];
@@ -768,6 +769,7 @@ async function fetchAllJobStats(
       .from("league_sync_jobs")
       .select("sleeper_calls, duration_ms")
       .eq("manager_run_id", runId)
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`league_sync_jobs read failed: ${error.message}`);
     const page = data ?? [];

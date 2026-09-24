@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, HelpCircle, Inbox, Sparkles } from "lucide-react";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const metadata: Metadata = { title: "Signal Guide" };
 export const dynamic = "force-dynamic";
@@ -22,7 +23,9 @@ export default async function AdminSignalGuidePage() {
       .select("id, page_key, title, description, route_example, display_order")
       .order("display_order", { ascending: true })
       .order("title", { ascending: true }),
-    admin.from("guide_entries").select("page_id, kind"),
+    fetchAllRows("signal guide entries", (from, to) =>
+      admin.from("guide_entries").select("page_id, kind").order("id", { ascending: true }).range(from, to),
+    ).then((data) => ({ data })),
     admin
       .from("guide_question_submissions")
       .select("id", { count: "exact", head: true })

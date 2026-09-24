@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { formatTeamLabel } from "@/lib/team-label";
 import { scoreStatMap } from "@/lib/league-scoring";
 import type { GameLogEntry, PositionalFinish } from "./signals";
@@ -119,25 +120,30 @@ export async function loadWinningBids(
 
   const out: Array<{ amount: number; season: number; position: string | null }> = [];
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("league_transactions")
-      .select("season, type, status, metadata")
-      .eq("league_id", leagueRowId)
-      .in("season", seasons)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
+  // A failed page yields no history rather than a partial one.
+  let data: Array<{ season: number | null; type: string; status: string | null; metadata: unknown }>;
+  try {
+    data = await fetchAllRows("faab winning bids", (from, to) =>
+      supabase
+        .from("league_transactions")
+        .select("season, type, status, metadata")
+        .eq("league_id", leagueRowId)
+        .in("season", seasons)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (error) {
+    console.error("[faab] winning bids read failed", error);
+    return [];
+  }
 
-    for (const row of data) {
-      if (row.type !== "waiver") continue;
-      if (row.status && row.status !== "complete") continue;
-      const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
-      const amount = numberFrom(meta.settings?.waiver_bid);
-      if (amount === null || amount <= 0) continue;
-      out.push({ amount, season: Number(row.season), position: null });
-    }
-
-    if (data.length < PAGE) break;
+  for (const row of data) {
+    if (row.type !== "waiver") continue;
+    if (row.status && row.status !== "complete") continue;
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    const amount = numberFrom(meta.settings?.waiver_bid);
+    if (amount === null || amount <= 0) continue;
+    out.push({ amount, season: Number(row.season), position: null });
   }
 
   return out;
@@ -274,18 +280,22 @@ export async function loadAuctionHistory(
 ): Promise<LeagueAuction[]> {
   if (seasons.length === 0) return [];
 
-  const rows: AuctionTransactionRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("league_transactions")
-      .select("season, week, type, status, adds, roster_ids, metadata")
-      .eq("league_id", leagueRowId)
-      .eq("type", "waiver")
-      .in("season", seasons)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    rows.push(...(data as AuctionTransactionRow[]));
-    if (data.length < PAGE) break;
+  // A failed page yields no auctions rather than a partial history.
+  let rows: AuctionTransactionRow[];
+  try {
+    rows = (await fetchAllRows("faab auction history", (from, to) =>
+      supabase
+        .from("league_transactions")
+        .select("season, week, type, status, adds, roster_ids, metadata")
+        .eq("league_id", leagueRowId)
+        .eq("type", "waiver")
+        .in("season", seasons)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )) as AuctionTransactionRow[];
+  } catch (error) {
+    console.error("[faab] auction history read failed", error);
+    return [];
   }
 
   return groupAuctions(rows);

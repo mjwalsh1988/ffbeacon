@@ -253,13 +253,13 @@ export async function GET(req: Request) {
       let positionalWarCurveRowsDeleted: number | null = null;
       try {
         const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        const { data, error } = await supabase
+        // An exact count rather than the returned rows, which cap at 1000.
+        const { count, error } = await supabase
           .from("positional_war_curves")
-          .delete()
-          .lt("computed_at", cutoff)
-          .select("fingerprint");
+          .delete({ count: "exact" })
+          .lt("computed_at", cutoff);
         if (error) throw new Error(error.message);
-        positionalWarCurveRowsDeleted = data?.length ?? 0;
+        positionalWarCurveRowsDeleted = count ?? 0;
       } catch (pruneErr) {
         console.error("[cron/recalculate-derived] Positional WAR curve prune failed", pruneErr);
       }

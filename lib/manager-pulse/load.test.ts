@@ -572,8 +572,8 @@ describe("a league we do not hold", () => {
   });
 });
 
-describe("never throws", () => {
-  it("returns the empty shape when every read fails", async () => {
+describe("a failed read", () => {
+  it("throws rather than returning an empty report", async () => {
     const throwingClient = {
       from: () => ({
         select: () => {
@@ -582,17 +582,47 @@ describe("never throws", () => {
       }),
     } as unknown as SupabaseClient<Database>;
 
-    const result = await loadManagerPulseInput(
-      throwingClient,
-      baseParams({
-        leagueSeasons: [
-          { sleeperLeagueId: "sleeper-league-1", season: 2026, category: "dynasty", leagueName: null },
-        ],
-      }),
-    );
+    await expect(
+      loadManagerPulseInput(
+        throwingClient,
+        baseParams({
+          leagueSeasons: [
+            { sleeperLeagueId: "sleeper-league-1", season: 2026, category: "dynasty", leagueName: null },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("connection refused");
+  });
 
-    expect(result.leagueSeasons).toEqual([]);
-    expect(result.trades).toEqual([]);
-    expect(result.sleeperUserId).toBe("user-1");
+  it("throws when a later page errors, instead of returning the rows so far", async () => {
+    const filler = Array.from({ length: 1000 }, (_, i) =>
+      rosterRow({ sleeper_roster_id: i + 100, owner_user_id: `filler-${i}` }),
+    );
+    const base = fakeClient({ leagues: [leagueRow()], rosters: filler });
+    const client = {
+      from: (table: string) => {
+        const builder = (base as unknown as { from: (t: string) => Record<string, unknown> }).from(table);
+        if (table !== "rosters") return builder;
+        // The second page of rosters fails.
+        builder.range = (from: number) =>
+          Promise.resolve(
+            from === 0
+              ? { data: filler, error: null }
+              : { data: null, error: { message: "statement timeout" } },
+          );
+        return builder;
+      },
+    } as unknown as SupabaseClient<Database>;
+
+    await expect(
+      loadManagerPulseInput(
+        client,
+        baseParams({
+          leagueSeasons: [
+            { sleeperLeagueId: "sleeper-league-1", season: 2026, category: "dynasty", leagueName: null },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("statement timeout");
   });
 });

@@ -70,7 +70,15 @@ function mockSupabase(opts: {
       : opts.sourceRow;
 
   function builder(table: string) {
-    const state: { selectArg?: string } = {};
+    const state: { selectArg?: string; eq: Record<string, unknown> } = { eq: {} };
+    // player_value_history honours its captured_at / player_id filters, newest
+    // first, so the loader's newest-capture read and its per-player fallback
+    // both see real rows.
+    const valueRows = () =>
+      [...(opts.values ?? [])]
+        .filter((v) => state.eq.captured_at === undefined || v.captured_at === state.eq.captured_at)
+        .filter((v) => state.eq.player_id === undefined || v.player_id === state.eq.player_id)
+        .sort((a, b) => b.captured_at.localeCompare(a.captured_at));
     const result = () => {
       if (table === "source_registry") return { data: sourceRow, error: null };
       if (table === "format_configs") return { data: opts.format, error: null };
@@ -80,20 +88,32 @@ function mockSupabase(opts: {
         }
         return { data: opts.rankings, error: null };
       }
-      if (table === "player_value_history") return { data: opts.values ?? [], error: null };
+      if (table === "player_value_history") return { data: valueRows(), error: null };
       if (table === "player_value_trends") return { data: opts.trends ?? [], error: null };
       return { data: [], error: null };
+    };
+    const single = () => {
+      const r = result();
+      return { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: null };
     };
     const b: Record<string, unknown> = {
       select(arg: string) {
         state.selectArg = arg;
         return b;
       },
-      eq: () => b,
+      eq: (col: string, val: unknown) => {
+        state.eq[col] = val;
+        return b;
+      },
       is: () => b,
       order: () => b,
       limit: () => b,
-      maybeSingle: () => Promise.resolve(result()),
+      range: (from: number, to: number) => {
+        const r = result();
+        const data = Array.isArray(r.data) ? r.data.slice(from, to + 1) : r.data;
+        return Promise.resolve({ data, error: null });
+      },
+      maybeSingle: () => Promise.resolve(single()),
       then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
         Promise.resolve(result()).then(res, rej),
       insert: writeThrow,
@@ -150,6 +170,30 @@ describe("loadRankedBoard (source forced to FF Beacon)", () => {
     expect(res.valueSourceSlug).toBe("ffbeacon");
     expect(res.sourceActive).toBe(true);
     expect(res.players[0]).toMatchObject({ playerId: "p1", name: "Ja'Marr Chase", position: "WR", value: 9000 });
+  });
+
+  it("keeps the latest value of a player missing from the newest capture", async () => {
+    const player = (id: string, rank: number) => ({
+      overall_rank: rank, position_rank: rank, tier: 1,
+      players: { id, first_name: id, last_name: "X", position: "WR", team: null, external_ids: null, draft_year: 2020, years_experience: 5, birth_date: null },
+    });
+    const supabase = mockSupabase({
+      format: FMT,
+      latestSeason: 2026,
+      rankings: [player("p1", 1), player("p2", 2)],
+      values: [
+        { player_id: "p1", value: 9000, captured_at: "2026-09-24T09:30:00Z" },
+        { player_id: "p1", value: 8000, captured_at: "2026-09-10T09:30:00Z" },
+        // p2 was last written two weeks before the newest capture.
+        { player_id: "p2", value: 4200, captured_at: "2026-09-10T09:30:00Z" },
+        { player_id: "p2", value: 4100, captured_at: "2026-09-01T09:30:00Z" },
+      ],
+    });
+    const res = await loadRankedBoard(supabase, { formatSlug: FMT.slug, rookieSeason: ROOKIE_SEASON });
+    expect(res.players.map((p) => [p.playerId, p.value])).toEqual([
+      ["p1", 9000],
+      ["p2", 4200],
+    ]);
   });
 
   it("still loads the board when ffbeacon is_active=false, flagging sourceActive=false", async () => {

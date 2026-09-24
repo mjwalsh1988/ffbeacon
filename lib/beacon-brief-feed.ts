@@ -16,6 +16,7 @@ import type {
 } from "@/lib/supabase/server";
 import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
 import { memoTtl } from "@/lib/memo-ttl";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 /**
  * Either public read client is acceptable here.
@@ -522,26 +523,29 @@ async function loadSidebarUncached(
  * Every published article slug, for generateStaticParams on /brief/[slug].
  *
  * Paged with range() because select() silently truncates at 1000 rows, and the
- * article count only grows. Ordered newest first so that if a build ever has to cut
- * the list short, the most-read articles are the ones that got prerendered.
+ * article count only grows.
  */
 export async function publishedArticleSlugs(
   supabase: ReaderClient,
 ): Promise<string[]> {
-  const pageSize = 1000;
-  const slugs: string[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from("articles")
-      .select("slug")
-      .eq("status", "published")
-      .order("published_at", { ascending: false })
-      .range(from, from + pageSize - 1);
-    if (error || !data || data.length === 0) break;
-    slugs.push(...data.map((r) => r.slug));
-    if (data.length < pageSize) break;
+  // id breaks published_at ties so pages neither overlap nor skip. A failed
+  // read prerenders nothing rather than a partial list; every article still
+  // renders on first request (dynamicParams).
+  try {
+    const rows = await fetchAllRows("published article slugs", (from, to) =>
+      supabase
+        .from("articles")
+        .select("slug")
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    return rows.map((r) => r.slug);
+  } catch (err) {
+    console.error("[brief] published article slugs failed", err);
+    return [];
   }
-  return slugs;
 }
 
 export async function loadArticle(

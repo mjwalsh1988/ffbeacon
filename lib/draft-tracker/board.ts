@@ -28,6 +28,7 @@
 
 import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 import { adpFormatKeyCandidates } from "@/lib/on-the-clock/adp";
 import { normalizePositionColor } from "@/lib/on-the-clock/position-colors";
@@ -40,9 +41,6 @@ import type { DraftTrackerBoard, TrackerPlayer } from "./types";
  * source shipping the world to a phone.
  */
 const BOARD_LIMIT = 900;
-
-/** PostgREST returns at most 1000 rows per request, so every read here pages. */
-const PAGE = 1000;
 
 /** The Sleeper market rows live under this source slug. */
 const MARKET_SOURCE = "sleeper";
@@ -102,8 +100,10 @@ async function loadAdpMap(formatSlug: string): Promise<AdpMap> {
   // Keys are internal constants, never user input.
   for (const key of adpFormatKeyCandidates(formatSlug, "everyone")) {
     const map: Record<string, number> = {};
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
+    // A failed page throws, so a partial map is never cached for the hour and
+    // a failed read is never mistaken for "this key has no market".
+    const rows = await fetchAllRows(`draft tracker adp ${key}`, (from, to) =>
+      supabase
         .from("player_market_snapshots")
         .select(`sleeper_player_id, adp_value:adp->>${key}`)
         .eq("source", MARKET_SOURCE)
@@ -112,18 +112,18 @@ async function loadAdpMap(formatSlug: string): Promise<AdpMap> {
         // The order is not cosmetic. Paging an unordered query lets Postgres
         // return the rows in a different sequence per page, which silently
         // duplicates some players and drops others. This market runs past 1600
-        // rows, so it pages every time.
+        // rows, so it pages every time. id ends it because sleeper_player_id
+        // alone is unique only per season.
         .order("sleeper_player_id")
-        .range(from, from + PAGE - 1);
-      if (error || !data || data.length === 0) break;
-      for (const row of data as unknown as {
-        sleeper_player_id: string;
-        adp_value: string | null;
-      }[]) {
-        const value = Number(row.adp_value);
-        if (Number.isFinite(value) && value > 0) map[row.sleeper_player_id] = value;
-      }
-      if (data.length < PAGE) break;
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    for (const row of rows as unknown as {
+      sleeper_player_id: string;
+      adp_value: string | null;
+    }[]) {
+      const value = Number(row.adp_value);
+      if (Number.isFinite(value) && value > 0) map[row.sleeper_player_id] = value;
     }
     if (Object.keys(map).length > 0) return { key, date, map };
   }
@@ -167,25 +167,21 @@ async function loadBoard(args: {
         .maybeSingle();
       if (!latestSeason) return [];
 
-      const rows: RankingRow[] = [];
-      for (let from = 0; from < BOARD_LIMIT; from += PAGE) {
-        const size = Math.min(PAGE, BOARD_LIMIT - from);
-        const { data, error } = await supabase
-          .from("rankings")
-          .select(
-            "overall_rank, position_rank, tier, players!inner(id, first_name, last_name, full_name, position, team, external_ids)",
-          )
-          .eq("format_config_id", formatConfigId)
-          .eq("source", sourceSlug)
-          .eq("season", latestSeason.season)
-          .is("week", null)
-          .order("overall_rank")
-          .range(from, from + size - 1);
-        if (error || !data || data.length === 0) break;
-        rows.push(...(data as unknown as RankingRow[]));
-        if (data.length < size) break;
-      }
-      return rows;
+      // BOARD_LIMIT is under the 1000-row cap, so one request holds it.
+      const { data, error } = await supabase
+        .from("rankings")
+        .select(
+          "overall_rank, position_rank, tier, players!inner(id, first_name, last_name, full_name, position, team, external_ids)",
+        )
+        .eq("format_config_id", formatConfigId)
+        .eq("source", sourceSlug)
+        .eq("season", latestSeason.season)
+        .is("week", null)
+        .order("overall_rank")
+        .order("id", { ascending: true })
+        .range(0, BOARD_LIMIT - 1);
+      if (error) throw new Error(`draft tracker rankings: ${error.message}`);
+      return (data ?? []) as unknown as RankingRow[];
     })(),
     loadAdpMapCached(formatSlug),
   ]);
@@ -207,8 +203,8 @@ async function loadBoard(args: {
   // history: one row per player per (format, source), so this is a single
   // indexed read instead of a scan over every snapshot ever written.
   const valueByPlayer = new Map<string, number>();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  const valueRows = await fetchAllRows("draft tracker values", (from, to) =>
+    supabase
       .from("player_value_trends")
       .select("player_id, current_value")
       .eq("format_config_id", formatConfigId)
@@ -216,14 +212,13 @@ async function loadBoard(args: {
       // Ordered for the same reason the ADP read is: a paged query with no
       // order can hand back the same row twice and never hand back another.
       .order("player_id")
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      if (typeof row.current_value === "number") {
-        valueByPlayer.set(row.player_id, row.current_value);
-      }
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of valueRows) {
+    if (typeof row.current_value === "number") {
+      valueByPlayer.set(row.player_id, row.current_value);
     }
-    if (data.length < PAGE) break;
   }
 
   const players: TrackerPlayer[] = [];

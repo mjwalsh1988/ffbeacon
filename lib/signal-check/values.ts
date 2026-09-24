@@ -26,6 +26,7 @@ import {
   PICK_FALLBACK_SOURCE_DISPLAY,
 } from "./format";
 import { readSleeperId } from "@/lib/ranking-boards";
+import { loadLatestPickSnapshots } from "@/lib/trade-analyzer";
 
 type Client = SupabaseClient<Database>;
 
@@ -90,14 +91,6 @@ async function loadPoolMax(
   const value = data?.current_value;
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
-
-/**
- * How far back the pick-price read looks. Only the newest snapshot per pick is
- * ever used; the window exists so the query cannot drag months of diary back
- * with it. Generous enough to ride out a sync outage, and there is a fallback
- * below for one longer than this.
- */
-const PICK_VALUE_WINDOW_DAYS = 14;
 
 export async function buildValueResolver(
   supabase: Client,
@@ -177,32 +170,29 @@ export async function buildValueResolver(
     // PostgREST, so how many snapshots came back was a function of how much
     // history existed. The dedupe below still only wants the newest row per
     // pick, and a fortnight is thirteen days more than it needs.
-    const windowStart = new Date(Date.now() - PICK_VALUE_WINDOW_DAYS * 86_400_000).toISOString();
-
-    const loadPicks = async (sourceSlug: string, since: string | null) => {
-      let query = supabase
-        .from("draft_pick_values")
-        .select("season, round, pick_position, value, captured_at")
-        .eq("format_config_id", format.configId)
-        .eq("source", sourceSlug)
-        .in("season", seasons)
-        .in("round", rounds);
-      if (since) query = query.gte("captured_at", since);
-      const { data } = await query.order("captured_at", { ascending: false });
-      return data ?? [];
+    //
+    // The window is anchored on the newest snapshot rather than on now, so a
+    // multi-day sync outage still prices every pick. That replaced an
+    // unwindowed fallback read of the whole diary, which the 1000-row cap cut
+    // to the newest 1000 rows.
+    const loadPicks = async (sourceSlug: string) => {
+      try {
+        return await loadLatestPickSnapshots(supabase, {
+          formatConfigId: format.configId,
+          source: sourceSlug,
+          seasons,
+          rounds,
+        });
+      } catch (err) {
+        // Unchanged posture: a failed read is treated as no price here.
+        console.error("[signal-check] pick values read failed", err);
+        return [];
+      }
     };
 
-    // A window that comes back empty means the sync has not run inside it, not
-    // that the pick has no price. Falling back to the unwindowed query keeps a
-    // multi-day outage from silently stripping every pick out of a trade.
-    const loadPicksWithFallback = async (sourceSlug: string) => {
-      const recent = await loadPicks(sourceSlug, windowStart);
-      return recent.length > 0 ? recent : loadPicks(sourceSlug, null);
-    };
-
-    let rows = await loadPicksWithFallback(FFBEACON_SOURCE_SLUG);
+    let rows = await loadPicks(FFBEACON_SOURCE_SLUG);
     if (rows.length === 0) {
-      rows = await loadPicksWithFallback(PICK_FALLBACK_SOURCE_SLUG);
+      rows = await loadPicks(PICK_FALLBACK_SOURCE_SLUG);
       if (rows.length > 0) {
         pickSlug = PICK_FALLBACK_SOURCE_SLUG;
         pickDisplay = PICK_FALLBACK_SOURCE_DISPLAY;

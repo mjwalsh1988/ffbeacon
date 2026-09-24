@@ -16,6 +16,7 @@ import type { Database, Json } from "@/lib/database.types";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import { isAliveRoster, isChoppedLeague } from "@/lib/chopped/league";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import {
   DEFAULT_PLAYOFF_TEAMS,
   DEFAULT_PLAYOFF_WEEK_START,
@@ -767,17 +768,24 @@ export async function loadDefenseSplits(
   if (seasons.length === 0) return out;
   const keys = typeof scoring === "string" ? [scoring] : [...scoring];
 
-  const { data, error } = await supabase
-    .from("nfl_defense_vs_position")
-    .select(
-      "team, season, position, multiplier, adjusted_multiplier, shrunk_multiplier, games_sampled",
-    )
-    .in("scoring", keys)
-    .in("season", seasons);
-  if (error)
-    throw new Error(`power pulse defense split load failed: ${error.message}`);
+  // An IDP league over three seasons is already close to 1000 rows, so this
+  // pages, ordered by the full primary key. A failed page throws, as before.
+  const data = await fetchAllRows("power pulse defense splits", (from, to) =>
+    supabase
+      .from("nfl_defense_vs_position")
+      .select(
+        "team, season, position, multiplier, adjusted_multiplier, shrunk_multiplier, games_sampled",
+      )
+      .in("scoring", keys)
+      .in("season", seasons)
+      .order("team", { ascending: true })
+      .order("season", { ascending: true })
+      .order("position", { ascending: true })
+      .order("scoring", { ascending: true })
+      .range(from, to),
+  );
 
-  for (const row of data ?? []) {
+  for (const row of data) {
     out.set(`${row.team}|${row.season}|${row.position}`, {
       team: row.team,
       season: Number(row.season),

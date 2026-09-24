@@ -42,6 +42,7 @@
 
 import { OFFENSE_POSITIONS } from "@/lib/site";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { Database } from "@/lib/database.types";
 import type { ScoringKey } from "@/lib/player-profile";
 import { scoringSettingsForFormat, type ScoringSettings } from "@/lib/league-scoring";
@@ -93,7 +94,6 @@ export type ExtrasContext = {
   tePremiumPerReception: number;
 };
 
-const PAGE = 1000;
 /**
  * Sleeper publishes an 18-week regular season. Also the last week the
  * projection loop below walks to; kept here rather than imported from
@@ -149,36 +149,43 @@ async function loadProjectionRows(
   const out = new Map<string, Map<number, ProjectionRow>>();
   if (playerIds.length === 0) return out;
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("player_weekly_projections")
-      .select(
-        "player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
-      )
-      .eq("season", season)
-      .eq("season_type", "regular")
-      // NOT OPTIONAL: the Map below is keyed (player, week) with no tiebreak,
-      // so two sources' rows would silently race to decide the page.
-      .eq("source", source)
-      .gte("week", fromWeek)
-      .in("player_id", playerIds)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      if (!row.player_id) continue;
-      const byWeek = out.get(row.player_id) ?? new Map<number, ProjectionRow>();
-      byWeek.set(Number(row.week), {
-        playerId: row.player_id,
-        week: Number(row.week),
-        opponent: row.opponent,
-        statLine: (row.stat_line as Record<string, unknown> | null) ?? null,
-        ppr: numOrNull(row.projected_pts_ppr),
-        halfPpr: numOrNull(row.projected_pts_half_ppr),
-        std: numOrNull(row.projected_pts_std),
-      });
-      out.set(row.player_id, byWeek);
-    }
-    if (data.length < PAGE) break;
+  // Ordered by id so pages neither overlap nor skip. A failed read shows no
+  // projection rather than some weeks of one.
+  let rows;
+  try {
+    rows = await fetchAllRows("breakdown projections", (from, to) =>
+      db
+        .from("player_weekly_projections")
+        .select(
+          "player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
+        )
+        .eq("season", season)
+        .eq("season_type", "regular")
+        // NOT OPTIONAL: the Map below is keyed (player, week) with no tiebreak,
+        // so two sources' rows would silently race to decide the page.
+        .eq("source", source)
+        .gte("week", fromWeek)
+        .in("player_id", playerIds)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (err) {
+    console.error("[breakdown] projection read failed", err);
+    return out;
+  }
+  for (const row of rows) {
+    if (!row.player_id) continue;
+    const byWeek = out.get(row.player_id) ?? new Map<number, ProjectionRow>();
+    byWeek.set(Number(row.week), {
+      playerId: row.player_id,
+      week: Number(row.week),
+      opponent: row.opponent,
+      statLine: (row.stat_line as Record<string, unknown> | null) ?? null,
+      ppr: numOrNull(row.projected_pts_ppr),
+      halfPpr: numOrNull(row.projected_pts_half_ppr),
+      std: numOrNull(row.projected_pts_std),
+    });
+    out.set(row.player_id, byWeek);
   }
   return out;
 }
@@ -413,29 +420,36 @@ async function loadValueSeriesPair(
   if (!formatConfigId || !source || playerIds.length === 0) return out;
 
   const sinceIso = new Date(Date.now() - days * 86_400_000).toISOString();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("player_value_history")
-      .select("player_id, value, formula_offset, captured_at")
-      .eq("format_config_id", formatConfigId)
-      .eq("source", source)
-      .in("player_id", playerIds)
-      .gte("captured_at", sinceIso)
-      .order("captured_at", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      if (!row.player_id) continue;
-      const list = out.get(row.player_id) ?? [];
-      list.push({
-        t: row.captured_at as string,
-        // Honor formula_offset so the chart shows the market series, matching
-        // the profile's value chart exactly.
-        value: Number(row.value) - Number(row.formula_offset ?? 0),
-      });
-      out.set(row.player_id, list);
-    }
-    if (data.length < PAGE) break;
+  // Both players share each captured_at, so id breaks the tie at page edges.
+  // A failed read draws no chart rather than a truncated one.
+  let rows;
+  try {
+    rows = await fetchAllRows("breakdown value series", (from, to) =>
+      db
+        .from("player_value_history")
+        .select("player_id, value, formula_offset, captured_at")
+        .eq("format_config_id", formatConfigId)
+        .eq("source", source)
+        .in("player_id", playerIds)
+        .gte("captured_at", sinceIso)
+        .order("captured_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (err) {
+    console.error("[breakdown] value series read failed", err);
+    return out;
+  }
+  for (const row of rows) {
+    if (!row.player_id) continue;
+    const list = out.get(row.player_id) ?? [];
+    list.push({
+      t: row.captured_at as string,
+      // Honor formula_offset so the chart shows the market series, matching
+      // the profile's value chart exactly.
+      value: Number(row.value) - Number(row.formula_offset ?? 0),
+    });
+    out.set(row.player_id, list);
   }
   return out;
 }

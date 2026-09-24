@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatTeamLabelOrNull } from "@/lib/team-label";
 import type { Database } from "@/lib/database.types";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 
 /**
  * Is this player available in any of my leagues?
@@ -83,14 +84,6 @@ export const EMPTY_FREE_AGENT_REPORT: FreeAgentReport = {
 
 /** Ceiling on how many leagues one search will look at. */
 export const MAX_SEARCHED_LEAGUES = 200;
-
-/**
- * PostgREST's default page size is 1000 rows, and the synced-league probe below
- * reads one row per roster (twelve or so per league). At the league ceiling that
- * is a couple of thousand rows of a single uuid column, so the default would
- * silently truncate it and report synced leagues as unsynced.
- */
-const ROSTER_PROBE_LIMIT = 50000;
 
 /** The roster columns the search reads, for the rosters that actually hold him. */
 type RosterHit = {
@@ -197,12 +190,19 @@ export async function findFreeAgentLeagues(
     // A league row on its own does not mean we can answer for it. Only stored
     // rosters make the closed-world test valid, so this is what "synced" means
     // here: we hold at least one roster.
-    const { data: probeRows } = await supabase
-      .from("rosters")
-      .select("league_id")
-      .in("league_id", [...leagueByRowId.keys()])
-      .limit(ROSTER_PROBE_LIMIT);
-    const syncedRowIds = new Set((probeRows ?? []).map((r) => r.league_id));
+    //
+    // One row per roster is a couple of thousand rows at the league ceiling,
+    // past PostgREST's 1000-row cap (which .limit() cannot raise), so this is
+    // paged. A failed page throws into the catch below: "could not search".
+    const probeRows = await fetchAllRowsInChunks("free agent roster probe", [...leagueByRowId.keys()], (chunk, from, to) =>
+      supabase
+        .from("rosters")
+        .select("league_id")
+        .in("league_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const syncedRowIds = new Set(probeRows.map((r) => r.league_id));
     if (syncedRowIds.size === 0) {
       return { ...EMPTY_FREE_AGENT_REPORT, unsyncedCount: wanted.length };
     }

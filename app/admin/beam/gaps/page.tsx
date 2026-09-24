@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatEastern } from "@/lib/datetime";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const metadata: Metadata = { title: "Unanswered questions | Ask BEAM" };
 export const dynamic = "force-dynamic";
@@ -23,7 +24,6 @@ export const dynamic = "force-dynamic";
  */
 
 const WINDOW_DAYS = 30;
-const FETCH_CAP = 2000;
 
 const REASON_LABEL: Record<string, string> = {
   "no-player": "Could not find the player",
@@ -43,15 +43,17 @@ export default async function AdminBeamGapsPage() {
   const admin = createAdminClient();
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data } = await admin
-    .from("beam_queries")
-    .select("question, question_normalized, failure_reason, created_at, actor_hash")
-    .in("outcome", ["unsupported", "error"])
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(FETCH_CAP);
-
-  const rows = data ?? [];
+  // Every row in the window, paged; a failed page throws to the error boundary.
+  const rows = await fetchAllRows("beam gaps window", (from, to) =>
+    admin
+      .from("beam_queries")
+      .select("question, question_normalized, failure_reason, created_at, actor_hash")
+      .in("outcome", ["unsupported", "error"])
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to),
+  );
 
   const byReason = new Map<string, number>();
   const byQuestion = new Map<

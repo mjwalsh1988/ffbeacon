@@ -1,4 +1,5 @@
 import { getServiceClient } from "./_supabase";
+import { fetchAllRowsInChunks } from "../lib/supabase/fetch-all";
 
 async function main() {
   const supabase = getServiceClient();
@@ -28,15 +29,22 @@ async function main() {
   );
   console.log("player_ids:", playerIds.length);
 
-  const valueResult = await supabase
-    .from("player_value_history")
-    .select("player_id, value, captured_at")
-    .eq("format_config_id", format.id)
-    .eq("source", "ktc")
-    .in("player_id", playerIds)
-    .order("captured_at", { ascending: false });
-  console.log("player_value_history rows:", valueResult.data?.length, "error:", valueResult.error?.message);
-  console.log("first 3:", valueResult.data?.slice(0, 3));
+  // Chunked and paged: 500 ids overflow one request URL, and their history is
+  // far more than 1000 rows. Chunks are merged, so re-sort newest first.
+  const values = await fetchAllRowsInChunks("player_value_history", playerIds, (chunk, from, to) =>
+    supabase
+      .from("player_value_history")
+      .select("player_id, value, captured_at")
+      .eq("format_config_id", format.id)
+      .eq("source", "ktc")
+      .in("player_id", chunk)
+      .order("captured_at", { ascending: false })
+      .order("player_id", { ascending: true })
+      .range(from, to),
+  );
+  values.sort((a, b) => b.captured_at.localeCompare(a.captured_at) || a.player_id.localeCompare(b.player_id));
+  console.log("player_value_history rows:", values.length);
+  console.log("first 3:", values.slice(0, 3));
 }
 
 main().catch((e) => {

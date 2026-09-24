@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { withRetry } from "./supabase/retry";
 import { currentNflSeason } from "./sleeper";
+import { fetchAllRows } from "./supabase/fetch-all";
 
 /**
  * The season these rankings describe.
@@ -33,6 +34,58 @@ export function rankingsSeason(): number {
 }
 
 const TIERS = 6;
+
+/**
+ * How far back from a source's newest captured_at still counts as the same
+ * capture. Every sync stamps one timestamp per run and runs at most daily, so
+ * this takes the newest run whole and nothing from the one before it.
+ */
+const CAPTURE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+type HistoryRow = {
+  player_id: string;
+  value: number;
+  captured_at: string;
+  players: { position: string } | null;
+};
+
+/**
+ * The rows of a (source, format)'s newest capture, newest first.
+ *
+ * This used to read the whole history newest first with no paging, so it saw
+ * the newest 1000 rows: the latest capture plus whatever part of the previous
+ * one fit under the cap. Anchoring on the newest captured_at and paging that
+ * window makes the board the source's latest capture, at any size.
+ */
+async function loadLatestCapture(
+  supabase: SupabaseClient<Database>,
+  sourceSlug: string,
+  formatId: string,
+): Promise<HistoryRow[]> {
+  const { data: newest, error } = await supabase
+    .from("player_value_history")
+    .select("captured_at")
+    .eq("format_config_id", formatId)
+    .eq("source", sourceSlug)
+    .order("captured_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const newestAt = newest?.[0]?.captured_at;
+  if (!newestAt) return [];
+  const windowStart = new Date(new Date(newestAt).getTime() - CAPTURE_WINDOW_MS).toISOString();
+  const rows = await fetchAllRows(`seed rankings ${sourceSlug}/${formatId}`, (from, to) =>
+    supabase
+      .from("player_value_history")
+      .select("player_id, value, captured_at, players(position)")
+      .eq("format_config_id", formatId)
+      .eq("source", sourceSlug)
+      .gte("captured_at", windowStart)
+      .order("captured_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows as unknown as HistoryRow[];
+}
 
 type SourceRow = {
   slug: string;
@@ -108,16 +161,7 @@ export async function runSeedRankings(
       // let a persistent error throw so the run fails loudly instead of shipping
       // a format with no rankings.
       const values = await withRetry(
-        async () => {
-          const { data, error } = await supabase
-            .from("player_value_history")
-            .select("player_id, value, captured_at, players(position)")
-            .eq("format_config_id", formatId)
-            .eq("source", source.slug)
-            .order("captured_at", { ascending: false });
-          if (error) throw error;
-          return data ?? [];
-        },
+        () => loadLatestCapture(supabase, source.slug, formatId),
         { label: `seed rankings ${source.slug}/${slug}` },
       );
       if (values.length === 0) {
@@ -128,9 +172,7 @@ export async function runSeedRankings(
       const latestByPlayer = new Map<string, { value: number; position: string }>();
       for (const row of values) {
         if (latestByPlayer.has(row.player_id)) continue;
-        const position =
-          ((row as unknown as { players: { position: string } | null }).players
-            ?.position) ?? "WR";
+        const position = row.players?.position ?? "WR";
         latestByPlayer.set(row.player_id, { value: row.value, position });
       }
 
@@ -199,6 +241,29 @@ export async function runSeedRankings(
             ignoreDuplicates: false,
           });
         if (error) throw error;
+      }
+      // A player the source no longer carries keeps his old row otherwise: the
+      // upsert only touches players in this run. That row holds an old
+      // overall_rank that now collides with a current player's (measured
+      // 2026-09-24: 817 ffbeacon dynasty rows over 595 players, 709 distinct
+      // ranks). Every row this run wrote carries generatedAt, so anything older
+      // in this (source, format, season) is a player who dropped out.
+      const { data: dropped, error: dropErr } = await withRetry(
+        async () =>
+          await supabase
+            .from("rankings")
+            .delete()
+            .eq("source", source.slug)
+            .eq("format_config_id", formatId)
+            .eq("season", season)
+            .is("week", null)
+            .lt("generated_at", generatedAt)
+            .select("id"),
+        { label: `rankings clear-dropped ${source.slug}/${slug}` },
+      );
+      if (dropErr) throw dropErr;
+      if ((dropped?.length ?? 0) > 0) {
+        console.log(`  removed ${dropped!.length} rows for players no longer in the source`);
       }
       console.log(`  ${rankings.length} ranking rows`);
       totalRows += rankings.length;

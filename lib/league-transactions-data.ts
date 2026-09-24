@@ -83,6 +83,8 @@ export async function loadLeagueTransactions(
     )
     .eq("league_id", leagueRowId)
     .order("created_at_sleeper", { ascending: false, nullsFirst: false })
+    // Tiebreak: timestamps can tie, and pages over a tie repeat or skip rows.
+    .order("id", { ascending: true })
     .range(offset, offset + limit - 1);
 
   if (filter.types && filter.types.length > 0) {

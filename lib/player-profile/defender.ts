@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { normalizeProjectedIdpLine, type StatLine } from "@/lib/idp/stat-line";
 import { IDP_SCORING_KEYS } from "@/lib/idp/scoring-presets";
+import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 
 type Db = SupabaseClient<Database>;
 
@@ -349,8 +350,6 @@ export async function loadDefenderProfile(
   };
 }
 
-const SLATE_PAGE = 1000;
-
 /**
  * The team's slate for one season, from its players' projection rows.
  *
@@ -367,24 +366,29 @@ async function loadTeamSlate(
   source: string,
 ): Promise<{ teamWeeks: Map<number, string | null>; slateWeeks: Set<number> }> {
   const teamWeeks = new Map<number, string | null>();
-  for (let offset = 0; ; offset += SLATE_PAGE) {
-    const { data, error } = await supabase
-      .from("player_weekly_projections")
-      .select("week, opponent")
-      .eq("team", team)
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .eq("source", source)
-      .not("opponent", "is", null)
-      .order("week", { ascending: true })
-      .order("id", { ascending: true })
-      .range(offset, offset + SLATE_PAGE - 1);
-    if (error || !data) break;
-    for (const row of data) {
-      if (!teamWeeks.has(Number(row.week))) teamWeeks.set(Number(row.week), row.opponent);
-    }
-    if (data.length < SLATE_PAGE) break;
-    if (offset > 20_000) break;
+  let rows;
+  try {
+    rows = await fetchAllRows(`team slate ${team} ${season}`, (from, to) =>
+      supabase
+        .from("player_weekly_projections")
+        .select("week, opponent")
+        .eq("team", team)
+        .eq("season", season)
+        .eq("season_type", "regular")
+        .eq("source", source)
+        .not("opponent", "is", null)
+        .order("week", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (err) {
+    // An empty slate claims no byes. A partial one would label every week
+    // after the failed page a bye.
+    console.error("[defender] team slate read failed", err);
+    return { teamWeeks, slateWeeks: new Set<number>() };
+  }
+  for (const row of rows) {
+    if (!teamWeeks.has(Number(row.week))) teamWeeks.set(Number(row.week), row.opponent);
   }
   // Every team shares the season's week range, so the weeks this team plays
   // plus the gaps between them is the slate's reach. A gap inside the range is
@@ -434,20 +438,30 @@ export async function loadReaderIdpLeagues(
   sleeperUserId: string,
   season: number,
 ): Promise<ReaderIdpLeague[]> {
-  const { data: memberships } = await supabase
-    .from("league_users")
-    .select("league_id")
-    .eq("sleeper_user_id", sleeperUserId)
-    .limit(200);
-  const ids = [...new Set((memberships ?? []).map((m) => m.league_id))];
+  // Every membership, paged. A capped, unordered read kept an arbitrary 200,
+  // so a reader in many leagues across seasons could lose this season's. A
+  // failed read throws; the caller renders no selector.
+  const memberships = await fetchAllRows(`league memberships ${sleeperUserId}`, (from, to) =>
+    supabase
+      .from("league_users")
+      .select("league_id")
+      .eq("sleeper_user_id", sleeperUserId)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const ids = [...new Set(memberships.map((m) => m.league_id))];
   if (ids.length === 0) return [];
-  const { data: leagues } = await supabase
-    .from("leagues")
-    .select("id, name, season, roster_positions, scoring_settings")
-    .in("id", ids)
-    .eq("season", season);
+  const leagues = await fetchAllRowsInChunks(`reader leagues ${sleeperUserId}`, ids, (chunk, from, to) =>
+    supabase
+      .from("leagues")
+      .select("id, name, season, roster_positions, scoring_settings")
+      .in("id", chunk)
+      .eq("season", season)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   const out: ReaderIdpLeague[] = [];
-  for (const league of leagues ?? []) {
+  for (const league of leagues) {
     const slots = Array.isArray(league.roster_positions)
       ? (league.roster_positions as unknown[]).map(String)
       : [];

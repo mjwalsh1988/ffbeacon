@@ -21,13 +21,15 @@ function bandCeiling(position: string, leagueType: string): number {
 async function main() {
   const supabase = getServiceClient();
 
-  const { data: formats } = await supabase
+  const { data: formats, error: formatsError } = await supabase
     .from("format_configs").select("id, slug, league_type");
+  if (formatsError) throw new Error(`format_configs read failed: ${formatsError.message}`);
   const fmtById = new Map((formats ?? []).map((f) => [f.id, f]));
 
   const positionByPlayer = new Map<string, string>();
   for (let from = 0; ; from += 1000) {
-    const { data } = await supabase.from("players").select("id, position").order("id", { ascending: true }).range(from, from + 999);
+    const { data, error } = await supabase.from("players").select("id, position").order("id", { ascending: true }).range(from, from + 999);
+    if (error) throw new Error(`players read failed at row ${from}: ${error.message}`);
     for (const p of data ?? []) positionByPlayer.set(p.id, p.position);
     if (!data || data.length < 1000) break;
   }
@@ -36,12 +38,13 @@ async function main() {
   type Row = { player_id: string; format_config_id: string; value: number };
   const rows: Row[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("player_value_history")
       .select("player_id, format_config_id, value")
       .eq("source", "ffbeacon")
       .order("id", { ascending: true })
       .range(from, from + 999);
+    if (error) throw new Error(`ffbeacon value read failed at row ${from}: ${error.message}`);
     for (const r of data ?? []) rows.push(r as Row);
     if (!data || data.length < 1000) break;
   }

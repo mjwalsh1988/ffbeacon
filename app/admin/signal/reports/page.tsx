@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import {
   ReportQueue,
   type ReportGroup,
@@ -23,13 +24,15 @@ export default async function SignalReportsPage() {
   await requireAdmin();
   const admin = createAdminClient();
 
-  const { data: reports } = await admin
-    .from("signal_reports")
-    .select("id, target_type, target_id, reason, details, status, created_at")
-    .in("status", ["pending", "reviewed"])
-    .order("created_at", { ascending: true });
-
-  const rows = reports ?? [];
+  const rows = await fetchAllRows("signal reports queue", (from, to) =>
+    admin
+      .from("signal_reports")
+      .select("id, target_type, target_id, reason, details, status, created_at")
+      .in("status", ["pending", "reviewed"])
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
   const postIds = Array.from(
     new Set(rows.filter((r) => r.target_type === "post").map((r) => r.target_id)),
   );
@@ -45,11 +48,15 @@ export default async function SignalReportsPage() {
     { body: string; hidden: boolean; hiddenReason: string | null; handle: string; displayName: string }
   >();
   if (postIds.length > 0) {
-    const { data: posts } = await admin
-      .from("signal_posts")
-      .select("id, body, hidden, hidden_reason, signals!inner(handle, display_name)")
-      .in("id", postIds);
-    for (const p of posts ?? []) {
+    const posts = await fetchAllRowsInChunks("signal reports posts", postIds, (chunk, from, to) =>
+      admin
+        .from("signal_posts")
+        .select("id, body, hidden, hidden_reason, signals!inner(handle, display_name)")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    for (const p of posts) {
       const s = p.signals as unknown as { handle: string; display_name: string };
       postById.set(p.id, {
         body: p.body,
@@ -73,11 +80,15 @@ export default async function SignalReportsPage() {
     }
   >();
   if (commentIds.length > 0) {
-    const { data: comments } = await admin
-      .from("signal_comments")
-      .select("id, body, hidden, hidden_reason, author_user_id, signal_posts!inner(body)")
-      .in("id", commentIds);
-    for (const c of comments ?? []) {
+    const comments = await fetchAllRowsInChunks("signal reports comments", commentIds, (chunk, from, to) =>
+      admin
+        .from("signal_comments")
+        .select("id, body, hidden, hidden_reason, author_user_id, signal_posts!inner(body)")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    for (const c of comments) {
       const parent = c.signal_posts as unknown as { body: string };
       commentById.set(c.id, {
         body: c.body,
@@ -98,11 +109,15 @@ export default async function SignalReportsPage() {
     { name: string; handle: string | null }
   >();
   if (authorIds.length > 0) {
-    const { data: authors } = await admin
-      .from("signals")
-      .select("user_id, handle, display_name, status, visibility, hidden")
-      .in("user_id", authorIds);
-    for (const a of authors ?? []) {
+    const authors = await fetchAllRowsInChunks("signal reports authors", authorIds, (chunk, from, to) =>
+      admin
+        .from("signals")
+        .select("user_id, handle, display_name, status, visibility, hidden")
+        .in("user_id", chunk)
+        .order("user_id", { ascending: true })
+        .range(from, to),
+    );
+    for (const a of authors) {
       const live =
         a.status === "published" && a.visibility === "public" && a.hidden === false;
       authorById.set(a.user_id, {

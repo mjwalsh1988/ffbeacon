@@ -36,6 +36,7 @@ import {
   type TeamStatusVariant,
 } from "@/lib/league-team-status";
 import { compareProjectedFinish } from "@/lib/power-pulse/projected-order";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -79,15 +80,14 @@ export type LeagueTeamStatusSummary = {
   valueIsExact: boolean;
 };
 
-const PAGE = 1000;
-
 /**
  * Map of Sleeper league id to the searched user's standing in that league.
  * Leagues we have never pulsed are simply absent from the map, and the UI
  * renders the pending state for them.
  *
- * Never throws. A failed lookup degrades to "nothing synced", which is the same
- * thing the reader sees before their first visit to a league.
+ * Never throws. A failed lookup (any page of any read) degrades to "nothing
+ * synced" for every league, which is the same thing the reader sees before
+ * their first visit to a league. It never returns a partial set.
  */
 export async function loadSearchedTeamStatuses(
   supabase: AnySupabase,
@@ -109,42 +109,55 @@ export async function loadSearchedTeamStatuses(
   if (sleeperLeagueIds.length === 0 || !sleeperUserId) return out;
 
   try {
-    const { data: leagueRows } = await supabase
-      .from("leagues")
-      // playoff_teams comes out of the raw Sleeper payload through a JSON path
-      // rather than by selecting `metadata`, which would drag the whole league
-      // object back for every row on a list that can be twenty-plus leagues
-      // long. It draws the Contender and Bubble cut lines, so the tag on this
-      // list and the tag inside the league have to read the same setting.
-      .select(
-        "id, sleeper_league_id, total_rosters, format_config_id, playoff_teams:metadata->settings->>playoff_teams",
-      )
-      .in("sleeper_league_id", sleeperLeagueIds.slice(0, PAGE));
-    if (!leagueRows || leagueRows.length === 0) return out;
+    const leagueRows = await fetchAllRowsInChunks("team status leagues", sleeperLeagueIds, (ids, from, to) =>
+      (supabase as SupabaseClient<Database>)
+        .from("leagues")
+        // playoff_teams comes out of the raw Sleeper payload through a JSON path
+        // rather than by selecting `metadata`, which would drag the whole league
+        // object back for every row on a list that can be twenty-plus leagues
+        // long. It draws the Contender and Bubble cut lines, so the tag on this
+        // list and the tag inside the league have to read the same setting.
+        .select(
+          "id, sleeper_league_id, total_rosters, format_config_id, playoff_teams:metadata->settings->>playoff_teams",
+        )
+        .in("sleeper_league_id", ids)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    if (leagueRows.length === 0) return out;
 
     const leagueById = new Map(leagueRows.map((l) => [l.id, l]));
 
     // The searched user's roster in each league. owner_user_id holds the
     // Sleeper user id verbatim (see lib/league-pulse.ts), so this matches
     // without a join through league_users.
-    const { data: rosterRows } = await supabase
-      .from("rosters")
-      .select("id, league_id, sleeper_roster_id")
-      .in("league_id", [...leagueById.keys()])
-      .eq("owner_user_id", sleeperUserId);
-    if (!rosterRows || rosterRows.length === 0) return out;
+    const rosterRows = await fetchAllRowsInChunks("team status rosters", [...leagueById.keys()], (ids, from, to) =>
+      (supabase as SupabaseClient<Database>)
+        .from("rosters")
+        .select("id, league_id, sleeper_roster_id")
+        .in("league_id", ids)
+        .eq("owner_user_id", sleeperUserId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    if (rosterRows.length === 0) return out;
 
     const rosterIds = rosterRows.map((r) => r.id);
 
-    const [pulseRows, valueRes] = await Promise.all([
+    const [pulseRows, valueRows] = await Promise.all([
       // Every roster in these leagues, not just ours: a projected finish is a
       // position among the others. Paged, because a heavy Sleeper user across
       // twenty-plus leagues clears the 1000-row default in one query.
       fetchAllPulseRows(supabase, [...leagueById.keys()], season),
-      supabase
-        .from("league_power_rankings_cache")
-        .select("roster_id, format_config_id, source, overall_rank, total_value")
-        .in("roster_id", rosterIds),
+      // One row per (roster, format, source): hundreds for a heavy user.
+      fetchAllRowsInChunks("team status value rows", rosterIds, (ids, from, to) =>
+        (supabase as SupabaseClient<Database>)
+          .from("league_power_rankings_cache")
+          .select("roster_id, format_config_id, source, overall_rank, total_value")
+          .in("roster_id", ids)
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
     ]);
 
     // Group by league, then order by expected wins. Same comparator as the
@@ -191,7 +204,7 @@ export async function loadSearchedTeamStatuses(
         total_value: number | null;
       }>
     >();
-    for (const row of valueRes.data ?? []) {
+    for (const row of valueRows) {
       const list = valueRowsByRoster.get(row.roster_id) ?? [];
       list.push({
         format_config_id: row.format_config_id,
@@ -262,10 +275,12 @@ export async function loadSearchedTeamStatuses(
       });
     }
   } catch (err) {
-    console.warn(
+    console.error(
       "[league-team-status] summary lookup failed:",
       (err as Error).message,
     );
+    // Nothing rather than a partial answer.
+    out.clear();
   }
 
   return out;
@@ -293,22 +308,19 @@ async function fetchAllPulseRows(
   leagueRowIds: string[],
   season: number,
 ): Promise<PulseRow[]> {
-  const rows: PulseRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  // Throws on a failed page; the caller's catch reports nothing synced.
+  return fetchAllRowsInChunks("team status pulse rows", leagueRowIds, (ids, from, to) =>
+    (supabase as SupabaseClient<Database>)
       .from("league_power_pulse_cache")
       .select("league_id, roster_id, pulse_rank, projected_wins, expected_points_per_week")
       .eq("season", season)
-      .in("league_id", leagueRowIds)
+      .in("league_id", ids)
       // A stable total order is what makes paging sound. Without it Postgres is
       // free to return rows in a different order per page, which drops some and
-      // repeats others.
+      // repeats others. id ends it because it is unique.
       .order("league_id", { ascending: true })
       .order("roster_id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    rows.push(...data);
-    if (data.length < PAGE) break;
-  }
-  return rows;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 }

@@ -92,7 +92,7 @@ function makeBuilder(resolve: (calls: Call[]) => { data: unknown; error: unknown
       calls.push({ method, args });
       return builder;
     };
-  for (const m of ["select", "eq", "gte", "lte", "in", "is", "order", "limit", "gt"]) {
+  for (const m of ["select", "eq", "gte", "lte", "in", "is", "order", "limit", "gt", "range"]) {
     builder[m] = chain(m);
   }
   builder.then = (
@@ -152,6 +152,12 @@ function applyOrderAndLimit(rows: Row[], calls: Call[]): Row[] {
   if (limitCall) {
     const [n] = limitCall.args as [number];
     out = out.slice(0, n);
+  }
+  // A paged read (loadDefenseSplits) gets its page of the ordered rows.
+  const rangeCall = calls.find((c) => c.method === "range");
+  if (rangeCall) {
+    const [from, to] = rangeCall.args as [number, number];
+    out = out.slice(from, to + 1);
   }
   return out;
 }

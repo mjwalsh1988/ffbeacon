@@ -6,6 +6,7 @@ import { describePickSignal } from "@/lib/beacon/pick-slots";
 import { BeaconPageShell } from "@/components/admin/beacon-page-shell";
 import { ManualComposer } from "@/components/admin/manual-composer";
 import { ManualSignalsList, type ManualSignalItem } from "@/components/admin/manual-signals-list";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const metadata: Metadata = { title: "Manual signals" };
 export const dynamic = "force-dynamic";
@@ -31,12 +32,16 @@ export default async function BeaconManualPage() {
 
   const [composer, active, recompute, pickCoords] = await Promise.all([
     flagshipId
-      ? admin
-          .from("player_value_trends")
-          .select("player_id, current_value, players!inner(first_name, last_name, position, team)")
-          .eq("source", "ffbeacon").eq("format_config_id", flagshipId)
-          .order("current_value", { ascending: false }).limit(1000)
-      : Promise.resolve({ data: [] as never[] }),
+      ? fetchAllRows("manual signals player list", (from, to) =>
+          admin
+            .from("player_value_trends")
+            .select("player_id, current_value, players!inner(first_name, last_name, position, team)")
+            .eq("source", "ffbeacon").eq("format_config_id", flagshipId)
+            .order("current_value", { ascending: false })
+            .order("player_id", { ascending: true })
+            .range(from, to),
+        )
+      : Promise.resolve([]),
     admin
       .from("beacon_manual_signals")
       .select("id, target, player_id, format_config_id, adjustment_type, magnitude, silent, reason, pick_season, pick_round, pick_position, players(first_name, last_name, position)")
@@ -46,7 +51,7 @@ export default async function BeaconManualPage() {
     loadPickCoordinates(admin),
   ]);
 
-  const players = (composer.data ?? []).map((t) => {
+  const players = composer.map((t) => {
     const p = t.players as unknown as { first_name: string; last_name: string; position: string; team: string | null };
     return { id: t.player_id, name: `${p.first_name} ${p.last_name}`, position: p.position, team: p.team };
   });

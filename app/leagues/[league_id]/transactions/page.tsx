@@ -3,6 +3,7 @@ import { Suspense, cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatTeamLabelCompact } from "@/lib/team-label";
@@ -705,14 +706,25 @@ async function loadFacets(
 }> {
   // No season facet, Sleeper's transactions endpoint only returns the
   // league's current season, so the synced rows already share one season.
-  const { data: allRows } = await supabase
-    .from("league_transactions")
-    .select("type, week")
-    .eq("league_id", leagueRowId);
+  // Paged: a league can hold more than 1000 transactions. A failed read
+  // leaves the type and week facets empty rather than undercounted.
+  let allRows: Array<{ type: string; week: number | null }> = [];
+  try {
+    allRows = await fetchAllRows("transaction facets", (from, to) =>
+      supabase
+        .from("league_transactions")
+        .select("type, week")
+        .eq("league_id", leagueRowId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (error) {
+    console.error("[transactions] facet read failed", error);
+  }
 
   const typeCounts = new Map<string, number>();
   const weekSet = new Set<number>();
-  for (const r of allRows ?? []) {
+  for (const r of allRows) {
     typeCounts.set(r.type, (typeCounts.get(r.type) ?? 0) + 1);
     if (typeof r.week === "number") weekSet.add(r.week);
   }

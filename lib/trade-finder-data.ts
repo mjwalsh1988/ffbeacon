@@ -42,6 +42,7 @@ import { formatTeamLabel } from "@/lib/team-label";
 import { type ScoringSettings } from "@/lib/league-scoring";
 import { loadAdjustedProjections } from "@/lib/projections/read";
 import { computeAgeDecimal } from "@/lib/player-age";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { FinderPick, FinderPlayer, FinderTeam } from "@/lib/trade-finder/types";
 import {
   matchViewerRoster,
@@ -54,9 +55,6 @@ type AnySupabase =
 
 /** How many weeks ahead the lineup arithmetic looks. */
 const WEEK_HORIZON = 6;
-
-/** PostgREST pages at 1000 rows; projections blow past that in one league. */
-const PAGE = 1000;
 
 export type TradeFinderLeague = {
   leagueRowId: string;
@@ -196,21 +194,23 @@ async function loadPickValues(
   source: string,
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  // id breaks captured_at ties (a whole capture shares one timestamp), so
+  // pages cannot overlap. A failed page throws rather than pricing picks off
+  // a partial history.
+  const rows = await fetchAllRows("trade finder pick values", (from, to) =>
+    (supabase as SupabaseClient<Database>)
       .from("draft_pick_values")
       .select("season, round, pick_position, value, captured_at")
       .eq("format_config_id", formatConfigId)
       .eq("source", source)
       .order("captured_at", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      const key = `${row.season}|${row.round}|${row.pick_position}`;
-      // Ordered newest first, so the first row for a key is the current price.
-      if (!out.has(key)) out.set(key, Number(row.value));
-    }
-    if (data.length < PAGE) break;
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of rows) {
+    const key = `${row.season}|${row.round}|${row.pick_position}`;
+    // Ordered newest first, so the first row for a key is the current price.
+    if (!out.has(key)) out.set(key, Number(row.value));
   }
   return out;
 }

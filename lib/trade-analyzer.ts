@@ -6,6 +6,7 @@ import type { LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
 import type { StartupPickIndex } from "@/lib/league-startup-picks";
 import { describeUnresolved } from "@/lib/startup-draft";
 import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -696,17 +697,85 @@ async function loadPickValues(
   source: string,
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
-  const { data } = await (supabase as SupabaseClient<Database>)
-    .from("draft_pick_values")
-    .select("season, round, pick_position, value, captured_at")
-    .eq("format_config_id", formatConfigId)
-    .eq("source", source)
-    .order("captured_at", { ascending: false });
-  for (const row of data ?? []) {
+  let rows: PickSnapshotRow[];
+  try {
+    rows = await loadLatestPickSnapshots(supabase as SupabaseClient<Database>, {
+      formatConfigId,
+      source,
+    });
+  } catch (err) {
+    // Unchanged posture: picks price at zero rather than failing the analysis.
+    console.error("[trade-analyzer] pick values read failed", err);
+    return map;
+  }
+  for (const row of rows) {
     const key = pickKey(Number(row.season), Number(row.round), String(row.pick_position));
     if (!map.has(key)) map.set(key, Number(row.value));
   }
   return map;
+}
+
+export type PickSnapshotRow = {
+  season: number;
+  round: number;
+  pick_position: string;
+  value: number;
+  captured_at: string;
+};
+
+/**
+ * How far back from a source's newest pick snapshot the read reaches. The
+ * sync writes every pick daily, so only the newest row per key is used; the
+ * window rides out a skipped key without reading the whole diary.
+ */
+export const PICK_SNAPSHOT_WINDOW_DAYS = 14;
+
+/**
+ * draft_pick_values rows for one (format, source), newest first, from the
+ * newest snapshot back PICK_SNAPSHOT_WINDOW_DAYS. The table is a daily diary
+ * (about 36 rows a day per pair), so an unpaged read of the whole history
+ * returned only the newest 1000 rows. Anchored on the newest captured_at
+ * rather than on now, so a stalled sync still prices every pick. Paged, and
+ * throws on a failed read.
+ */
+export async function loadLatestPickSnapshots(
+  supabase: SupabaseClient<Database>,
+  opts: { formatConfigId: string; source: string; seasons?: number[]; rounds?: number[] },
+): Promise<PickSnapshotRow[]> {
+  let anchor = supabase
+    .from("draft_pick_values")
+    .select("captured_at")
+    .eq("format_config_id", opts.formatConfigId)
+    .eq("source", opts.source);
+  if (opts.seasons) anchor = anchor.in("season", opts.seasons);
+  if (opts.rounds) anchor = anchor.in("round", opts.rounds);
+  const { data: newest, error } = await anchor
+    .order("captured_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`draft_pick_values newest snapshot: ${error.message}`);
+  const newestAt = newest?.[0]?.captured_at;
+  if (!newestAt) return [];
+  const since = new Date(
+    new Date(newestAt).getTime() - PICK_SNAPSHOT_WINDOW_DAYS * 86_400_000,
+  ).toISOString();
+  const rows = await fetchAllRows(
+    `draft_pick_values ${opts.source}/${opts.formatConfigId}`,
+    (from, to) => {
+      let q = supabase
+        .from("draft_pick_values")
+        .select("season, round, pick_position, value, captured_at")
+        .eq("format_config_id", opts.formatConfigId)
+        .eq("source", opts.source)
+        .gte("captured_at", since);
+      if (opts.seasons) q = q.in("season", opts.seasons);
+      if (opts.rounds) q = q.in("round", opts.rounds);
+      return q
+        .order("captured_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to);
+    },
+  );
+  return rows as PickSnapshotRow[];
 }
 
 function round2(n: number): number {

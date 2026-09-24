@@ -142,6 +142,9 @@ function makeFakeAdmin(handlers: Record<string, TableHandlers>) {
     range() {
       return this;
     }
+    order() {
+      return this;
+    }
     maybeSingle() {
       return Promise.resolve(this.resolve());
     }

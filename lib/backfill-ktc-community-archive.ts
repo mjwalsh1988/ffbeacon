@@ -313,6 +313,8 @@ export async function runCommunityArchiveBackfill(
         const { data, error } = await supabase
           .from("players")
           .select("id, first_name, last_name, position")
+          // Unique order, or offset pages can overlap or skip rows.
+          .order("id", { ascending: true })
           .range(pageOffset, pageOffset + PAGE - 1);
         if (error) throw error;
         return (data ?? []) as PlayerRow[];

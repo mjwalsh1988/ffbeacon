@@ -27,6 +27,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import { withRetry, chunkUpsert } from "./supabase/retry";
+import { fetchAllRows } from "./supabase/fetch-all";
 import {
   loadBeaconSettings,
   loadSignalWeights,
@@ -738,17 +739,22 @@ export async function runCalculateBeaconValues(
     let pickRows = 0;
     let pickSignalsApplied = 0;
     if (dynastyFormatIds.length > 0) {
-      const { data: ktcPicks, error: pErr } = await supabase
-        .from("draft_pick_values")
-        .select("season, round, pick_position, format_config_id, value, metadata, captured_at")
-        .eq("source", "ktc")
-        .in("format_config_id", dynastyFormatIds)
-        .order("captured_at", { ascending: false });
-      if (pErr) throw pErr;
+      // Paged over the whole history (10k+ rows) with id breaking captured_at
+      // ties; a single read stopped at the newest 1000. Throws on a failed page.
+      const ktcPicks = await fetchAllRows("ktc draft_pick_values for ffbeacon", (from, to) =>
+        supabase
+          .from("draft_pick_values")
+          .select("season, round, pick_position, format_config_id, value, metadata, captured_at")
+          .eq("source", "ktc")
+          .in("format_config_id", dynastyFormatIds)
+          .order("captured_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
       // KTC picks carry historical snapshots; keep only the latest per pick key
       // so the single ffbeacon captured_at does not collide on the conflict key.
       const latestPick = new Map<string, (typeof ktcPicks)[number]>();
-      for (const p of ktcPicks ?? []) {
+      for (const p of ktcPicks) {
         const key = `${p.season}|${p.round}|${p.pick_position}|${p.format_config_id}`;
         if (!latestPick.has(key)) latestPick.set(key, p);
       }

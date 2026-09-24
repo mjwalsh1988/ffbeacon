@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import {
   getActiveFormats,
   getAvailableSources,
@@ -50,15 +51,22 @@ export default async function BoardEditorPage({
     notFound();
   }
 
-  const { data: playerRows } = await supabase
-    .from("user_ranking_board_players")
-    .select(
-      "id, player_id, rank_position, tier, players!inner(slug, first_name, last_name, full_name, position, team, external_ids)",
-    )
-    .eq("board_id", boardId)
-    .order("rank_position", { ascending: true });
+  // Paged: a board can hold more players than one request returns. A failed
+  // page throws, because an editor opened on part of a board would save part
+  // of a board.
+  const playerRows = await fetchAllRows("ranking board players", (from, to) =>
+    supabase
+      .from("user_ranking_board_players")
+      .select(
+        "id, player_id, rank_position, tier, players!inner(slug, first_name, last_name, full_name, position, team, external_ids)",
+      )
+      .eq("board_id", boardId)
+      .order("rank_position", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
-  const initialPlayers: BoardPlayer[] = (playerRows ?? []).map((row) => {
+  const initialPlayers: BoardPlayer[] = playerRows.map((row) => {
     const p = row.players as unknown as PlayerJoin;
     return {
       rowId: row.id,

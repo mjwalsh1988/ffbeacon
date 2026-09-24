@@ -6,6 +6,7 @@ import { currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { resolveUserIdentities } from "@/lib/user-identity";
 import { formatEastern, formatRelative } from "@/lib/datetime";
 import { SignalScoutSubnav } from "@/components/admin/signal-scout-subnav";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const dynamic = "force-dynamic";
 
@@ -124,11 +125,22 @@ export default async function SignalScoutIntegrityPage() {
       .or(`rounds_burned.gte.${BURNOUT_MIN_ROUNDS},rounds_solved_late.gte.${BURNOUT_MIN_ROUNDS}`)
       .order("rounds_burned", { ascending: false })
       .limit(BURNOUT_LIMIT),
-    admin
-      .from("signal_scout_guesses")
-      .select("round_id, guess_number, created_at")
-      .order("created_at", { ascending: false })
-      .limit(GUESS_WINDOW_LIMIT),
+    // The newest GUESS_WINDOW_LIMIT guesses, paged: one request caps at 1000.
+    fetchAllRows("signal scout integrity guesses", (from, to) =>
+      from >= GUESS_WINDOW_LIMIT
+        ? Promise.resolve({ data: [], error: null })
+        : admin
+            .from("signal_scout_guesses")
+            .select("round_id, guess_number, created_at")
+            .order("created_at", { ascending: false })
+            // (round_id, guess_number) is unique, so the order is total.
+            .order("round_id", { ascending: true })
+            .order("guess_number", { ascending: true })
+            .range(from, Math.min(to, GUESS_WINDOW_LIMIT - 1)),
+    ).then(
+      (data) => ({ data, error: null }),
+      (error: unknown) => ({ data: null, error }),
+    ),
     admin
       .from("signal_scout_activity_counters")
       .select("identity_key, game_date, count, last_at")

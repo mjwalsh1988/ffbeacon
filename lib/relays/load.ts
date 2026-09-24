@@ -15,6 +15,7 @@ import type { createCachedReadClient, createClient } from "@/lib/supabase/server
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { memoTtl } from "@/lib/memo-ttl";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { BriefSidebarData, SidebarCategory } from "@/lib/beacon-brief-feed";
 import {
   isRelayKind,
@@ -624,26 +625,33 @@ export type RelayWeekCount = { week: number; count: number };
  * Behind the week filter and the week rail. Memoised a minute.
  */
 export async function loadRelayWeekCounts(supabase: ReaderClient, season: string): Promise<RelayWeekCount[]> {
-  return memoTtl(`ref:relays:week-counts:${season}`, 60_000, async () => {
-    // PAGED, not capped at 1000. A single capped read ordered by week
-    // descending drops the EARLIEST weeks of a busy season, so the filter
-    // quietly stops offering week 1 while still looking complete. A season runs
-    // to about 900 rows, so this is one page in practice and two at most.
-    const counts = new Map<number, number>();
-    for (let from = 0; ; from += 1000) {
-      const { data } = await supabase
-        .from("relays")
-        .select("week")
-        .eq("status", "published")
-        .eq("season", season)
-        .not("week", "is", null)
-        .order("week", { ascending: false })
-        .range(from, from + 999);
-      for (const r of data ?? []) if (typeof r.week === "number") counts.set(r.week, (counts.get(r.week) ?? 0) + 1);
-      if ((data?.length ?? 0) < 1000) break;
-    }
-    return [...counts.entries()].map(([week, count]) => ({ week, count })).sort((a, b) => b.week - a.week);
-  });
+  try {
+    return await memoTtl(`ref:relays:week-counts:${season}`, 60_000, async () => {
+      // PAGED, not capped at 1000. A single capped read ordered by week
+      // descending drops the EARLIEST weeks of a busy season, so the filter
+      // quietly stops offering week 1 while still looking complete. id breaks
+      // the ties inside a week so pages neither overlap nor skip.
+      const rows = await fetchAllRows(`relay week counts ${season}`, (from, to) =>
+        supabase
+          .from("relays")
+          .select("week")
+          .eq("status", "published")
+          .eq("season", season)
+          .not("week", "is", null)
+          .order("week", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+      const counts = new Map<number, number>();
+      for (const r of rows) if (typeof r.week === "number") counts.set(r.week, (counts.get(r.week) ?? 0) + 1);
+      return [...counts.entries()].map(([week, count]) => ({ week, count })).sort((a, b) => b.week - a.week);
+    });
+  } catch (err) {
+    // The feed still renders without a week filter; a partial count would not
+    // say it was partial. A rejected read is not memoised.
+    console.error("[relays] week counts failed", err);
+    return [];
+  }
 }
 
 /** The light row the calendar view draws a day from. */
@@ -661,26 +669,29 @@ export type RelayCalendarItem = {
  * and the cap would otherwise drop the end of it without a word.
  */
 export async function loadRelaysBetween(supabase: ReaderClient, start: string, end: string): Promise<RelayCalendarItem[]> {
-  const out: RelayCalendarItem[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data } = await supabase
-      .from("relays")
-      .select("id, slug, headline, kind, source_posted_at")
-      .eq("status", "published")
-      .gte("source_posted_at", start)
-      .lt("source_posted_at", end)
-      .order("source_posted_at", { ascending: true })
-      .range(from, from + 999);
-    for (const r of data ?? []) {
-      out.push({
-        id: r.id,
-        slug: r.slug,
-        headline: r.headline,
-        kind: isRelayKind(r.kind) ? r.kind : "other",
-        sourcePostedAt: r.source_posted_at,
-      });
-    }
-    if ((data?.length ?? 0) < 1000) break;
+  let rows;
+  try {
+    rows = await fetchAllRows(`relays between ${start} and ${end}`, (from, to) =>
+      supabase
+        .from("relays")
+        .select("id, slug, headline, kind, source_posted_at")
+        .eq("status", "published")
+        .gte("source_posted_at", start)
+        .lt("source_posted_at", end)
+        .order("source_posted_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (err) {
+    // An empty month renders; half a month would look like a quiet one.
+    console.error("[relays] calendar read failed", err);
+    return [];
   }
-  return out;
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    headline: r.headline,
+    kind: isRelayKind(r.kind) ? r.kind : "other",
+    sourcePostedAt: r.source_posted_at,
+  }));
 }

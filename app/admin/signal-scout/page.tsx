@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { TIER_DISPLAY_NAMES, type ClueTierChipKey } from "@/app/games/signal-scout/clue-grid";
 import { SignalScoutSubnav } from "@/components/admin/signal-scout-subnav";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { PlayerInsightTables } from "./player-insight-tables";
 import { RecentRoundsTable } from "./recent-rounds-table";
 import { RecentGuessesTable } from "./recent-guesses-table";
@@ -68,11 +69,22 @@ export default async function SignalScoutAdminPage({
       .not("completed_at", "is", null)
       .order("completed_at", { ascending: false })
       .limit(COMPLETED_WINDOW_LIMIT),
-    admin
-      .from("signal_scout_guesses")
-      .select("guessed_player_id")
-      .order("created_at", { ascending: false })
-      .limit(GUESSES_WINDOW_LIMIT),
+    // The newest GUESSES_WINDOW_LIMIT guesses, paged: one request caps at 1000.
+    fetchAllRows("signal scout guesses window", (from, to) =>
+      from >= GUESSES_WINDOW_LIMIT
+        ? Promise.resolve({ data: [], error: null })
+        : admin
+            .from("signal_scout_guesses")
+            .select("guessed_player_id")
+            .order("created_at", { ascending: false })
+            // (round_id, guess_number) is unique, so the order is total.
+            .order("round_id", { ascending: true })
+            .order("guess_number", { ascending: true })
+            .range(from, Math.min(to, GUESSES_WINDOW_LIMIT - 1)),
+    ).then(
+      (data) => ({ data, error: null }),
+      (error: unknown) => ({ data: null, error }),
+    ),
     Promise.all(
       CLUE_TIERS.map((tier) =>
         admin

@@ -34,6 +34,7 @@
 
 import { headers } from "next/headers";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
 import {
@@ -492,31 +493,55 @@ export async function connectSleeperLeagues(
   const admin = createAdminClient();
   const sleeperIds = leagues.map((l) => l.league_id);
 
-  const { data: leagueRows } = await admin
-    .from("leagues")
-    .select("id, sleeper_league_id, metadata")
-    .in("sleeper_league_id", sleeperIds);
+  // Chunked and paged: a reader with many leagues has more rosters than one
+  // request returns. A failed read is treated as nothing synced (the prior
+  // behaviour on error), never as a partial list.
+  let leagueRows: Array<{ id: string; sleeper_league_id: string; metadata: unknown }> = [];
+  let rosterRows: Array<{
+    league_id: string;
+    sleeper_roster_id: number;
+    owner_user_id: string | null;
+    co_owners: unknown;
+    waiver_budget: number | null;
+  }> = [];
+  try {
+    leagueRows = await fetchAllRowsInChunks("faab connect leagues", sleeperIds, (chunk, from, to) =>
+      admin
+        .from("leagues")
+        .select("id, sleeper_league_id, metadata")
+        .in("sleeper_league_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    rosterRows = await fetchAllRowsInChunks(
+      "faab connect rosters",
+      leagueRows.map((l) => l.id),
+      (chunk, from, to) =>
+        admin
+          .from("rosters")
+          .select(
+            "league_id, sleeper_roster_id, owner_user_id, co_owners, waiver_budget",
+          )
+          .in("league_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+    );
+  } catch (err) {
+    console.error("[faab] connect leagues read failed:", err);
+    leagueRows = [];
+    rosterRows = [];
+  }
 
   const rowBySleeperId = new Map(
-    (leagueRows ?? []).map((l) => [l.sleeper_league_id, l]),
+    leagueRows.map((l) => [l.sleeper_league_id, l]),
   );
-
-  const rowIds = (leagueRows ?? []).map((l) => l.id);
-  const { data: rosterRows } = rowIds.length
-    ? await admin
-        .from("rosters")
-        .select(
-          "league_id, sleeper_roster_id, owner_user_id, co_owners, waiver_budget",
-        )
-        .in("league_id", rowIds)
-    : { data: [] as never[] };
 
   const mineByLeagueRow = new Map<
     string,
     { rosterId: number; waiverBudgetUsed: number }
   >();
   const rosterCountByLeagueRow = new Map<string, number>();
-  for (const r of rosterRows ?? []) {
+  for (const r of rosterRows) {
     rosterCountByLeagueRow.set(
       r.league_id,
       (rosterCountByLeagueRow.get(r.league_id) ?? 0) + 1,

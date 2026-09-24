@@ -33,6 +33,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { getServiceClient } from "./_supabase";
+import { fetchAllRows, fetchAllRowsInChunks } from "../lib/supabase/fetch-all";
 
 /** Mirrors CATEGORIZE_SCHEMA in lib/beacon-brief/curate.ts. */
 const SCHEMA = {
@@ -184,17 +185,23 @@ async function main() {
     (categories ?? []).map((c) => c.slug).join(", "),
   );
 
-  let q = supabase
-    .from("news_ingestions")
-    .select(
-      "id, status, filter_reason, text, author_handle, media, quoted, retweeted, article_id",
-    )
-    .eq("is_revision", false)
-    .order("created_at", { ascending: false });
-  if (limit) q = q.limit(limit);
-  const { data: rows, error } = await q;
-  if (error) throw new Error(error.message);
-  if (!rows || rows.length === 0) {
+  // Paged: a bare select stops at 1000 rows. --limit still means "the n most
+  // recent", so pages stop at n.
+  const cap = limit ? limit : Number.POSITIVE_INFINITY;
+  const rows = await fetchAllRows("news_ingestions", (from, to) =>
+    from >= cap
+      ? Promise.resolve({ data: [], error: null })
+      : supabase
+          .from("news_ingestions")
+          .select(
+            "id, status, filter_reason, text, author_handle, media, quoted, retweeted, article_id",
+          )
+          .eq("is_revision", false)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, Math.min(to, cap - 1)),
+  );
+  if (rows.length === 0) {
     console.log("No ingestions to score.");
     return;
   }
@@ -205,13 +212,18 @@ async function main() {
     .map((r) => r.article_id)
     .filter((id): id is string => Boolean(id));
   const titleById = new Map<string, string>();
-  if (articleIds.length > 0) {
-    const { data: articles } = await supabase
-      .from("articles")
-      .select("id, title")
-      .in("id", articleIds);
-    for (const a of articles ?? []) titleById.set(a.id, a.title ?? "");
-  }
+  const articles = await fetchAllRowsInChunks(
+    "articles for titles",
+    [...new Set(articleIds)],
+    (chunk, from, to) =>
+      supabase
+        .from("articles")
+        .select("id, title")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+  );
+  for (const a of articles) titleById.set(a.id, a.title ?? "");
 
   console.log(
     `Scoring ${rows.length} posts with ${model}, threshold ${threshold}\n`,

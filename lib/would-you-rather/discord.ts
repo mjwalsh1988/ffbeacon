@@ -78,6 +78,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { SITE } from "@/lib/site";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { fetchWebhookPoll, postWebhookMessage, type DiscordMessageInput } from "@/lib/discord";
 import { fetchPollAnswerVoters, hasDiscordBotToken } from "@/lib/discord-poll-voters";
 import { buildPollAnswer, buildPollQuestion, type PollAsset } from "./poll-text";
@@ -791,7 +792,13 @@ export async function ingestClosedPolls(
         outcome.votesAdded += totalA + totalB;
       }
 
-      await recomputeDiscordTally(admin, poll.trade_id);
+      try {
+        await recomputeDiscordTally(admin, poll.trade_id);
+      } catch (err) {
+        // The poll is already closed out; the next recompute for this trade
+        // rebuilds the tally from scratch, so the sweep carries on.
+        outcome.errors.push(err instanceof Error ? err.message : "Tally recompute failed.");
+      }
       outcome.ingested += 1;
     }
   } catch (err) {
@@ -1032,22 +1039,33 @@ async function closeOutPoll(
  * polls on the same trade is one row and counts once.
  */
 async function recomputeDiscordTally(admin: Client, tradeId: string): Promise<void> {
-  const [{ data: voters }, { data: counted }] = await Promise.all([
-    admin
-      .from("would_you_rather_discord_votes")
-      .select("side")
-      .eq("trade_id", tradeId),
+  // Paged: a trade can pass 1000 voters, and a capped read would write a capped
+  // tally. Either read failing throws before the write, so a stored tally is
+  // never replaced by one built from partial evidence.
+  const [voters, counted] = await Promise.all([
+    fetchAllRows(`wyr discord voters ${tradeId}`, (from, to) =>
+      admin
+        .from("would_you_rather_discord_votes")
+        .select("side")
+        .eq("trade_id", tradeId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     // Only the polls that were NOT read by voter. Adding a resolved poll's
     // totals on top of its own rows would count every one of its voters twice.
-    admin
-      .from("would_you_rather_discord_polls")
-      .select("ingested_votes_a, ingested_votes_b")
-      .eq("trade_id", tradeId)
-      .eq("voters_resolved", false)
-      .not("results_ingested_at", "is", null),
+    fetchAllRows(`wyr discord counted polls ${tradeId}`, (from, to) =>
+      admin
+        .from("would_you_rather_discord_polls")
+        .select("ingested_votes_a, ingested_votes_b")
+        .eq("trade_id", tradeId)
+        .eq("voters_resolved", false)
+        .not("results_ingested_at", "is", null)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
   ]);
 
-  const { a, b } = discordTally(voters ?? [], counted ?? []);
+  const { a, b } = discordTally(voters, counted);
 
   await admin
     .from("would_you_rather_trades")

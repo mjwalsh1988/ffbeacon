@@ -31,6 +31,7 @@ import {
   type RawDraftPick,
 } from "../lib/draft-selections";
 import { getSleeperDraftPicksOrNull, type SleeperLeague } from "../lib/sleeper";
+import { fetchAllRows, fetchAllRowsInChunks } from "../lib/supabase/fetch-all";
 import {
   ffbeaconFormatCandidates,
   detectLeagueFormat,
@@ -77,37 +78,41 @@ function leagueShape(raw: unknown): SleeperLeague | null {
 // ---------------------------------------------------------------------------
 
 async function passOnTheClock(supabase: Client, candidates: FormatCandidates) {
-  const { data: drafts, error: draftErr } = await supabase
-    .from("on_the_clock_draft_cache")
-    .select(
-      "sleeper_draft_id, sleeper_league_id, season, draft_status, draft_type, metadata, league_metadata",
-    );
-  if (draftErr) throw new Error(`draft cache read failed: ${draftErr.message}`);
+  const drafts = await fetchAllRows("draft cache", (from, to) =>
+    supabase
+      .from("on_the_clock_draft_cache")
+      .select(
+        "sleeper_draft_id, sleeper_league_id, season, draft_status, draft_type, metadata, league_metadata",
+      )
+      .order("sleeper_draft_id", { ascending: true })
+      .range(from, to),
+  );
 
   const byDraft = new Map<string, (typeof drafts)[number]>();
-  for (const d of drafts ?? []) byDraft.set(d.sleeper_draft_id, d);
+  for (const d of drafts) byDraft.set(d.sleeper_draft_id, d);
 
   // on_the_clock_draft_cache.league_metadata only arrived in migration 0180, so
   // every draft cached before that has a null and cannot be classified from its
   // own row. Most of those leagues have ALSO been through League Pulse, which
   // stores the same scoring and roster shape, so `leagues` is the fallback. On
   // the first run this recovered 24 of the 34 otherwise-unclassifiable drafts.
-  const leagueIds = [...new Set((drafts ?? []).map((d) => d.sleeper_league_id).filter(Boolean))];
+  const leagueIds = [...new Set(drafts.map((d) => d.sleeper_league_id).filter(Boolean))];
   const leagueBySleeperId = new Map<string, SleeperLeague>();
-  for (let i = 0; i < leagueIds.length; i += 200) {
-    const chunk = leagueIds.slice(i, i + 200);
-    const { data } = await supabase
+  const cacheLeagues = await fetchAllRowsInChunks("draft cache leagues", leagueIds, (chunk, from, to) =>
+    supabase
       .from("leagues")
       .select("sleeper_league_id, scoring_settings, roster_positions, metadata")
-      .in("sleeper_league_id", chunk);
-    for (const row of data ?? []) {
-      const shape = leagueShape({
-        ...((row.metadata ?? {}) as Record<string, unknown>),
-        ...(row.scoring_settings ? { scoring_settings: row.scoring_settings } : {}),
-        ...(row.roster_positions ? { roster_positions: row.roster_positions } : {}),
-      });
-      if (shape) leagueBySleeperId.set(row.sleeper_league_id, shape);
-    }
+      .in("sleeper_league_id", chunk)
+      .order("sleeper_league_id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of cacheLeagues) {
+    const shape = leagueShape({
+      ...((row.metadata ?? {}) as Record<string, unknown>),
+      ...(row.scoring_settings ? { scoring_settings: row.scoring_settings } : {}),
+      ...(row.roster_positions ? { roster_positions: row.roster_positions } : {}),
+    });
+    if (shape) leagueBySleeperId.set(row.sleeper_league_id, shape);
   }
 
   // Page the pick cache: PostgREST truncates a bare select at 1000 rows and
@@ -213,14 +218,15 @@ async function passOnTheClock(supabase: Client, candidates: FormatCandidates) {
 // ---------------------------------------------------------------------------
 
 async function passLeaguePulse(supabase: Client, candidates: FormatCandidates) {
-  const { data: drafts, error } = await supabase
-    .from("league_drafts")
-    .select("sleeper_draft_id, league_id, season, status, type, settings, start_time")
-    .eq("status", "complete")
-    .order("season", { ascending: false });
-  if (error) throw new Error(`league_drafts read failed: ${error.message}`);
-
-  const completed = drafts ?? [];
+  const completed = await fetchAllRows("league_drafts", (from, to) =>
+    supabase
+      .from("league_drafts")
+      .select("sleeper_draft_id, league_id, season, status, type, settings, start_time")
+      .eq("status", "complete")
+      .order("season", { ascending: false })
+      .order("sleeper_draft_id", { ascending: true })
+      .range(from, to),
+  );
   if (completed.length === 0) {
     return { draftsWritten: 0, rowsWritten: 0, skipped: 0, unreachable: 0 };
   }
@@ -239,22 +245,23 @@ async function passLeaguePulse(supabase: Client, candidates: FormatCandidates) {
   // per draft (a dynasty league has one draft per season, all the same format).
   const leagueIds = [...new Set(pending.map((d) => d.league_id))];
   const formatByLeague = new Map<string, string | null>();
-  for (let i = 0; i < leagueIds.length; i += 200) {
-    const chunk = leagueIds.slice(i, i + 200);
-    const { data } = await supabase
+  const pendingLeagues = await fetchAllRowsInChunks("pending draft leagues", leagueIds, (chunk, from, to) =>
+    supabase
       .from("leagues")
       .select("id, scoring_settings, roster_positions, metadata")
-      .in("id", chunk);
-    for (const row of data ?? []) {
-      const merged = {
-        ...((row.metadata ?? {}) as Record<string, unknown>),
-        ...(row.scoring_settings ? { scoring_settings: row.scoring_settings } : {}),
-        ...(row.roster_positions ? { roster_positions: row.roster_positions } : {}),
-      };
-      const shape = leagueShape(merged);
-      const detected = shape ? detectLeagueFormat(shape, candidates) : null;
-      formatByLeague.set(row.id, detected?.slug ?? null);
-    }
+      .in("id", chunk)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  for (const row of pendingLeagues) {
+    const merged = {
+      ...((row.metadata ?? {}) as Record<string, unknown>),
+      ...(row.scoring_settings ? { scoring_settings: row.scoring_settings } : {}),
+      ...(row.roster_positions ? { roster_positions: row.roster_positions } : {}),
+    };
+    const shape = leagueShape(merged);
+    const detected = shape ? detectLeagueFormat(shape, candidates) : null;
+    formatByLeague.set(row.id, detected?.slug ?? null);
   }
 
   let draftsWritten = 0;
