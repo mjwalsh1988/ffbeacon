@@ -301,11 +301,13 @@ export function computePowerPulse(
     : rosters;
   if (scoringRosters.length === 0) return [];
 
-  // One team leaves per week, so the season ends when one is left, capped at
-  // week 17. See the header of lib/chopped/league.ts for why Sleeper's own
+  // choppedPerWeek teams leave per week (one in most leagues, two in the 32
+  // team ones), so the season ends when one is left, capped at week 17. See
+  // the header of lib/chopped/league.ts for why Sleeper's own
   // `last_chopped_leg` is not read for this.
+  const choppedPerWeek = league.choppedPerWeek ?? 1;
   const choppedFinalWeek = chopped
-    ? resolveFinalWeek(currentWeek, scoringRosters.length).finalWeek
+    ? resolveFinalWeek(currentWeek, scoringRosters.length, choppedPerWeek).finalWeek
     : null;
   const lastRegularWeek =
     choppedFinalWeek !== null
@@ -654,7 +656,7 @@ export function computePowerPulse(
           weeks: weeklyByRoster.get(team.roster.sleeperRosterId) ?? new Map(),
         })),
         remainingWeeks,
-        { runs: settings.simulation.runs, seed: settings.simulation.seed },
+        { runs: settings.simulation.runs, seed: settings.simulation.seed, choppedPerWeek },
       )
     : null;
 

@@ -272,4 +272,17 @@ describe("computePowerPulse over a chopped league", () => {
     expect(chopped[0].weekly.map((w) => w.week)).toEqual([5, 6, 7]);
     expect(ordinary[0].weekly.at(-1)?.week).toBe(14);
   });
+
+  it("finishes sooner in a league that chops two a week", () => {
+    // Four teams from week 5, two out a week: weeks 5 and 6 leave one.
+    const twoAWeek = computePowerPulse(
+      input({ league: league({ chopped: true, choppedPerWeek: 2 }) }),
+    );
+    expect(twoAWeek[0].weekly.map((w) => w.week)).toEqual([5, 6]);
+    // With half the field going each week, the chance of going out this week
+    // across the four teams sums to two chops, not one (each figure is
+    // stored to four places, hence the tolerance).
+    const total = twoAWeek.reduce((sum, t) => sum + (t.chopOddsThisWeek ?? 0), 0);
+    expect(total).toBeCloseTo(2, 3);
+  });
 });

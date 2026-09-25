@@ -140,8 +140,14 @@ export function FaabForm({
   // The page already resolved the ranked player list for the active
   // (source, format). That same list IS the value pool the calculator needs:
   // no extra fetch, and it normalizes value against this source's own range.
+  // Ranked players only: a defender (unranked, no value) is in the search list
+  // but has no place in a value distribution, and his placeholder rank would
+  // stretch the pool.
   const playerPool = useMemo(
-    () => players.map((p) => ({ overallRank: p.overall_rank, value: p.value })),
+    () =>
+      players
+        .filter((p) => !p.unranked)
+        .map((p) => ({ overallRank: p.overall_rank, value: p.value })),
     [players],
   );
 

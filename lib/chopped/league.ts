@@ -26,8 +26,9 @@
  * week, every week, which would collapse the survival simulation to a single
  * week and report a title chance of roughly 1/aliveCount to everyone still in.
  * So we ignore the field entirely and derive the final week from the field
- * size instead: one team leaves per week, so aliveCount teams need
- * aliveCount - 1 more weeks to reach a single survivor, and the answer is
+ * size instead: one team leaves per week in most leagues (two in the 32 team
+ * leagues; see chopsPerWeek), so aliveCount teams need aliveCount - 1 more
+ * chops to reach a single survivor, and the answer is
  * capped at week 17 because Sleeper's fantasy regular season does not run past
  * it. `finalWeekVerified` is false, and it is surfaced in the report so the UI
  * can hedge the wording rather than state a date we do not actually know.
@@ -68,18 +69,51 @@ const SLEEPER_TYPE_CHOPPED = 3;
 /**
  * Is this a chopped league that actually chops?
  *
- * `disable_elimination` is the commissioner switch that turns a chopped league
- * into an ordinary scoring league with chopped's UI. Treating one of those as
- * chopped would tell every manager they are in danger of elimination in a
- * league where nobody can be eliminated, which is the loudest possible wrong
- * answer, so the switch is checked rather than the type alone.
+ * `disable_elimination` reads like the commissioner switch that turns a
+ * chopped league into an ordinary scoring league with chopped's UI, and a
+ * league where nobody can be eliminated must never be told it is in danger of
+ * elimination. But the flag does NOT mean that on its own. Measured on
+ * 2026-09-25: of the eight 2026 chopped leagues carrying disable_elimination 1,
+ * SEVEN had already eliminated rosters, including both 32 team leagues, which
+ * chop two a week. Reading the flag alone filed those as ordinary leagues and
+ * ran a head to head model over a league with no head to head games, which
+ * printed 0.00 expected wins for every team.
+ *
+ * So the elimination record wins. A chopped-type league is chopped when the
+ * flag is off OR when Sleeper has recorded an elimination on any roster
+ * (`eliminatedWeeks`, one entry per roster, from `eliminatedWeek`). A league
+ * with the flag on and nobody out yet is treated as not chopping: before its
+ * first chop there is no way to tell, and "ordinary league" is the answer that
+ * frightens nobody. Callers without roster data may omit the second argument
+ * and get the flag-only reading.
  */
 export function isChoppedLeague(
   settings: Record<string, unknown> | null | undefined,
+  eliminatedWeeks: ReadonlyArray<number | null> = [],
 ): boolean {
   if (!settings) return false;
   if (Number(settings.type) !== SLEEPER_TYPE_CHOPPED) return false;
-  return Number(settings.disable_elimination ?? 0) !== 1;
+  if (Number(settings.disable_elimination ?? 0) !== 1) return true;
+  return eliminatedWeeks.some((week) => week !== null);
+}
+
+/**
+ * How many rosters this league chops per week, read off what it has actually
+ * done. Sleeper publishes no setting for it: most leagues chop one, the 32
+ * team leagues we hold chop two. The busiest week so far is the answer, and 1
+ * before anyone has gone. The busiest rather than the latest, because a week
+ * in which a league chops fewer (it has run out of teams) says nothing about
+ * the weeks before.
+ */
+export function chopsPerWeek(eliminatedWeeks: ReadonlyArray<number | null>): number {
+  const byWeek = new Map<number, number>();
+  for (const week of eliminatedWeeks) {
+    if (week === null) continue;
+    byWeek.set(week, (byWeek.get(week) ?? 0) + 1);
+  }
+  let most = 1;
+  for (const count of byWeek.values()) most = Math.max(most, count);
+  return most;
 }
 
 /**
@@ -114,11 +148,13 @@ export type FinalWeekRead = {
 };
 
 /**
- * When the last chop lands, derived from how many teams are left.
+ * When the last chop lands, derived from how many teams are left and how many
+ * go each week (`perWeek`, from `chopsPerWeek`; 1 when omitted).
  *
- * `currentWeek + aliveCount - 2` is the week that leaves one survivor: the
- * current week chops one (hence the minus one for it) and each later week
- * chops one more. Capped at week 17.
+ * Reaching one survivor takes ceil((aliveCount - 1) / perWeek) chop weeks,
+ * the first of them the current week, so the final week is the current week
+ * plus that count minus one. With one chop a week that is
+ * `currentWeek + aliveCount - 2`, exactly as before. Capped at week 17.
  *
  * With one team left the result sits BEFORE the current week, and that is
  * deliberate rather than clamped away: the league is over, there is nothing
@@ -129,11 +165,14 @@ export type FinalWeekRead = {
 export function resolveFinalWeek(
   currentWeek: number,
   aliveCount: number,
+  perWeek = 1,
 ): FinalWeekRead {
   const week = Number.isFinite(currentWeek) ? Math.floor(currentWeek) : 1;
   const alive = Number.isFinite(aliveCount) ? Math.floor(aliveCount) : 0;
+  const chops = Number.isFinite(perWeek) && perWeek >= 1 ? Math.floor(perWeek) : 1;
+  const chopWeeks = Math.ceil((Math.max(0, alive) - 1) / chops);
   return {
-    finalWeek: Math.min(LAST_FANTASY_WEEK, week + Math.max(0, alive) - 2),
+    finalWeek: Math.min(LAST_FANTASY_WEEK, week + chopWeeks - 1),
     finalWeekVerified: FINAL_WEEK_VERIFIED,
   };
 }

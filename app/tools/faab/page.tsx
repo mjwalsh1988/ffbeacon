@@ -17,6 +17,10 @@ import {
   resolveSleeperViewer,
 } from "@/lib/sleeper-handle/resolve";
 import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
+import { loadManualDefendersCached } from "@/lib/faab/manual-defenders";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { currentNflSeason } from "@/lib/nfl-season";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 import { parseManualSeed } from "./manual-setup";
 import { WrittenSections } from "./written-sections";
@@ -171,6 +175,20 @@ export default async function FaabPage({
         rankingsSource: rankingsResolution.source,
         valueSource: valueHistoryResolution.source ?? null,
       });
+    }
+  }
+
+  // Defenders for the manual calculator, after every ranked player and marked
+  // "not ranked": no value source ranks one. Only while the IDP switch is on,
+  // like every other IDP surface; the switch is read from memoised settings,
+  // so with it off this costs nothing.
+  if (players.length > 0 && idpEnabledFrom(await loadPowerPulseSettings(createAdminClient()))) {
+    try {
+      const defenders = await loadManualDefendersCached(Number(currentNflSeason()));
+      players = [...players, ...defenders.map((d) => ({ ...d, unranked: true }))];
+    } catch (error) {
+      // The offensive list still works; the defenders are an addition to it.
+      console.error("[faab] manual defender list failed", error);
     }
   }
 

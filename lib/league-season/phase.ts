@@ -125,7 +125,10 @@ function chopEvents(rosters: OutcomeRoster[]): ChopEvent[] {
 export function resolveLeagueOutcome(
   input: ResolveOutcomeInput,
 ): LeagueOutcome {
-  const chopped = isChoppedLeague(input.settings ?? null);
+  const chopped = isChoppedLeague(
+    input.settings ?? null,
+    input.rosters.map((r) => eliminatedWeek(r.settings ?? null)),
+  );
   const status = (input.status ?? "").toLowerCase();
 
   const chops = chopped ? chopEvents(input.rosters) : [];

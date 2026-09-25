@@ -277,7 +277,8 @@ async function runPowerPulse(
   const aliveRosterIds = league.chopped ? await loadAliveRosterIds(supabase, leagueRowId) : null;
   const aliveCount = aliveRosterIds?.length ?? rosters.length;
   const remaining = league.chopped
-    ? choppedWeeks(currentWeek, resolveFinalWeek(currentWeek, aliveCount).finalWeek).length
+    ? choppedWeeks(currentWeek, resolveFinalWeek(currentWeek, aliveCount, league.choppedPerWeek ?? 1).finalWeek)
+        .length
     : schedule.weeks.filter((w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart).length;
   if (remaining === 0) return { ok: false, skipped: "no games left to project" };
 

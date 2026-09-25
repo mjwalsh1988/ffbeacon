@@ -34,6 +34,10 @@ import { loadAdjustedProjections } from "@/lib/projections/read";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import { canonicalScoringForFormat } from "@/lib/draft-value/default-settings";
+import { isDefender } from "@/lib/site";
+import { IDP_PRESETS } from "@/lib/idp/scoring-presets";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { IDP_SCORING_KEY } from "@/lib/power-pulse/idp-reads";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import { buildSignals } from "./signals";
 import { loadGameLogs, loadPositionalFinishes } from "./league-load";
@@ -63,6 +67,15 @@ const CANONICAL_SCORING: Record<ScoringBase, ScoringSettings> = {
   half_ppr: canonicalScoringForFormat({ scoringType: "half_ppr", tePremiumBonus: 0 }),
   std: canonicalScoringForFormat({ scoringType: "standard", tePremiumBonus: 0 }),
 };
+
+/**
+ * A defender is priced under Sleeper's default IDP scoring (idp123, plan D-1),
+ * whatever offensive base the page is on: the manual calculator has no league
+ * scoring to read, and idp123 is the one IDP system every figure on the site
+ * names. The offensive keys ride along untouched and score nothing for him
+ * (lib/league-scoring.ts keeps only idp_* keys on a defender's projected line).
+ */
+const DEFENDER_SCORING: ScoringSettings = { ...CANONICAL_SCORING.ppr, ...IDP_PRESETS.idp123 };
 
 /** The accuracy table keys its rows by these same strings. */
 const ACCURACY_SCORING: Record<ScoringBase, string> = {
@@ -180,6 +193,7 @@ async function loadPositionProjections(
   fromWeek: number,
   toWeek: number,
   scoring: ScoringBase,
+  defender: boolean,
 ): Promise<Map<string, { total: number; weeks: number }>> {
   const supabase = createCachedReadClient();
   const playerIds = await playerIdsAtPosition(supabase, position, season, fromWeek, toWeek);
@@ -193,8 +207,10 @@ async function loadPositionProjections(
     season,
     fromWeek,
     toWeek,
-    scoringSettings: CANONICAL_SCORING[scoring],
+    scoringSettings: defender ? DEFENDER_SCORING : CANONICAL_SCORING[scoring],
     positionByPlayer,
+    // Only for a defender, and only because the caller checked the IDP switch.
+    includeDefenders: defender,
     // No live week here beyond fromWeek itself: the manual calculator has no
     // roster and no per-player injury designation to weigh against it, so the
     // injury multiplier's week-to-week discount (which only fires for the
@@ -239,10 +255,15 @@ function loadPositionProjectionsCached(
    * serving the previous engine's numbers out of a 24 hour cache.
    */
   source: string,
+  /** A DL, LB or DB priced under idp123; the IDP switch is checked by the caller. */
+  defender = false,
 ): Promise<Map<string, { total: number; weeks: number }>> {
+  // A defender's curve does not depend on the offensive base, so it is keyed
+  // once rather than three times.
+  const keyScoring = defender ? IDP_SCORING_KEY : scoring;
   return unstable_cache(
     async () => [
-      ...(await loadPositionProjections(position, season, fromWeek, toWeek, scoring)),
+      ...(await loadPositionProjections(position, season, fromWeek, toWeek, scoring, defender)),
     ],
     [
       "faab-position-projections",
@@ -250,7 +271,7 @@ function loadPositionProjectionsCached(
       String(season),
       String(fromWeek),
       String(toWeek),
-      scoring,
+      keyScoring,
       source,
     ],
     { revalidate: CACHE_TTL.daily, tags: [CACHE_TAGS.playerProjections] },
@@ -310,6 +331,16 @@ export async function loadPlayerOutlook(
 
   const scoring = scoringBaseForFormat(formatSlug);
   const pulseSettings = await loadPowerPulseSettings(supabase);
+  // A defender is projected only while the IDP switch is on, like every other
+  // IDP surface (plan R-25). Off, he takes the offensive path, which returns no
+  // projection for him and says so, exactly as before.
+  const defender = isDefender(position) && idpEnabledFrom(pulseSettings);
+  const accuracyKey = defender ? IDP_SCORING_KEY : ACCURACY_SCORING[scoring];
+  if (defender) {
+    notices.push(
+      "Defender points here are Sleeper's default IDP scoring. A league that scores tackles, sacks or turnovers differently will value him differently.",
+    );
+  }
   const defenseSeasons = defenseSeasonsFor(season);
 
   // WHICH PROJECTION ENGINE THIS PAGE IS ON, resolved once for the whole
@@ -335,14 +366,15 @@ export async function loadPlayerOutlook(
           lastRegularWeek,
           scoring,
           projectionSource,
+          defender,
         )
       : Promise.resolve(new Map<string, { total: number; weeks: number }>()),
     // The RESOLVED source rather than a pinned one, to pair with the
     // projections read below and with the position curve above: a reliability
     // multiplier measures how one engine's numbers have landed, and applying it
     // to the other engine's numbers is a plausible-looking wrong answer.
-    loadAccuracy(supabase, [playerId], ACCURACY_SCORING[scoring], projectionSource),
-    loadDefenseSplits(supabase, ACCURACY_SCORING[scoring], defenseSeasons),
+    loadAccuracy(supabase, [playerId], accuracyKey, projectionSource),
+    loadDefenseSplits(supabase, accuracyKey, defenseSeasons),
     // Deliberately the RAW power-pulse loader, not loadAdjustedProjections,
     // and deliberately a separate call from loadPositionProjectionsCached
     // above even though both touch player_weekly_projections for the same
@@ -409,12 +441,12 @@ export async function loadPlayerOutlook(
     }));
 
   const [gameLogs, finishes] = await Promise.all([
-    loadGameLogs(supabase, playerId, season),
+    loadGameLogs(supabase, playerId, season, undefined, { defender }),
     settings.signals.ceiling.enabled
       ? loadPositionalFinishes(
           supabase,
           playerId,
-          ACCURACY_SCORING[scoring],
+          accuracyKey,
           season - settings.signals.ceiling.lookbackSeasons,
         )
       : Promise.resolve([]),

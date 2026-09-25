@@ -206,10 +206,26 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
 
   // Sums to 9 at the baseline, which is the standard 1 QB, 2 RB, 3 WR, 1 TE
   // plus two flex spots absorbed into the running back and receiver counts.
+  //
+  // Defenders (manual mode prices one once the IDP switch is on) are MEASURED:
+  // the defenders actually started per team per week across every settled week
+  // of our 2025 and 2026 IDP leagues, flex slots included, read 2026-09-25:
+  // DL 1.22, LB 1.34, DB 0.94. Flat, because the offensive starter count the
+  // reader enters says nothing about how many defenders their league starts.
   manualReplacement: {
-    startersPerTeam: { QB: 1.0, RB: 2.8, WR: 3.9, TE: 1.3, K: 1.0, DEF: 1.0 },
+    startersPerTeam: {
+      QB: 1.0,
+      RB: 2.8,
+      WR: 3.9,
+      TE: 1.3,
+      K: 1.0,
+      DEF: 1.0,
+      DL: 1.2,
+      LB: 1.3,
+      DB: 0.9,
+    },
     baselineStarters: 9,
-    flatPositions: ["K", "DEF"],
+    flatPositions: ["K", "DEF", "DL", "LB", "DB"],
     superflexQbPerTeam: 1.9,
   },
 

@@ -20,6 +20,7 @@
  * Pure. Everything arrives as plain numbers.
  */
 
+import { isDefender } from "@/lib/site";
 import type { MarginalWeek, FaabSignal, SignalSettings } from "./types";
 
 /** Reliability history for one player, already blended across seasons. */
@@ -34,7 +35,10 @@ export type AccuracySignalInput = {
 export type GameLogEntry = {
   season: number;
   week: number;
-  /** Share of his team's offensive snaps, 0 to 1. Null when not recorded. */
+  /**
+   * Share of his team's snaps on his side of the ball (offensive, or defensive
+   * for a DL, LB or DB), 0 to 1. Null when not recorded.
+   */
   snapPct: number | null;
   /** His team's offensive snap count that game. Guards against garbage reads. */
   teamSnaps: number | null;
@@ -278,7 +282,9 @@ function ceilingSignal(input: SignalInput): FaabSignal | null {
   return {
     id: "ceiling",
     label: "His ceiling so far",
-    detail: `Best finish in ${cfg.lookbackSeasons} seasons: ${input.position}${best.finish} in ${best.season}. Context, not a forecast.`,
+    // A defender's finishes are ranked under Sleeper's default IDP scoring,
+    // whatever the league scores, and every IDP figure names its scoring.
+    detail: `Best finish in ${cfg.lookbackSeasons} seasons: ${input.position}${best.finish} in ${best.season}${isDefender(input.position) ? ", under Sleeper default IDP scoring" : ""}. Context, not a forecast.`,
     tone: "neutral",
     multiplier: 1,
     spread: 0,

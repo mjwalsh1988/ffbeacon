@@ -120,6 +120,8 @@ export type ChoppedContext = {
   substitutes: number;
   releaseCutoffWeek: number | null;
   seed: number;
+  /** Rosters chopped per week (chopsPerWeek); 1 when omitted. */
+  choppedPerWeek?: number;
 };
 
 export type ChoppedOutcome = {
@@ -147,7 +149,8 @@ export function computeChopped(
 ): ChoppedOutcome {
   const chopped = settings.chopped;
   const aliveCount = context.aliveRosterIds.length;
-  const { finalWeek, finalWeekVerified } = resolveFinalWeek(context.currentWeek, aliveCount);
+  const perWeek = context.choppedPerWeek ?? 1;
+  const { finalWeek, finalWeekVerified } = resolveFinalWeek(context.currentWeek, aliveCount, perWeek);
   const weeks = choppedWeeks(context.currentWeek, finalWeek);
 
   const teamsBefore: SurvivalTeam[] = context.aliveRosterIds.map((rosterId) => ({
@@ -160,12 +163,12 @@ export function computeChopped(
   // two runs then belongs to the signing rather than to the dice, which is
   // the only way a two point swing means anything at all.
   const runs = chopped.runs;
-  const before = simulateSurvival(teamsBefore, weeks, { runs, seed: context.seed });
+  const before = simulateSurvival(teamsBefore, weeks, { runs, seed: context.seed, choppedPerWeek: perWeek });
 
   const teamsAfter: SurvivalTeam[] = teamsBefore.map((team) =>
     team.rosterId === context.myRosterId ? { ...team, weeks: context.weeklyAfter } : team,
   );
-  const after = simulateSurvival(teamsAfter, weeks, { runs, seed: context.seed });
+  const after = simulateSurvival(teamsAfter, weeks, { runs, seed: context.seed, choppedPerWeek: perWeek });
 
   const mineBefore = before.get(context.myRosterId);
   const mineAfter = after.get(context.myRosterId);

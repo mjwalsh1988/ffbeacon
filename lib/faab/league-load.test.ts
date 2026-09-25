@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  depthRoomFor,
   groupAuctions,
+  loadGameLogs,
   loadLeagueValueContext,
   type AuctionTransactionRow,
 } from "./league-load";
@@ -165,5 +167,69 @@ describe("loadLeagueValueContext keeper detection", () => {
   it("returns no format when the league is missing", async () => {
     const out = await loadLeagueValueContext(clientReturning(null), "l1");
     expect(out).toEqual({ formatConfigId: null, isKeeperLeague: false });
+  });
+});
+
+describe("depthRoomFor (a defender's depth is counted within his sub-position)", () => {
+  const depth = [
+    { playerId: "a", name: "A", depthOrder: 1, injuryStatus: "Out", subPosition: "LILB" },
+    { playerId: "b", name: "B", depthOrder: 1, injuryStatus: null, subPosition: "RILB" },
+    { playerId: "c", name: "C", depthOrder: 2, injuryStatus: null, subPosition: "RILB" },
+    { playerId: "d", name: "D", depthOrder: 2, injuryStatus: null, subPosition: null },
+  ];
+
+  it("keeps the whole position for an offensive player", () => {
+    expect(depthRoomFor(depth, "c", false)).toHaveLength(4);
+  });
+
+  it("keeps only the defender's own spot, so the other side's starter is not 'ahead' of him", () => {
+    expect(depthRoomFor(depth, "c", true).map((d) => d.playerId)).toEqual(["b", "c"]);
+  });
+
+  it("gives a defender with no recorded spot no room rather than a wrong one", () => {
+    expect(depthRoomFor(depth, "d", true)).toEqual([]);
+  });
+});
+
+describe("loadGameLogs for a defender", () => {
+  function fakeClient(rows: Array<Record<string, unknown>>) {
+    const chain = {
+      select: () => chain,
+      eq: () => chain,
+      order: () => chain,
+      limit: async () => ({ data: rows, error: null }),
+    };
+    return { from: () => chain } as unknown as Parameters<typeof loadGameLogs>[0];
+  }
+
+  const row = {
+    season: 2026,
+    week: 2,
+    gp: 1,
+    snap_pct: null,
+    off_snp: null,
+    tm_off_snp: null,
+    rec_tgt: null,
+    rush_att: null,
+    def_snap_pct: 0.92,
+    def_snp: 60,
+    tm_def_snp: 65,
+  };
+
+  it("reads his defensive snap share and no touches", async () => {
+    const [log] = await loadGameLogs(fakeClient([row]), "p", 2026, 8, { defender: true });
+    expect(log).toMatchObject({ snapPct: 0.92, teamSnaps: 65, touches: null });
+  });
+
+  it("caps a share stored a little over 1 instead of reading it as a percentage", async () => {
+    const [log] = await loadGameLogs(fakeClient([{ ...row, def_snap_pct: 1.05 }]), "p", 2026, 8, {
+      defender: true,
+    });
+    expect(log.snapPct).toBe(1);
+  });
+
+  it("reads the offensive share, as before, when he is not a defender", async () => {
+    const [log] = await loadGameLogs(fakeClient([row]), "p", 2026);
+    expect(log.snapPct).toBeNull();
   });
 });

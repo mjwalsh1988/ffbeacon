@@ -62,7 +62,7 @@ import {
 } from "./marginal";
 import { loadPositionalWarView } from "@/lib/league-positional-war-data";
 import { loadLeagueFreeAgents } from "./free-agents";
-import { isChoppedLeague, resolveFinalWeek } from "@/lib/chopped/league";
+import { resolveFinalWeek } from "@/lib/chopped/league";
 import {
   computeChopped,
   loadAliveRosterIds,
@@ -89,7 +89,10 @@ import {
   tendencyLabel,
   type TendencyAuction,
 } from "./tendency";
+import { isDefender } from "@/lib/site";
+import { IDP_SCORING_KEY } from "@/lib/power-pulse/idp-reads";
 import {
+  depthRoomFor,
   loadAuctionHistory,
   loadEliteValue,
   loadGameLogs,
@@ -346,15 +349,16 @@ export async function calculateLeagueFaab(
   const mine = rosters.find((r) => r.sleeperRosterId === input.sleeperRosterId);
   if (!mine) return { ok: false, error: "We could not find your team in this league." };
 
-  // The money is read here rather than with the other loaders below because
-  // it carries Sleeper's league type, and whether this is a chopped league
-  // decides which weeks we even project: a chopped season has no playoff
-  // week to stop at, it runs until one team is left.
+  // Read here rather than with the other loaders below, beside the chopped
+  // decision, because whether this is a chopped league decides which weeks we
+  // even project: a chopped season has no playoff week to stop at, it runs
+  // until one team is left.
   const money = await loadLeagueMoney(supabase, input.leagueRowId);
-  const chopped = isChoppedLeague({
-    type: money.sleeperType,
-    disable_elimination: 0,
-  });
+  // The same answer Power Pulse uses (loadLeague reads the rosters'
+  // eliminations for a chopped-type league), so the two tools can never
+  // disagree about whether a league chops, or how many it chops a week.
+  const chopped = league.chopped;
+  const choppedPerWeek = league.choppedPerWeek ?? 1;
   const aliveIds = chopped
     ? await loadAliveRosterIds(supabase, input.leagueRowId)
     : rosters.map((r) => r.sleeperRosterId);
@@ -369,7 +373,7 @@ export async function calculateLeagueFaab(
 
   const nflState = await getNflState();
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
-  const choppedFinal = resolveFinalWeek(currentWeek, aliveIds.length);
+  const choppedFinal = resolveFinalWeek(currentWeek, aliveIds.length, choppedPerWeek);
   const lastRegularWeek = chopped
     ? Math.max(currentWeek, choppedFinal.finalWeek)
     : Math.max(currentWeek, league.playoffWeekStart - 1);
@@ -953,6 +957,7 @@ export async function calculateLeagueFaab(
           substitutes: substituteCount,
           releaseCutoffWeek: null,
           seed: pulseSettings.simulation.seed,
+          choppedPerWeek,
         },
         settings,
         1,
@@ -1117,13 +1122,20 @@ export async function calculateLeagueFaab(
       : null;
 
   // ---- the player reads ----------------------------------------------------
+  // A defender (listed only while the IDP switch is on) reads his DEFENSIVE
+  // snaps, his finishes under idp123 (the only IDP finishes we build; the
+  // offensive base holds none for him, which left his finish line empty) and
+  // his depth chart within his own sub-position.
+  const candidateIsDefender = isDefender(candidate.position);
   const [gameLogs, finishes, teamDepth] = await Promise.all([
-    loadGameLogs(supabase, candidate.playerId, league.season),
+    loadGameLogs(supabase, candidate.playerId, league.season, undefined, {
+      defender: candidateIsDefender,
+    }),
     settings.signals.ceiling.enabled
       ? loadPositionalFinishes(
           supabase,
           candidate.playerId,
-          scoringBase,
+          candidateIsDefender ? IDP_SCORING_KEY : scoringBase,
           league.season - settings.signals.ceiling.lookbackSeasons,
         )
       : Promise.resolve([]),
@@ -1132,9 +1144,10 @@ export async function calculateLeagueFaab(
       : Promise.resolve([]),
   ]);
 
-  const teammate = starterAheadOf(teamDepth, candidate.playerId);
+  const depthRoom = depthRoomFor(teamDepth, candidate.playerId, candidateIsDefender);
+  const teammate = starterAheadOf(depthRoom, candidate.playerId);
   const candidateDepthOrder =
-    teamDepth.find((d) => d.playerId === candidate.playerId)?.depthOrder ?? null;
+    depthRoom.find((d) => d.playerId === candidate.playerId)?.depthOrder ?? null;
 
   const playerSignals = buildSignals({
     position: candidate.position,

@@ -160,14 +160,25 @@ describe("resolveLeagueOutcome, chopped leagues", () => {
     expect(outcome.runnerUpRosterId).toBeNull();
   });
 
-  it("is an ordinary league when the commissioner disabled elimination", () => {
+  it("is an ordinary league when elimination is disabled and nobody has gone", () => {
+    const outcome = resolveLeagueOutcome({
+      status: "in_season",
+      settings: { type: 3, disable_elimination: 1 },
+      rosters: rosters(6, {}),
+    });
+    expect(outcome.chopped).toBe(false);
+    expect(outcome.chops).toEqual([]);
+  });
+
+  it("is chopped when Sleeper has eliminated a roster despite the disable flag", () => {
+    // The 32 team leagues carry disable_elimination 1 and chop two a week.
     const outcome = resolveLeagueOutcome({
       status: "in_season",
       settings: { type: 3, disable_elimination: 1 },
       rosters: rosters(6, { 2: 1 }),
     });
-    expect(outcome.chopped).toBe(false);
-    expect(outcome.chops).toEqual([]);
+    expect(outcome.chopped).toBe(true);
+    expect(outcome.chops.map((c) => c.sleeperRosterId)).toEqual([2]);
   });
 });
 

@@ -309,16 +309,27 @@ export async function loadAuctionHistory(
  * where neither exists the opportunity signal simply does not fire. Older
  * seasons genuinely lack these columns (see scripts/backfill-sleeper-stats.ts),
  * so a missing read is expected rather than an error.
+ *
+ * A DEFENDER's share is his DEFENSIVE snaps (def_snap_pct, or def_snp over
+ * tm_def_snp), and he has no touches: targets and carries say nothing about a
+ * linebacker's role. His share is stored 0 to 1 and a handful of rows read a
+ * little over 1 (a snap-count quirk, up to 1.08 in 2025), so it is capped at 1
+ * rather than run through the offensive "above 1 is a percentage" rule, which
+ * would turn an every-down linebacker into a 1 percent one.
  */
 export async function loadGameLogs(
   supabase: ServiceClient,
   playerId: string,
   season: number,
   limit = 8,
+  opts: { defender?: boolean } = {},
 ): Promise<GameLogEntry[]> {
+  const defender = opts.defender === true;
   const { data, error } = await supabase
     .from("player_stats")
-    .select("season, week, snap_pct, off_snp, tm_off_snp, rec_tgt, rush_att, gp")
+    .select(
+      "season, week, snap_pct, off_snp, tm_off_snp, rec_tgt, rush_att, gp, def_snap_pct, def_snp, tm_def_snp",
+    )
     .eq("player_id", playerId)
     .eq("season", season)
     .order("week", { ascending: false })
@@ -328,6 +339,20 @@ export async function loadGameLogs(
   return data
     .filter((r) => Number(r.gp ?? 0) > 0)
     .map((r) => {
+      if (defender) {
+        const direct = numberFrom(r.def_snap_pct);
+        const own = numberFrom(r.def_snp);
+        const team = numberFrom(r.tm_def_snp);
+        const derived = own !== null && team !== null && team > 0 ? own / team : null;
+        const share = direct ?? derived;
+        return {
+          season: Number(r.season),
+          week: Number(r.week),
+          snapPct: share === null ? null : Math.min(1, Math.max(0, share)),
+          teamSnaps: team,
+          touches: null,
+        };
+      }
       const direct = numberFrom(r.snap_pct);
       const off = numberFrom(r.off_snp);
       const team = numberFrom(r.tm_off_snp);
@@ -590,6 +615,8 @@ export type TeamDepthEntry = {
   name: string;
   depthOrder: number | null;
   injuryStatus: string | null;
+  /** Sleeper's depth_chart_position (LILB, RCB, NT...); what a defender's order is counted within. */
+  subPosition: string | null;
 };
 
 export async function loadTeamDepth(
@@ -618,8 +645,32 @@ export async function loadTeamDepth(
       name: name || "A teammate",
       depthOrder: order && order > 0 ? order : null,
       injuryStatus: status,
+      subPosition:
+        typeof meta.depth_chart_position === "string" && meta.depth_chart_position.length > 0
+          ? meta.depth_chart_position.toUpperCase()
+          : null,
     };
   });
+}
+
+/**
+ * The depth room the candidate's order is counted in. An offensive player's
+ * room is his whole position at his team. A defender's is his SUB-position
+ * (plan R-24, lib/player-profile/defender-depth.ts): Sleeper orders each spot
+ * separately, so a team has an order-1 left and an order-1 right inside
+ * linebacker, and comparing orders across the two would call a starter the
+ * backup of the other side's starter. A defender with no sub-position on
+ * record has no room we can read, so he gets none rather than a wrong one.
+ */
+export function depthRoomFor(
+  depth: TeamDepthEntry[],
+  candidatePlayerId: string,
+  defender: boolean,
+): TeamDepthEntry[] {
+  if (!defender) return depth;
+  const mine = depth.find((d) => d.playerId === candidatePlayerId)?.subPosition ?? null;
+  if (!mine) return [];
+  return depth.filter((d) => d.subPosition === mine);
 }
 
 /** Injury designations that mean the man in front is not playing. */

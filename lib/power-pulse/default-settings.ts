@@ -342,7 +342,12 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   // pp-9 (2026-09-24, IDP-405): the IDP switch went on. A league that starts
   // defensive slots now projects and seats its defenders, so its scores mean
   // something different; every league rescores on next view.
-  modelVersion: "pp-9",
+  //
+  // pp-10 (2026-09-25): a chopped-type league carrying disable_elimination is
+  // now read as chopped once Sleeper has eliminated anyone, and a league that
+  // chops two a week (the 32 team ones) is simulated that way. Seven leagues
+  // had been scored as head to head leagues with no head to head games.
+  modelVersion: "pp-10",
 
   weights: {
     points: 0.55,

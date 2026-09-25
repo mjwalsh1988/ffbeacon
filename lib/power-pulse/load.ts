@@ -15,7 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
-import { isAliveRoster, isChoppedLeague } from "@/lib/chopped/league";
+import { chopsPerWeek, eliminatedWeek, isAliveRoster, isChoppedLeague } from "@/lib/chopped/league";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import {
   DEFAULT_PLAYOFF_TEAMS,
@@ -96,13 +96,17 @@ export type LeagueRow = {
    * eliminated every week and the last team alive wins.
    *
    * It changes which model runs rather than a parameter inside one, because
-   * such a league has no bracket, no bye and no last place, and Sleeper's
-   * `disable_elimination` switch is checked too: a league carrying chopped's
-   * type with elimination turned off is an ordinary scoring league wearing
-   * chopped's interface, and telling its managers they are in danger of
-   * elimination would be the loudest possible wrong answer.
+   * such a league has no bracket, no bye and no last place. Sleeper's
+   * `disable_elimination` switch is checked too, but the rosters' recorded
+   * eliminations outrank it: the 32 team leagues carry the switch and chop two
+   * a week (see isChoppedLeague in lib/chopped/league.ts).
    */
   chopped: boolean;
+  /**
+   * Rosters chopped per week, read off the league's own eliminations
+   * (chopsPerWeek). 1 for an ordinary league and when omitted.
+   */
+  choppedPerWeek?: number;
 };
 
 export type RosterRow = {
@@ -275,6 +279,7 @@ export async function loadLeague(
 
   const meta = (data.metadata ?? {}) as { settings?: Record<string, unknown> };
   const settings = meta.settings ?? {};
+  const eliminated = await loadEliminatedWeeks(supabase, leagueRowId, settings);
 
   return {
     id: data.id,
@@ -293,8 +298,30 @@ export async function loadLeague(
     // so intOrNull, not positiveIntOrNull.
     playoffRoundType: intOrNull(settings.playoff_round_type) ?? 0,
     medianMatch: intOrNull(settings.league_average_match) === 1,
-    chopped: isChoppedLeague(settings),
+    chopped: isChoppedLeague(settings, eliminated),
+    choppedPerWeek: chopsPerWeek(eliminated),
   };
+}
+
+/**
+ * Each roster's elimination week (null while alive), for a chopped-type
+ * league only. Every other league returns [] without a query, so this costs an
+ * ordinary league nothing. The rule for reading the field is eliminatedWeek's.
+ */
+export async function loadEliminatedWeeks(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  settings: Record<string, unknown>,
+): Promise<Array<number | null>> {
+  if (Number(settings.type) !== 3) return [];
+  const { data } = await supabase
+    .from("rosters")
+    .select("sleeper_roster_id, metadata")
+    .eq("league_id", leagueRowId);
+  return (data ?? []).map((row) => {
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    return eliminatedWeek(meta.settings ?? null);
+  });
 }
 
 /**

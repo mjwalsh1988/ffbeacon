@@ -67,7 +67,16 @@ describe("replacementRankFor", () => {
   });
 
   it("returns null for a position we have no shape for", () => {
-    expect(replacementRankFor("LB", 12, 9, R)).toBeNull();
+    expect(replacementRankFor("OL", 12, 9, R)).toBeNull();
+  });
+
+  it("gives defenders a measured, flat replacement level", () => {
+    // 12 teams at the measured 1.3 linebackers each: the 16th linebacker.
+    expect(replacementRankFor("LB", 12, 9, R)).toBe(16);
+    expect(replacementRankFor("DL", 12, 9, R)).toBe(14);
+    expect(replacementRankFor("DB", 12, 9, R)).toBe(11);
+    // Flat: the offensive starter count the reader enters does not move them.
+    expect(replacementRankFor("LB", 12, 7, R)).toBe(replacementRankFor("LB", 12, 12, R));
   });
 });
 

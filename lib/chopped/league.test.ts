@@ -4,6 +4,7 @@ import {
   LAST_FANTASY_WEEK,
   aliveFraction,
   choppedWeeks,
+  chopsPerWeek,
   eliminatedWeek,
   isAliveRoster,
   isChoppedLeague,
@@ -19,8 +20,18 @@ describe("isChoppedLeague", () => {
     expect(isChoppedLeague({ type: 3, disable_elimination: 0 })).toBe(true);
   });
 
-  it("rejects a chopped league with elimination disabled", () => {
+  it("rejects a chopped league with elimination disabled and nobody out", () => {
     expect(isChoppedLeague({ type: 3, disable_elimination: 1 })).toBe(false);
+    expect(isChoppedLeague({ type: 3, disable_elimination: 1 }, [null, null])).toBe(false);
+  });
+
+  it("believes Sleeper's eliminations over the disable_elimination flag", () => {
+    // The 32 team league: flag on, four rosters already chopped in weeks 1 and 2.
+    expect(isChoppedLeague({ type: 3, disable_elimination: 1 }, [null, 2, 2, 1, 1, null])).toBe(true);
+  });
+
+  it("never turns a non-chopped type into chopped, whatever the rosters say", () => {
+    expect(isChoppedLeague({ type: 2 }, [1, 2])).toBe(false);
   });
 
   it("rejects redraft, keeper and dynasty", () => {
@@ -103,10 +114,34 @@ describe("resolveFinalWeek", () => {
     expect(FINAL_WEEK_VERIFIED).toBe(false);
   });
 
+  it("with two chops a week, needs half as many weeks", () => {
+    // 28 alive in week 3, two a week: 27 chops take 14 weeks, weeks 3 to 16.
+    expect(resolveFinalWeek(3, 28, 2).finalWeek).toBe(16);
+    // Three left: this week's two chops leave one.
+    expect(resolveFinalWeek(9, 3, 2).finalWeek).toBe(9);
+  });
+
+  it("treats a missing or junk per-week count as one", () => {
+    expect(resolveFinalWeek(5, 12, 0).finalWeek).toBe(15);
+    expect(resolveFinalWeek(5, 12, Number.NaN).finalWeek).toBe(15);
+  });
+
   it("survives junk inputs without producing NaN", () => {
     expect(
       Number.isFinite(resolveFinalWeek(Number.NaN, Number.NaN).finalWeek),
     ).toBe(true);
+  });
+});
+
+describe("chopsPerWeek", () => {
+  it("is one before anyone has gone", () => {
+    expect(chopsPerWeek([])).toBe(1);
+    expect(chopsPerWeek([null, null])).toBe(1);
+  });
+
+  it("reads the busiest week", () => {
+    expect(chopsPerWeek([null, 2, 2, 1, 1])).toBe(2);
+    expect(chopsPerWeek([1, 2, 3, null])).toBe(1);
   });
 });
 

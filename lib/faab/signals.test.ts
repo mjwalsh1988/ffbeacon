@@ -164,4 +164,16 @@ describe("combining", () => {
     expect(ceiling?.multiplier).toBe(1);
     expect(ceiling?.spread).toBe(0);
   });
+
+  it("names Sleeper's default IDP scoring on a defender's finish, and only there", () => {
+    const finishes = [{ season: 2025, finish: 12, playersRanked: 90 }];
+    const lb = buildSignals(baseInput({ position: "LB", positionalFinishes: finishes })).find(
+      (s) => s.id === "ceiling",
+    );
+    expect(lb?.detail).toBe(
+      "Best finish in 3 seasons: LB12 in 2025, under Sleeper default IDP scoring. Context, not a forecast.",
+    );
+    const wr = buildSignals(baseInput({ positionalFinishes: finishes })).find((s) => s.id === "ceiling");
+    expect(wr?.detail).toBe("Best finish in 3 seasons: WR12 in 2025. Context, not a forecast.");
+  });
 });

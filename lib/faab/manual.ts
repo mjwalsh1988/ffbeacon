@@ -23,8 +23,12 @@
 
 import type { ManualReplacementSettings, MarginalValue, MarginalWeek } from "./types";
 
-/** Positions we can find a replacement level for. */
-export type ManualPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+/**
+ * Positions we can find a replacement level for. The defensive three are
+ * reached only while the IDP switch is on, when the manual list carries them
+ * and their curve is scored under idp123 (./outlook.ts).
+ */
+export type ManualPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF" | "DL" | "LB" | "DB";
 
 export type ManualMarginalInput = {
   position: string;

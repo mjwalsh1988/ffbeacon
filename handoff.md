@@ -6,6 +6,11 @@
   identical), then the switch went on with DL 0.33, LB 0, DB 0, defense splits
   recomputed, and versions pp-9, war-5, ledger-6 plus the guide copy pushed.
   See IDP-405 in progress.md.
+- ALSO DONE, NOT COMMITTED (owner instruction): IDP-4F1, chopped leagues that
+  Sleeper flags disable_elimination but still chop (the 32 team leagues chop two
+  a week), and IDP-4F2, defenders in the FAAB manual calculator. Power Pulse is
+  pp-10 in the tree. Also IDP-4F3, the league-mode FAAB defender card (finish
+  line, defensive snap share, depth by sub-position). See progress.md.
 - NEXT: the owner's visual and screen-reader pass; then IDP-406 day-one checks
   (no "No projection" for projected defenders, no "Unknown player" rows, rerun
   the invariant, IndexNow for the guide and gated defender slugs), Search

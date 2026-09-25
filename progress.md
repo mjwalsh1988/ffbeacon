@@ -10221,7 +10221,7 @@ PE-T017 | completed | modelVersion can no longer be pinned by a stored settings 
        round-trip would otherwise look like an edit.
      | verified: yes (9 tests, including the exact stale production row as a fixture)
 
-PE-T018 | open, needs a product decision, NOT a code change | the stale production
+PE-T018 | completed | (closed 2026-09-25: read on production, the league_power_pulse_settings row held an empty document before the IDP switch-on, so no stale pp-2 reliability values remain and the code defaults apply) the stale production
        settings row is also holding back two evidence-based improvements
      | notes: the same pp-2 row carries reliability.priorGames 10 and clamps of 0.85 to
        1.15. The code defaults are 60 and 0.95 to 1.05, set from the pp-5 measurement
@@ -15433,7 +15433,7 @@ FB-G12 | completed | League deep view chopped link (no compute)
      | notes: 2026-09-19. One line under the league header for a settings.type 3 league, reading the already-loaded sleeperLeague object. No new query and no compute. Note the real route segment is [league_id], not [sleeper_league_id] as the plan wrote it.
      | verified: yes
 
-FB-G13 | blocked | IndexNow submission for the new URL through the existing path
+FB-G13 | completed | IndexNow submission for the new URL through the existing path (submitted and accepted with a 200 on 2026-09-20 under FB-R02, as handoff.md records; status updated 2026-09-25)
      | files: none (script run)
      | depends on: FB-G05, deploy
      | notes: 2026-09-19. Deliberately NOT submitted. scripts/indexnow.ts takes URLs as arguments and refuses an empty run; it does not read the sitemap. https://ffbeacon.com/guides/chopped-league-strategy returns 404 today because none of this work is committed or deployed, and submitting a URL that 404s teaches the participating engines the wrong thing. Run this once the guide is live: npm run indexnow -- /guides/chopped-league-strategy
@@ -15454,7 +15454,7 @@ section in handoff.md. Plans of record:
 docs/faab/faab-calculator-overhaul-plan.md and
 docs/faab/chopped-guillotine-guide-seo-plan.md.
 
-FB-R01 | pending | Browser QA of the new result card at phone width
+FB-R01 | completed | Browser QA of the new result card at phone width (done by the owner 2026-09-20, as handoff.md records; status updated 2026-09-25)
      | files: app/tools/faab/*.tsx (no change expected, this is a check)
      | depends on: none
      | notes: HIGHEST PRIORITY and recommended before anything ships. Nobody
@@ -15578,7 +15578,7 @@ FB-R07 | pending | The bid search scans every simulation run per dollar
        fix if it is ever needed: precompute a sorted cumulative array of the
        run maxima once and binary search it.
      | verified: no
-FB-R08 | pending | No ESLint config anywhere in the repo
+FB-R08 | completed | No ESLint config anywhere in the repo (closed 2026-09-25 by IDP-401: ESLint installed, customised, and part of the gate)
      | files: package.json, a new eslint config
      | depends on: none
      | notes: Recommended someday, so the gate exists at all. npm run lint
@@ -16337,6 +16337,24 @@ IDP-405 | completed | Switch on and version bumps (2026-09-25 UTC, owner go-ahea
      | depends on: phase 3 pushed and deployed, IDP-402, IDP-403, OWNER GO-AHEAD
      | notes: idp.enabled true. Recompute stays on demand through pulseLeague; nothing added to any cron. Decide the trade-finder fingerprint tf2 (IDP-311 left it on purpose: suggestions never hold a defender). Defender profile cache key v2 only if its shape changed. Then the owner's first browser and screen-reader pass over the phase 3 screens, which only render with the switch on: Positional WAR Defense section, Lineups board in an IDP league, Power Pulse rooms, trade builder defenders, FAAB defenders, defender profile "This week" links. Expected effect per league: docs/idp/phase-3-invariant-report.txt.
      | verified: no
+
+IDP-4F1 | completed | Chopped leagues flagged disable_elimination, and leagues that chop two a week (the "32 man" league)
+     | files: lib/chopped/league.ts (isChoppedLeague takes the rosters' elimination weeks; NEW chopsPerWeek; resolveFinalWeek takes a per-week count), lib/chopped/league.test.ts, lib/power-pulse/load.ts (NEW loadEliminatedWeeks, read only for a chopped-type league; LeagueRow.choppedPerWeek), lib/power-pulse/engine.ts (final week and survival simulation use the count), lib/league-power-pulse.ts, lib/faab/league-faab.ts (uses league.chopped and choppedPerWeek instead of its own type-only check), lib/faab/league-chopped.ts (ChoppedContext.choppedPerWeek), lib/league-season/phase.ts, lib/league-season/phase.test.ts, lib/power-pulse/chopped.test.ts, scripts/verify-idp-invariant.ts, lib/power-pulse/default-settings.ts (pp-10)
+     | depends on: none
+     | notes: CAUSE. "32 man" (sleeper 1375706195679019008) is a Sleeper chopped league (settings.type 3) whose settings carry disable_elimination 1, which isChoppedLeague read as "an ordinary league wearing chopped's interface". Sleeper eliminates in it anyway, two rosters a week (rosters 24 and 25 in week 1, 15 and 19 in week 2). Filed as ordinary, it ran the head-to-head model over a league with no head-to-head games (every roster has its own matchup_id every week), which printed 0.00 expected wins for all 32 teams and scored the four chopped rosters at 0.0. Measured across 2026: 8 chopped-type leagues carry the flag and 7 of them have eliminated rosters, among them "The Last Survivor" (the other 32 team league, also two a week). FIX: a chopped-type league is chopped when the flag is off OR any roster has an elimination recorded (flag on and nobody out yet stays ordinary, the answer that frightens nobody); chopsPerWeek is the busiest elimination week so far, 1 before anyone goes; resolveFinalWeek is now current week plus ceil((alive - 1) / perWeek) minus 1, identical to before at one a week; the survival simulation already took choppedPerWeek and is now given it. FAAB and the league season summary use the same rule, so no two surfaces can disagree. VERIFIED read-only against production with the invariant script: 32 man now scores its 28 live teams with survival figures in place of expected wins and playoff odds, and every sampled ordinary league is still identical. modelVersion pp-10 so the affected leagues' cached rows rebuild on next view after deploy (every league rescores once).
+     | verified: yes (tests, typecheck, lint, build; invariant report)
+
+IDP-4F2 | completed | FAAB manual mode: defenders can be picked and priced (open item from IDP-312)
+     | files: NEW lib/faab/manual-defenders.ts (+ .test.ts, 6 tests), app/tools/faab/page.tsx, app/tools/faab/faab-form.tsx, lib/faab/outlook.ts, lib/faab/manual.ts, lib/faab/manual.test.ts, lib/faab/default-settings.ts, app/tools/faab/manual-result.tsx
+     | depends on: IDP-405
+     | notes: While the IDP switch is on, the manual calculator's search list carries up to 100 DL, 100 LB and 100 DB after the ranked players, marked "not ranked": defenders on an NFL roster who passed the site search's relevance gate (20 or more defensive snaps in a game this season or last), ordered by idp123 points a game from player_idp_seasons (this season once he has two games, else last season). One small cached read (daily), so the page does not wait on projections; the offensive list still renders if it fails. Once one is picked, lib/faab/outlook.ts prices him through the same shared reader league mode uses, with Sleeper's default IDP scoring (idp123) and includeDefenders, accuracy, defense splits and season finishes all under idp123, and a notice that names the scoring; the result subtitle says "Sleeper default IDP scoring" in place of the format. Replacement level for DL, LB and DB is MEASURED, not assumed: defenders actually started per team per week across every settled week of our 2025 and 2026 IDP leagues, flex included: DL 1.22, LB 1.34, DB 0.94, stored as 1.2, 1.3 and 0.9 and flat (the offensive starter count says nothing about defensive slots). Checked against production read-only: LB top Schwesinger 16.6 a week, 12 team replacement the 16th at 13.8; DL top Hutchinson 14.1, replacement 14th at 11.5; DB top Conner 13.5, replacement 11th at 11.9. A defender with no projection gets a sentence ("no value source ranks defenders, so there is no bid to show") instead of the rank-and-value estimate, which would have priced him off a placeholder rank; defenders are also kept out of the form's value pool. Switch off: no defender is listed and the outlook takes the offensive path, exactly as before. The league-mode season-finish line (IDP-312 item b) is fixed in IDP-4F3.
+     | verified: yes (tests, typecheck, lint, build; production check of the curve)
+
+IDP-4F3 | completed | FAAB league mode: a defender's result card reads his defensive record (the last IDP-312 item)
+     | files: lib/faab/league-faab.ts, lib/faab/league-load.ts (loadGameLogs defender option; TeamDepthEntry.subPosition; NEW depthRoomFor), lib/faab/signals.ts, lib/faab/outlook.ts, lib/faab/league-load.test.ts (6 tests), lib/faab/signals.test.ts (1 test)
+     | depends on: IDP-312, IDP-4F2
+     | notes: Four reads on the card assumed an offensive player. (1) Season finishes were asked for under the league's offensive base, where a defender has none, so his finish line was empty: now read under idp123, the only IDP finishes we build, and the line names the scoring ("Best finish in 3 seasons: DL1 in 2025, under Sleeper default IDP scoring", checked against Myles Garrett's stored finishes). (2) Snap share came from OFFENSIVE snaps and touches from targets plus carries, so the role-change signal could never fire for a defender: now his defensive share (def_snap_pct, or def_snp over tm_def_snp) and no touches, capped at 1 because a few stored shares read a little over 1 (up to 1.08 in 2025) and the offensive rule would have read 1.05 as 1 percent. The manual calculator's outlook uses the same loader with the same option. (3) The injured-starter-ahead-of-him signal compared depth orders across the whole position; Sleeper orders each defensive SUB-position separately (plan R-24), so the other side's order-1 linebacker would have been called the starter ahead of him. It now reads his own sub-position only, and none when his spot is not on record. (4) The finish line now names the scoring. Offense unchanged in every case (tests pin the offensive wording and the offensive snap read). Gate: lint clean, typecheck green, 432 files / 6,267 tests, build 57 of 57.
+     | verified: yes
 
 IDP-406 | pending | Post-launch checks
      | files: none (checks), this file

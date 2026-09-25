@@ -8,6 +8,7 @@ import { analyticsBid, liveMessage, type BidView } from "./bid-view";
 import { biddersFor, choppedPlatform, type ManualSetupState } from "./manual-setup";
 import type { FaabPlayer } from "./player-combobox";
 import { computeManualMarginal } from "@/lib/faab/manual";
+import { isDefender } from "@/lib/site";
 import { buildLadder, upgradeStrengthOf } from "@/lib/faab/ladder";
 import { buildMarket } from "@/lib/faab/market";
 import { buildReasons } from "@/lib/faab/reasons";
@@ -75,6 +76,10 @@ export function ManualResult({
   const cacheRef = useRef(new Map<string, { cell: PriorCell; fellBackTo: string | null }>());
 
   const playerId = player?.player_id ?? null;
+  // No value source ranks a defender, so the rank-and-value fallback would
+  // price him off a placeholder rank. He gets a sentence instead.
+  const defender = player ? isDefender(player.position) : false;
+  const fallback = defender ? null : fallbackResult;
 
   useEffect(() => {
     setOutlook(null);
@@ -275,7 +280,7 @@ export function ManualResult({
       mode: "manual",
       leagueKind: isChopped ? "chopped" : "standard",
       title: player.name,
-      subtitle: `${setup.teams}-team, start ${setup.starters}, ${formatName}${setup.superflex ? ", superflex" : ""}`,
+      subtitle: `${setup.teams}-team, start ${setup.starters}, ${defender ? "Sleeper default IDP scoring" : formatName}${setup.superflex ? ", superflex" : ""}`,
       headline: built.headline,
       explanation: built.explanation,
       confidence: outlook.confidence,
@@ -321,6 +326,7 @@ export function ManualResult({
     aliveFraction,
     upgradeStrength,
     platform,
+    defender,
   ]);
 
   // The default goal is the calculator's opinion about this player, so it
@@ -368,9 +374,11 @@ export function ManualResult({
         ? "Reading his rest-of-season outlook."
         : view
           ? liveMessage(view, goal)
-          : fallbackResult
-            ? `Recommended bid ${fallbackResult.lowBid} to ${fallbackResult.highBid} FAAB.`
-            : "";
+          : fallback
+            ? `Recommended bid ${fallback.lowBid} to ${fallback.highBid} FAAB.`
+            : defender
+              ? DEFENDER_NO_PROJECTION
+              : "";
 
   return (
     <div className="space-y-3">
@@ -397,7 +405,7 @@ export function ManualResult({
           onAnnounce={setAnnouncement}
         />
       ) : (
-        <FallbackResult result={fallbackResult} error={error} />
+        <FallbackResult result={fallback} error={error ?? (defender ? DEFENDER_NO_PROJECTION : null)} />
       )}
 
       <p className="rounded-card border border-line bg-surface/40 px-4 py-3 text-sm leading-relaxed text-ink-muted">
@@ -407,6 +415,9 @@ export function ManualResult({
     </div>
   );
 }
+
+const DEFENDER_NO_PROJECTION =
+  "No weekly projections are published for this defender right now, and no value source ranks defenders, so there is no bid to show.";
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));

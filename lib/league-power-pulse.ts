@@ -612,7 +612,10 @@ export async function calculateLeaguePowerPulse(
   // coming back empty rather than by being clamped up to one more week.
   const aliveCount = aliveRosterIds?.length ?? rosters.length;
   const remainingWeekCount = league.chopped
-    ? choppedWeeks(currentWeek, resolveFinalWeek(currentWeek, aliveCount).finalWeek)
+    ? choppedWeeks(
+        currentWeek,
+        resolveFinalWeek(currentWeek, aliveCount, league.choppedPerWeek ?? 1).finalWeek,
+      )
         .length
     : schedule.weeks.filter(
         (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
