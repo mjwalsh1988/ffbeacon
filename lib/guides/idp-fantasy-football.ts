@@ -53,7 +53,7 @@ export function buildIdpFaq(facts: IdpLeagueFacts): FaqItem[] {
     {
       question: "Does FF Beacon project IDP players?",
       answer:
-        "Every defender's player page shows the projected stat line published for his next game, scored under the IDP system you pick. League Pulse does not project defenders yet.",
+        "Yes. Every defender's player page shows the projected stat line published for his next game, scored under the IDP system you pick. In an IDP league, League Pulse projects your defenders under your league's own scoring: the lineup optimiser seats them, and Power Pulse and the positional scarcity chart count them.",
     },
   ];
 }

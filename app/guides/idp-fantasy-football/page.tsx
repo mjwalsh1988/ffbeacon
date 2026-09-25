@@ -468,6 +468,11 @@ export default async function IdpFantasyFootballGuide() {
                 </>
               ) : null}
             </Para>
+            <Para>
+              In a Sleeper IDP league, League Pulse projects your defenders under your league&apos;s
+              own scoring. The Lineups page seats them in the best lineup, the waiver list includes
+              free agent defenders, and Power Pulse and the positional scarcity chart count them.
+            </Para>
             <InSeasonChecklist />
           </Lesson>
 

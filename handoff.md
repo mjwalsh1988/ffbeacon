@@ -1,6 +1,17 @@
 # Handoff
 
-## NEXT SESSION: START HERE. IDP PHASE 4 IS HALF DONE, NOTHING COMMITTED (2026-09-24, eighth pass)
+## NEXT SESSION: START HERE. THE IDP SWITCH IS ON (2026-09-25 UTC); NEXT IS IDP-406
+
+- Invariant check passed on the deployed code (every ordinary league
+  identical), then the switch went on with DL 0.33, LB 0, DB 0, defense splits
+  recomputed, and versions pp-9, war-5, ledger-6 plus the guide copy pushed.
+  See IDP-405 in progress.md.
+- NEXT: the owner's visual and screen-reader pass; then IDP-406 day-one checks
+  (no "No projection" for projected defenders, no "Unknown player" rows, rerun
+  the invariant, IndexNow for the guide and gated defender slugs), Search
+  Console at 28 and 56 days, then IDP-407 close-out.
+
+## EARLIER THE SAME DAY: PHASE 4 PART ONE (kept for history)
 
 - Phase 3 is still committed locally and NOT pushed. This session's work is
   UNCOMMITTED in the working tree, by instruction. The IDP switch is OFF and no

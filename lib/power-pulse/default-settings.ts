@@ -338,7 +338,11 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   //
   // Both change what a score means, so cached pp-2 rows are stale by definition
   // and every league rescores on next view.
-  modelVersion: "pp-8",
+  //
+  // pp-9 (2026-09-24, IDP-405): the IDP switch went on. A league that starts
+  // defensive slots now projects and seats its defenders, so its scores mean
+  // something different; every league rescores on next view.
+  modelVersion: "pp-9",
 
   weights: {
     points: 0.55,

@@ -89,7 +89,11 @@ export const DEFAULT_WAR_SETTINGS: WarSettings = {
   // by a number with no measured year over year persistence. Jaxson Dart was
   // ranking QB1 or QB2 in several leagues and Jalen Hurts tenth, on a
   // multiplier gap of 16% between them.
-  modelVersion: "war-4",
+  //
+  // war-5 (2026-09-24, IDP-405): the IDP switch went on. A league that starts
+  // defensive slots now draws DL, LB and DB curves and counts defenders in
+  // replacement, so every curve rebuilds on next view.
+  modelVersion: "war-5",
   displayDepthMultiple: 2.5,
   minDisplayDepth: 36,
   cliffThreshold: 0.5,

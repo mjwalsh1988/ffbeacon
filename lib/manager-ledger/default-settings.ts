@@ -48,7 +48,11 @@ export const MANAGER_LEDGER_RETRY_MS = 15 * 60 * 1000;
 // ledger-5 (2026-09-24, IDP-122): the ledger now NAMES claimed and drafted
 // defenders instead of "Player 12345". Names live inside the stored rows, so the
 // version moves and every IDP league's cached detail is rebuilt on next view.
-export const MANAGER_LEDGER_MODEL_VERSION = "ledger-5";
+// ledger-6 (2026-09-24, IDP-405): the IDP switch went on. An IDP league's
+// defensive slots are now graded, so efficiency and points left on the bench
+// change for those leagues and every ledger rebuilds on next view. (The plan
+// named this ledger-5, which IDP-122 had already used.)
+export const MANAGER_LEDGER_MODEL_VERSION = "ledger-6";
 
 /** How many waiver moves are kept per roster in the stored detail. */
 export const MAX_STORED_WAIVER_MOVES = 12;

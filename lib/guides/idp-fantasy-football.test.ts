@@ -74,11 +74,10 @@ describe("the FAQ agrees with the page's own figures", () => {
     expect(flex?.answer).toContain(`Of the ${FACTS.leagues} IDP leagues synced on FF Beacon, ${FACTS.flexOnly} start`);
   });
 
-  it("does not claim League Pulse projects defenders", () => {
-    const faq = buildIdpFaq(FACTS);
-    expect(faq.find((q) => q.question.includes("project"))?.answer).toContain(
-      "League Pulse does not project defenders yet",
-    );
+  it("says League Pulse projects defenders, now that the IDP switch is on (IDP-405)", () => {
+    const answer = buildIdpFaq(FACTS).find((q) => q.question.includes("project"))?.answer;
+    expect(answer).toContain("League Pulse projects your defenders under your league's own scoring");
+    expect(answer).not.toContain("does not project defenders yet");
   });
 });
 
