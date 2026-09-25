@@ -36,6 +36,7 @@
  * the slot). See ON-THE-CLOCK-PLAN.md section 7.
  */
 
+import { OFFENSE_POSITIONS, positionNoun, positionNounMap } from "@/lib/site";
 import type { DraftPosition, RankedPlayer, RecommendationCardData } from "./board-types";
 import type { BuildMode, OnTheClockSettings, PlayerPool } from "./types";
 import { pickBestByValue } from "./draft-derive";
@@ -485,20 +486,15 @@ const SLOT_WORD: Record<SlotLabel, string> = {
   RB: "RB",
   WR: "WR",
   TE: "TE",
-  K: "kicker",
-  DEF: "defense",
+  K: positionNoun("K"),
+  DEF: positionNoun("DEF", "singular", "short"),
   FLEX: "flex",
   SUPER_FLEX: "superflex",
 };
 
-const POS_WORD: Record<DraftPosition, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POS_WORD: Record<DraftPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  short: ["DEF"],
+});
 
 function buildNeedReason(
   player: RankedPlayer,

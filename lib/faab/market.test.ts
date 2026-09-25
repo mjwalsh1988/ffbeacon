@@ -152,6 +152,72 @@ describe("urgency", () => {
   });
 });
 
+describe("urgency signal (time of season, said out loud)", () => {
+  const signalAt = (overrides: Partial<MarketInput>) =>
+    buildMarket(baseInput(overrides)).signals.find((s) => s.id === "urgency");
+
+  it("reaches the reader through buildMarket, so it is actually wired", () => {
+    expect(signalAt({ currentWeek: 3 })).toBeDefined();
+  });
+
+  it("calls early season hot, with the measured size", () => {
+    const s = signalAt({ currentWeek: 3, lastRegularWeek: 14 });
+    expect(s?.label).toMatch(/early-season/i);
+    expect(s?.detail).toContain("1.3 times");
+  });
+
+  it("calls the run-in the time leftover money is wasted, and counts the weeks", () => {
+    const s = signalAt({ currentWeek: 14, lastRegularWeek: 14 });
+    expect(s?.label).toMatch(/wasted/i);
+    expect(s?.detail).toContain("1 regular season week left");
+    expect(s?.detail).toContain("1.7 times");
+  });
+
+  it("calls weeks 7 to 10 the cheapest stretch", () => {
+    expect(signalAt({ currentWeek: 8 })?.label).toMatch(/cheapest/i);
+  });
+
+  it("says nothing in week 1, which is not a measured in-season market, whatever its band says", () => {
+    expect(signalAt({ currentWeek: 1 })).toBeUndefined();
+    const settings = structuredClone(DEFAULT_FAAB_SETTINGS.market);
+    settings.calendar.bands[0].multiplier = 2;
+    expect(signalAt({ currentWeek: 1, settings })).toBeUndefined();
+  });
+
+  it("calls neither hot nor wasted in weeks 11 to 13, which sit between the cheap stretch and the run-in", () => {
+    expect(signalAt({ currentWeek: 12, lastRegularWeek: 14 })).toBeUndefined();
+  });
+
+  it("names the comparison weeks rather than calling them mid-season", () => {
+    expect(signalAt({ currentWeek: 3 })?.detail).toContain("times the weeks 7 to 10 level");
+  });
+
+  it("says nothing past the regular season", () => {
+    expect(signalAt({ currentWeek: 15, lastRegularWeek: 14 })).toBeUndefined();
+  });
+
+  it("does not call week 6 the run-in in a short season", () => {
+    expect(signalAt({ currentWeek: 6, lastRegularWeek: 11 })?.label).toMatch(/early-season/i);
+  });
+
+  it("never moves the reader's number, so the season is not counted twice", () => {
+    for (const week of [3, 8, 12, 15]) {
+      const s = signalAt({ currentWeek: week, lastRegularWeek: 17 });
+      if (s) {
+        expect(s.multiplier).toBe(1);
+        expect(s.spread).toBe(0);
+      }
+    }
+  });
+
+  it("stays silent in a chopped league and when the calendar is off", () => {
+    expect(signalAt({ currentWeek: 3, aliveCount: 10 })).toBeUndefined();
+    const settings = structuredClone(DEFAULT_FAAB_SETTINGS.market);
+    settings.calendar.enabled = false;
+    expect(signalAt({ currentWeek: 3, settings })).toBeUndefined();
+  });
+});
+
 describe("market read", () => {
   it("reports weeks left and the richest rival", () => {
     const { read } = buildMarket(

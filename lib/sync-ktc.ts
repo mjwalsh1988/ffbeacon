@@ -10,8 +10,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyKtcTep, tepTierFromTePremiumBonus, type TepPlayer } from "./ktc-tep";
 import { parsePickName } from "./ktc-picks";
+import { extractKtcPlayers } from "./ktc-page";
 import { withRetry } from "./supabase/retry";
+import {
+  buildKtcPlayerIndex,
+  buildKtcPlayerPatch,
+  collectKtcPlayerUpdate,
+  normalizeKtcName,
+  type PendingKtcUpdate,
+} from "./ktc-player-match";
 import type { Database, Json } from "./database.types";
+
+/** players writes in flight at once after the scrape (one per matched player). */
+const PLAYER_WRITE_CONCURRENCY = 8;
 
 const PICK_FORMAT_SLUGS = new Set<string>(["dynasty-ppr-std", "dynasty-ppr-sflex"]);
 
@@ -31,8 +42,10 @@ type KtcPlayer = {
   playerName: string;
   position: string;
   team: string | null;
-  oneQBValues?: { value?: number; rank?: number; positionalRank?: number; tier?: number };
-  superflexValues?: { value?: number; rank?: number; positionalRank?: number; tier?: number };
+  // `tier` was replaced by overallTier / positionalTier in KTC's 2026-09 page.
+  // Nothing here reads either; the whole object is kept in metadata as sent.
+  oneQBValues?: { value?: number; rank?: number; positionalRank?: number; tier?: number; overallTier?: number; positionalTier?: number };
+  superflexValues?: { value?: number; rank?: number; positionalRank?: number; tier?: number; overallTier?: number; positionalTier?: number };
 };
 
 type ScrapeTarget = {
@@ -91,27 +104,23 @@ async function scrapeTarget(target: ScrapeTarget): Promise<KtcPlayer[]> {
     return [];
   }
   const html = await response.text();
-  const match = html.match(/var\s+playersArray\s*=\s*(\[[\s\S]*?\]);/);
-  if (!match) {
-    console.warn(`  ${target.formatSlug}: no playersArray found`);
+  // lib/ktc-page.ts reads both page layouts KTC has served (see its header).
+  const extracted = extractKtcPlayers(html);
+  if (!extracted) {
+    console.warn(
+      `  ${target.formatSlug}: HTTP 200 but no player list in the page (${html.length} bytes); KTC's markup may have changed again`,
+    );
     return [];
   }
-  try {
-    return JSON.parse(match[1]) as KtcPlayer[];
-  } catch (err) {
-    console.warn(`  ${target.formatSlug}: parse error`, (err as Error).message);
-    return [];
+  if (extracted.players.length === 0) {
+    // A list that parses but is empty is the next silent failure waiting to
+    // happen: say so rather than skip the target without a word.
+    console.warn(`  ${target.formatSlug}: the page's player list is present but empty (${extracted.layout})`);
   }
+  return extracted.players as KtcPlayer[];
 }
 
-function normalizeName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[.'']/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
-    .trim();
-}
+const normalizeName = normalizeKtcName;
 
 export async function runKtcSync(
   supabase: SupabaseClient<Database>,
@@ -164,11 +173,23 @@ export async function runKtcSync(
   const formatBySlug = new Map(
     formats.map((f) => [f.slug, { id: f.id, te_premium_bonus: Number(f.te_premium_bonus ?? 0) }]),
   );
-  const playerByName = new Map<string, string>();
+  // Two rows can share a name and position (Frank Gore and Frank Gore Jr.);
+  // the index decides between them instead of letting the last row win.
+  const playerIndex = buildKtcPlayerIndex(players);
+  const ambiguousWarned = new Set<string>();
+  const resolvePlayerId = (k: KtcPlayer, position: string): string | null => {
+    const r = playerIndex.resolve(k, position);
+    if (r.kind === "matched") return r.playerId;
+    if (r.kind === "ambiguous" && !ambiguousWarned.has(k.playerName)) {
+      ambiguousWarned.add(k.playerName);
+      console.warn(
+        `  ktc ambiguous name: "${k.playerName}" (${position}, ktc=${k.playerID}) matches ${r.candidates.length} players; skipped`,
+      );
+    }
+    return null;
+  };
   const positionByPlayerId = new Map<string, string>();
   for (const p of players) {
-    const key = `${normalizeName(`${p.first_name} ${p.last_name}`)}|${p.position}`;
-    playerByName.set(key, p.id);
     positionByPlayerId.set(p.id, p.position);
   }
 
@@ -241,7 +262,7 @@ export async function runKtcSync(
 
       const key = `${normalizeName(k.playerName)}|${position}`;
       fingerprint.set(key, value);
-      const playerId = playerByName.get(key);
+      const playerId = resolvePlayerId(k, position);
       if (!playerId) {
         unmatched++;
         continue;
@@ -330,6 +351,7 @@ export async function runKtcSync(
   }
 
   const perFormat: Array<{ formatSlug: string; rows: number }> = [];
+  const pendingPlayerUpdates = new Map<string, PendingKtcUpdate<KtcPlayer>>();
 
   for (const { target, rows, ktcPlayers } of batches) {
     let formatRows = 0;
@@ -352,103 +374,100 @@ export async function runKtcSync(
     }
     perFormat.push({ formatSlug: target.formatSlug, rows: formatRows });
 
-    const ktcUpdates = ktcPlayers
-      .map((k) => {
-        const position = k.position === "RDP" ? "PICK" : k.position?.toUpperCase();
-        if (!position || position === "PICK") return null;
-        const key = `${normalizeName(k.playerName)}|${position}`;
-        const playerId = playerByName.get(key);
-        if (!playerId) return null;
-        return { playerId, ktcRaw: k };
-      })
-      .filter(Boolean) as Array<{ playerId: string; ktcRaw: KtcPlayer }>;
-
-    const updateIds = ktcUpdates.map((u) => u.playerId);
-    const existingByPlayerId = new Map<
-      string,
-      {
-        external_ids: Record<string, unknown>;
-        source_synced_at: Record<string, unknown>;
-        metadata: Record<string, unknown>;
-      }
-    >();
-    for (let from = 0; from < updateIds.length; from += 200) {
-      const batch = updateIds.slice(from, from + 200);
-      const data = await withRetry(
-        async () => {
-          const { data, error } = await supabase
-            .from("players")
-            .select("id, external_ids, source_synced_at, metadata")
-            .in("id", batch);
-          if (error) throw error;
-          return data ?? [];
-        },
-        { label: `players select for merge` },
-      );
-      for (const p of data) {
-        existingByPlayerId.set(p.id, {
-          external_ids: (p.external_ids as Record<string, unknown>) ?? {},
-          source_synced_at: (p.source_synced_at as Record<string, unknown>) ?? {},
-          metadata: (p.metadata as Record<string, unknown>) ?? {},
-        });
-      }
-    }
-
-    for (const update of ktcUpdates) {
-      const existing = existingByPlayerId.get(update.playerId);
-      if (!existing) continue;
-      const ktcId = String(update.ktcRaw.playerID);
-      const existingKtcId =
-        typeof existing.external_ids.ktc === "string" ? existing.external_ids.ktc : null;
-      const externalIds: Json = {
-        ...(existing.external_ids as Record<string, Json>),
-        ktc: existingKtcId ?? ktcId,
-      };
-      const sourceSyncedAt: Json = {
-        ...(existing.source_synced_at as Record<string, Json>),
-        ktc: now,
-      };
-      const metadata: Json = {
-        ...(existing.metadata as Record<string, Json>),
-        ktc: update.ktcRaw as unknown as Json,
-      };
-      try {
-        await withRetry(
-          async () => {
-            const { error } = await supabase
-              .from("players")
-              .update({
-                external_ids: externalIds,
-                source_synced_at: sourceSyncedAt,
-                metadata,
-              })
-              .eq("id", update.playerId);
-            if (error) throw error;
-          },
-          { label: `players update ${update.playerId.slice(0, 8)}` },
-        );
-      } catch (err) {
-        const code = (err as { code?: string } | undefined)?.code;
-        if (code === "23505") {
-          console.warn(
-            `  ktc id collision: another player already owns ktc=${update.ktcRaw.playerID}; updating source_synced_at + metadata only`,
-          );
-          await withRetry(
-            async () => {
-              const { error: retryErr } = await supabase
-                .from("players")
-                .update({ source_synced_at: sourceSyncedAt, metadata })
-                .eq("id", update.playerId);
-              if (retryErr) throw retryErr;
-            },
-            { label: `players update (no ktc) ${update.playerId.slice(0, 8)}` },
-          );
-          continue;
-        }
-        throw err;
-      }
+    for (const k of ktcPlayers) {
+      const position = k.position === "RDP" ? "PICK" : k.position?.toUpperCase();
+      if (!position || position === "PICK") continue;
+      const playerId = resolvePlayerId(k, position);
+      if (!playerId) continue;
+      collectKtcPlayerUpdate(pendingPlayerUpdates, playerId, k);
     }
   }
+
+  // One write per matched player for the whole run (see collectKtcPlayerUpdate).
+  const updateIds = [...pendingPlayerUpdates.keys()];
+  const existingByPlayerId = new Map<
+    string,
+    {
+      external_ids: Record<string, unknown>;
+      source_synced_at: Record<string, unknown>;
+      metadata: Record<string, unknown>;
+    }
+  >();
+  for (let from = 0; from < updateIds.length; from += 200) {
+    const batch = updateIds.slice(from, from + 200);
+    const data = await withRetry(
+      async () => {
+        const { data, error } = await supabase
+          .from("players")
+          .select("id, external_ids, source_synced_at, metadata")
+          .in("id", batch);
+        if (error) throw error;
+        return data ?? [];
+      },
+      { label: `players select for merge` },
+    );
+    for (const p of data) {
+      existingByPlayerId.set(p.id, {
+        external_ids: (p.external_ids as Record<string, unknown>) ?? {},
+        source_synced_at: (p.source_synced_at as Record<string, unknown>) ?? {},
+        metadata: (p.metadata as Record<string, unknown>) ?? {},
+      });
+    }
+  }
+
+  const writePlayer = async (playerId: string): Promise<void> => {
+    const update = pendingPlayerUpdates.get(playerId);
+    const existing = existingByPlayerId.get(playerId);
+    if (!update || !existing) return;
+    const patch = buildKtcPlayerPatch(existing, update, now);
+    const externalIds = patch.external_ids as Json;
+    const sourceSyncedAt = patch.source_synced_at as Json;
+    const metadata = patch.metadata as Json;
+    try {
+      await withRetry(
+        async () => {
+          const { error } = await supabase
+            .from("players")
+            .update({
+              external_ids: externalIds,
+              source_synced_at: sourceSyncedAt,
+              metadata,
+            })
+            .eq("id", playerId);
+          if (error) throw error;
+        },
+        { label: `players update ${playerId.slice(0, 8)}` },
+      );
+    } catch (err) {
+      const code = (err as { code?: string } | undefined)?.code;
+      if (code !== "23505") throw err;
+      console.warn(
+        `  ktc id collision: another player already owns ktc=${update.ktcId}; updating source_synced_at + metadata only`,
+      );
+      await withRetry(
+        async () => {
+          const { error: retryErr } = await supabase
+            .from("players")
+            .update({ source_synced_at: sourceSyncedAt, metadata })
+            .eq("id", playerId);
+          if (retryErr) throw retryErr;
+        },
+        { label: `players update (no ktc) ${playerId.slice(0, 8)}` },
+      );
+    }
+  };
+  let nextWrite = 0;
+  const writeWorker = async (): Promise<void> => {
+    for (;;) {
+      const i = nextWrite++;
+      if (i >= updateIds.length) return;
+      await writePlayer(updateIds[i]);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(PLAYER_WRITE_CONCURRENCY, updateIds.length) }, () => writeWorker()),
+  );
+  console.log(`  ${updateIds.length} players rows updated with KTC metadata`);
 
   for (const { targetSlug, baseSlug } of DERIVED_FROM_SFLEX) {
     if (!PICK_FORMAT_SLUGS.has(baseSlug)) continue;

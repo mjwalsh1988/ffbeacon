@@ -113,9 +113,25 @@ describe("FRESHNESS_SPECS registry", () => {
     expect(FRESHNESS_SPECS.some((s) => s.table === "players")).toBe(true);
   });
 
-  it("watches every table exactly once", () => {
-    const tables = FRESHNESS_SPECS.map((s) => s.table);
-    expect(new Set(tables).size).toBe(tables.length);
+  it("watches every table (or table slice) exactly once, under a unique label", () => {
+    const keys = FRESHNESS_SPECS.map((s) => `${s.table}|${s.match?.column ?? ""}|${s.match?.value ?? ""}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    const labels = FRESHNESS_SPECS.map((s) => s.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("checks each value source on its own, so one quiet source cannot hide behind the others", () => {
+    const sources = FRESHNESS_SPECS.filter((s) => s.table === "player_value_history").map(
+      (s) => s.match?.value,
+    );
+    expect(sources.sort()).toEqual(["dynastyprocess", "fantasycalc", "ffbeacon", "ktc"]);
+  });
+
+  it("gives the weekly DynastyProcess feed a weekly limit, so it is not a nightly false alarm", () => {
+    const dp = FRESHNESS_SPECS.find((s) => s.match?.value === "dynastyprocess");
+    expect(dp?.maxAgeHours).toBeGreaterThanOrEqual(24 * 8);
+    const ktc = FRESHNESS_SPECS.find((s) => s.match?.value === "ktc");
+    expect(ktc?.maxAgeHours).toBe(48);
   });
 
   it("gives every spec a reason a reader can act on", () => {

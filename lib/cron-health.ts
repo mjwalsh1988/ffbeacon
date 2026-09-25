@@ -183,6 +183,64 @@ export function findMissedJobs(
   return misses;
 }
 
+export type CronFailure = {
+  name: string;
+  label: string;
+  /** When the most recent failed run started. */
+  startedAt: string;
+  /** Its recorded error, trimmed. Null when the ledger kept none. */
+  error: string | null;
+  /** How many of the recent runs read failed, newest first, all in a row. */
+  failedInARow: number;
+};
+
+/** How many recent runs a frequent job must fail in a row before it is reported. */
+export const FREQUENT_FAILURE_STREAK = 3;
+
+/**
+ * Jobs that DID run and reported a failure.
+ *
+ * The third failure mode, and the one that went unreported longest. A job the
+ * platform skips is a miss, a job that dies mid-run is stalled, and a job that
+ * runs, throws and records `error` was reported by nothing at all: sync-ktc
+ * failed every night from 2026-09-08 to 2026-09-25 with "wrote 0
+ * player_value_history rows" in the ledger, and no alert went out because the
+ * job was never late and the value table stayed fresh through other sources.
+ *
+ * A daily job is reported on its newest run failing. A job that runs hourly or
+ * more often is reported only when its last FREQUENT_FAILURE_STREAK runs all
+ * failed, so one transient error in a minute-by-minute worker is not an email.
+ * `recentByJob` holds each job's latest runs, newest first. Pure.
+ */
+export function findFailingJobs(
+  jobs: ReadonlyArray<CronJobLike>,
+  recentByJob: ReadonlyMap<string, ReadonlyArray<{ started_at: string; status: string; error: string | null }>>,
+  ignore: ReadonlySet<string> = new Set(),
+): CronFailure[] {
+  const out: CronFailure[] = [];
+  for (const job of jobs) {
+    if (ignore.has(job.name)) continue;
+    const runs = recentByJob.get(job.name) ?? [];
+    if (runs.length === 0 || runs[0].status !== "error") continue;
+    let streak = 0;
+    for (const run of runs) {
+      if (run.status !== "error") break;
+      streak += 1;
+    }
+    const frequent = parseFields(job.schedule)?.hour === "*";
+    if (frequent && streak < FREQUENT_FAILURE_STREAK) continue;
+    const raw = runs[0].error;
+    out.push({
+      name: job.name,
+      label: job.label,
+      startedAt: runs[0].started_at,
+      error: raw ? raw.slice(0, 300) : null,
+      failedInARow: streak,
+    });
+  }
+  return out;
+}
+
 /**
  * Runs that claimed to start and never reported a finish.
  *
@@ -359,30 +417,44 @@ export async function loadCronLedgerState(
 ): Promise<{
   lastRunByJob: Map<string, string>;
   stalled: Array<{ name: string; startedAt: string }>;
+  /** Each job's latest FREQUENT_FAILURE_STREAK runs, newest first, for findFailingJobs. */
+  recentByJob: Map<string, Array<{ started_at: string; status: string; error: string | null }>>;
 }> {
   const lastRunByJob = new Map<string, string>();
   const stalled: Array<{ name: string; startedAt: string }> = [];
+  const recentByJob = new Map<string, Array<{ started_at: string; status: string; error: string | null }>>();
 
+  // Still one indexed lookup per job; it now returns the last few rows rather
+  // than one, so the failure streak costs no extra round trip.
   const results = await Promise.all(
     jobs.map(async (job) => {
       const { data, error } = await supabase
         .from("cron_runs")
-        .select("started_at, status")
+        .select("started_at, status, error")
         .eq("job_name", job.name)
         .order("started_at", { ascending: false })
-        .limit(1);
+        .limit(FREQUENT_FAILURE_STREAK);
       if (error) throw error;
-      return { job, row: data?.[0] ?? null };
+      return { job, rows: data ?? [] };
     }),
   );
 
-  for (const { job, row } of results) {
+  for (const { job, rows } of results) {
+    const row = rows[0];
     if (!row) continue;
     lastRunByJob.set(job.name, row.started_at);
+    recentByJob.set(
+      job.name,
+      rows.map((r) => ({
+        started_at: r.started_at,
+        status: r.status,
+        error: r.error,
+      })),
+    );
     if (row.status === "running" && isStaleRunning(row.started_at, nowMs)) {
       stalled.push({ name: job.name, startedAt: row.started_at });
     }
   }
 
-  return { lastRunByJob, stalled };
+  return { lastRunByJob, stalled, recentByJob };
 }

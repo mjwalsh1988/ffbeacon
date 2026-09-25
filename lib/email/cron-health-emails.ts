@@ -27,7 +27,8 @@ import {
   EMAIL_SITE_URL,
 } from "./layout";
 import { sendEmail } from "./send";
-import type { CronMiss } from "../cron-health";
+import { formatEastern } from "../datetime";
+import type { CronFailure, CronMiss } from "../cron-health";
 import type { FreshnessResult } from "../data-freshness";
 
 export const CRON_HEALTH_ALERT_TO =
@@ -62,20 +63,31 @@ export async function sendCronHealthEmail(args: {
   missed: CronMiss[];
   stalled: Array<{ name: string; startedAt: string }>;
   stale?: FreshnessResult[];
+  failing?: CronFailure[];
 }): Promise<void> {
   const { missed, stalled } = args;
   const stale = args.stale ?? [];
-  if (missed.length === 0 && stalled.length === 0 && stale.length === 0) return;
+  const failing = args.failing ?? [];
+  if (missed.length === 0 && stalled.length === 0 && stale.length === 0 && failing.length === 0) return;
   const url = `${EMAIL_SITE_URL}/admin/crons`;
 
+  const describeFailure = (f: CronFailure) =>
+    `${f.failedInARow === 1 ? "The latest run" : `The last ${f.failedInARow} runs`} failed, most recently at ${formatEastern(f.startedAt)}.${
+      f.error ? ` Error: ${f.error}` : ""
+    }`;
+
   const rows: Array<{ label: string; value: string }> = [
+    ...failing.map((f) => ({
+      label: `${f.label} is failing`,
+      value: describeFailure(f),
+    })),
     ...missed.map((m) => ({
       label: `${m.label} did not run`,
       value: `${describeGap(m)}, against a ${m.maxGapHours}-hour limit. Schedule ${m.schedule}.`,
     })),
     ...stalled.map((s) => ({
       label: `${s.name} never finished`,
-      value: `Still marked running since ${s.startedAt}. The invocation started and died before it could report a result.`,
+      value: `Still marked running since ${formatEastern(s.startedAt)}. The invocation started and died before it could report a result.`,
     })),
     ...stale.map((r) => ({
       label: `${r.label} has gone stale`,
@@ -84,19 +96,26 @@ export async function sendCronHealthEmail(args: {
   ];
 
   const headline =
-    missed.length > 0
-      ? `${missed.length === 1 ? "A scheduled job" : `${missed.length} scheduled jobs`} did not run`
-      : stalled.length > 0
-        ? "A scheduled job never finished"
-        : `${stale.length === 1 ? "A table has" : `${stale.length} tables have`} stopped updating`;
+    failing.length > 0
+      ? `${failing.length === 1 ? "A scheduled job is" : `${failing.length} scheduled jobs are`} failing`
+      : missed.length > 0
+        ? `${missed.length === 1 ? "A scheduled job" : `${missed.length} scheduled jobs`} did not run`
+        : stalled.length > 0
+          ? "A scheduled job never finished"
+          : `${stale.length === 1 ? "A table has" : `${stale.length} tables have`} stopped updating`;
+
+  const lead =
+    failing.length > 0
+      ? "These jobs ran and recorded a failure. The error is in the run ledger; nothing retries it for you, and every night it fails is a day of data that will not exist unless someone backfills it."
+      : missed.length > 0
+        ? "Nothing failed. These jobs were never invoked at all, which is why nothing else on the site can tell you about it: the run ledger only records invocations that started, so a job the platform skips leaves no row, no error, and a health panel that still shows its previous success."
+        : stalled.length > 0
+          ? "A run started and then died before it could record a result. The row is still marked running."
+          : "These tables have stopped moving. Another job writing to the same table can hide this, which is why value sources are checked one at a time.";
 
   const innerHtml = [
     emailHeading(headline),
-    emailParagraph(
-      missed.length > 0
-        ? "Nothing failed. These jobs were never invoked at all, which is why nothing else on the site can tell you about it: the run ledger only records invocations that started, so a job the platform skips leaves no row, no error, and a health panel that still shows its previous success."
-        : "A run started and then died before it could record a result. The row is still marked running.",
-    ),
+    emailParagraph(lead),
     emailParagraph(
       "Worth checking whichever data the job produces before assuming the next run will catch up. A missed value sync means a gap in the history, and the derived recalc that follows it will have run off yesterday's board without complaint.",
     ),
@@ -111,12 +130,13 @@ export async function sendCronHealthEmail(args: {
     "leaves no row and no error, and a table nothing is scheduled to write is",
     "never reported late at all.",
     "",
+    ...failing.map((f) => `${f.name}: ${describeFailure(f)}`),
     ...missed.map((m) =>
       `${m.name}: ${describeGap(m)}, against a ${m.maxGapHours}-hour limit (schedule ${m.schedule}).`,
     ),
-    ...stalled.map((s) => `${s.name}: still marked running since ${s.startedAt}.`),
+    ...stalled.map((s) => `${s.name}: still marked running since ${formatEastern(s.startedAt)}.`),
     ...stale.map(
-      (r) => `${r.table}: ${describeStaleness(r)}, against a ${r.maxAgeHours}-hour limit.`,
+      (r) => `${r.label}: ${describeStaleness(r)}, against a ${r.maxAgeHours}-hour limit.`,
     ),
     "",
     `Cron panel: ${url}`,
@@ -125,11 +145,13 @@ export async function sendCronHealthEmail(args: {
   const { html, text } = buildBrandedEmail({
     title: "FF Beacon schedule health",
     preheader:
-      missed.length > 0
-        ? `${missed.map((m) => m.name).join(", ")} did not run.`
-        : stalled.length > 0
-          ? `${stalled.map((s) => s.name).join(", ")} never finished.`
-          : `${stale.map((r) => r.table).join(", ")} stopped updating.`,
+      failing.length > 0
+        ? `${failing.map((f) => f.name).join(", ")} failing.`
+        : missed.length > 0
+          ? `${missed.map((m) => m.name).join(", ")} did not run.`
+          : stalled.length > 0
+            ? `${stalled.map((s) => s.name).join(", ")} never finished.`
+            : `${stale.map((r) => r.label).join(", ")} stopped updating.`,
     innerHtml,
     textBody,
   });
@@ -137,9 +159,11 @@ export async function sendCronHealthEmail(args: {
   await sendEmail({
     to: CRON_HEALTH_ALERT_TO,
     subject:
-      missed.length > 0 || stalled.length > 0
-        ? "FF Beacon: a scheduled job did not run"
-        : "FF Beacon: a table has stopped updating",
+      failing.length > 0
+        ? "FF Beacon: a scheduled job is failing"
+        : missed.length > 0 || stalled.length > 0
+          ? "FF Beacon: a scheduled job did not run"
+          : "FF Beacon: a table has stopped updating",
     html,
     text,
   });

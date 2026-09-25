@@ -20,7 +20,7 @@ import {
 } from "@/lib/roster-badges";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import { PositionChip } from "@/components/position-chip";
-import { positionNoun } from "@/lib/site";
+import { positionNoun, positionNounMap } from "@/lib/site";
 import { splitUnvaluedRoster } from "@/lib/league-view-roster-split";
 import type {
   DraftPickAsset,
@@ -65,12 +65,10 @@ type TeamCardProps = {
 const POSITION_ORDER = ["QB", "RB", "WR", "TE"] as const;
 type ValuedPosition = (typeof POSITION_ORDER)[number];
 
-const POSITION_LABEL: Record<ValuedPosition, string> = {
-  QB: "Quarterbacks",
-  RB: "Running Backs",
-  WR: "Wide Receivers",
-  TE: "Tight Ends",
-};
+const POSITION_LABEL: Record<ValuedPosition, string> = positionNounMap(POSITION_ORDER, {
+  form: "plural",
+  heading: true,
+});
 
 // Colored top edge per position group, matching the On The Clock draft board
 // hues (QB red, RB green, WR blue, TE amber). Full literal class strings so
@@ -638,18 +636,17 @@ function PositionColumn({
                     })}
                   />
                 )}
-                <span
-                  className="flex-shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-subtle"
-                  aria-label={`Team ${p.team ?? "free agent"}`}
-                >
+                {/* aria-label on a plain span is not read, so the spoken words
+                    are text: the visible code, plus sr-only words in the same
+                    element (never an aria-hidden twin). */}
+                <span className="flex-shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-subtle">
+                  <span className="sr-only normal-case">Team </span>
                   {p.team ?? "FA"}
+                  {p.team ? null : <span className="sr-only normal-case"> (free agent)</span>}
                 </span>
                 {starter && (
-                  <span
-                    className="ml-auto flex-shrink-0 inline-flex items-center rounded-full bg-brand-cyan/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-brand-cyan"
-                    aria-label="Starter"
-                  >
-                    ST
+                  <span className="ml-auto flex-shrink-0 inline-flex items-center rounded-full bg-brand-cyan/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-brand-cyan">
+                    ST<span className="sr-only normal-case"> (starter)</span>
                   </span>
                 )}
               </li>
@@ -710,15 +707,13 @@ function DefenseColumn({
                   </>
                 ) : (
                   <>
-                    <span aria-hidden="true">FA</span>
-                    <span className="sr-only">Free agent</span>
+                    FA<span className="sr-only normal-case"> (free agent)</span>
                   </>
                 )}
               </span>
               {starter && (
                 <span className="ml-auto flex-shrink-0 inline-flex items-center rounded-full bg-brand-cyan/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-brand-cyan">
-                  <span aria-hidden="true">ST</span>
-                  <span className="sr-only">Starter</span>
+                  ST<span className="sr-only normal-case"> (starter)</span>
                 </span>
               )}
             </li>
@@ -795,15 +790,13 @@ function PicksColumn({
                   key={`${p.season}-${p.round}-${p.original_roster_id}-${i}`}
                   className="flex items-baseline gap-2 px-3 py-1.5"
                 >
-                  <span
-                    className="flex-shrink-0 font-mono text-sm font-medium text-ink"
-                    aria-label={
-                      p.pick_label
-                        ? `${p.season} round ${p.round}, slot ${p.slot}`
-                        : `${p.season} round ${p.round}`
-                    }
-                  >
+                  <span className="flex-shrink-0 font-mono text-sm font-medium text-ink">
                     {pickLabel}
+                    <span className="sr-only">
+                      {p.pick_label
+                        ? ` (${p.season} round ${p.round}, slot ${p.slot})`
+                        : ` (${p.season} round ${p.round})`}
+                    </span>
                   </span>
                   <span className="ml-auto truncate text-right text-[10px] text-ink-subtle">
                     {attribution}

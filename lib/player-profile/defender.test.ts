@@ -3,6 +3,7 @@ import {
   buildDefenderWeeks,
   idpPartOfScoring,
   lineFromColumns,
+  loadReaderIdpLeagues,
   nextProjectedWeek,
 } from "./defender";
 
@@ -95,5 +96,73 @@ describe("idpPartOfScoring", () => {
         idp_sack: "4",
       }),
     ).toEqual({ idp_tkl_solo: 1.5, bonus_tkl_10p: 2, idp_sack: 4 });
+  });
+});
+
+/**
+ * A fake client that honours eq, in and range the way PostgREST does, with
+ * the 1000-row cap, so a read that forgot to page would come back short.
+ */
+function fakeLeagueClient(tables: Record<string, Array<Record<string, unknown>>>) {
+  return {
+    from(table: string) {
+      const filters: Array<(r: Record<string, unknown>) => boolean> = [];
+      let window: [number, number] = [0, 999];
+      const builder = {
+        select: () => builder,
+        eq: (col: string, v: unknown) => {
+          filters.push((r) => r[col] === v);
+          return builder;
+        },
+        in: (col: string, vs: unknown[]) => {
+          const set = new Set(vs);
+          filters.push((r) => set.has(r[col]));
+          return builder;
+        },
+        order: () => builder,
+        range: (from: number, to: number) => {
+          window = [from, Math.min(to, from + 999)];
+          return builder;
+        },
+        then: (resolve: (v: unknown) => void) => {
+          const rows = (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
+          resolve({ data: rows.slice(window[0], window[1] + 1), error: null });
+        },
+      };
+      return builder;
+    },
+  };
+}
+
+describe("loadReaderIdpLeagues", () => {
+  it("reads every membership past the 1000-row cap, so this season's IDP league is not dropped", async () => {
+    // 1,200 older memberships first, then the one that matters last.
+    const leagueUsers: Array<Record<string, unknown>> = [];
+    const leagues: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < 1200; i++) {
+      leagueUsers.push({ id: i, league_id: `old-${i}`, sleeper_user_id: "u1" });
+      leagues.push({
+        id: `old-${i}`,
+        sleeper_league_id: `s-old-${i}`,
+        name: `Old ${i}`,
+        season: 2024,
+        roster_positions: ["QB", "LB"],
+        scoring_settings: { idp_tkl_solo: 1 },
+      });
+    }
+    leagueUsers.push({ id: 5000, league_id: "now", sleeper_user_id: "u1" });
+    leagues.push({
+      id: "now",
+      sleeper_league_id: "s-now",
+      name: "This season",
+      season: 2026,
+      roster_positions: ["QB", "IDP_FLEX"],
+      scoring_settings: { idp_sack: 4, pass_td: 4 },
+    });
+    const client = fakeLeagueClient({ league_users: leagueUsers, leagues });
+    const out = await loadReaderIdpLeagues(client as never, "u1", 2026);
+    expect(out).toEqual([
+      { id: "now", sleeperLeagueId: "s-now", name: "This season", scoring: { idp_sack: 4 } },
+    ]);
   });
 });

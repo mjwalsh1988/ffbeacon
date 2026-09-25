@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { computeDraftGrades, defensivePickCounts } from "./draft-grade";
+import { computeDraftGrades, defensivePickCounts, madePickCounts, ungradedPicksNote } from "./draft-grade";
 import { DEFAULT_ON_THE_CLOCK_SETTINGS } from "./default-settings";
 import type { ShapedPick } from "./types";
 import type { TeamRollup } from "./rosters";
@@ -105,7 +105,35 @@ describe("defensive picks in draft grades", () => {
       picks: [pick({ rosterId: 1 }), pick({ pickNo: 2, rosterId: 1, position: "LB" })],
     });
     const market = grades[0].components.find((c) => c.key === "market");
-    expect(market?.evidence).toContain("Graded on 1 of 2 picks; 1 defensive pick has no value.");
+    expect(market?.evidence).toContain("Graded on 1 of 2 picks; 1 defensive pick has no market value.");
+  });
+});
+
+describe("ungradedPicksNote (review item 21)", () => {
+  it("counts an unpriced offensive pick in M and names it", () => {
+    // 10 made picks: 7 priced, 2 defenders, 1 offensive pick with no value.
+    expect(ungradedPicksNote(7, 10, 2)).toBe(
+      " Graded on 7 of 10 picks; 2 defensive picks have no market value and 1 other pick could not be priced.",
+    );
+  });
+
+  it("names unpriced offensive picks in a league with no defenders", () => {
+    expect(ungradedPicksNote(13, 15, 0)).toBe(" Graded on 13 of 15 picks; 2 other picks could not be priced.");
+  });
+
+  it("says nothing when every pick was graded, or when the picks were not supplied", () => {
+    expect(ungradedPicksNote(15, 15, 0)).toBe("");
+    expect(ungradedPicksNote(7, undefined, 2)).toBe("");
+  });
+
+  it("counts every made, non-keeper pick per roster", () => {
+    const counts = madePickCounts([
+      pick({ rosterId: 1, position: "WR" }),
+      pick({ rosterId: 1, position: "LB" }),
+      pick({ rosterId: 1, position: "K", isKeeper: true }),
+      pick({ rosterId: null }),
+    ]);
+    expect(counts.get(1)).toBe(2);
   });
 });
 

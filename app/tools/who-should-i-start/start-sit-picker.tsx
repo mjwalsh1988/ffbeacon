@@ -38,6 +38,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Loader2, Minus, Plus, Search, X } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { positionNoun } from "@/lib/site";
 import {
   MAX_START_SIT_PLAYERS,
   MIN_START_SIT_PLAYERS,
@@ -326,7 +327,7 @@ function PlayerChip({
     <button
       type="button"
       onClick={onRemove}
-      aria-label={`Remove ${player.name} from the comparison`}
+      aria-label={`Remove ${player.name}${player.position ? `, ${positionNoun(player.position)},` : ""} from the comparison`}
       className="group flex min-h-11 items-center gap-2 rounded-full border border-line bg-base/60 py-1 pl-1 pr-3 text-sm text-ink transition-colors hover:border-signal-warning/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
     >
       <PlayerHeadshot sleeperId={player.sleeperId} name="" size={28} />
@@ -563,6 +564,7 @@ function AddPlayerCombobox({
                     <span className="text-ink">{r.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
                       {r.position}
+                      {r.position ? <span className="sr-only"> ({positionNoun(r.position)})</span> : null}
                       {r.team ? `, ${r.team}` : ""}
                     </span>
                   </span>

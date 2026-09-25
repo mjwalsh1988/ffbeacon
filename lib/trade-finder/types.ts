@@ -17,6 +17,7 @@
  */
 
 import type { TeamStatusKey } from "@/lib/league-team-status";
+import { positionNoun, positionNounMap } from "@/lib/site";
 import type { TradeQualityConfig } from "@/lib/trade-quality";
 import type { PulseSnapshot } from "./pulse";
 // Type-only. Nothing runtime from lib/manager-pulse may reach the finder
@@ -193,14 +194,10 @@ export function readTradePosition(raw: unknown): TradePosition | null {
 }
 
 /** The spoken and written name of a group. "DEF" alone reads as an abbreviation. */
-export const TRADE_POSITION_LABEL: Record<TradePosition, string> = {
-  QB: "Quarterback",
-  RB: "Running back",
-  WR: "Wide receiver",
-  TE: "Tight end",
-  K: "Kicker",
-  DEF: "Defense",
-};
+export const TRADE_POSITION_LABEL: Record<TradePosition, string> = positionNounMap(TRADE_POSITIONS, {
+  heading: true,
+  short: ["DEF"],
+});
 
 /**
  * The group as it appears inside a sentence, article and all.
@@ -209,14 +206,9 @@ export const TRADE_POSITION_LABEL: Record<TradePosition, string> = {
  * this is prose ("You asked to bring in a running back"). Keeping one string for
  * both jobs is how a card ends up reading "bring in Running back".
  */
-export const TRADE_POSITION_PHRASE: Record<TradePosition, string> = {
-  QB: "a quarterback",
-  RB: "a running back",
-  WR: "a wide receiver",
-  TE: "a tight end",
-  K: "a kicker",
-  DEF: "a defense",
-};
+export const TRADE_POSITION_PHRASE = Object.fromEntries(
+  TRADE_POSITIONS.map((p) => [p, `a ${positionNoun(p, "singular", p === "DEF" ? "short" : "full")}`]),
+) as Record<TradePosition, string>;
 
 /**
  * How many players may be pinned to ONE side of a search.

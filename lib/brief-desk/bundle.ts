@@ -32,7 +32,7 @@
  */
 
 import { isDefender } from "@/lib/site";
-import { idp123Points, idpLineCells } from "./datasets";
+import { idp123Points, idpLineCells, snapPercent } from "./datasets";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -364,6 +364,10 @@ function weekLineRecord(
     if (key.startsWith("idp_") || key === "def_snp" || key === "def_snap_pct") continue;
     out[key] = value as number | string | null;
   }
+  // A whole percentage, the same scale a defender's def_snap_pct carries
+  // through idpLineCells, so the desk never reads 0.93 in one record and 93 in
+  // the next.
+  out.snap_pct = snapPercent(line.snap_pct);
   return out;
 }
 

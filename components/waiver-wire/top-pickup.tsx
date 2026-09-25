@@ -38,15 +38,11 @@ import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { NflTeamLogo } from "@/components/nfl-team-logo";
 import type { BoardPosition, BoardRow } from "@/lib/waiver-wire/types";
+import { OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 
-const POSITION_WORD: Record<BoardPosition, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  short: ["DEF"],
+});
 
 function one(n: number): string {
   return (Math.round(n * 10) / 10).toFixed(1);

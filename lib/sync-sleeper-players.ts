@@ -30,9 +30,9 @@
  *   - DO include practice squad, IR, suspended (status reflects this).
  *
  * Position normalization:
- *   - Primary `players.position` is the first fantasy_positions entry that
- *     matches our known set; falls back to player.position when there's no
- *     fantasy_positions value.
+ *   - Primary `players.position` is the first entry of KNOWN_POSITIONS found
+ *     among fantasy_positions plus player.position.
+ *   - A defender always lands on DL, LB or DB (see pickPrimaryPosition).
  *
  * External ID merge:
  *   - external_ids is a multi-source jsonb map. Sleeper sync ONLY writes the
@@ -60,6 +60,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import { getSleeperPlayers, type SleeperPlayer } from "./sleeper";
 import { withRetry } from "./supabase/retry";
+import { foldDefenderPosition, IDP_POSITIONS } from "./site";
 
 /** PostgREST select pages. Keeps each response comfortably bounded. */
 const SELECT_PAGE = 1000;
@@ -136,20 +137,47 @@ export function parseWeight(value: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * A defender's primary position is always DL, LB or DB, never Sleeper's raw
+ * NFL label. Two rules, both needed:
+ *
+ *   - If Sleeper's fantasy_positions name a defender position, that wins over
+ *     the raw one. KNOWN_POSITIONS lists DE before LB, so before this rule a
+ *     player Sleeper files as position "DE" with fantasy_positions ["LB"] was
+ *     stored as "DE" (Azur Kamara and Kendall Donnerson, 2026-09-25), which no
+ *     slot map, isDefender check or position filter recognises.
+ *   - Otherwise the raw label is folded (DE to DL, OLB to LB, CB to DB) through
+ *     lib/site.ts foldDefenderPosition, the one copy of that mapping.
+ *
+ * Offensive players are untouched: the known-list priority below decides them
+ * exactly as before. The raw value stays in metadata.sleeper.position.
+ */
 export function pickPrimaryPosition(player: SleeperPlayer): string | null {
-  const candidates: string[] = [];
+  const fantasy: string[] = [];
   if (Array.isArray(player.fantasy_positions)) {
     for (const p of player.fantasy_positions) {
-      if (typeof p === "string" && p.length > 0) candidates.push(p.toUpperCase());
+      if (typeof p === "string" && p.length > 0) fantasy.push(p.toUpperCase());
     }
   }
+  const candidates = [...fantasy];
   if (player.position) candidates.push(player.position.toUpperCase());
 
+  let picked: string | null = null;
   for (const pos of KNOWN_POSITIONS) {
-    if (candidates.includes(pos)) return pos;
+    if (candidates.includes(pos)) {
+      picked = pos;
+      break;
+    }
   }
   // Fallback: first candidate we have, even if not in KNOWN_POSITIONS.
-  return candidates[0] ?? null;
+  picked ??= candidates[0] ?? null;
+
+  const folded = foldDefenderPosition(picked);
+  if (!folded) return picked;
+  for (const pos of IDP_POSITIONS) {
+    if (fantasy.some((f) => foldDefenderPosition(f) === pos)) return pos;
+  }
+  return folded;
 }
 
 /** The positions League Pulse can seat a player at (the PulsePosition values). */
@@ -168,7 +196,7 @@ export function pickEligiblePositions(player: SleeperPlayer, primary: string): s
   if (Array.isArray(player.fantasy_positions)) {
     for (const p of player.fantasy_positions) {
       if (typeof p !== "string") continue;
-      const pos = p.toUpperCase();
+      const pos = foldDefenderPosition(p) ?? p.toUpperCase();
       if (ELIGIBLE_POSITION_SET.has(pos) && !out.includes(pos)) out.push(pos);
     }
   }

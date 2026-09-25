@@ -29,7 +29,7 @@
  * Presentational server component.
  */
 
-import type { IdpPosition } from "@/lib/site";
+import { OFFENSE_POSITIONS, positionNounMap, type IdpPosition } from "@/lib/site";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
@@ -47,14 +47,9 @@ import type { BoardPosition, BoardRow } from "@/lib/waiver-wire/types";
  */
 const TOUCH_POSITIONS: readonly BoardPosition[] = ["QB", "RB", "WR", "TE"];
 
-const POSITION_WORD: Record<BoardPosition, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  short: ["DEF"],
+});
 
 /**
  * The rank tile's edge, one hue per position.

@@ -32,6 +32,7 @@
  *    argues for the pick is a room nobody trusts twice.
  */
 
+import { OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 import type { RankedPlayer } from "./board-types";
 import type { MarginalResult } from "./marginal";
 import type { BuildMode, KeeperStyle } from "./types";
@@ -143,23 +144,12 @@ const YOUNG_ENOUGH = 55;
 // Wording helpers
 // ---------------------------------------------------------------------------
 
-const POS_WORD: Record<string, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POS_WORD: Record<string, string> = positionNounMap(OFFENSE_POSITIONS, { short: true });
 
-const POS_PLURAL: Record<string, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+const POS_PLURAL: Record<string, string> = positionNounMap(OFFENSE_POSITIONS, {
+  form: "plural",
+  short: true,
+});
 
 function posWord(position: string): string {
   return POS_WORD[position] ?? "player";

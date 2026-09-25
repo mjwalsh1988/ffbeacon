@@ -174,7 +174,7 @@ export function StartSitBoard({
                 verdict={verdict}
                 candidateById={candidateById}
                 projectionById={projectionById}
-                formatLabel={board.format.display}
+                formatLabel={board.scoringLabel}
                 market={market}
                 recentForm={recentForm}
                 scaleMax={scaleMax}
@@ -187,7 +187,7 @@ export function StartSitBoard({
                 verdict={verdict}
                 candidateById={candidateById}
                 projectionById={projectionById}
-                formatLabel={board.format.display}
+                formatLabel={board.scoringLabel}
                 market={market}
                 recentForm={recentForm}
                 scaleMax={scaleMax}
@@ -401,9 +401,9 @@ function ConfidenceMeter({
 
 /**
  * "We couldn't find X and Y. ..." plus "A and B play a position this tool
- * does not evaluate." combined into one sentence pair, following the same
- * wording the pre-refactor page used for its own not-found state. Null when
- * every requested slug resolved to an evaluable player.
+ * does not evaluate." plus, when the reader mixed sides of the ball, which
+ * players were left off and why, combined into one alert. Null when every
+ * requested slug resolved to a player on the board.
  */
 function buildMissingPlayersAlert(board: StartSitBoardData): string | null {
   const parts: string[] = [];
@@ -415,11 +415,24 @@ function buildMissingPlayersAlert(board: StartSitBoardData): string | null {
     );
   }
 
-  if (board.refusedPlayers.length > 0) {
-    // Spelled out ("linebacker", not "LB") so the sentence reads aloud (IDP-127).
-    const names = joinWithAnd(board.refusedPlayers.map((p) => `${p.name} (${positionNoun(p.position)})`));
-    const verb = board.refusedPlayers.length === 1 ? "plays" : "play";
-    parts.push(`${names} ${verb} a position this tool does not evaluate.`);
+  // Spelled out ("linebacker", not "LB") so the sentence reads aloud (IDP-127).
+  const describe = (list: StartSitBoardData["refusedPlayers"]) =>
+    joinWithAnd(list.map((p) => `${p.name} (${positionNoun(p.position)})`));
+
+  const unsupported = board.refusedPlayers.filter((p) => p.reason === "position");
+  if (unsupported.length > 0) {
+    const verb = unsupported.length === 1 ? "plays" : "play";
+    parts.push(`${describe(unsupported)} ${verb} a position this tool does not evaluate.`);
+  }
+
+  const otherSide = board.refusedPlayers.filter((p) => p.reason === "other-side");
+  if (otherSide.length > 0) {
+    const verb = otherSide.length === 1 ? "was" : "were";
+    parts.push(
+      board.side === "defense"
+        ? `${describe(otherSide)} ${verb} left off: the first player added is a defensive player, so this board compares defensive players, and they are scored on a different system from offensive players. Compare them on a board of their own.`
+        : `${describe(otherSide)} ${verb} left off: the first player added is an offensive player, so this board compares offensive players, and defensive players are scored on a different system. Compare them on a board of their own.`,
+    );
   }
 
   return parts.length > 0 ? parts.join(" ") : null;

@@ -53,7 +53,9 @@
  */
 
 import { BREAKDOWN_PLAYER_SELECT } from "@/lib/breakdown/player-select";
-import { OFFENSE_POSITIONS } from "@/lib/site";
+import { OFFENSE_POSITIONS, isDefender } from "@/lib/site";
+import { IDP_PRESETS, IDP_PRESET_LABEL } from "@/lib/idp/scoring-presets";
+import { IDP_SCORING_KEY } from "@/lib/power-pulse/idp-reads";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { closestScoringBase, scoringSettingsForFormat } from "@/lib/league-scoring";
@@ -117,12 +119,24 @@ export type StartSitFormat = {
   te_premium_bonus: number | null;
 };
 
-/** A requested slug whose player exists but plays a position this tool does not evaluate. */
+/**
+ * A requested slug whose player exists but cannot go on this board.
+ *
+ * "position": a position the tool does not evaluate (an offensive lineman, or
+ * a defender while the IDP switch is off). "other-side": a defender on an
+ * offensive board or the reverse. The two sides are scored on different
+ * systems (the reader's format against Sleeper's default IDP scoring) and no
+ * lineup slot holds both, so a margin between them would mean nothing.
+ */
 export type StartSitRefusedPlayer = {
   slug: string;
   name: string;
   position: string;
+  reason: "position" | "other-side";
 };
+
+/** Which side of the ball a board compares. Decided by the first player that resolved onto it. */
+export type StartSitSide = "offense" | "defense";
 
 export type StartSitBoard = {
   /**
@@ -141,6 +155,15 @@ export type StartSitBoard = {
   /** currentWeek..18 inclusive, for the week select. Empty once the season is over. */
   remainingWeeks: number[];
   format: StartSitFormat;
+  /** Offense, or defenders only (DL, LB, DB) while the IDP switch is on. */
+  side: StartSitSide;
+  /**
+   * The scoring every point on this board is in, for the card pill, the
+   * reasons and the share image: the reader's format on an offensive board,
+   * "Sleeper default IDP scoring" on a defensive one. No format_configs row
+   * scores a defender, so the reader's format cannot be the label there.
+   */
+  scoringLabel: string;
   /** The value source slug (site header chip). Drives the Market tab only, never the verdict. */
   sourceSlug: string | null;
   /** The RESOLVED projection source, from the same read that produced every number below. */
@@ -154,7 +177,7 @@ export type StartSitBoard = {
   projections: StartSitProjection[];
   /** Requested slugs that matched no active player. */
   notFoundSlugs: string[];
-  /** Requested slugs that matched a player outside QB/RB/WR/TE/K/DEF. */
+  /** Requested slugs that matched a player this board cannot compare (see StartSitRefusedPlayer). */
   refusedPlayers: StartSitRefusedPlayer[];
 };
 
@@ -174,7 +197,31 @@ export type LoadStartSitBoardParams = {
   formatParam?: string | string[];
   /** Raw ?source= value, resolved through the normal site-header chain when sourceSlug is absent. */
   sourceParam?: string | string[];
+  /**
+   * The IDP switch (league_power_pulse_settings.settings.idp.enabled), read
+   * once by the caller. Off, a defender is refused as before.
+   */
+  allowDefenders?: boolean;
+  /**
+   * Positions whose opponent weight is 0 (unadjustedPositionsFrom), read by
+   * the caller from the settings it already holds. The settings row is
+   * service-role only, so this module does not read it through the reader's
+   * client.
+   */
+  unadjustedPositions?: readonly string[];
 };
+
+/**
+ * DEFENSIVE positions whose opponent weight is 0 in the Power Pulse settings.
+ * Pure. Defenders only on purpose: QB and WR also carry 0 by default, but their
+ * cards show a measured rank line and the verdict cites it, so for them the
+ * multiplier row stays as it always was.
+ */
+export function unadjustedPositionsFrom(positionReliability: Record<string, number>): string[] {
+  return Object.entries(positionReliability)
+    .filter(([position, weight]) => isDefender(position) && !(weight > 0))
+    .map(([position]) => position);
+}
 
 /* ------------------------------------------------------------------ */
 /* Pure helpers. Exported so load.test.ts can exercise them without a DB. */
@@ -233,12 +280,76 @@ export function parseStartCountParam(input: string | string[] | undefined): numb
   return Number.isFinite(parsed) ? parsed : DEFAULT_START_COUNT;
 }
 
-/** "DST" is folded into "DEF" (players.position spelling); anything else outside the six is refused. */
-export function normalizeCandidatePosition(position: string): PulsePosition | null {
+/**
+ * "DST" is folded into "DEF" (players.position spelling). The six offensive
+ * positions always map; DL, LB and DB map only with `allowDefenders` (the IDP
+ * switch). Anything else is refused.
+ */
+export function normalizeCandidatePosition(
+  position: string,
+  allowDefenders = false,
+): PulsePosition | null {
   const upper = position.trim().toUpperCase();
   const mapped = upper === "DST" ? "DEF" : upper;
-  // The board refuses defenders (plan R-23), so only the six offensive positions map.
-  return (OFFENSE_POSITIONS as readonly string[]).includes(mapped) ? (mapped as PulsePosition) : null;
+  if ((OFFENSE_POSITIONS as readonly string[]).includes(mapped)) return mapped as PulsePosition;
+  if (allowDefenders && isDefender(mapped)) return mapped as PulsePosition;
+  return null;
+}
+
+/**
+ * Split resolved players into one side of the ball, decided by the first
+ * player that RESOLVED onto the board (a slug that matched nobody, or a
+ * position the tool does not evaluate, never decides it). Everyone on the
+ * other side is refused with "other-side" rather than silently dropped. Pure.
+ */
+export function splitBySide<T extends { position: PulsePosition }>(
+  players: T[],
+): { side: StartSitSide; kept: T[]; otherSide: T[] } {
+  const side: StartSitSide = players.length > 0 && isDefender(players[0].position) ? "defense" : "offense";
+  const kept: T[] = [];
+  const otherSide: T[] = [];
+  for (const p of players) {
+    const onDefense = isDefender(p.position);
+    if (onDefense === (side === "defense")) kept.push(p);
+    else otherSide.push(p);
+  }
+  return { side, kept, otherSide };
+}
+
+/**
+ * The side a board will take, from the raw positions in the reader's order
+ * (null for a slug that matched nobody). The page calls this BEFORE the board
+ * loads, to decide the tabs and the chips, and it is the same rule
+ * loadStartSitBoard applies, so the two cannot disagree. Pure.
+ */
+export function boardSide(
+  positions: Array<string | null | undefined>,
+  allowDefenders: boolean,
+): StartSitSide {
+  const resolved = positions
+    .map((p) => (p ? normalizeCandidatePosition(p, allowDefenders) : null))
+    .filter((p): p is PulsePosition => p !== null)
+    .map((position) => ({ position }));
+  return splitBySide(resolved).side;
+}
+
+/** True when a raw position lands on the given side of the ball. Pure. */
+export function onSide(position: string | null | undefined, side: StartSitSide): boolean {
+  return isDefender(position) === (side === "defense");
+}
+
+/**
+ * Whether a resolved player gets a picker chip. A chip says "this player is in
+ * the comparison" (IDP-127), so: with the switch off, never a defender; with
+ * it on, only players on the board's side. Pure.
+ */
+export function getsPickerChip(
+  position: string | null | undefined,
+  allowDefenders: boolean,
+  side: StartSitSide,
+): boolean {
+  if (!allowDefenders) return !isDefender(position);
+  return onSide(position, side);
 }
 
 /** floor = max(0, points - sigma), ceiling = points + sigma. Either null propagates both to null. */
@@ -348,9 +459,10 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
     bySlug.set(row.slug, row);
   }
 
-  const candidates: StartSitCandidate[] = [];
+  const resolved: StartSitCandidate[] = [];
   const notFoundSlugs: string[] = [];
   const refusedPlayers: StartSitRefusedPlayer[] = [];
+  const allowDefenders = params.allowDefenders === true;
 
   for (const slug of normalizedSlugs) {
     const row = bySlug.get(slug);
@@ -358,13 +470,13 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
       notFoundSlugs.push(slug);
       continue;
     }
-    const position = normalizeCandidatePosition(row.position);
+    const position = normalizeCandidatePosition(row.position, allowDefenders);
     const name = playerDisplayName(row);
     if (!position) {
-      refusedPlayers.push({ slug, name, position: row.position });
+      refusedPlayers.push({ slug, name, position: row.position, reason: "position" });
       continue;
     }
-    candidates.push({
+    resolved.push({
       playerId: row.id,
       slug: row.slug,
       sleeperId: readSleeperId(row),
@@ -375,13 +487,27 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
     });
   }
 
+  // One side of the ball per board. A defender is scored under Sleeper's
+  // default IDP scoring and an offensive player under the reader's format, so
+  // a points margin between the two compares different units.
+  const { side, kept: candidates, otherSide } = splitBySide(resolved);
+  for (const c of otherSide) {
+    refusedPlayers.push({ slug: c.slug, name: c.name, position: c.position, reason: "other-side" });
+  }
+  const defensive = side === "defense";
+
   const currentWeek = clock.currentWeek;
   const remainingWeeks = remainingWeeksFrom(currentWeek);
   const week = resolveBoardWeek(params.weekParam, currentWeek);
   const startCount = clampStartCount(parseStartCountParam(params.startParam), candidates.length);
 
-  const scoringSettings = scoringSettingsForFormat(format);
-  const scoringBase = closestScoringBase(scoringSettings);
+  // A defensive board is scored ONLY under idp123: the offensive format map
+  // carries no idp_ weight (a defender would score null), and merging the two
+  // into one map would dot-product every offensive player on receptions alone.
+  // The side split above is what makes one map per board safe.
+  const scoringSettings = defensive ? { ...IDP_PRESETS.idp123 } : scoringSettingsForFormat(format);
+  const scoringBase = defensive ? IDP_SCORING_KEY : closestScoringBase(scoringSettings);
+  const scoringLabel = defensive ? IDP_PRESET_LABEL.idp123 : format.display;
   const playerIds = candidates.map((c) => c.playerId);
   const positionByPlayer = new Map(candidates.map((c) => [c.playerId, c.position]));
   const injuryByPlayer = new Map(candidates.map((c) => [c.playerId, c.injuryStatus]));
@@ -405,6 +531,10 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
       positionByPlayer,
       injuryByPlayer,
       currentWeek,
+      // Defenders are projected, graded and split under idp123 only when asked.
+      includeDefenders: defensive,
+      // A defensive board holds defenders only (splitBySide), so idp123 alone.
+      defendersOnly: defensive,
     });
     projectionSource = result.source;
     byPlayer = result.byPlayer;
@@ -448,6 +578,22 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
     availabilityByPlayer.set(row.player_id, row.availability === "out" ? "out" : "projected");
   }
   const updatedAt = freshestRes.data?.updated_at ?? null;
+  const unadjusted = new Set(params.unadjustedPositions ?? []);
+
+  // No defense has the four games a current-season split needs until about
+  // week 5 (lib/calculate-defense-splits.ts MIN_GAMES), so until then the
+  // rank comes from last season and says so. A second read only in those
+  // weeks; the rest of the season this costs nothing.
+  let ranks = defenseRanks;
+  let rankSeason: number | null = clock.season;
+  if (clock.season != null && defenseRanks.size === 0) {
+    ranks = await loadDefenseRanks(db, scoringBase, clock.season - 1);
+    rankSeason = ranks.size > 0 ? clock.season - 1 : null;
+  }
+  const rankSeasonNote =
+    rankSeason != null && clock.season != null && rankSeason !== clock.season
+      ? { defenseRankSeason: rankSeason }
+      : {};
 
   const projections: StartSitProjection[] = candidates.map((candidate) => {
     const summary = byPlayer.get(candidate.playerId);
@@ -457,7 +603,7 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
     const { floor, ceiling } = floorCeiling(points, sigma);
     const opponent = weekData?.opponent ?? null;
     const defenseRank: DefenseRank | null = opponent
-      ? defenseRanks.get(`${opponent.trim().toUpperCase()}|${candidate.position}`) ?? null
+      ? ranks.get(`${opponent.trim().toUpperCase()}|${candidate.position}`) ?? null
       : null;
     const environment = candidate.team
       ? gameEnv.byTeam.get(candidate.team.trim().toUpperCase()) ?? null
@@ -474,7 +620,9 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
       ceiling,
       opponent,
       opponentMultiplier: weekData?.opponentMultiplier ?? null,
+      ...(unadjusted.has(candidate.position) ? { opponentUnadjusted: true as const } : {}),
       defenseRankVsPosition: defenseRank?.rank ?? null,
+      ...(defenseRank ? rankSeasonNote : {}),
       // AdjustedProjection calls this weeksPlayed; StartSitProjection calls
       // the same figure weeksGraded (section 2.6's StartSitProjection shape).
       beatRate: weekData?.beatRate ?? null,
@@ -493,6 +641,8 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
     currentWeek,
     remainingWeeks,
     format,
+    side,
+    scoringLabel,
     sourceSlug,
     projectionSource,
     updatedAt,

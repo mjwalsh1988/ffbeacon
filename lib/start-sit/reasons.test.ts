@@ -270,6 +270,22 @@ describe("buildStartSitReasons", () => {
     expect(buildStartSitReasons(oneMissing)).toEqual([]);
   });
 
+  it("names the season when the matchup rank is last season's", () => {
+    const input = withMatchup(baseInput());
+    input.projections.a = { ...input.projections.a, defenseRankSeason: 2025 };
+    input.projections.b = { ...input.projections.b, defenseRankSeason: 2025 };
+    expect(buildStartSitReasons(input)[0]).toMatch(/allowed the fourth-most points to running backs in 2025\.$/);
+  });
+
+  it("environment never fires on a defensive board: his own offense's total is not his opportunity", () => {
+    const withEnv = withEnvironment(baseInput());
+    const defensive: StartSitReasonInput = {
+      ...withEnv,
+      candidates: withEnv.candidates.map((c) => ({ ...c, position: "LB" as const })),
+    };
+    expect(buildStartSitReasons(defensive)).toEqual([]);
+  });
+
   it("floor fires when the confidence favours the last starter", () => {
     const fired = buildStartSitReasons(withFloor(baseInput()));
     expect(fired).toEqual(["If you need a safe floor, Bijan Robinson's is 12.1 points to Josh Jacobs's 8.1."]);

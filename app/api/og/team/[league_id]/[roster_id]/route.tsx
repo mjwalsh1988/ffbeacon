@@ -13,7 +13,7 @@ import {
   OG_LOGO_DATA_URI,
   OG_WORDMARK,
 } from "@/lib/og/assets";
-import { clip, displayName } from "@/lib/og/display-name";
+import { clip, defenderFooterLine, displayName } from "@/lib/og/display-name";
 
 export const runtime = "nodejs";
 
@@ -22,7 +22,7 @@ const BG = "#0F0F1A";
 const BG_BASE = "#07070D";
 const INK = "#F4F4F8";
 const INK_MUTED = "#A8A8B8";
-const INK_SUBTLE = "#6B6B7D";
+const INK_SUBTLE = "#8A8A9C";
 const PURPLE = "#A855F7";
 const CYAN = "#22D3EE";
 const AMBER = "#F59E0B";
@@ -332,21 +332,38 @@ export async function GET(
         )}
       </div>
 
+      {/* The defender line gets a row of its own (review item 54). Inside the
+          footer row it shared about 750 px with the legend and the wordmark,
+          so four long names wrapped it to three lines. defenderFooterLine
+          keeps it inside a character budget that cannot reach 1120 px at this
+          size, and nowrap is the backstop. Its 22 px still leave the
+          position columns their twelve 25 px rows. */}
+      {team.defenders.length > 0 && (
+        <p
+          style={{
+            fontSize: 13,
+            color: INK_SUBTLE,
+            margin: "10px 0 0 0",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}
+        >
+          {defenderFooterLine(team.defenders)}
+        </p>
+      )}
+
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginTop: 12,
+          marginTop: team.defenders.length > 0 ? 6 : 12,
         }}
       >
         <p style={{ fontSize: 13, color: INK_SUBTLE, margin: 0 }}>
           Values via {context.sourceDisplay}, {context.formatDisplay}
           {context.pickSource && context.pickSource.slug !== context.sourceSlug
             ? `, picks via ${context.pickSource.display}`
-            : ""}
-          {team.defenders.length > 0
-            ? `. Defense, no market value: ${defenderLine(team.defenders)}`
             : ""}
         </p>
         {/* A shared image carries no tooltip, so the two marks explain
@@ -776,15 +793,4 @@ function ordinal(n: number): string {
   if (mod10 === 2) return `${n}nd`;
   if (mod10 === 3) return `${n}rd`;
   return `${n}th`;
-}
-
-/**
- * Defenders by name for the footer line (plan IDP-209). The image has no room
- * for a sixth column, so the first four names are printed and the rest are
- * counted rather than silently cut.
- */
-function defenderLine(names: string[]): string {
-  const shown = names.slice(0, 4).join(", ");
-  const more = names.length - 4;
-  return more > 0 ? `${shown} and ${more} more` : shown;
 }

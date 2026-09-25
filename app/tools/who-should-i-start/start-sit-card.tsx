@@ -79,6 +79,7 @@ import { BeaconValue } from "@/components/beacon-value-icon";
 import type { StartSitCall } from "@/components/start-sit-badge";
 import { opponentLabel, pctLabel } from "@/components/league-schedule/format";
 import { ordinal } from "@/lib/league-team-status";
+import { isDefender, positionNoun } from "@/lib/site";
 import { ENVIRONMENT_TIER_LABEL, type EnvironmentTier } from "@/lib/nfl-game-environment";
 import { matchupPhrase } from "@/lib/breakdown/scoring";
 import { MIN_GRADED_WEEKS } from "@/lib/start-sit/reasons";
@@ -371,6 +372,9 @@ export function StartSitCard({
               className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${positionClass}`}
             >
               {candidate.position}
+              {/* The code stays visible; the spelled-out noun is the missing
+                  words, inside the same element (the Lineups rule). */}
+              <span className="sr-only normal-case"> ({positionNoun(candidate.position)})</span>
             </span>
             {candidate.team && (
               <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
@@ -433,7 +437,11 @@ export function StartSitCard({
               </div>
 
               <MetricRow icon={Shield} label="Matchup">
-                {projection.opponentMultiplier != null ? (
+                {projection.opponentUnadjusted ? (
+                  // The weight for this position is 0 (IDP-403), so a 1.00x
+                  // would read as a measured neutral matchup. It is not one.
+                  "Not adjusted for opponent at this position"
+                ) : projection.opponentMultiplier != null ? (
                   <>
                     <TonePill tone={matchupTone(projection.opponentMultiplier)}>
                       {matchupPhrase(projection.opponentMultiplier)}
@@ -444,8 +452,11 @@ export function StartSitCard({
                     {projection.defenseRankVsPosition != null && projection.opponent && (
                       <span className="mt-1 block text-xs text-ink-muted">
                         <span className="sr-only">, </span>
-                        {projection.opponent} ranks {ordinal(projection.defenseRankVsPosition)} in points allowed to{" "}
+                        {projection.opponent}{" "}
+                        {projection.defenseRankSeason != null ? "ranked" : "ranks"}{" "}
+                        {ordinal(projection.defenseRankVsPosition)} in points allowed to{" "}
                         {positionPlural(candidate.position)}
+                        {projection.defenseRankSeason != null ? ` in ${projection.defenseRankSeason}` : ""}
                       </span>
                     )}
                   </>
@@ -455,7 +466,11 @@ export function StartSitCard({
               </MetricRow>
 
               <MetricRow icon={Flame} label="Game environment">
-                {environmentTotal != null && projection.environmentTier ? (
+                {isDefender(candidate.position) ? (
+                  // His own offense's implied total is not his opportunity, and
+                  // nothing here models what is, so no figure is shown.
+                  "Not measured for defensive players"
+                ) : environmentTotal != null && projection.environmentTier ? (
                   <>
                     <TonePill tone={ENVIRONMENT_TONE[projection.environmentTier]}>
                       {ENVIRONMENT_TIER_LABEL[projection.environmentTier]}

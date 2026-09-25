@@ -5,11 +5,17 @@ import {
   remainingWeeksFrom,
   parseStartCountParam,
   normalizeCandidatePosition,
+  splitBySide,
+  boardSide,
+  getsPickerChip,
+  onSide,
+  unadjustedPositionsFrom,
   floorCeiling,
   detectOnBye,
   MIN_COMPLETE_SLATE_TEAMS,
 } from "./load";
 import { MAX_START_SIT_PLAYERS } from "./types";
+import { DEFAULT_POWER_PULSE_SETTINGS } from "@/lib/power-pulse/default-settings";
 import type { GameEnvironment } from "@/lib/nfl-game-environment";
 
 describe("normalizeStartSitSlugs", () => {
@@ -120,6 +126,79 @@ describe("normalizeCandidatePosition", () => {
   it("refuses a position outside the six", () => {
     expect(normalizeCandidatePosition("LB")).toBeNull();
     expect(normalizeCandidatePosition("OL")).toBeNull();
+  });
+
+  it("maps DL, LB and DB only when the IDP switch allows defenders", () => {
+    for (const position of ["DL", "LB", "DB"]) {
+      expect(normalizeCandidatePosition(position, true)).toBe(position);
+      expect(normalizeCandidatePosition(position, false)).toBeNull();
+    }
+    expect(normalizeCandidatePosition("OL", true)).toBeNull();
+    expect(normalizeCandidatePosition("WR", true)).toBe("WR");
+  });
+});
+
+describe("splitBySide", () => {
+  const p = (name: string, position: "WR" | "RB" | "DEF" | "LB" | "DB" | "DL") => ({ name, position });
+
+  it("takes the side from the first player added and refuses the other side", () => {
+    const out = splitBySide([p("lb1", "LB"), p("wr1", "WR"), p("db1", "DB")]);
+    expect(out.side).toBe("defense");
+    expect(out.kept.map((x) => x.name)).toEqual(["lb1", "db1"]);
+    expect(out.otherSide.map((x) => x.name)).toEqual(["wr1"]);
+  });
+
+  it("keeps the team defense on the offensive side, where it is scored", () => {
+    const out = splitBySide([p("wr1", "WR"), p("def1", "DEF"), p("dl1", "DL")]);
+    expect(out.side).toBe("offense");
+    expect(out.kept.map((x) => x.name)).toEqual(["wr1", "def1"]);
+    expect(out.otherSide.map((x) => x.name)).toEqual(["dl1"]);
+  });
+
+  it("mixes DL, LB and DB freely, as an IDP flex does", () => {
+    const out = splitBySide([p("dl1", "DL"), p("lb1", "LB"), p("db1", "DB")]);
+    expect(out.otherSide).toEqual([]);
+  });
+
+  it("is offense with nobody on it", () => {
+    expect(splitBySide([]).side).toBe("offense");
+  });
+});
+
+describe("boardSide (the page's prediction, same rule as the loader)", () => {
+  it("skips a slug that matched nobody and a refused position before deciding", () => {
+    // The review case: a stale first slug, then a linebacker, then a receiver.
+    expect(boardSide([null, "LB", "WR"], true)).toBe("defense");
+    expect(boardSide(["OL", "DB", "RB"], true)).toBe("defense");
+  });
+
+  it("is always offense with the switch off, since no defender resolves", () => {
+    expect(boardSide(["LB", "WR"], false)).toBe("offense");
+  });
+
+  it("getsPickerChip: never a defender with the switch off; only the board's side with it on", () => {
+    expect(getsPickerChip("LB", false, "offense")).toBe(false);
+    expect(getsPickerChip("WR", false, "offense")).toBe(true);
+    expect(getsPickerChip("LB", true, "defense")).toBe(true);
+    expect(getsPickerChip("WR", true, "defense")).toBe(false);
+    expect(getsPickerChip("DEF", true, "offense")).toBe(true);
+    expect(getsPickerChip("DB", true, "offense")).toBe(false);
+  });
+
+  it("onSide keeps the team defense offensive", () => {
+    expect(onSide("DEF", "offense")).toBe(true);
+    expect(onSide("LB", "offense")).toBe(false);
+    expect(onSide("LB", "defense")).toBe(true);
+  });
+});
+
+describe("unadjustedPositionsFrom", () => {
+  it("lists the defensive positions whose opponent weight is zero, and no offensive one", () => {
+    expect(unadjustedPositionsFrom({ RB: 0.29, DL: 0.33, LB: 0, DB: 0 }).sort()).toEqual(["DB", "LB"]);
+    // The real defaults carry QB and WR at 0 too; their cards must not change.
+    const real = unadjustedPositionsFrom(DEFAULT_POWER_PULSE_SETTINGS.opponent.positionReliability);
+    expect(real).not.toContain("QB");
+    expect(real).not.toContain("WR");
   });
 });
 

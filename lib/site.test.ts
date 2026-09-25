@@ -15,7 +15,9 @@ import {
   OFFENSE_POSITIONS,
   POSITIONS,
   isDefender,
+  positionHeading,
   positionNoun,
+  positionNounMap,
 } from "./site";
 
 describe("position constants", () => {
@@ -60,42 +62,46 @@ describe("positionNoun", () => {
     expect(positionNoun("OL")).toBe("OL");
     expect(positionNoun(null)).toBe("");
   });
+
+  it("has a short style for the two positions that have one, and only them", () => {
+    expect(positionNoun("WR", "singular", "short")).toBe("receiver");
+    expect(positionNoun("DEF", "plural", "short")).toBe("defenses");
+    expect(positionNoun("RB", "singular", "short")).toBe("running back");
+    expect(positionNoun("LB", "plural", "short")).toBe("linebackers");
+  });
+});
+
+describe("positionHeading and positionNounMap", () => {
+  it("capitalises only the first letter", () => {
+    expect(positionHeading("RB")).toBe("Running backs");
+    expect(positionHeading("DEF", "singular")).toBe("Team defense");
+    expect(positionHeading("DEF", "plural", "short")).toBe("Defenses");
+    expect(positionHeading(null)).toBe("");
+  });
+
+  it("builds a map, with the short word for a listed position only", () => {
+    expect(positionNounMap(["QB", "WR", "DEF"] as const, { short: ["DEF"] })).toEqual({
+      QB: "quarterback",
+      WR: "wide receiver",
+      DEF: "defense",
+    });
+    expect(positionNounMap(["WR", "TE"] as const, { form: "plural", short: true, heading: true })).toEqual({
+      WR: "Receivers",
+      TE: "Tight ends",
+    });
+  });
 });
 
 const ROOTS = ["lib", "components", "app"];
 /**
- * Files allowed to hold a position-to-English map. The helper itself, then a
- * debt ledger recorded on 2026-09-24 (IDP-102): maps that existed before the
- * helper and carry DIFFERENT wording on purpose (short "receiver", "defense"
- * rather than "team defense", capitalised group headings, "Streaming
- * defenses"), or sit on surfaces that stay offense-only by plan (draft tools,
- * waiver wire, rankings). Folding them would rewrite copy across the site for
- * no defender gain. A NEW file may not join this list; use positionNoun.
- * Phase 2 and 3 tasks that touch a listed file fold it and delete its line.
+ * Files allowed to hold a position-to-English map: the helper, and nothing
+ * else. The debt ledger recorded on 2026-09-24 (IDP-102) listed 19 older maps;
+ * all were folded on 2026-09-25 into positionNoun, positionHeading and
+ * positionNounMap, keeping each surface's wording (the short "receiver" and
+ * "defense" forms live in lib/site.ts beside the full ones). A NEW file may not
+ * join this list; use the helpers.
  */
-const ALLOWED = new Map<string, string>([
-  ["lib/site.ts", "the helper"],
-  ["lib/league-schedule/slots.ts", "SLOT_GROUP_LABEL: group headings incl. Flex, Superflex, Defensive players"],
-  ["lib/on-the-clock/draft-alerts.ts", "draft tools stay offense-only (R-11); short 'receiver' wording"],
-  ["lib/on-the-clock/draft-grade.ts", "draft tools stay offense-only; slot words incl. flex tokens"],
-  ["lib/on-the-clock/rationale.ts", "draft tools stay offense-only; short 'receiver' wording"],
-  ["lib/on-the-clock/recommend.ts", "draft tools stay offense-only; 'defense' wording"],
-  ["lib/rankings/faq.ts", "rankings stay offense-only (R-18)"],
-  ["lib/signal-scout/clues.ts", "Signal Scout stays offense-only (R-15); four positions only"],
-  ["lib/trade-finder/explain.ts", "value-side trade copy; folded in IDP-311"],
-  ["lib/trade-finder/types.ts", "exported TRADE_POSITION_LABEL; folded in IDP-311"],
-  ["lib/waiver-wire/reasons.ts", "waiver wire board is offense-only; 'defense' wording"],
-  ["components/team-card.tsx", "ValuedPosition headings; reworked in IDP-209"],
-  ["components/waiver-wire/board-rail.tsx", "waiver wire board is offense-only"],
-  ["components/waiver-wire/player-card.tsx", "waiver wire board is offense-only"],
-  ["components/waiver-wire/top-pickup.tsx", "waiver wire board is offense-only"],
-  ["components/waiver-wire/waiver-board.tsx", "group headings incl. 'Streaming defenses'"],
-  ["app/guides/dynasty-strategy/dynasty-figures.tsx", "guide figure headings, four positions"],
-  ["app/my-beacon/draft-tracker/[trackerId]/team-rosters.tsx", "draft tracker stays offense-only; headings"],
-  ["app/tools/on-the-clock/draft-pulse-board.tsx", "slot token labels incl. flex tokens"],
-  ["app/tools/on-the-clock/player-spotlight.tsx", "draft tools stay offense-only"],
-  ["app/tools/who-should-i-start/toughest-calls.tsx", "K_DEF combined key; board refuses defenders"],
-]);
+const ALLOWED = new Map<string, string>([["lib/site.ts", "the helper"]]);
 
 function walk(dir: string, out: string[]): void {
   for (const name of readdirSync(dir)) {
@@ -116,9 +122,15 @@ describe("one position noun map", () => {
   });
 
   it("finds no second map from position codes to English nouns", () => {
-    // A map entry like QB: "quarterback" (or "Quarterbacks"). A colour map or
-    // an order map never has an English noun on the right.
-    const pattern = /\bQB:\s*["'`]quarterbacks?["'`]/i;
+    // A map entry like QB: "quarterback", LB: "linebacker" or DL: "Defensive
+    // linemen", for any position the helper knows. A colour map or an order
+    // map never has an English noun on the right. Widened on 2026-09-25: the
+    // QB-only pattern missed two defensive-only maps in the IDP guide.
+    const nouns = ["quarterback", "running back", "wide receiver", "tight end", "kicker", "team defense", "defensive linem[ae]n", "linebacker", "defensive back"];
+    const pattern = new RegExp(
+      `\\b(QB|RB|WR|TE|K|DEF|DL|LB|DB)\\s*:\\s*["'\`](${nouns.join("|")})s?["'\`]`,
+      "i",
+    );
     const offenders = files
       .map((f) => relative(root, f).replace(/\\/g, "/"))
       .filter((rel) => !ALLOWED.has(rel))

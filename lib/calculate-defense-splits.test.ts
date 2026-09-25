@@ -4,6 +4,7 @@ import {
   groupPerformances,
   idp123FromColumns,
   pointsFor,
+  recentSeasons,
 } from "./calculate-defense-splits";
 
 type Row = Parameters<typeof groupPerformances>[0][number];
@@ -96,5 +97,33 @@ describe("computeSeasonSplits (IDP-403 calibration reads this)", () => {
 
   it("publishes nothing for a defender under a PPR base", () => {
     expect(computeSeasonSplits(rows, "pts_ppr")).toEqual([]);
+  });
+});
+
+/** A stub of the one chained query recentSeasons issues. */
+function seasonClient(result: { data: unknown; error: { message: string } | null }) {
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    order: () => chain,
+    limit: () => Promise.resolve(result),
+  };
+  return { from: () => chain } as unknown as Parameters<typeof recentSeasons>[0];
+}
+
+describe("recentSeasons (C7)", () => {
+  it("throws on a failed read instead of guessing the calendar year", async () => {
+    await expect(recentSeasons(seasonClient({ data: null, error: { message: "timeout" } }))).rejects.toThrow(
+      /season lookup failed: timeout/,
+    );
+  });
+
+  it("returns the newest stored season and the two before it", async () => {
+    await expect(recentSeasons(seasonClient({ data: [{ season: 2025 }], error: null }))).resolves.toEqual([2025, 2024, 2023]);
+  });
+
+  it("falls back to the calendar only when the table is empty", async () => {
+    const latest = new Date().getFullYear() - 1;
+    await expect(recentSeasons(seasonClient({ data: [], error: null }))).resolves.toEqual([latest, latest - 1, latest - 2]);
   });
 });

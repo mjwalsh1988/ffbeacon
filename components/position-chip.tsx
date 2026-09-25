@@ -9,10 +9,11 @@ import {
  * A small position tag in the position's own hue (plan R-22), with the
  * position spelled out for a screen reader ("linebacker", not "LB").
  *
- * The code is drawn for the eye and the noun is the text a screen reader
- * reads, both inside the one element, so pointing at the chip finds a real
- * text node rather than falling back to an ancestor. Colour is never the only
- * signal: the code is always printed.
+ * The code is ONE real text node, read by everyone, and only the missing
+ * words ride beside it as sr-only inside the same element (the Lineups rule):
+ * an aria-hidden code with an sr-only twin goes silent when a screen reader
+ * follows the pointer onto it. normal-case keeps the noun from being exposed
+ * in capitals and read as an initialism. Colour is never the only signal.
  */
 export function PositionChip({
   position,
@@ -29,8 +30,10 @@ export function PositionChip({
     <span
       className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone} ${className}`}
     >
-      <span aria-hidden="true">{position.toUpperCase()}</span>
-      <span className="sr-only">{noun}</span>
+      {position.toUpperCase()}
+      {noun && noun.toUpperCase() !== position.toUpperCase() ? (
+        <span className="sr-only normal-case"> ({noun})</span>
+      ) : null}
     </span>
   );
 }

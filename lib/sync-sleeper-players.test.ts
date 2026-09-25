@@ -95,6 +95,40 @@ describe("pickPrimaryPosition", () => {
   });
 });
 
+describe("pickPrimaryPosition, defenders", () => {
+  it("prefers Sleeper's fantasy position over a raw defender label (the Azur Kamara row)", () => {
+    // position "DE", fantasy_positions ["LB"]: stored as "DE" before the fix.
+    expect(pickPrimaryPosition(player({ position: "DE", fantasy_positions: ["LB"] }))).toBe("LB");
+    expect(pickPrimaryPosition(player({ position: "LB", fantasy_positions: ["DB"] }))).toBe("DB");
+  });
+
+  it.each([
+    ["DE", "DL"],
+    ["DT", "DL"],
+    ["NT", "DL"],
+    ["EDGE", "DL"],
+    ["ILB", "LB"],
+    ["OLB", "LB"],
+    ["MLB", "LB"],
+    ["CB", "DB"],
+    ["S", "DB"],
+    ["FS", "DB"],
+    ["SS", "DB"],
+  ])("folds a raw %s with no fantasy position to %s", (raw, expected) => {
+    expect(pickPrimaryPosition(player({ position: raw }))).toBe(expected);
+  });
+
+  it("leaves offensive players and the team defense alone", () => {
+    expect(pickPrimaryPosition(player({ position: "TE", fantasy_positions: ["TE", "QB"] }))).toBe("QB");
+    expect(pickPrimaryPosition(player({ position: "DEF", fantasy_positions: ["DEF"] }))).toBe("DEF");
+    expect(pickPrimaryPosition(player({ position: "OL" }))).toBe("OL");
+  });
+
+  it("folds a raw label in fantasy_positions for eligibility too", () => {
+    expect(pickEligiblePositions(player({ fantasy_positions: ["DE", "OLB"] }), "DL")).toEqual(["DL", "LB"]);
+  });
+});
+
 describe("pickEligiblePositions (IDP-111)", () => {
   it("keeps both halves of a dual-eligible defender, primary unchanged", () => {
     const p = player({ position: "DE", fantasy_positions: ["DL", "LB"] });

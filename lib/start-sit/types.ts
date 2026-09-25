@@ -89,7 +89,21 @@ export type StartSitProjection = {
   ceiling: number | null; // points + sigma
   opponent: string | null;
   opponentMultiplier: number | null;
+  /**
+   * True when this position's opponent weight is 0 in the Power Pulse
+   * settings (LB and DB at launch, IDP-403), so the multiplier is 1.00
+   * because nothing was adjusted, not because the matchup measured neutral.
+   * Absent otherwise.
+   */
+  opponentUnadjusted?: true;
   defenseRankVsPosition: number | null;
+  /**
+   * The season that rank is from, present ONLY when it is not the board's own
+   * season. Early in a season no defense has the four games a split needs
+   * (lib/calculate-defense-splits.ts MIN_GAMES), so the rank falls back to last
+   * season and every sentence that shows it says which season it is.
+   */
+  defenseRankSeason?: number;
   beatRate: number | null;
   availabilityRate: number | null;
   weeksGraded: number;

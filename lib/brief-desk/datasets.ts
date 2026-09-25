@@ -153,7 +153,7 @@ export function idpLineCells(line: WeekLine): Row {
     idp_ff: line.idp_ff ?? null,
     idp_fum_rec: line.idp_fum_rec ?? null,
     idp_def_td: line.idp_def_td ?? null,
-    def_snap_pct: round1(line.def_snap_pct ?? null),
+    def_snap_pct: snapPercent(line.def_snap_pct),
   };
 }
 
@@ -167,6 +167,17 @@ type Row = Record<string, string | number | null>;
 function round1(n: number | null | undefined): number | null {
   if (n === null || n === undefined || !Number.isFinite(n)) return null;
   return Math.round(n * 10) / 10;
+}
+
+/**
+ * A snap share as a whole percentage. player_stats stores snap_pct and
+ * def_snap_pct as a 0 to 1 fraction (the profile game log multiplies by 100
+ * too), and the column headers say "%", so 0.93 must read 93. Rounding the raw
+ * fraction to one place printed 0.9 under "Snap %" (review item 34).
+ */
+export function snapPercent(n: number | null | undefined): number | null {
+  if (n === null || n === undefined || !Number.isFinite(n)) return null;
+  return Math.round(n * 100);
 }
 
 function playerCells(p: DatasetPlayer): Row {
@@ -334,7 +345,7 @@ function lineCells(line: WeekLine): Row {
     rec_yd: line.rec_yd,
     rec_td: line.rec_td,
     fum_lost: line.fum_lost,
-    snap_pct: round1(line.snap_pct),
+    snap_pct: snapPercent(line.snap_pct),
   };
 }
 

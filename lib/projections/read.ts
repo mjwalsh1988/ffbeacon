@@ -113,6 +113,12 @@ export async function loadAdjustedProjections(params: {
    * defensive slot. Absent or false: offense only, the reads this always made.
    */
   includeDefenders?: boolean;
+  /**
+   * Every player in this read is a defender (a defensive start/sit board), so
+   * accuracy and splits are read under idp123 alone. Without it the offensive
+   * base closestScoringBase picks for an idp-only map is read too, for nobody.
+   */
+  defendersOnly?: boolean;
 }): Promise<{
   source: string;
   byPlayer: Map<string, AdjustedProjectionSummary>;
@@ -166,6 +172,12 @@ export async function loadAdjustedProjections(params: {
 
   const scoringBase = closestScoringBase(scoringSettings);
   const defenseSeasons = defenseSeasonsFor(season);
+  const scoringKeys: string | string[] =
+    includeDefenders && params.defendersOnly === true
+      ? [IDP_SCORING_KEY]
+      : includeDefenders
+        ? [scoringBase, IDP_SCORING_KEY]
+        : scoringBase;
 
   const [projections, accuracy, defense] = await Promise.all([
     loadProjections(dbClient, playerIds, season, fromWeek, toWeek, source),
@@ -173,17 +185,8 @@ export async function loadAdjustedProjections(params: {
     // per migration 0240: a multiplier measured against Sleeper's projection
     // is only meaningful applied to Sleeper's projection. See the comment on
     // loadAccuracy in lib/power-pulse/load.ts.
-    loadAccuracy(
-      dbClient,
-      playerIds,
-      includeDefenders ? [scoringBase, IDP_SCORING_KEY] : scoringBase,
-      source,
-    ),
-    loadDefenseSplits(
-      dbClient,
-      includeDefenders ? [scoringBase, IDP_SCORING_KEY] : scoringBase,
-      defenseSeasons,
-    ),
+    loadAccuracy(dbClient, playerIds, scoringKeys, source),
+    loadDefenseSplits(dbClient, scoringKeys, defenseSeasons),
   ]);
 
   // Grouped by player, then by week, before any scoring happens. A player who

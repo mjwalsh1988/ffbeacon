@@ -20,7 +20,7 @@
  * Presentational server components.
  */
 
-import type { IdpPosition } from "@/lib/site";
+import { OFFENSE_POSITIONS, positionNounMap, type IdpPosition } from "@/lib/site";
 import Link from "next/link";
 import { CalendarDays, Info, ListFilter, Wallet } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
@@ -28,14 +28,10 @@ import { formatEastern } from "@/lib/datetime";
 import { boardWeeks, weekPath, weekPhase } from "@/lib/waiver-wire/weeks";
 import { BOARD_POSITIONS, type BoardPosition, type WaiverBoard } from "@/lib/waiver-wire/types";
 
-const POSITION_WORD: Record<BoardPosition, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "wide receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  form: "plural",
+  short: ["DEF"],
+});
 
 const POSITION_TEXT: Record<BoardPosition | IdpPosition, string> = {
   QB: "text-position-qb",

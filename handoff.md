@@ -1,6 +1,45 @@
 # Handoff
 
-## NEXT SESSION: START HERE. THE IDP SWITCH IS ON (2026-09-25 UTC); NEXT IS IDP-406
+## NEXT SESSION: START HERE. IDP BUILD COMPLETE; EVERYTHING UNCOMMITTED (2026-09-25)
+
+- IDP-407 done with three reviewers; FU-01 to FU-12 in progress.md. The owner
+  recorded the screen-reader pass as done. Only IDP item left: Search Console
+  on 2026-10-23 and 2026-11-20.
+- NOTHING IS COMMITTED OR PUSHED (owner instruction). Until it is deployed the
+  Vercel KTC cron keeps failing nightly; stopgap `npm run sync:ktc`.
+- Production already changed (not waiting on a deploy): migration 0303, four
+  player positions, the Frank Gore and Kyle Williams KTC id repair, the KTC
+  backfill. The code that expects migration 0303 ships with the commit.
+
+## EARLIER: FOLLOW-UPS FU-01 TO FU-06 BUILT, NOT COMMITTED (2026-09-25)
+
+- Owner instruction: do not commit or push. Everything below is in the
+  working tree only. Details, with production checks, in progress.md FU-01 to
+  FU-06 (after IDP-407).
+- KTC: the nightly sync broke on 2026-09-08 when KTC moved its player list
+  into <script id="ktc-players">. Fixed in lib/ktc-page.ts, and production
+  data is whole again: backfill for 2026-09-08 to 2026-09-24, today's sync,
+  rankings and trends rebuilt. BUT THE VERCEL CRON STILL RUNS THE OLD CODE and
+  will fail every night until this ships. Stopgap: `npm run sync:ktc` from
+  this machine.
+- Also built: matchup view names the week's own starters (no "Unknown player"
+  from a stale roster, verified 0 on production); FAAB urgency signal back
+  and wired; every old position-noun map folded into lib/site.ts; Who Should I
+  Start accepts defenders while the IDP switch is on (defenders compared only
+  with defenders, Sleeper default IDP scoring).
+
+## EARLIER: IDP-406 DAY ONE IS DONE (2026-09-25)
+
+- Invariant rerun identical, zero "No projection" for defenders Sleeper
+  projects, zero "Unknown player" on the Lineups board, IndexNow accepted for
+  the guide and 1,558 defender slugs. Details and the three matchup-page
+  "Unknown player" rows (stale rosters, not IDP) in IDP-406 in progress.md.
+- URGENT, NOT IDP: sync-ktc has failed every night since 2026-09-08 (0 rows,
+  "every KTC target returned empty"). KTC values are 18 days stale.
+- STILL OPEN: the owner's browser and screen-reader pass over the switch-on
+  screens; Search Console on 2026-10-23 and 2026-11-20; IDP-407 close-out.
+
+## EARLIER: THE IDP SWITCH IS ON (2026-09-25 UTC); NEXT WAS IDP-406
 
 - Invariant check passed on the deployed code (every ordinary league
   identical), then the switch went on with DL 0.33, LB 0, DB 0, defense splits

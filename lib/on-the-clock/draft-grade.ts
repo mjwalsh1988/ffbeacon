@@ -34,7 +34,7 @@
  * because every sentence here has to be traceable to a number above it.
  */
 
-import { isDefender } from "@/lib/site";
+import { OFFENSE_POSITIONS, isDefender, positionNoun, positionNounMap } from "@/lib/site";
 import type { ShapedPick } from "./types";
 import { round, zScores, zToDisplay } from "@/lib/power-pulse/math";
 import type { DraftPulseTeam } from "./draft-pulse";
@@ -92,10 +92,11 @@ export interface DraftGradeInput {
   /** True while the draft is still running, which softens the review copy. */
   inProgress: boolean;
   /**
-   * Every pick in the draft. Optional: used only to count the defensive picks
-   * each roster made, which have no value and so never reach pickSurpluses
-   * (plan R-11). The market evidence names that count rather than grading on
-   * fewer picks without saying so.
+   * Every pick in the draft. Optional: used only to count the picks each
+   * roster made that never reached pickSurpluses, defenders (no value source
+   * prices them, plan R-11) and offensive picks with no value or no market
+   * price. The market evidence names both counts rather than grading on fewer
+   * picks without saying so.
    */
   picks?: ShapedPick[];
 }
@@ -109,6 +110,38 @@ export function defensivePickCounts(picks: ShapedPick[] | undefined): Map<number
     out.set(pick.rosterId, (out.get(pick.rosterId) ?? 0) + 1);
   }
   return out;
+}
+
+/** Made, non-keeper picks of any position, per roster: the whole of "M". */
+export function madePickCounts(picks: ShapedPick[] | undefined): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const pick of picks ?? []) {
+    if (pick.rosterId === null || pick.isKeeper) continue;
+    out.set(pick.rosterId, (out.get(pick.rosterId) ?? 0) + 1);
+  }
+  return out;
+}
+
+/**
+ * The note that follows the market evidence when some of a roster's picks were
+ * not graded. "N of M" counts EVERY made, non-keeper pick, so an offensive
+ * pick that could not be priced (no FF Beacon value, or no market price at
+ * that slot) is counted and named rather than silently missing from both
+ * numbers. Empty when every pick was graded or the picks were not supplied.
+ */
+export function ungradedPicksNote(graded: number, made: number | undefined, defensive: number): string {
+  if (made === undefined) return "";
+  const total = Math.max(made, graded + defensive);
+  const other = Math.max(0, total - graded - defensive);
+  if (graded >= total) return "";
+  const parts: string[] = [];
+  if (defensive > 0) {
+    parts.push(`${defensive} defensive ${defensive === 1 ? "pick has" : "picks have"} no market value`);
+  }
+  if (other > 0) {
+    parts.push(`${other} other ${other === 1 ? "pick" : "picks"} could not be priced`);
+  }
+  return ` Graded on ${graded} of ${total} picks; ${parts.join(" and ")}.`;
 }
 
 const LABELS: Record<GradeComponentKey, string> = {
@@ -224,6 +257,7 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
   // this used to do again a few lines later.
   const surplusTotals = surplusByRoster(pickSurpluses);
   const defensiveCounts = defensivePickCounts(input.picks);
+  const madeCounts = madePickCounts(input.picks);
   const market: RawComponent = {
     key: "market",
     raw: new Map(),
@@ -241,13 +275,11 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
       id,
       50 + 50 * Math.max(-1, Math.min(1, perPick / MARKET_REFERENCE)),
     );
-    const defensive = defensiveCounts.get(id) ?? 0;
-    const defensiveNote =
-      defensive > 0
-        ? ` Graded on ${entry.count} of ${entry.count + defensive} picks; ${defensive} defensive ${
-            defensive === 1 ? "pick has" : "picks have"
-          } no value.`
-        : "";
+    const defensiveNote = ungradedPicksNote(
+      entry.count,
+      input.picks ? (madeCounts.get(id) ?? 0) : undefined,
+      defensiveCounts.get(id) ?? 0,
+    );
     market.evidence.set(
       id,
       (entry.total >= 0
@@ -566,13 +598,8 @@ function ordinalish(n: number): string {
 }
 
 const SLOT_WORDS: Record<string, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-  DST: "defense",
+  ...positionNounMap(OFFENSE_POSITIONS, { short: true }),
+  DST: positionNoun("DEF", "singular", "short"),
   FLEX: "flex",
   REC_FLEX: "receiving flex",
   WR_TE: "receiving flex",

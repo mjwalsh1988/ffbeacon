@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SITE } from "@/lib/site";
+import { SITE, positionNoun } from "@/lib/site";
 import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { formatEasternDate } from "@/lib/datetime";
 import { findPublishedGuide } from "@/lib/guides/published";
@@ -188,10 +188,9 @@ function ScoringTable() {
  * rather than printed as "not enough data" in the middle of it (review 48).
  */
 function firstVersusTwelfth(byRank: Record<"DL" | "LB" | "DB", number[]>, season: number): string | null {
-  const noun = { LB: "linebacker", DL: "defensive lineman", DB: "defensive back" } as const;
   const parts = (["LB", "DL", "DB"] as const)
     .filter((pos) => byRank[pos].length >= 12)
-    .map((pos) => `the best ${noun[pos]} averaged ${byRank[pos][0].toFixed(1)} points a game and the twelfth ${byRank[pos][11].toFixed(1)}`);
+    .map((pos) => `the best ${positionNoun(pos)} averaged ${byRank[pos][0].toFixed(1)} points a game and the twelfth ${byRank[pos][11].toFixed(1)}`);
   if (parts.length === 0) return null;
   const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join("; ")}; and ${parts[parts.length - 1]}`;
   return `In ${season}, in Sleeper default IDP scoring, ${list}.`;

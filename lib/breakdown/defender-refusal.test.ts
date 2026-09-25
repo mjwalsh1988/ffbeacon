@@ -1,7 +1,9 @@
 /**
- * IDP-127: the three direct-slug leaks refuse a defender with a sentence.
- * The Who Should I Start board already refused one (lib/start-sit/load.ts);
- * these hold the picker chip, the Beacon Breakdown core and its OG route.
+ * IDP-127: the Beacon Breakdown core and its OG route refuse a defender with a
+ * sentence. The Who Should I Start BOARD accepts defenders while the IDP
+ * switch is on (owner decision 2026-09-25), scored under Sleeper's default IDP
+ * scoring and compared only with other defenders; with the switch off it
+ * refuses them exactly as before, and so does the picker chip.
  */
 
 import { readFileSync } from "node:fs";
@@ -24,8 +26,9 @@ describe("the breakdown core refuses defenders", () => {
     ]);
   });
 
-  it("the start/sit board maps no defender to a position", () => {
+  it("the start/sit board maps no defender while the switch is off, and maps one while it is on", () => {
     expect(normalizeCandidatePosition("LB")).toBeNull();
+    expect(normalizeCandidatePosition("LB", true)).toBe("LB");
     expect(normalizeCandidatePosition("DST")).toBe("DEF");
   });
 
@@ -35,10 +38,11 @@ describe("the breakdown core refuses defenders", () => {
     expect(source).toContain("refusedSlugs");
   });
 
-  it("the picker gives a defender no chip, and the refusal names the position in words", () => {
+  it("the picker chip for a defender follows the switch, and the refusal names the position in words", () => {
     const page = readFileSync(path.join(ROOT, "app/tools/who-should-i-start/page.tsx"), "utf8");
-    expect(page).toContain("!isDefender(p.position)");
+    expect(page).toContain("getsPickerChip(p.position, allowDefenders, side)");
     const board = readFileSync(path.join(ROOT, "app/tools/who-should-i-start/start-sit-board.tsx"), "utf8");
     expect(board).toContain("positionNoun(p.position)");
+    expect(board).toContain("scored on a different system");
   });
 });

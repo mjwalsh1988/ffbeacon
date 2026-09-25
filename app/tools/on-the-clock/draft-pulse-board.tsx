@@ -26,7 +26,7 @@
  */
 
 // Draft Pulse stays offense-only (plan R-11).
-import { OFFENSE_POSITIONS } from "@/lib/site";
+import { IDP_POSITIONS, OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 import { ArrowDown, ArrowUp, Gauge } from "lucide-react";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
 import type { TeamRollup } from "@/lib/on-the-clock/rosters";
@@ -38,15 +38,8 @@ import { EmptyCard, LoadingCard, NotStartedCard } from "./states";
 
 /** Plain-English name for a Sleeper starting-slot token. */
 const SLOT_LABELS: Record<string, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-  DL: "defensive lineman",
-  LB: "linebacker",
-  DB: "defensive back",
+  ...positionNounMap(OFFENSE_POSITIONS, { short: true }),
+  ...positionNounMap(IDP_POSITIONS),
   FLEX: "flex",
   REC_FLEX: "receiver flex",
   WRRB_FLEX: "run-catch flex",

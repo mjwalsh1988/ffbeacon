@@ -533,33 +533,7 @@ export async function runCalculateProjectionAccuracy(
     );
   }
 
-  // Replace wholesale so players who fall out of the projection feed do not
-  // keep a stale reliability score forever. Every source is rebuilt on every
-  // run, so this clears the whole table rather than one source's slice.
-  await withRetry(
-    async () => {
-      const { error } = await supabase
-        .from("player_projection_accuracy")
-        .delete()
-        .not("id", "is", null);
-      if (error) throw error;
-    },
-    { label: "player_projection_accuracy clear" },
-  );
-
-  // Chunked with retry: this is a long run over tens of thousands of rows and
-  // Supabase's edge proxy occasionally drops a socket mid-stream.
-  const CHUNK = 500;
-  for (let i = 0; i < allInserts.length; i += CHUNK) {
-    const chunk = allInserts.slice(i, i + CHUNK);
-    await withRetry(
-      async () => {
-        const { error } = await supabase.from("player_projection_accuracy").insert(chunk);
-        if (error) throw error;
-      },
-      { label: `player_projection_accuracy insert ${i}` },
-    );
-  }
+  await replaceAccuracyRows(supabase, allInserts, new Date().toISOString());
 
   return {
     playersScored: allPlayers.size,
@@ -568,6 +542,68 @@ export async function runCalculateProjectionAccuracy(
     durationMs: Date.now() - started,
     perSource,
   };
+}
+
+
+type AccuracyInsert = Database["public"]["Tables"]["player_projection_accuracy"]["Insert"];
+
+/** Rows per upsert request. */
+export const ACCURACY_WRITE_CHUNK = 500;
+
+/**
+ * Swap the table's contents for `rows` WITHOUT ever showing a reader a
+ * partial table.
+ *
+ * The first version deleted every row and then inserted the new set in 500-row
+ * chunks, so for the whole insert (tens of thousands of rows) Power Pulse,
+ * Positional WAR and every lineup page read some players' reliability and
+ * silently treated the rest as neutral. Now:
+ *
+ *   1. every row is UPSERTED on (player_id, season, scoring, source), which
+ *      migration 0303 made one NULLS NOT DISTINCT unique index so the blended
+ *      rows (season null) are covered too. A key keeps its old row until the
+ *      new one replaces it in place, so no key is ever missing mid-run;
+ *   2. every row is stamped with this run's `computed_at`, and only AFTER all
+ *      upserts succeed are the rows NOT carrying that stamp deleted. Those are
+ *      the players who fell out of the feed, which is what the wholesale delete
+ *      existed to clear.
+ *
+ * A failure part way leaves every key readable (old or new figures) and skips
+ * the stale delete, so the next run finishes the job. Never throws away rows
+ * it has not replaced.
+ */
+export async function replaceAccuracyRows(
+  supabase: ServiceClient,
+  rows: readonly AccuracyInsert[],
+  runStamp: string,
+): Promise<void> {
+  const stamped = rows.map((row) => ({ ...row, computed_at: runStamp }));
+  for (let i = 0; i < stamped.length; i += ACCURACY_WRITE_CHUNK) {
+    const chunk = stamped.slice(i, i + ACCURACY_WRITE_CHUNK);
+    // Chunked with retry: a long run over tens of thousands of rows, and
+    // Supabase's edge proxy occasionally drops a socket mid-stream. An upsert
+    // is idempotent, so a retried chunk is safe.
+    await withRetry(
+      async () => {
+        const { error } = await supabase
+          .from("player_projection_accuracy")
+          .upsert(chunk, { onConflict: "player_id,season,scoring,source", ignoreDuplicates: false });
+        if (error) throw error;
+      },
+      { label: `player_projection_accuracy upsert ${i}` },
+    );
+  }
+
+  await withRetry(
+    async () => {
+      const { error } = await supabase
+        .from("player_projection_accuracy")
+        .delete()
+        .neq("computed_at", runStamp);
+      if (error) throw error;
+    },
+    { label: "player_projection_accuracy stale delete" },
+  );
 }
 
 /**

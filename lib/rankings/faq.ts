@@ -31,6 +31,7 @@ import {
   type RankingFormat,
 } from "@/lib/rankings-formats";
 import type { BoardPulse, BoardRow } from "@/lib/rankings/insights";
+import { OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 
 export type RankingsFaqInput = {
   format: RankingFormat;
@@ -45,14 +46,9 @@ export type RankingsFaqInput = {
   cadence: "daily" | "weekly" | undefined;
 };
 
-const POSITION_WORD: Record<string, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POSITION_WORD: Record<string, string> = positionNounMap(OFFENSE_POSITIONS, {
+  short: ["DEF"],
+});
 
 function positionWord(position: string): string {
   return POSITION_WORD[position] ?? position;

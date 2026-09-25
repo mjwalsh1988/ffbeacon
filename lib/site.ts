@@ -574,6 +574,38 @@ export function isDefender(position: string | null | undefined): boolean {
   return (IDP_POSITIONS as readonly string[]).includes(position.toUpperCase());
 }
 
+/**
+ * Every label a defender can carry, from Sleeper's roster data or anyone
+ * else's, folded to the three IDP positions. Sleeper's fantasy_positions
+ * already say DL, LB or DB; its raw NFL `position` says DE, OLB, CB and the
+ * like. The ONE copy of this folding: the players sync writes through it and
+ * the IDP guide reads through it.
+ */
+const DEFENDER_LABELS: Readonly<Record<string, IdpPosition>> = {
+  DL: "DL",
+  DE: "DL",
+  DT: "DL",
+  NT: "DL",
+  EDGE: "DL",
+  LB: "LB",
+  ILB: "LB",
+  OLB: "LB",
+  MLB: "LB",
+  DB: "DB",
+  CB: "DB",
+  S: "DB",
+  FS: "DB",
+  SS: "DB",
+};
+
+/** Every label foldDefenderPosition recognises, upper case, for a query filter. */
+export const DEFENDER_POSITION_LABELS: readonly string[] = Object.keys(DEFENDER_LABELS);
+
+/** DL, LB or DB for any defender label (case-insensitive), null for anyone else. */
+export function foldDefenderPosition(position: string | null | undefined): IdpPosition | null {
+  return DEFENDER_LABELS[(position ?? "").toUpperCase()] ?? null;
+}
+
 const POSITION_NOUNS: Record<string, { singular: string; plural: string }> = {
   QB: { singular: "quarterback", plural: "quarterbacks" },
   RB: { singular: "running back", plural: "running backs" },
@@ -587,17 +619,64 @@ const POSITION_NOUNS: Record<string, { singular: string; plural: string }> = {
 };
 
 /**
+ * The short forms some surfaces use on purpose ("the last startable receiver",
+ * "stream a defense"). Kept here, beside the full forms, so a surface that
+ * wants the short word still reads it from the one map.
+ */
+const SHORT_POSITION_NOUNS: Record<string, { singular: string; plural: string }> = {
+  WR: { singular: "receiver", plural: "receivers" },
+  DEF: { singular: "defense", plural: "defenses" },
+};
+
+export type PositionNounForm = "singular" | "plural";
+export type PositionNounStyle = "full" | "short";
+
+/**
  * The English word for a position, for prose and accessible names. The ONE
  * copy: every "QB" to "quarterback" map in the site delegates here. Anything
  * it does not know (OL, LS, an unfamiliar slot) comes back as its own code.
+ * "short" gives "receiver" and "defense"; every other position has one word.
  */
 export function positionNoun(
   position: string | null | undefined,
-  form: "singular" | "plural" = "singular",
+  form: PositionNounForm = "singular",
+  style: PositionNounStyle = "full",
 ): string {
   if (!position) return "";
-  const entry = POSITION_NOUNS[position.toUpperCase()];
+  const key = position.toUpperCase();
+  const entry = (style === "short" ? SHORT_POSITION_NOUNS[key] : undefined) ?? POSITION_NOUNS[key];
   return entry ? entry[form] : position;
+}
+
+/** The same word as a heading, first letter capitalised: "Running backs". */
+export function positionHeading(
+  position: string | null | undefined,
+  form: PositionNounForm = "plural",
+  style: PositionNounStyle = "full",
+): string {
+  const noun = positionNoun(position, form, style);
+  return noun.length === 0 ? noun : noun[0].toUpperCase() + noun.slice(1);
+}
+
+/**
+ * A code-to-word map built from positionNoun, for a surface that indexes by
+ * position. `short` is true for every position or a list of the positions
+ * that take the short word (["DEF"] keeps "wide receiver" and says "defense").
+ */
+export function positionNounMap<T extends string>(
+  positions: readonly T[],
+  opts: { form?: PositionNounForm; short?: boolean | readonly string[]; heading?: boolean } = {},
+): Record<T, string> {
+  const form = opts.form ?? "singular";
+  const out = {} as Record<T, string>;
+  for (const position of positions) {
+    const short = opts.short === true || (Array.isArray(opts.short) && opts.short.includes(position));
+    const style: PositionNounStyle = short ? "short" : "full";
+    out[position] = opts.heading
+      ? positionHeading(position, form, style)
+      : positionNoun(position, form, style);
+  }
+  return out;
 }
 
 export const DEFAULT_FORMAT_SLUG = "redraft-ppr-std";

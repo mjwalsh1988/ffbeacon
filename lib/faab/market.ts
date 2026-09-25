@@ -254,6 +254,94 @@ export function urgencyMultiplier(input: MarketInput): number {
   return early + (late - early) * t;
 }
 
+/**
+ * Time of season, said out loud.
+ *
+ * Read off the MEASURED calendar bands, not the old urgency ramp: the ramp
+ * discounted the first weeks as though early budget were cheap, and the
+ * winning bids in our own leagues say those weeks are among the dearest.
+ *
+ * It explains; it never moves the reader's number. The calendar already moves
+ * what we expect RIVALS to bid (see calendarMultiplier), and a second
+ * multiplier on the reader's own valuation would count the season twice, so
+ * the signal carries a multiplier of exactly 1 and the list prints no
+ * percentage beside it. The size it quotes is the current band against the
+ * cheapest band, which is how the bands were measured.
+ *
+ * Chopped leagues price on how much of the field is left, not on the week, so
+ * they get no calendar sentence.
+ */
+export function urgencySignal(input: MarketInput): FaabSignal | null {
+  const cfg = input.settings.calendar;
+  if (!cfg.enabled || cfg.bands.length === 0) return null;
+  if (input.aliveCount != null) return null;
+  // Week 1 is not a measured in-season market (most of its claims are
+  // offseason and preseason rookie claims; see default-settings.ts), so it
+  // says nothing whatever an admin sets its band to.
+  if (input.currentWeek <= 1) return null;
+  // Past the regular season there is no "weeks left" to speak of.
+  if (input.currentWeek > input.lastRegularWeek) return null;
+
+  const bandIndex = cfg.bands.findIndex(
+    (b) => input.currentWeek >= b.fromWeek && (b.toWeek === null || input.currentWeek <= b.toWeek),
+  );
+  if (bandIndex < 0) return null;
+  const current = cfg.bands[bandIndex].multiplier;
+  const cheapest = Math.min(...cfg.bands.map((b) => b.multiplier));
+  if (!(cheapest > 0)) return null;
+  const cheapestIndex = cfg.bands.findIndex((b) => b.multiplier === cheapest);
+  const cheapBand = cfg.bands[cheapestIndex];
+  // Named by its own weeks, because the bands are admin-editable and "mid
+  // season" is only true of the defaults.
+  const cheapWeeks =
+    cheapBand.toWeek === null
+      ? `weeks ${cheapBand.fromWeek} on`
+      : cheapBand.fromWeek === cheapBand.toWeek
+        ? `week ${cheapBand.fromWeek}`
+        : `weeks ${cheapBand.fromWeek} to ${cheapBand.toWeek}`;
+  const ratio = current / cheapest;
+  const times = (Math.round(ratio * 10) / 10).toFixed(1);
+  const weeksLeft = Math.max(0, input.lastRegularWeek - input.currentWeek + 1);
+  const shared = "Already counted in what we expect rivals to bid, so it does not move your number twice.";
+
+  if (current === cheapest) {
+    return {
+      id: "urgency",
+      label: "The cheapest stretch of the season",
+      detail: `Week ${input.currentWeek}. Winning bids in our synced leagues run at their lowest level of the year right now. ${shared}`,
+      tone: "neutral",
+      multiplier: 1,
+      spread: 0,
+    };
+  }
+  if (ratio < 1.1) return null;
+
+  // Hot bands before the cheapest stretch are the early rush; the open-ended
+  // final band is the run-in. A hot band in between (weeks 11 to 13 by
+  // default sit at about 1.1) is neither, and says nothing.
+  const isRunIn = cfg.bands[bandIndex].toWeek === null;
+  const isEarly = bandIndex < cheapestIndex;
+  if (!isRunIn && !isEarly) return null;
+  const late = isRunIn;
+  return late
+    ? {
+        id: "urgency",
+        label: "Money you do not spend is wasted",
+        detail: `${weeksLeft} regular season week${weeksLeft === 1 ? "" : "s"} left. Leftover FAAB buys nothing, and winning bids from here run about ${times} times the ${cheapWeeks} level. ${shared}`,
+        tone: "neutral",
+        multiplier: 1,
+        spread: 0,
+      }
+    : {
+        id: "urgency",
+        label: "Early-season bidding runs hot",
+        detail: `Week ${input.currentWeek}. Winning bids now run about ${times} times the ${cheapWeeks} level, and budget you hold can still buy whoever breaks out later. ${shared}`,
+        tone: "neutral",
+        multiplier: 1,
+        spread: 0,
+      };
+}
+
 export function buildMarket(input: MarketInput): {
   read: MarketRead;
   signals: FaabSignal[];
@@ -282,13 +370,14 @@ export function buildMarket(input: MarketInput): {
     aliveCount: input.aliveCount ?? null,
   };
 
-  // The calendar no longer produces a signal that moves the reader's own
-  // number: it moves what we expect RIVALS to bid, inside the auction model.
-  // Leaving a multiplier on the reader's valuation as well would apply the
-  // same seasonal effect twice.
-  const signals = [rivalNeedSignal(input), rivalBudgetSignal(input, read)].filter(
-    (s): s is FaabSignal => s !== null,
-  );
+  // The calendar moves what we expect RIVALS to bid, inside the auction model,
+  // never the reader's own number: a multiplier there too would apply the same
+  // seasonal effect twice. urgencySignal only says it out loud (multiplier 1).
+  const signals = [
+    rivalNeedSignal(input),
+    rivalBudgetSignal(input, read),
+    urgencySignal(input),
+  ].filter((s): s is FaabSignal => s !== null);
 
   return { read, signals };
 }

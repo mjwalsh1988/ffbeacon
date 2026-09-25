@@ -40,6 +40,7 @@ import type {
   BoardPosition,
   WaiverBoard,
 } from "@/lib/waiver-wire/types";
+import { OFFENSE_POSITIONS, positionNoun, positionNounMap } from "@/lib/site";
 import { WaiverPlayerCard } from "./player-card";
 
 /** How many players a SINGLE-POSITION board shows at once. */
@@ -66,12 +67,8 @@ const GROUP_DEPTH: Record<BoardPosition, number> = {
 const GROUP_ORDER: BoardPosition[] = ["RB", "WR", "TE", "QB", "DEF", "K"];
 
 const GROUP_HEADING: Record<BoardPosition, string> = {
-  RB: "Running backs",
-  WR: "Wide receivers",
-  TE: "Tight ends",
-  QB: "Quarterbacks",
-  DEF: "Streaming defenses",
-  K: "Kickers",
+  ...positionNounMap(OFFENSE_POSITIONS, { form: "plural", heading: true }),
+  DEF: `Streaming ${positionNoun("DEF", "plural", "short")}`,
 };
 
 /**
@@ -93,14 +90,10 @@ const GROUP_HELPER: Record<BoardPosition, string> = {
   K: "Stream the matchup. Nothing here is worth real money, and the gap between the first and the last of them is about a point.",
 };
 
-const POSITION_WORD: Record<BoardPosition, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "wide receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  form: "plural",
+  short: ["DEF"],
+});
 
 const EMPTY_COPY: Record<BoardEmptyReason, { heading: string; body: string }> = {
   "no-season": {

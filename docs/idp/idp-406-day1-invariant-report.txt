@@ -1,0 +1,1309 @@
+
+> ffbeacon@0.1.0 verify:idp-invariant
+> tsx --env-file=.env.local scripts/verify-idp-invariant.ts
+
+IDP invariant, season 2026, stored switch ON
+549 leagues this season, 31 start a defensive slot; sampling 20 that do not.
+
+ORDINARY LEAGUES (must be identical)
+  identical: Torchbearers FFL [1394089060829507584]
+  identical: PSA Playaz [1389359929432764416]
+  identical: ✅ Best Ball Union #10 [1362480992765353984]
+  identical: ch [1397356249988784128]
+  identical: Hashtag Football [1389754556337913856]
+  identical: The Violet Vanguard [1312173787734642688]
+  identical: HCP Superflex TEP [1314429400879484928]
+  identical: Chopped [1388340234948726784]
+  identical: Icarus  [1387547102938136576]
+  identical: #SFB16 - Vegas Stakes [1366879711992512512]
+  identical: NoFunLeague - 2026 S5 [1384730834543599616]
+  identical: Titan Town Fantasy Football League [1389691354010902528]
+  identical: The League [1396265296884408320]
+  identical: 12 MAN PPR FANTASY [1389737265726525440]
+  identical: BBL Drizzy [1401421476388724736]
+  identical: University Terrace League [1312127185259098112]
+  identical: Guillotine - Last Man Standing [1375551850396274688]
+  identical: LCFFL [1385463585500594176]
+  identical: McUltra Dynasty [1313686335218778112]
+  identical: Light Your Beacons | FFBeacon.com [1396986200966885376]
+
+IDP LEAGUES (switch off, then on)
+
+Dynasty Gurus [1319838920854220800]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, SUPER_FLEX, K, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 178.1 to 189.5, expected wins 9.68 to 9.69, playoff odds 99.0% to 99.0%, Pulse 85 to 84
+  roster 2: points a week 127.2 to 136.3, expected wins 4.73 to 4.73, playoff odds 6.9% to 6.9%, Pulse 20 to 20
+  roster 3: points a week 101.6 to 111.7, expected wins 0.95 to 0.96, playoff odds 0.0% to 0.0%, Pulse 3 to 2
+  roster 4: points a week 147.6 to 157.7, expected wins 5.71 to 5.71, playoff odds 30.5% to 31.3%, Pulse 30 to 36
+  roster 5: points a week 179.2 to 191.1, expected wins 11.11 to 11.21, playoff odds 99.9% to 99.9%, Pulse 88 to 90
+  roster 6: points a week 140.9 to 151.8, expected wins 5.57 to 5.66, playoff odds 22.7% to 25.2%, Pulse 29 to 37
+  roster 7: points a week 159.0 to 168.2, expected wins 7.80 to 7.60, playoff odds 84.5% to 80.9%, Pulse 62 to 58
+  roster 8: points a week 155.8 to 167.0, expected wins 6.84 to 6.81, playoff odds 67.6% to 67.6%, Pulse 55 to 60
+  roster 9: points a week 163.4 to 174.3, expected wins 8.82 to 8.83, playoff odds 95.5% to 95.6%, Pulse 72 to 67
+  roster 10: points a week 163.2 to 173.9, expected wins 8.78 to 8.80, playoff odds 93.5% to 93.7%, Pulse 75 to 68
+  Positional WAR (off | on)
+  QB: demand 20, rank 1 1.09, at demand 0.16 | demand 20, rank 1 1.07, at demand 0.16
+  RB: demand 27, rank 1 1.45, at demand 0.12 | demand 27, rank 1 1.41, at demand 0.12
+  WR: demand 33, rank 1 1.28, at demand 0.08 | demand 33, rank 1 1.25, at demand 0.07
+  TE: demand 10, rank 1 0.85, at demand 0.07 | demand 10, rank 1 0.83, at demand 0.07
+  K: demand 10, rank 1 0.14, at demand 0.01 | demand 10, rank 1 0.14, at demand 0.01
+  LB: no curve | demand 10, rank 1 0.24, at demand 0.01
+  Manager Ledger
+  gradable slots 10 to 11, ungradable 1 to 0
+  roster 1: efficiency 90.4% to 90.7%, points left 43.0 to 43.0
+  roster 2: efficiency 80.9% to 82.3%, points left 62.2 to 62.2
+  roster 3: efficiency 72.0% to 75.6%, points left 58.8 to 58.8
+  roster 4: efficiency 84.4% to 84.0%, points left 52.4 to 58.9
+  roster 5: efficiency 88.5% to 89.2%, points left 50.7 to 50.7
+  roster 6: efficiency 83.5% to 83.3%, points left 61.7 to 65.7
+  roster 7: efficiency 74.0% to 75.7%, points left 100.5 to 100.5
+  roster 8: efficiency 75.8% to 76.1%, points left 100.2 to 107.7
+  roster 9: efficiency 74.9% to 75.7%, points left 110.3 to 110.3
+  roster 10: efficiency 69.6% to 69.1%, points left 102.8 to 112.8
+
+SILO!  $20 [1354680605945655296]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, WRRB_FLEX, SUPER_FLEX, K, DL, DL, LB, LB, DB, DB
+  Power Pulse
+  roster 1: points a week 108.5 to 194.5, expected wins none to none, playoff odds none to none, Pulse 48 to 70
+  roster 2: points a week 100.5 to 186.2, expected wins none to none, playoff odds none to none, Pulse 24 to 40
+  roster 3: points a week 117.4 to 190.9, expected wins none to none, playoff odds none to none, Pulse 76 to 63
+  roster 4: points a week 114.9 to 198.5, expected wins none to none, playoff odds none to none, Pulse 68 to 84
+  roster 5: points a week 98.1 to 176.1, expected wins none to none, playoff odds none to none, Pulse 29 to 15
+  roster 6: points a week 107.7 to 180.7, expected wins none to none, playoff odds none to none, Pulse 52 to 31
+  roster 7: points a week 107.8 to 188.6, expected wins none to none, playoff odds none to none, Pulse 53 to 62
+  roster 8: points a week 66.4 to 161.6, expected wins none to none, playoff odds none to none, Pulse 1 to 2
+  roster 9: points a week 107.5 to 189.3, expected wins none to none, playoff odds none to none, Pulse 52 to 52
+  roster 10: points a week 110.8 to 184.6, expected wins none to none, playoff odds none to none, Pulse 56 to 23
+  roster 11: points a week 107.9 to 186.3, expected wins none to none, playoff odds none to none, Pulse 56 to 48
+  roster 12: points a week 119.5 to 201.8, expected wins none to none, playoff odds none to none, Pulse 83 to 89
+  roster 13: points a week 120.5 to 206.0, expected wins none to none, playoff odds none to none, Pulse 81 to 96
+  roster 14: points a week 124.3 to 197.2, expected wins none to none, playoff odds none to none, Pulse 89 to 77
+  roster 15: points a week 90.9 to 175.1, expected wins none to none, playoff odds none to none, Pulse 13 to 17
+  roster 16: points a week 112.5 to 195.6, expected wins none to none, playoff odds none to none, Pulse 60 to 70
+  roster 17: points a week 119.6 to 190.6, expected wins none to none, playoff odds none to none, Pulse 76 to 57
+  roster 18: points a week 110.7 to 179.6, expected wins none to none, playoff odds none to none, Pulse 46 to 23
+  Positional WAR (off | on)
+  QB: demand 33, rank 1 2.21, at demand 0.27 | demand 33, rank 1 1.51, at demand 0.18
+  RB: demand 40, rank 1 2.27, at demand 0.23 | demand 40, rank 1 1.55, at demand 0.16
+  WR: demand 63, rank 1 2.10, at demand 0.21 | demand 63, rank 1 1.43, at demand 0.14
+  TE: demand 26, rank 1 1.62, at demand 0.29 | demand 26, rank 1 1.10, at demand 0.20
+  K: demand 18, rank 1 0.14, at demand 0.02 | demand 18, rank 1 0.10, at demand 0.01
+  DL: no curve | demand 36, rank 1 0.47, at demand 0.04
+  LB: no curve | demand 36, rank 1 0.75, at demand 0.12
+  DB: no curve | demand 36, rank 1 0.45, at demand 0.02
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+Grimm Reaper Dynasty [1313374091377381376]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, K, IDP_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 143.2 to 166.3, expected wins 8.93 to 8.78, playoff odds 88.0% to 85.3%, Pulse 78 to 79
+  roster 2: points a week 151.7 to 174.4, expected wins 9.99 to 9.84, playoff odds 96.5% to 95.5%, Pulse 87 to 82
+  roster 3: points a week 121.3 to 145.1, expected wins 4.28 to 4.40, playoff odds 3.2% to 3.5%, Pulse 8 to 5
+  roster 4: points a week 133.5 to 155.6, expected wins 6.44 to 6.43, playoff odds 31.7% to 29.8%, Pulse 32 to 35
+  roster 5: points a week 132.6 to 158.4, expected wins 6.96 to 7.27, playoff odds 44.5% to 52.5%, Pulse 28 to 46
+  roster 6: points a week 139.7 to 164.3, expected wins 8.05 to 8.10, playoff odds 75.8% to 76.0%, Pulse 62 to 73
+  roster 7: points a week 131.4 to 155.6, expected wins 4.80 to 5.11, playoff odds 7.2% to 9.7%, Pulse 22 to 20
+  roster 8: points a week 148.1 to 173.8, expected wins 7.14 to 7.28, playoff odds 59.6% to 62.3%, Pulse 77 to 76
+  roster 9: points a week 125.6 to 147.1, expected wins 4.42 to 4.16, playoff odds 5.0% to 3.4%, Pulse 12 to 12
+  roster 10: points a week 130.6 to 153.3, expected wins 5.35 to 5.34, playoff odds 13.1% to 11.1%, Pulse 21 to 21
+  roster 11: points a week 150.0 to 173.1, expected wins 8.09 to 8.03, playoff odds 79.8% to 77.6%, Pulse 81 to 81
+  roster 12: points a week 154.4 to 175.4, expected wins 9.55 to 9.25, playoff odds 95.7% to 93.4%, Pulse 91 to 88
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.28, at demand 0.21 | demand 24, rank 1 1.20, at demand 0.19
+  RB: demand 31, rank 1 1.65, at demand 0.12 | demand 31, rank 1 1.54, at demand 0.12
+  WR: demand 41, rank 1 1.46, at demand 0.08 | demand 41, rank 1 1.36, at demand 0.08
+  TE: demand 12, rank 1 0.98, at demand 0.13 | demand 12, rank 1 0.91, at demand 0.12
+  K: demand 12, rank 1 0.19, at demand 0.01 | demand 12, rank 1 0.17, at demand 0.01
+  DL: no curve | demand 11, rank 1 0.24, at demand 0.05
+  LB: no curve | demand 22, rank 1 0.27, at demand 0.02
+  DB: no curve | demand 3, rank 1 0.11, at demand 0.02
+  Manager Ledger
+  gradable slots 10 to 13, ungradable 3 to 0
+  roster 1: efficiency 80.2% to 78.9%, points left 77.9 to 97.9
+  roster 2: efficiency 84.4% to 84.0%, points left 51.9 to 62.9
+  roster 3: efficiency 71.4% to 75.4%, points left 81.9 to 81.9
+  roster 4: efficiency 94.1% to 90.5%, points left 18.7 to 34.2
+  roster 5: efficiency 85.8% to 88.9%, points left 42.7 to 44.2
+  roster 6: efficiency 87.0% to 88.7%, points left 44.4 to 48.4
+  roster 7: efficiency 82.4% to 81.5%, points left 47.1 to 56.6
+  roster 8: efficiency 91.3% to 92.5%, points left 23.6 to 24.6
+  roster 9: efficiency 86.7% to 88.5%, points left 34.4 to 40.4
+  roster 10: efficiency 84.0% to 85.9%, points left 49.0 to 51.0
+  roster 11: efficiency 86.4% to 84.2%, points left 51.0 to 65.5
+  roster 12: efficiency 94.0% to 91.5%, points left 21.0 to 34.0
+
+37 BGR Dyn 2020 [1312104825462226944]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, FLEX, FLEX, SUPER_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, DL, DL, LB, LB, DB, DB
+  Power Pulse
+  roster 1: points a week 145.2 to 232.8, expected wins 12.75 to 8.60, playoff odds 90.6% to 55.4%, Pulse 58 to 29
+  roster 2: points a week 108.8 to 227.4, expected wins 2.30 to 6.97, playoff odds 0.1% to 30.5%, Pulse 5 to 24
+  roster 3: points a week 156.9 to 289.6, expected wins 16.59 to 20.12, playoff odds 99.5% to 100.0%, Pulse 73 to 90
+  roster 4: points a week 131.2 to 243.4, expected wins 8.81 to 11.32, playoff odds 41.9% to 87.7%, Pulse 30 to 45
+  roster 5: points a week 170.2 to 293.8, expected wins 18.89 to 20.23, playoff odds 100.0% to 100.0%, Pulse 89 to 91
+  roster 6: points a week 121.0 to 223.7, expected wins 5.06 to 6.22, playoff odds 4.4% to 19.9%, Pulse 14 to 16
+  roster 7: points a week 142.2 to 243.3, expected wins 12.24 to 11.29, playoff odds 87.7% to 86.6%, Pulse 45 to 39
+  roster 8: points a week 143.0 to 224.6, expected wins 11.66 to 6.12, playoff odds 82.5% to 19.3%, Pulse 47 to 18
+  roster 9: points a week 136.1 to 237.8, expected wins 10.79 to 10.38, playoff odds 74.0% to 79.8%, Pulse 31 to 34
+  roster 10: points a week 127.9 to 224.2, expected wins 7.30 to 6.57, playoff odds 19.3% to 22.3%, Pulse 25 to 24
+  roster 11: points a week 178.4 to 313.8, expected wins 19.94 to 21.93, playoff odds 100.0% to 100.0%, Pulse 94 to 96
+  roster 12: points a week 164.2 to 258.8, expected wins 17.67 to 14.25, playoff odds 100.0% to 98.6%, Pulse 84 to 59
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.23, at demand 0.18 | demand 24, rank 1 0.92, at demand 0.14
+  RB: demand 33, rank 1 1.76, at demand 0.23 | demand 33, rank 1 1.33, at demand 0.17
+  WR: demand 54, rank 1 1.57, at demand 0.09 | demand 54, rank 1 1.19, at demand 0.07
+  TE: demand 21, rank 1 1.16, at demand 0.10 | demand 21, rank 1 0.88, at demand 0.08
+  DL: no curve | demand 24, rank 1 0.27, at demand 0.02
+  LB: no curve | demand 50, rank 1 0.72, at demand 0.08
+  DB: no curve | demand 58, rank 1 0.42, at demand 0.03
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+It's A Dynasty Folks [1358145132343341056]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, K, DL, LB, DB, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 153.9 to 204.8, expected wins 4.88 to 4.64, playoff odds 35.6% to 28.9%, Pulse 27 to 16
+  roster 2: points a week 145.2 to 201.6, expected wins 5.02 to 5.38, playoff odds 30.8% to 40.9%, Pulse 8 to 16
+  roster 3: points a week 168.4 to 222.4, expected wins 6.88 to 6.83, playoff odds 83.7% to 82.3%, Pulse 92 to 89
+  roster 4: points a week 154.0 to 206.1, expected wins 5.36 to 5.27, playoff odds 46.7% to 41.9%, Pulse 30 to 24
+  roster 5: points a week 165.9 to 226.1, expected wins 7.11 to 7.51, playoff odds 85.5% to 90.7%, Pulse 86 to 96
+  roster 6: points a week 168.1 to 211.9, expected wins 7.36 to 6.04, playoff odds 88.6% to 62.9%, Pulse 90 to 38
+  roster 7: points a week 157.7 to 215.7, expected wins 5.81 to 6.33, playoff odds 58.5% to 71.8%, Pulse 51 to 67
+  roster 8: points a week 150.2 to 209.1, expected wins 5.61 to 6.25, playoff odds 47.6% to 65.5%, Pulse 18 to 46
+  roster 9: points a week 153.5 to 214.4, expected wins 5.72 to 6.38, playoff odds 53.1% to 71.5%, Pulse 35 to 67
+  roster 10: points a week 159.5 to 205.6, expected wins 6.24 to 5.36, playoff odds 69.8% to 43.4%, Pulse 51 to 20
+  Positional WAR (off | on)
+  QB: demand 20, rank 1 1.00, at demand 0.14 | demand 20, rank 1 0.85, at demand 0.12
+  RB: demand 31, rank 1 1.50, at demand 0.08 | demand 31, rank 1 1.28, at demand 0.07
+  WR: demand 38, rank 1 1.31, at demand 0.08 | demand 38, rank 1 1.11, at demand 0.07
+  TE: demand 11, rank 1 0.87, at demand 0.10 | demand 11, rank 1 0.74, at demand 0.09
+  K: demand 10, rank 1 0.15, at demand 0.01 | demand 10, rank 1 0.13, at demand 0.01
+  DL: no curve | demand 10, rank 1 0.21, at demand 0.02
+  LB: no curve | demand 28, rank 1 0.34, at demand 0.02
+  DB: no curve | demand 12, rank 1 0.15, at demand 0.03
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+The Gentlemens Club 3 [1313912046688931840]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, DL, DL, LB, LB, DB, DB, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 129.8 to 178.3, expected wins 4.81 to 5.36, playoff odds 5.3% to 10.2%, Pulse 21 to 30
+  roster 2: points a week 165.0 to 210.1, expected wins 9.33 to 9.35, playoff odds 94.5% to 94.1%, Pulse 80 to 78
+  roster 3: points a week 153.8 to 199.0, expected wins 8.92 to 8.78, playoff odds 85.9% to 84.8%, Pulse 67 to 66
+  roster 4: points a week 141.8 to 189.7, expected wins 5.27 to 5.67, playoff odds 8.9% to 15.3%, Pulse 34 to 29
+  roster 5: points a week 150.4 to 195.4, expected wins 6.99 to 6.87, playoff odds 48.2% to 45.0%, Pulse 50 to 50
+  roster 6: points a week 177.6 to 222.4, expected wins 10.67 to 10.48, playoff odds 99.4% to 99.0%, Pulse 90 to 89
+  roster 7: points a week 152.1 to 197.7, expected wins 7.01 to 6.97, playoff odds 51.6% to 51.1%, Pulse 61 to 57
+  roster 8: points a week 110.2 to 151.3, expected wins 2.15 to 2.16, playoff odds 0.1% to 0.1%, Pulse 3 to 4
+  roster 9: points a week 157.9 to 202.8, expected wins 8.18 to 7.97, playoff odds 79.0% to 75.2%, Pulse 69 to 66
+  roster 10: points a week 129.6 to 170.8, expected wins 3.62 to 3.40, playoff odds 1.0% to 0.6%, Pulse 14 to 12
+  roster 11: points a week 174.3 to 224.1, expected wins 10.65 to 10.72, playoff odds 99.1% to 99.3%, Pulse 89 to 93
+  roster 12: points a week 142.0 to 186.9, expected wins 6.39 to 6.26, playoff odds 27.2% to 25.3%, Pulse 37 to 34
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.32, at demand 0.24 | demand 24, rank 1 1.20, at demand 0.21
+  RB: demand 31, rank 1 1.58, at demand 0.15 | demand 31, rank 1 1.44, at demand 0.14
+  WR: demand 42, rank 1 1.39, at demand 0.09 | demand 42, rank 1 1.26, at demand 0.08
+  TE: demand 23, rank 1 1.45, at demand 0.18 | demand 23, rank 1 1.31, at demand 0.16
+  DL: no curve | demand 24, rank 1 0.41, at demand 0.05
+  LB: no curve | demand 36, rank 1 0.32, at demand 0.00
+  DB: no curve | demand 24, rank 1 0.15, at demand 0.01
+  Manager Ledger
+  gradable slots 10 to 17, ungradable 7 to 0
+  roster 1: efficiency 86.6% to 84.6%, points left 40.0 to 68.0
+  roster 2: efficiency 87.9% to 88.7%, points left 52.2 to 60.7
+  roster 3: efficiency 85.6% to 87.7%, points left 54.8 to 57.3
+  roster 4: efficiency 77.4% to 83.1%, points left 58.5 to 58.5
+  roster 5: efficiency 94.0% to 87.7%, points left 19.0 to 54.0
+  roster 6: efficiency 92.2% to 91.9%, points left 33.8 to 44.8
+  roster 7: efficiency 95.5% to 96.7%, points left 12.5 to 13.5
+  roster 8: efficiency 91.8% to 87.2%, points left 21.8 to 51.3
+  roster 9: efficiency 83.6% to 86.0%, points left 52.9 to 65.4
+  roster 10: efficiency 80.7% to 82.7%, points left 56.2 to 62.2
+  roster 11: efficiency 92.1% to 92.2%, points left 37.4 to 48.4
+  roster 12: efficiency 75.7% to 79.0%, points left 78.9 to 94.4
+
+Boston Bombers  [1386480435789328384]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, K, DEF, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 143.0 to 151.9, expected wins 5.96 to 5.99, playoff odds 36.2% to 37.5%, Pulse 23 to 25
+  roster 2: points a week 145.1 to 153.7, expected wins 7.47 to 7.59, playoff odds 70.6% to 73.7%, Pulse 45 to 55
+  roster 3: points a week 156.0 to 165.1, expected wins 9.20 to 9.27, playoff odds 96.1% to 96.4%, Pulse 92 to 92
+  roster 4: points a week 139.3 to 146.7, expected wins 5.10 to 5.04, playoff odds 16.7% to 15.1%, Pulse 7 to 5
+  roster 5: points a week 145.3 to 153.2, expected wins 5.87 to 5.74, playoff odds 36.6% to 33.9%, Pulse 24 to 27
+  roster 6: points a week 155.6 to 164.3, expected wins 8.27 to 8.24, playoff odds 88.5% to 88.3%, Pulse 90 to 88
+  roster 7: points a week 141.5 to 149.1, expected wins 6.07 to 6.02, playoff odds 39.7% to 38.6%, Pulse 22 to 26
+  roster 8: points a week 151.0 to 159.2, expected wins 7.39 to 7.39, playoff odds 74.0% to 74.3%, Pulse 62 to 58
+  roster 9: points a week 146.2 to 154.6, expected wins 7.05 to 6.99, playoff odds 62.6% to 62.1%, Pulse 46 to 45
+  roster 10: points a week 152.6 to 161.0, expected wins 7.63 to 7.73, playoff odds 79.0% to 80.1%, Pulse 81 to 80
+  Positional WAR (off | on)
+  QB: demand 10, rank 1 0.70, at demand 0.14 | demand 10, rank 1 0.69, at demand 0.13
+  RB: demand 26, rank 1 1.28, at demand 0.09 | demand 26, rank 1 1.26, at demand 0.09
+  WR: demand 30, rank 1 1.11, at demand 0.09 | demand 30, rank 1 1.08, at demand 0.08
+  TE: demand 14, rank 1 1.07, at demand 0.10 | demand 14, rank 1 1.05, at demand 0.10
+  K: demand 10, rank 1 0.15, at demand 0.01 | demand 10, rank 1 0.15, at demand 0.01
+  DEF: demand 10, rank 1 0.20, at demand 0.08 | demand 10, rank 1 0.20, at demand 0.08
+  LB: no curve | demand 6, rank 1 0.10, at demand 0.03
+  DB: no curve | demand 4, rank 1 0.34, at demand 0.02
+  Manager Ledger
+  gradable slots 10 to 11, ungradable 1 to 0
+  roster 1: efficiency 86.1% to 87.1%, points left 44.9 to 44.9
+  roster 2: efficiency 92.9% to 90.6%, points left 23.8 to 35.3
+  roster 3: efficiency 96.6% to 96.8%, points left 12.5 to 12.5
+  roster 4: efficiency 88.8% to 89.3%, points left 27.5 to 27.5
+  roster 5: efficiency 98.8% to 99.0%, points left 3.1 to 3.1
+  roster 6: efficiency 95.5% to 95.7%, points left 15.9 to 15.9
+  roster 7: efficiency 96.4% to 96.7%, points left 11.9 to 11.9
+  roster 8: efficiency 92.9% to 93.1%, points left 24.2 to 24.2
+  roster 9: efficiency 92.8% to 93.2%, points left 22.9 to 22.9
+  roster 10: efficiency 85.8% to 86.3%, points left 53.8 to 53.8
+
+Legends of the Deep 32 Dynasty🏈 [1315377626289807360]
+  slots: RB, RB, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 76.2 to 134.5, expected wins 19.29 to 19.05, playoff odds 53.4% to 63.9%, Pulse 63 to 67
+  roster 2: points a week 70.7 to 132.1, expected wins 10.68 to 12.61, playoff odds 0.1% to 2.3%, Pulse 39 to 45
+  roster 3: points a week 84.7 to 147.5, expected wins 20.95 to 21.56, playoff odds 81.5% to 93.0%, Pulse 83 to 92
+  roster 4: points a week 73.6 to 131.0, expected wins 14.79 to 15.44, playoff odds 6.5% to 17.1%, Pulse 52 to 57
+  roster 5: points a week 65.5 to 124.8, expected wins 14.42 to 15.86, playoff odds 2.5% to 18.4%, Pulse 44 to 57
+  roster 6: points a week 64.8 to 116.5, expected wins 10.88 to 9.91, playoff odds 0.1% to 0.1%, Pulse 26 to 17
+  roster 7: points a week 101.4 to 149.0, expected wins 23.52 to 20.77, playoff odds 97.5% to 87.7%, Pulse 95 to 89
+  roster 8: points a week 42.3 to 103.6, expected wins 3.86 to 6.78, playoff odds 0.0% to 0.0%, Pulse 3 to 5
+  roster 9: points a week 84.2 to 131.2, expected wins 18.96 to 15.15, playoff odds 52.0% to 15.2%, Pulse 75 to 54
+  roster 10: points a week 76.3 to 125.8, expected wins 18.74 to 16.16, playoff odds 49.1% to 24.2%, Pulse 61 to 58
+  roster 11: points a week 84.8 to 138.9, expected wins 17.36 to 15.73, playoff odds 31.8% to 24.6%, Pulse 75 to 65
+  roster 12: points a week 70.3 to 133.8, expected wins 12.15 to 15.01, playoff odds 0.5% to 13.4%, Pulse 47 to 60
+  roster 13: points a week 72.8 to 130.3, expected wins 13.20 to 13.37, playoff odds 1.0% to 4.7%, Pulse 47 to 46
+  roster 14: points a week 55.8 to 113.0, expected wins 9.17 to 10.87, playoff odds 0.0% to 0.3%, Pulse 13 to 19
+  roster 15: points a week 59.0 to 109.7, expected wins 8.14 to 7.47, playoff odds 0.0% to 0.0%, Pulse 23 to 11
+  roster 16: points a week 101.1 to 154.8, expected wins 24.13 to 22.97, playoff odds 99.4% to 98.3%, Pulse 95 to 96
+  roster 17: points a week 40.1 to 90.6, expected wins 1.43 to 2.51, playoff odds 0.0% to 0.0%, Pulse 3 to 2
+  roster 18: points a week 60.1 to 113.8, expected wins 6.99 to 7.74, playoff odds 0.0% to 0.1%, Pulse 21 to 18
+  roster 19: points a week 62.1 to 130.2, expected wins 10.39 to 15.68, playoff odds 0.2% to 21.2%, Pulse 31 to 66
+  roster 20: points a week 67.9 to 124.0, expected wins 11.76 to 12.35, playoff odds 0.2% to 1.9%, Pulse 29 to 33
+  roster 21: points a week 65.8 to 115.2, expected wins 10.90 to 9.12, playoff odds 0.2% to 0.1%, Pulse 36 to 19
+  roster 22: points a week 116.2 to 173.1, expected wins 23.15 to 22.44, playoff odds 99.7% to 99.2%, Pulse 98 to 97
+  roster 23: points a week 74.7 to 124.0, expected wins 16.03 to 13.57, playoff odds 10.9% to 4.6%, Pulse 50 to 31
+  roster 24: points a week 69.8 to 125.8, expected wins 11.43 to 11.79, playoff odds 0.3% to 1.0%, Pulse 43 to 39
+  roster 25: points a week 74.2 to 133.2, expected wins 15.55 to 16.08, playoff odds 11.6% to 25.4%, Pulse 53 to 62
+  roster 26: points a week 53.9 to 113.0, expected wins 5.45 to 8.45, playoff odds 0.0% to 0.0%, Pulse 13 to 22
+  roster 27: points a week 63.3 to 106.6, expected wins 10.65 to 7.39, playoff odds 0.0% to 0.0%, Pulse 29 to 14
+  roster 28: points a week 94.3 to 145.4, expected wins 18.68 to 16.35, playoff odds 53.9% to 33.2%, Pulse 87 to 80
+  roster 29: points a week 56.9 to 116.3, expected wins 10.48 to 12.97, playoff odds 0.0% to 2.0%, Pulse 22 to 39
+  roster 30: points a week 95.7 to 151.9, expected wins 21.78 to 20.59, playoff odds 93.6% to 88.8%, Pulse 90 to 88
+  roster 31: points a week 79.3 to 131.2, expected wins 18.18 to 16.19, playoff odds 46.1% to 31.1%, Pulse 69 to 73
+  roster 32: points a week 78.7 to 140.8, expected wins 14.91 to 16.09, playoff odds 7.9% to 28.4%, Pulse 64 to 75
+  Positional WAR (off | on)
+  QB: demand 32, rank 1 3.78, at demand 1.52 | demand 32, rank 1 2.84, at demand 1.16
+  RB: demand 64, rank 1 3.14, at demand 0.14 | demand 64, rank 1 2.33, at demand 0.10
+  WR: demand 104, rank 1 3.11, at demand 0.15 | demand 104, rank 1 2.31, at demand 0.11
+  TE: demand 56, rank 1 3.08, at demand 0.13 | demand 56, rank 1 2.29, at demand 0.09
+  DL: no curve | demand 43, rank 1 0.76, at demand 0.04
+  LB: no curve | demand 49, rank 1 0.95, at demand 0.11
+  DB: no curve | demand 68, rank 1 0.57, at demand 0.03
+  Manager Ledger
+  gradable slots 8 to 13, ungradable 5 to 0
+  roster 1: efficiency 94.1% to 82.1%, points left 10.0 to 59.2
+  roster 2: efficiency 91.8% to 68.5%, points left 10.8 to 94.5
+  roster 3: efficiency 83.2% to 92.9%, points left 25.6 to 25.6
+  roster 4: efficiency 99.5% to 87.3%, points left 0.7 to 39.3
+  roster 5: efficiency 85.7% to 78.2%, points left 21.8 to 75.8
+  roster 6: efficiency 100.0% to 71.6%, points left 0.0 to 77.6
+  roster 7: efficiency 90.2% to 92.7%, points left 29.9 to 29.9
+  roster 8: efficiency 99.4% to 64.1%, points left 0.3 to 94.6
+  roster 9: efficiency 68.4% to 73.4%, points left 52.6 to 88.0
+  roster 10: efficiency 100.0% to 94.5%, points left 0.0 to 21.0
+  roster 11: efficiency 92.8% to 95.5%, points left 13.7 to 14.7
+  roster 12: efficiency 73.4% to 65.9%, points left 43.2 to 112.7
+  roster 13: efficiency 73.2% to 76.0%, points left 27.5 to 62.5
+  roster 14: efficiency 100.0% to 89.7%, points left 0.0 to 29.1
+  roster 15: efficiency 79.8% to 87.4%, points left 32.2 to 32.2
+  roster 16: efficiency 97.5% to 92.8%, points left 7.1 to 31.1
+  roster 17: efficiency 86.1% to 73.9%, points left 13.8 to 54.8
+  roster 18: efficiency 89.6% to 69.7%, points left 15.4 to 94.0
+  roster 19: efficiency 99.1% to 83.1%, points left 1.2 to 60.6
+  roster 20: efficiency 100.0% to 68.9%, points left 0.0 to 111.9
+  roster 21: efficiency 56.1% to 52.2%, points left 65.8 to 147.4
+  roster 22: efficiency 99.8% to 83.8%, points left 0.3 to 48.3
+  roster 23: efficiency 98.7% to 71.2%, points left 2.0 to 93.2
+  roster 24: efficiency 79.9% to 62.0%, points left 33.9 to 123.9
+  roster 25: efficiency 97.3% to 85.8%, points left 4.3 to 43.3
+  roster 26: efficiency 73.1% to 78.1%, points left 29.8 to 67.8
+  roster 27: efficiency 99.5% to 96.2%, points left 0.8 to 10.8
+  roster 28: efficiency 80.7% to 83.4%, points left 39.5 to 51.0
+  roster 29: efficiency 94.9% to 94.4%, points left 7.1 to 18.1
+  roster 30: efficiency 86.8% to 83.8%, points left 25.0 to 54.2
+  roster 31: efficiency 91.7% to 93.9%, points left 18.8 to 26.1
+  roster 32: efficiency 94.5% to 86.9%, points left 9.6 to 38.6
+
+The Burg Dynasty League [1312092665243783168]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, FLEX, K, DEF, DL, DL, LB, LB, DB, DB
+  Power Pulse
+  roster 1: points a week 113.6 to 152.0, expected wins 3.02 to 3.69, playoff odds 0.3% to 0.8%, Pulse 7 to 11
+  roster 2: points a week 137.4 to 172.0, expected wins 9.00 to 8.74, playoff odds 81.4% to 74.9%, Pulse 64 to 57
+  roster 3: points a week 131.8 to 153.7, expected wins 6.28 to 4.53, playoff odds 21.1% to 3.4%, Pulse 38 to 11
+  roster 4: points a week 127.9 to 163.5, expected wins 6.32 to 6.53, playoff odds 21.3% to 22.4%, Pulse 24 to 32
+  roster 5: points a week 142.3 to 180.6, expected wins 9.06 to 9.14, playoff odds 85.9% to 86.0%, Pulse 72 to 75
+  roster 6: points a week 137.4 to 172.0, expected wins 7.95 to 7.89, playoff odds 69.3% to 65.8%, Pulse 59 to 65
+  roster 7: points a week 126.6 to 169.0, expected wins 6.30 to 7.43, playoff odds 21.1% to 47.0%, Pulse 36 to 53
+  roster 8: points a week 160.6 to 198.1, expected wins 12.07 to 12.04, playoff odds 99.7% to 99.7%, Pulse 95 to 95
+  Positional WAR (off | on)
+  QB: demand 8, rank 1 0.75, at demand 0.09 | demand 8, rank 1 0.69, at demand 0.08
+  RB: demand 28, rank 1 1.49, at demand 0.12 | demand 28, rank 1 1.38, at demand 0.11
+  WR: demand 28, rank 1 1.11, at demand 0.10 | demand 28, rank 1 1.03, at demand 0.10
+  TE: demand 8, rank 1 0.69, at demand 0.04 | demand 8, rank 1 0.64, at demand 0.04
+  K: demand 8, rank 1 0.07, at demand 0.01 | demand 8, rank 1 0.07, at demand 0.01
+  DEF: demand 8, rank 1 0.16, at demand 0.03 | demand 8, rank 1 0.15, at demand 0.02
+  DL: no curve | demand 16, rank 1 0.19, at demand 0.02
+  LB: no curve | demand 16, rank 1 0.26, at demand 0.01
+  DB: no curve | demand 16, rank 1 0.12, at demand 0.01
+  Manager Ledger
+  gradable slots 11 to 17, ungradable 6 to 0
+  roster 1: efficiency 59.5% to 64.8%, points left 109.0 to 119.0
+  roster 2: efficiency 76.1% to 80.0%, points left 87.7 to 87.7
+  roster 3: efficiency 75.1% to 79.2%, points left 74.4 to 74.4
+  roster 4: efficiency 77.0% to 80.9%, points left 68.0 to 73.0
+  roster 5: efficiency 86.2% to 87.2%, points left 47.8 to 56.8
+  roster 6: efficiency 93.8% to 95.2%, points left 24.8 to 24.8
+  roster 7: efficiency 80.7% to 83.7%, points left 58.5 to 68.5
+  roster 8: efficiency 90.3% to 92.2%, points left 41.5 to 41.5
+
+Ohio's Finest Dynasty [1312077191298703360]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, DL, LB, DB
+  Power Pulse
+  roster 1: points a week 133.3 to 170.9, expected wins 5.97 to 5.86, playoff odds 38.8% to 36.7%, Pulse 53 to 44
+  roster 2: points a week 133.8 to 170.8, expected wins 7.01 to 6.80, playoff odds 61.4% to 56.5%, Pulse 71 to 64
+  roster 3: points a week 131.8 to 169.0, expected wins 6.06 to 5.94, playoff odds 39.0% to 37.4%, Pulse 45 to 38
+  roster 4: points a week 118.3 to 158.4, expected wins 5.26 to 5.93, playoff odds 19.1% to 33.3%, Pulse 3 to 13
+  roster 5: points a week 137.1 to 174.5, expected wins 8.06 to 7.88, playoff odds 83.1% to 79.7%, Pulse 89 to 85
+  roster 6: points a week 141.6 to 181.9, expected wins 7.26 to 7.32, playoff odds 74.4% to 75.9%, Pulse 90 to 91
+  roster 7: points a week 127.8 to 163.0, expected wins 6.51 to 6.23, playoff odds 51.2% to 43.7%, Pulse 29 to 21
+  roster 8: points a week 132.0 to 172.7, expected wins 5.54 to 5.87, playoff odds 28.4% to 37.0%, Pulse 43 to 56
+  roster 9: points a week 133.2 to 174.8, expected wins 6.32 to 6.67, playoff odds 50.0% to 58.6%, Pulse 46 to 66
+  roster 10: points a week 123.6 to 156.0, expected wins 6.14 to 5.54, playoff odds 39.2% to 24.0%, Pulse 14 to 5
+  roster 11: points a week 125.8 to 160.7, expected wins 6.57 to 6.44, playoff odds 42.7% to 39.6%, Pulse 33 to 27
+  roster 12: points a week 139.9 to 181.4, expected wins 7.30 to 7.52, playoff odds 72.7% to 77.7%, Pulse 88 to 92
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.36, at demand 0.22 | demand 24, rank 1 1.17, at demand 0.19
+  RB: demand 26, rank 1 1.45, at demand 0.10 | demand 26, rank 1 1.25, at demand 0.09
+  WR: demand 28, rank 1 1.23, at demand 0.10 | demand 28, rank 1 1.06, at demand 0.09
+  TE: demand 18, rank 1 1.41, at demand 0.12 | demand 18, rank 1 1.21, at demand 0.10
+  DL: no curve | demand 12, rank 1 0.28, at demand 0.03
+  LB: no curve | demand 12, rank 1 0.26, at demand 0.01
+  DB: no curve | demand 12, rank 1 0.17, at demand 0.02
+  Manager Ledger
+  gradable slots 8 to 11, ungradable 3 to 0
+  roster 1: efficiency 72.5% to 76.5%, points left 47.0 to 47.0
+  roster 2: efficiency 86.6% to 86.1%, points left 20.9 to 26.9
+  roster 3: efficiency 85.6% to 73.6%, points left 18.0 to 50.0
+  roster 4: efficiency 96.2% to 97.5%, points left 5.9 to 5.9
+  roster 5: efficiency 87.1% to 89.9%, points left 18.1 to 19.1
+  roster 6: efficiency 89.3% to 83.4%, points left 16.3 to 36.3
+  roster 7: efficiency 97.7% to 89.8%, points left 4.9 to 26.9
+  roster 8: efficiency 92.5% to 79.6%, points left 10.9 to 37.9
+  roster 9: efficiency 93.7% to 90.2%, points left 9.9 to 20.9
+  roster 10: efficiency 91.3% to 92.8%, points left 16.4 to 16.4
+  roster 11: efficiency 82.2% to 88.5%, points left 18.4 to 18.4
+  roster 12: efficiency 74.2% to 77.0%, points left 40.3 to 50.3
+
+FFL [1338964435393327104]
+  slots: RB, RB, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, K, DL, DL, LB, LB, DB, DB, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 65.0 to 132.1, expected wins 5.04 to 5.03, playoff odds 0.0% to 0.1%, Pulse 19 to 19
+  roster 2: points a week 65.7 to 140.2, expected wins 5.78 to 5.99, playoff odds 0.1% to 0.7%, Pulse 18 to 22
+  roster 3: points a week 105.8 to 183.5, expected wins 11.13 to 10.49, playoff odds 93.8% to 89.1%, Pulse 91 to 90
+  roster 4: points a week 79.8 to 151.1, expected wins 7.70 to 7.69, playoff odds 4.5% to 8.1%, Pulse 57 to 50
+  roster 5: points a week 82.9 to 146.2, expected wins 9.01 to 8.18, playoff odds 22.0% to 12.9%, Pulse 69 to 53
+  roster 6: points a week 113.9 to 192.7, expected wins 11.58 to 11.29, playoff odds 97.6% to 97.0%, Pulse 97 to 97
+  roster 7: points a week 94.1 to 173.5, expected wins 8.97 to 9.43, playoff odds 34.1% to 57.3%, Pulse 83 to 83
+  roster 8: points a week 97.9 to 180.2, expected wins 9.08 to 8.68, playoff odds 33.1% to 36.9%, Pulse 84 to 83
+  roster 9: points a week 87.8 to 169.6, expected wins 8.09 to 7.94, playoff odds 12.7% to 20.9%, Pulse 72 to 77
+  roster 10: points a week 75.8 to 151.7, expected wins 7.02 to 6.73, playoff odds 1.6% to 2.7%, Pulse 46 to 43
+  roster 11: points a week 73.0 to 148.8, expected wins 7.95 to 7.54, playoff odds 4.2% to 4.3%, Pulse 47 to 52
+  roster 12: points a week 86.7 to 159.9, expected wins 8.00 to 7.37, playoff odds 12.6% to 10.8%, Pulse 66 to 62
+  roster 13: points a week 85.7 to 156.8, expected wins 8.76 to 7.35, playoff odds 23.0% to 7.8%, Pulse 74 to 60
+  roster 14: points a week 75.0 to 152.1, expected wins 6.35 to 6.63, playoff odds 0.4% to 2.9%, Pulse 49 to 56
+  roster 15: points a week 90.4 to 167.7, expected wins 10.63 to 10.04, playoff odds 84.4% to 76.7%, Pulse 79 to 85
+  roster 16: points a week 65.7 to 136.7, expected wins 4.00 to 3.47, playoff odds 0.0% to 0.0%, Pulse 22 to 14
+  roster 17: points a week 69.3 to 140.6, expected wins 4.41 to 4.22, playoff odds 0.0% to 0.0%, Pulse 26 to 17
+  roster 18: points a week 111.4 to 194.4, expected wins 12.22 to 11.88, playoff odds 99.1% to 98.4%, Pulse 97 to 98
+  roster 19: points a week 61.3 to 138.4, expected wins 5.54 to 6.86, playoff odds 0.1% to 2.5%, Pulse 22 to 40
+  roster 20: points a week 23.1 to 81.8, expected wins 0.12 to 0.61, playoff odds 0.0% to 0.0%, Pulse 1 to 1
+  roster 21: points a week 70.7 to 149.8, expected wins 5.56 to 6.47, playoff odds 0.1% to 1.2%, Pulse 36 to 32
+  roster 22: points a week 78.0 to 136.7, expected wins 6.06 to 4.51, playoff odds 0.2% to 0.0%, Pulse 42 to 14
+  roster 23: points a week 57.7 to 137.6, expected wins 5.37 to 6.74, playoff odds 0.0% to 1.9%, Pulse 18 to 34
+  roster 24: points a week 68.1 to 146.2, expected wins 5.60 to 6.17, playoff odds 0.1% to 1.6%, Pulse 34 to 49
+  roster 25: points a week 74.1 to 137.1, expected wins 5.26 to 4.93, playoff odds 0.0% to 0.0%, Pulse 36 to 19
+  roster 26: points a week 102.1 to 160.1, expected wins 10.20 to 8.03, playoff odds 73.3% to 18.0%, Pulse 93 to 69
+  roster 27: points a week 70.7 to 157.4, expected wins 5.91 to 7.03, playoff odds 0.4% to 6.8%, Pulse 33 to 62
+  roster 28: points a week 73.3 to 149.5, expected wins 6.57 to 7.30, playoff odds 0.8% to 5.0%, Pulse 43 to 46
+  roster 29: points a week 76.0 to 165.4, expected wins 6.84 to 8.43, playoff odds 1.8% to 30.0%, Pulse 44 to 74
+  roster 30: points a week 63.5 to 134.9, expected wins 4.42 to 4.36, playoff odds 0.0% to 0.1%, Pulse 14 to 11
+  roster 31: points a week 71.7 to 144.1, expected wins 4.97 to 5.50, playoff odds 0.1% to 0.6%, Pulse 34 to 37
+  roster 32: points a week 68.9 to 151.9, expected wins 5.88 to 7.10, playoff odds 0.2% to 5.8%, Pulse 31 to 54
+  Positional WAR (off | on)
+  QB: demand 32, rank 1 3.94, at demand 1.57 | demand 32, rank 1 2.75, at demand 1.11
+  RB: demand 68, rank 1 3.54, at demand 0.10 | demand 68, rank 1 2.44, at demand 0.07
+  WR: demand 105, rank 1 3.25, at demand 0.10 | demand 105, rank 1 2.24, at demand 0.07
+  TE: demand 51, rank 1 2.62, at demand 0.15 | demand 51, rank 1 1.80, at demand 0.10
+  K: demand 32, rank 1 0.47, at demand 0.15 | demand 32, rank 1 0.32, at demand 0.10
+  DL: no curve | demand 71, rank 1 0.86, at demand 0.09
+  LB: no curve | demand 71, rank 1 1.11, at demand 0.03
+  DB: no curve | demand 114, rank 1 0.79, at demand 0.07
+  Manager Ledger
+  gradable slots 9 to 17, ungradable 8 to 0
+  roster 1: efficiency 94.5% to 85.7%, points left 8.6 to 48.6
+  roster 2: efficiency 100.0% to 90.9%, points left 0.0 to 30.0
+  roster 3: efficiency 99.3% to 94.1%, points left 1.5 to 26.5
+  roster 4: efficiency 88.1% to 93.6%, points left 19.1 to 20.1
+  roster 5: efficiency 95.7% to 86.6%, points left 8.5 to 49.5
+  roster 6: efficiency 93.2% to 88.8%, points left 17.2 to 54.2
+  roster 7: efficiency 90.1% to 81.2%, points left 22.8 to 79.0
+  roster 8: efficiency 98.5% to 81.5%, points left 2.3 to 57.3
+  roster 9: efficiency 92.2% to 90.9%, points left 13.9 to 32.9
+  roster 10: efficiency 97.0% to 80.4%, points left 4.3 to 63.3
+  roster 11: efficiency 100.0% to 91.9%, points left 0.0 to 28.0
+  roster 12: efficiency 94.4% to 92.7%, points left 10.0 to 29.0
+  roster 13: efficiency 66.0% to 78.6%, points left 58.9 to 91.9
+  roster 14: efficiency 92.1% to 88.7%, points left 13.0 to 40.0
+  roster 15: efficiency 93.1% to 86.8%, points left 17.3 to 72.3
+  roster 16: efficiency 87.0% to 70.0%, points left 15.0 to 73.0
+  roster 17: efficiency 78.2% to 59.5%, points left 36.9 to 137.9
+  roster 18: efficiency 99.4% to 88.7%, points left 1.8 to 65.8
+  roster 19: efficiency 73.8% to 81.1%, points left 28.7 to 77.7
+  roster 20: efficiency 91.8% to 87.8%, points left 4.0 to 23.0
+  roster 21: efficiency 38.4% to 30.0%, points left 78.6 to 284.6
+  roster 22: efficiency 67.0% to 69.5%, points left 59.0 to 94.0
+  roster 23: efficiency 91.8% to 88.2%, points left 11.0 to 39.0
+  roster 24: efficiency 100.0% to 81.9%, points left 0.0 to 80.0
+  roster 25: efficiency 83.4% to 90.1%, points left 22.3 to 29.3
+  roster 26: efficiency 86.0% to 87.9%, points left 32.2 to 46.2
+  roster 27: efficiency 97.9% to 93.9%, points left 4.6 to 25.6
+  roster 28: efficiency 89.7% to 95.3%, points left 10.7 to 13.7
+  roster 29: efficiency 93.6% to 82.6%, points left 14.8 to 83.8
+  roster 30: efficiency 98.1% to 72.3%, points left 1.6 to 75.6
+  roster 31: efficiency 91.5% to 85.5%, points left 13.8 to 53.8
+  roster 32: efficiency 86.4% to 89.9%, points left 22.3 to 44.3
+
+ League of Advanced Fantasy Fanatics (LAFF) [1317613253110554624]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, FLEX, FLEX, SUPER_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 161.3 to 165.1, expected wins 5.37 to 3.51, playoff odds 50.4% to 10.5%, Pulse 33 to 7
+  roster 2: points a week 193.1 to 216.4, expected wins 8.84 to 8.93, playoff odds 99.1% to 99.4%, Pulse 92 to 90
+  roster 3: points a week 182.5 to 207.4, expected wins 7.42 to 7.69, playoff odds 93.3% to 95.5%, Pulse 81 to 80
+  roster 4: points a week 161.7 to 182.1, expected wins 4.79 to 4.87, playoff odds 38.7% to 42.3%, Pulse 31 to 35
+  roster 5: points a week 164.9 to 186.7, expected wins 5.02 to 5.07, playoff odds 47.5% to 50.2%, Pulse 35 to 40
+  roster 6: points a week 194.1 to 220.1, expected wins 8.58 to 8.91, playoff odds 98.5% to 99.3%, Pulse 92 to 92
+  roster 7: points a week 165.7 to 189.5, expected wins 6.06 to 6.49, playoff odds 68.0% to 80.2%, Pulse 46 to 53
+  roster 8: points a week 152.6 to 175.2, expected wins 4.27 to 4.58, playoff odds 21.7% to 30.4%, Pulse 19 to 27
+  roster 9: points a week 148.6 to 168.9, expected wins 3.71 to 3.75, playoff odds 11.7% to 13.2%, Pulse 7 to 13
+  roster 10: points a week 171.2 to 193.5, expected wins 5.94 to 6.21, playoff odds 71.0% to 79.1%, Pulse 53 to 57
+  Positional WAR (off | on)
+  QB: demand 20, rank 1 1.01, at demand 0.15 | demand 20, rank 1 0.95, at demand 0.14
+  RB: demand 31, rank 1 1.41, at demand 0.07 | demand 31, rank 1 1.33, at demand 0.07
+  WR: demand 38, rank 1 1.27, at demand 0.08 | demand 38, rank 1 1.20, at demand 0.08
+  TE: demand 21, rank 1 1.29, at demand 0.12 | demand 21, rank 1 1.22, at demand 0.11
+  DL: no curve | demand 4, rank 1 0.21, at demand 0.07
+  LB: no curve | demand 16, rank 1 0.21, at demand 0.01
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+Strangers aren't strange  [1312823431334494208]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, DL, LB, DB, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 134.9 to 196.0, expected wins 4.83 to 5.75, playoff odds 6.7% to 24.3%, Pulse 41 to 53
+  roster 2: points a week 133.4 to 183.9, expected wins 4.67 to 4.63, playoff odds 6.2% to 6.7%, Pulse 35 to 31
+  roster 3: points a week 145.9 to 193.6, expected wins 6.64 to 6.10, playoff odds 43.5% to 29.1%, Pulse 58 to 51
+  roster 4: points a week 147.7 to 202.9, expected wins 6.21 to 6.32, playoff odds 37.2% to 42.5%, Pulse 51 to 53
+  roster 5: points a week 167.3 to 222.5, expected wins 8.47 to 8.28, playoff odds 90.1% to 87.6%, Pulse 85 to 86
+  roster 6: points a week 162.9 to 214.8, expected wins 7.66 to 7.36, playoff odds 76.3% to 70.6%, Pulse 78 to 76
+  roster 7: points a week 152.6 to 210.0, expected wins 7.11 to 7.38, playoff odds 60.9% to 70.5%, Pulse 68 to 73
+  roster 8: points a week 151.8 to 205.0, expected wins 7.02 to 7.06, playoff odds 57.1% to 58.8%, Pulse 66 to 67
+  roster 9: points a week 163.6 to 215.2, expected wins 7.97 to 7.62, playoff odds 82.9% to 76.7%, Pulse 78 to 76
+  roster 10: points a week 120.7 to 172.1, expected wins 3.67 to 3.74, playoff odds 1.3% to 1.9%, Pulse 22 to 20
+  roster 11: points a week 127.4 to 181.5, expected wins 4.10 to 4.34, playoff odds 2.5% to 4.8%, Pulse 28 to 28
+  roster 12: points a week 144.6 to 194.9, expected wins 6.65 to 6.28, playoff odds 42.1% to 34.7%, Pulse 58 to 54
+  roster 13: points a week 67.9 to 120.3, expected wins 0.31 to 0.57, playoff odds 0.0% to 0.0%, Pulse 1 to 1
+  roster 14: points a week 167.7 to 222.1, expected wins 8.70 to 8.57, playoff odds 93.1% to 91.6%, Pulse 81 to 80
+  Positional WAR (off | on)
+  QB: demand 14, rank 1 0.92, at demand 0.10 | demand 14, rank 1 0.80, at demand 0.09
+  RB: demand 33, rank 1 1.95, at demand 0.21 | demand 33, rank 1 1.68, at demand 0.18
+  WR: demand 44, rank 1 1.51, at demand 0.09 | demand 44, rank 1 1.31, at demand 0.07
+  TE: demand 21, rank 1 1.48, at demand 0.14 | demand 21, rank 1 1.27, at demand 0.12
+  DL: no curve | demand 14, rank 1 0.26, at demand 0.05
+  LB: no curve | demand 28, rank 1 0.44, at demand 0.05
+  DB: no curve | demand 14, rank 1 0.17, at demand 0.02
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+ZTL dynasty [1354987856895971328]
+  slots: QB, RB, WR, WR, TE, FLEX, FLEX, K, DL, LB, DB
+  Power Pulse
+  roster 1: points a week 128.5 to 146.7, expected wins 7.62 to 7.30, playoff odds 85.5% to 79.7%, Pulse 74 to 69
+  roster 2: points a week 110.3 to 129.9, expected wins 4.25 to 4.30, playoff odds 12.1% to 12.5%, Pulse 18 to 16
+  roster 3: points a week 118.8 to 141.0, expected wins 5.43 to 5.64, playoff odds 35.6% to 42.5%, Pulse 40 to 46
+  roster 4: points a week 108.9 to 129.1, expected wins 4.21 to 4.17, playoff odds 10.1% to 9.7%, Pulse 14 to 13
+  roster 5: points a week 143.2 to 162.9, expected wins 8.35 to 8.15, playoff odds 95.3% to 94.2%, Pulse 95 to 95
+  roster 6: points a week 135.9 to 158.0, expected wins 7.41 to 7.65, playoff odds 85.1% to 88.9%, Pulse 86 to 89
+  roster 7: points a week 116.4 to 136.1, expected wins 5.25 to 5.12, playoff odds 30.6% to 27.0%, Pulse 30 to 25
+  roster 8: points a week 131.2 to 151.4, expected wins 7.57 to 7.42, playoff odds 86.0% to 83.8%, Pulse 77 to 78
+  roster 9: points a week 134.1 to 155.1, expected wins 7.53 to 7.52, playoff odds 86.4% to 86.5%, Pulse 77 to 77
+  roster 10: points a week 117.0 to 138.0, expected wins 5.28 to 5.41, playoff odds 31.2% to 33.7%, Pulse 38 to 38
+  roster 11: points a week 108.0 to 130.6, expected wins 3.70 to 3.96, playoff odds 6.3% to 9.2%, Pulse 7 to 10
+  roster 12: points a week 119.4 to 137.6, expected wins 5.39 to 5.34, playoff odds 35.9% to 32.3%, Pulse 37 to 34
+  Positional WAR (off | on)
+  QB: demand 12, rank 1 0.95, at demand 0.11 | demand 12, rank 1 0.90, at demand 0.11
+  RB: demand 32, rank 1 1.97, at demand 0.19 | demand 32, rank 1 1.86, at demand 0.18
+  WR: demand 28, rank 1 1.24, at demand 0.10 | demand 28, rank 1 1.17, at demand 0.09
+  TE: demand 12, rank 1 0.90, at demand 0.07 | demand 12, rank 1 0.85, at demand 0.07
+  K: demand 12, rank 1 0.13, at demand 0.01 | demand 12, rank 1 0.12, at demand 0.01
+  DL: no curve | demand 12, rank 1 0.22, at demand 0.04
+  LB: no curve | demand 12, rank 1 0.14, at demand 0.02
+  DB: no curve | demand 12, rank 1 0.28, at demand 0.02
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+Die Nasty  [1312157572546990080]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, FLEX, FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 119.2 to 130.3, expected wins 14.06 to 14.00, playoff odds 57.6% to 57.6%, Pulse 38 to 40
+  roster 2: points a week 151.5 to 161.6, expected wins 22.07 to 21.69, playoff odds 99.9% to 99.9%, Pulse 93 to 89
+  roster 3: points a week 129.0 to 139.9, expected wins 15.75 to 15.49, playoff odds 78.9% to 76.8%, Pulse 64 to 56
+  roster 4: points a week 166.6 to 178.7, expected wins 24.69 to 24.59, playoff odds 100.0% to 100.0%, Pulse 97 to 98
+  roster 5: points a week 121.8 to 129.8, expected wins 13.87 to 12.97, playoff odds 53.1% to 39.9%, Pulse 46 to 35
+  roster 6: points a week 125.0 to 134.4, expected wins 14.67 to 13.99, playoff odds 65.3% to 57.9%, Pulse 57 to 47
+  roster 7: points a week 126.7 to 140.4, expected wins 16.44 to 16.92, playoff odds 84.6% to 88.6%, Pulse 62 to 72
+  roster 8: points a week 117.3 to 129.8, expected wins 11.63 to 12.04, playoff odds 24.4% to 29.2%, Pulse 37 to 39
+  roster 9: points a week 110.7 to 123.9, expected wins 11.23 to 11.87, playoff odds 18.1% to 25.7%, Pulse 26 to 35
+  roster 10: points a week 98.7 to 109.5, expected wins 4.87 to 4.93, playoff odds 0.1% to 0.1%, Pulse 9 to 8
+  roster 11: points a week 116.0 to 129.2, expected wins 10.70 to 11.28, playoff odds 15.7% to 21.7%, Pulse 27 to 30
+  roster 12: points a week 110.3 to 122.3, expected wins 8.02 to 8.22, playoff odds 2.3% to 2.7%, Pulse 15 to 20
+  Positional WAR (off | on)
+  QB: demand 12, rank 1 0.78, at demand 0.09 | demand 12, rank 1 0.75, at demand 0.08
+  RB: demand 34, rank 1 1.69, at demand 0.16 | demand 34, rank 1 1.63, at demand 0.15
+  WR: demand 54, rank 1 1.42, at demand 0.09 | demand 54, rank 1 1.37, at demand 0.09
+  TE: demand 20, rank 1 0.99, at demand 0.09 | demand 20, rank 1 0.95, at demand 0.08
+  DL: no curve | demand 2, rank 1 0.08, at demand 0.08
+  LB: no curve | demand 10, rank 1 0.30, at demand 0.02
+  Manager Ledger
+  gradable slots 10 to 11, ungradable 1 to 0
+  roster 1: efficiency 89.9% to 91.0%, points left 30.5 to 30.5
+  roster 2: efficiency 89.9% to 90.6%, points left 30.5 to 30.5
+  roster 3: efficiency 75.5% to 77.5%, points left 75.7 to 75.7
+  roster 4: efficiency 94.6% to 95.1%, points left 22.8 to 22.8
+  roster 5: efficiency 91.0% to 86.0%, points left 22.1 to 39.6
+  roster 6: efficiency 76.1% to 80.1%, points left 63.7 to 63.7
+  roster 7: efficiency 92.3% to 86.8%, points left 24.0 to 47.0
+  roster 8: efficiency 88.5% to 82.0%, points left 28.6 to 49.1
+  roster 9: efficiency 89.1% to 83.8%, points left 32.5 to 55.0
+  roster 10: efficiency 72.9% to 76.2%, points left 48.7 to 51.2
+  roster 11: efficiency 90.4% to 91.9%, points left 20.9 to 20.9
+  roster 12: efficiency 91.9% to 92.3%, points left 16.9 to 17.9
+
+Seacorp group 1 [1390824438731124736]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, K, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 113.7 to 142.4, expected wins 7.70 to 7.61, playoff odds 58.6% to 59.4%, Pulse 72 to 77
+  roster 2: points a week 112.4 to 138.7, expected wins 7.61 to 7.43, playoff odds 59.2% to 56.4%, Pulse 68 to 63
+  roster 3: points a week 111.1 to 141.6, expected wins 6.00 to 6.50, playoff odds 20.9% to 34.3%, Pulse 51 to 68
+  roster 4: points a week 116.0 to 141.5, expected wins 6.93 to 6.62, playoff odds 46.9% to 40.7%, Pulse 74 to 68
+  roster 5: points a week 116.9 to 139.6, expected wins 7.89 to 7.16, playoff odds 64.7% to 46.6%, Pulse 84 to 62
+  roster 6: points a week 115.6 to 138.4, expected wins 7.30 to 6.63, playoff odds 53.1% to 36.0%, Pulse 71 to 43
+  roster 7: points a week 112.6 to 137.2, expected wins 7.16 to 6.86, playoff odds 45.9% to 39.4%, Pulse 66 to 55
+  roster 8: points a week 109.3 to 139.4, expected wins 5.83 to 6.33, playoff odds 16.1% to 29.3%, Pulse 39 to 53
+  roster 9: points a week 99.3 to 127.3, expected wins 5.66 to 5.96, playoff odds 11.8% to 17.4%, Pulse 9 to 10
+  roster 10: points a week 100.8 to 130.3, expected wins 4.32 to 4.67, playoff odds 2.4% to 5.5%, Pulse 7 to 10
+  roster 11: points a week 113.7 to 141.1, expected wins 5.77 to 5.75, playoff odds 22.1% to 23.5%, Pulse 48 to 48
+  roster 12: points a week 122.7 to 152.0, expected wins 7.85 to 7.77, playoff odds 70.2% to 71.5%, Pulse 90 to 94
+  roster 13: points a week 94.7 to 122.4, expected wins 3.56 to 4.01, playoff odds 0.5% to 1.5%, Pulse 3 to 3
+  roster 14: points a week 114.4 to 141.3, expected wins 7.20 to 6.92, playoff odds 48.9% to 44.9%, Pulse 70 to 70
+  roster 15: points a week 104.0 to 132.4, expected wins 5.37 to 5.69, playoff odds 8.8% to 14.6%, Pulse 15 to 17
+  roster 16: points a week 118.1 to 148.8, expected wins 7.84 to 8.10, playoff odds 70.1% to 78.8%, Pulse 77 to 89
+  Positional WAR (off | on)
+  QB: demand 16, rank 1 1.04, at demand 0.10 | demand 16, rank 1 0.91, at demand 0.09
+  RB: demand 35, rank 1 2.06, at demand 0.17 | demand 35, rank 1 1.81, at demand 0.15
+  WR: demand 55, rank 1 1.83, at demand 0.14 | demand 55, rank 1 1.61, at demand 0.13
+  TE: demand 22, rank 1 1.39, at demand 0.17 | demand 22, rank 1 1.22, at demand 0.15
+  K: demand 16, rank 1 0.15, at demand 0.01 | demand 16, rank 1 0.13, at demand 0.01
+  DL: no curve | demand 5, rank 1 0.23, at demand 0.09
+  LB: no curve | demand 24, rank 1 0.44, at demand 0.02
+  DB: no curve | demand 3, rank 1 0.10, at demand 0.05
+  Manager Ledger
+  gradable slots 9 to 11, ungradable 2 to 0
+  roster 1: efficiency 84.0% to 87.8%, points left 20.2 to 20.2
+  roster 2: efficiency 100.0% to 94.2%, points left 0.0 to 12.2
+  roster 3: efficiency 88.5% to 84.7%, points left 12.5 to 24.7
+  roster 4: efficiency 92.3% to 94.3%, points left 11.0 to 11.0
+  roster 5: efficiency 83.7% to 84.4%, points left 21.7 to 25.7
+  roster 6: efficiency 90.8% to 92.3%, points left 12.4 to 13.4
+  roster 7: efficiency 87.9% to 80.9%, points left 16.2 to 32.5
+  roster 8: efficiency 90.4% to 77.5%, points left 11.2 to 38.4
+  roster 9: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 10: efficiency 86.2% to 80.3%, points left 17.7 to 31.1
+  roster 11: efficiency 100.0% to 85.8%, points left 0.0 to 29.8
+  roster 12: efficiency 81.1% to 78.7%, points left 22.3 to 34.3
+  roster 13: efficiency 69.5% to 63.8%, points left 32.4 to 47.4
+  roster 14: efficiency 95.0% to 86.8%, points left 6.4 to 22.4
+  roster 15: efficiency 100.0% to 71.9%, points left 0.0 to 49.2
+  roster 16: efficiency 92.6% to 90.7%, points left 13.2 to 20.2
+
+WR Loving League [1314654202256961536]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, DEF, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 108.9 to 116.3, expected wins 5.38 to 5.82, playoff odds 53.9% to 62.7%, Pulse 31 to 39
+  roster 2: points a week 110.0 to 110.0, expected wins 5.61 to 4.67, playoff odds 60.2% to 32.8%, Pulse 30 to 3
+  roster 3: points a week 108.8 to 115.5, expected wins 5.58 to 5.65, playoff odds 58.1% to 58.5%, Pulse 20 to 26
+  roster 4: points a week 110.8 to 118.1, expected wins 6.07 to 6.12, playoff odds 69.2% to 70.2%, Pulse 42 to 51
+  roster 5: points a week 112.6 to 120.7, expected wins 5.75 to 6.01, playoff odds 66.1% to 70.5%, Pulse 51 to 65
+  roster 6: points a week 125.0 to 125.0, expected wins 7.83 to 6.89, playoff odds 95.9% to 86.2%, Pulse 98 to 87
+  roster 7: points a week 122.0 to 127.9, expected wins 7.42 to 7.34, playoff odds 92.9% to 92.0%, Pulse 95 to 97
+  roster 8: points a week 108.4 to 116.2, expected wins 5.54 to 5.83, playoff odds 57.8% to 63.1%, Pulse 27 to 36
+  roster 9: points a week 106.5 to 115.3, expected wins 4.89 to 5.41, playoff odds 41.0% to 53.0%, Pulse 19 to 30
+  roster 10: points a week 112.6 to 119.4, expected wins 6.36 to 6.43, playoff odds 77.1% to 77.6%, Pulse 60 to 65
+  roster 11: points a week 110.6 to 117.7, expected wins 5.43 to 5.56, playoff odds 56.7% to 58.9%, Pulse 33 to 40
+  roster 12: points a week 110.6 to 118.5, expected wins 6.14 to 6.30, playoff odds 71.3% to 74.4%, Pulse 40 to 56
+  Positional WAR (off | on)
+  QB: demand 12, rank 1 0.89, at demand 0.08 | demand 12, rank 1 0.87, at demand 0.08
+  RB: demand 33, rank 1 1.70, at demand 0.10 | demand 33, rank 1 1.67, at demand 0.10
+  WR: demand 39, rank 1 1.35, at demand 0.08 | demand 39, rank 1 1.32, at demand 0.07
+  TE: demand 12, rank 1 0.83, at demand 0.09 | demand 12, rank 1 0.82, at demand 0.09
+  DEF: demand 12, rank 1 0.29, at demand 0.06 | demand 12, rank 1 0.28, at demand 0.06
+  DL: no curve | demand 3, rank 1 0.14, at demand 0.08
+  LB: no curve | demand 9, rank 1 0.17, at demand 0.01
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+NFL IDP - Deep rosters [1315039157147402240]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, FLEX, FLEX, FLEX, FLEX, FLEX, FLEX, FLEX, FLEX, FLEX, SUPER_FLEX, K, DEF, DL, DL, DL, DL, LB, LB, LB, LB, DB, DB, DB, DB, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 137.5 to 355.7, expected wins 7.70 to 8.80, playoff odds 17.6% to 44.6%, Pulse 47 to 64
+  roster 2: points a week 162.0 to 360.2, expected wins 7.19 to 6.17, playoff odds 16.0% to 4.5%, Pulse 64 to 47
+  roster 3: points a week 201.7 to 413.4, expected wins 9.72 to 8.83, playoff odds 86.9% to 63.8%, Pulse 96 to 89
+  roster 4: points a week 142.0 to 333.1, expected wins 7.56 to 7.28, playoff odds 15.4% to 8.2%, Pulse 55 to 33
+  roster 5: points a week 147.3 to 336.4, expected wins 5.98 to 6.13, playoff odds 2.7% to 2.5%, Pulse 42 to 29
+  roster 6: points a week 231.9 to 501.2, expected wins 11.72 to 11.56, playoff odds 100.0% to 100.0%, Pulse 99 to 99
+  roster 7: points a week 142.1 to 410.4, expected wins 5.50 to 8.27, playoff odds 1.4% to 48.9%, Pulse 43 to 88
+  roster 8: points a week 121.0 to 367.1, expected wins 5.89 to 8.03, playoff odds 1.4% to 33.5%, Pulse 21 to 71
+  roster 9: points a week 173.2 to 362.9, expected wins 10.37 to 9.06, playoff odds 89.6% to 52.4%, Pulse 85 to 66
+  roster 10: points a week 170.4 to 388.0, expected wins 10.13 to 9.48, playoff odds 87.9% to 71.6%, Pulse 86 to 82
+  roster 11: points a week 159.9 to 330.8, expected wins 7.81 to 6.20, playoff odds 13.9% to 1.3%, Pulse 71 to 19
+  roster 12: points a week 129.3 to 350.3, expected wins 4.56 to 5.49, playoff odds 0.1% to 1.7%, Pulse 22 to 44
+  roster 13: points a week 93.7 to 305.7, expected wins 3.28 to 5.07, playoff odds 0.0% to 0.4%, Pulse 2 to 15
+  roster 14: points a week 162.2 to 383.0, expected wins 9.82 to 9.66, playoff odds 81.2% to 75.5%, Pulse 76 to 82
+  roster 15: points a week 159.4 to 364.8, expected wins 6.79 to 6.27, playoff odds 3.0% to 2.1%, Pulse 60 to 34
+  roster 16: points a week 137.6 to 287.1, expected wins 5.87 to 2.67, playoff odds 2.5% to 0.0%, Pulse 34 to 6
+  roster 17: points a week 168.0 to 368.6, expected wins 9.15 to 8.97, playoff odds 68.2% to 56.8%, Pulse 76 to 73
+  roster 18: points a week 122.2 to 334.5, expected wins 5.35 to 6.58, playoff odds 0.4% to 3.7%, Pulse 16 to 31
+  roster 19: points a week 127.4 to 311.5, expected wins 8.49 to 8.56, playoff odds 29.0% to 30.6%, Pulse 36 to 28
+  roster 20: points a week 152.0 to 365.0, expected wins 6.90 to 6.81, playoff odds 10.7% to 8.8%, Pulse 54 to 60
+  roster 21: points a week 135.3 to 360.2, expected wins 5.13 to 6.40, playoff odds 0.4% to 6.5%, Pulse 32 to 58
+  roster 22: points a week 172.5 to 392.9, expected wins 9.46 to 9.41, playoff odds 77.3% to 72.7%, Pulse 82 to 84
+  roster 23: points a week 144.6 to 310.7, expected wins 7.78 to 4.89, playoff odds 18.9% to 0.2%, Pulse 52 to 18
+  roster 24: points a week 131.2 to 309.6, expected wins 6.59 to 5.60, playoff odds 2.7% to 0.3%, Pulse 28 to 12
+  roster 25: points a week 147.2 to 352.8, expected wins 7.29 to 6.84, playoff odds 8.8% to 5.0%, Pulse 44 to 51
+  roster 26: points a week 163.0 to 380.6, expected wins 8.11 to 8.29, playoff odds 39.2% to 40.9%, Pulse 71 to 69
+  roster 27: points a week 146.4 to 332.3, expected wins 6.27 to 4.45, playoff odds 3.0% to 0.1%, Pulse 42 to 18
+  roster 28: points a week 158.1 to 391.8, expected wins 7.37 to 8.16, playoff odds 19.0% to 41.6%, Pulse 60 to 78
+  roster 29: points a week 138.5 to 376.9, expected wins 4.80 to 7.30, playoff odds 0.8% to 19.9%, Pulse 31 to 68
+  roster 30: points a week 78.1 to 261.3, expected wins 0.48 to 1.57, playoff odds 0.0% to 0.0%, Pulse 2 to 3
+  roster 31: points a week 133.5 to 330.3, expected wins 5.07 to 5.63, playoff odds 0.1% to 0.4%, Pulse 24 to 18
+  roster 32: points a week 140.8 to 341.7, expected wins 5.87 to 5.57, playoff odds 2.1% to 1.8%, Pulse 43 to 40
+  Positional WAR (off | on)
+  QB: demand 46, rank 1 5.36, at demand 0.00 | demand 46, rank 1 3.45, at demand 0.00
+  RB: demand 128, rank 1 3.40, at demand 0.00 | demand 128, rank 1 2.15, at demand 0.00
+  WR: demand 207, rank 1 3.11, at demand 0.00 | demand 207, rank 1 1.95, at demand 0.00
+  TE: demand 130, rank 1 2.42, at demand 0.00 | demand 130, rank 1 1.51, at demand 0.00
+  K: demand 32, rank 1 0.30, at demand 0.02 | demand 32, rank 1 0.18, at demand 0.01
+  DEF: demand 32, rank 1 0.46, at demand 0.03 | demand 32, rank 1 0.28, at demand 0.02
+  DL: no curve | demand 247, rank 1 1.24, at demand 0.09
+  LB: no curve | demand 191, rank 1 1.96, at demand 0.00
+  DB: no curve | demand 266, rank 1 1.53, at demand 0.07
+  Manager Ledger
+  gradable slots 20 to 42, ungradable 22 to 0
+  roster 1: efficiency 93.8% to 98.2%, points left 14.8 to 14.8
+  roster 2: efficiency 100.0% to 99.0%, points left 0.0 to 7.0
+  roster 3: efficiency 100.0% to 94.5%, points left 0.0 to 47.0
+  roster 4: efficiency 80.3% to 61.4%, points left 57.5 to 291.5
+  roster 5: efficiency 92.2% to 58.9%, points left 15.7 to 288.7
+  roster 6: efficiency 100.0% to 80.9%, points left 0.0 to 241.0
+  roster 7: efficiency 94.4% to 93.8%, points left 17.5 to 54.5
+  roster 8: efficiency 100.0% to 91.2%, points left 0.0 to 92.0
+  roster 9: efficiency 100.0% to 92.9%, points left 0.0 to 49.0
+  roster 10: efficiency 100.0% to 99.2%, points left 0.0 to 7.0
+  roster 11: efficiency 60.6% to 28.8%, points left 124.9 to 473.9
+  roster 12: efficiency 98.6% to 88.4%, points left 3.4 to 99.4
+  roster 13: efficiency 100.0% to 93.6%, points left 0.0 to 47.0
+  roster 14: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 15: efficiency 100.0% to 40.7%, points left 0.0 to 387.0
+  roster 16: efficiency 94.9% to 98.7%, points left 9.1 to 9.1
+  roster 17: efficiency 100.0% to 97.6%, points left 0.1 to 22.1
+  roster 18: efficiency 96.3% to 95.2%, points left 8.0 to 33.0
+  roster 19: efficiency 100.0% to 88.3%, points left 0.0 to 72.0
+  roster 20: efficiency 100.0% to 99.1%, points left 0.0 to 7.0
+  roster 21: efficiency 87.3% to 96.6%, points left 30.2 to 30.2
+  roster 22: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 23: efficiency 100.0% to 85.9%, points left 0.0 to 100.0
+  roster 24: efficiency 97.5% to 79.4%, points left 4.0 to 93.0
+  roster 25: efficiency 100.0% to 98.4%, points left 0.0 to 12.7
+  roster 26: efficiency 100.0% to 99.0%, points left 0.0 to 8.0
+  roster 27: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 28: efficiency 100.0% to 96.5%, points left 0.0 to 28.0
+  roster 29: efficiency 99.8% to 89.6%, points left 0.7 to 92.7
+  roster 30: efficiency 88.4% to 95.8%, points left 19.0 to 24.1
+  roster 31: efficiency 100.0% to 72.7%, points left 0.0 to 161.8
+  roster 32: efficiency 100.0% to 98.3%, points left 0.0 to 11.0
+
+WarHorse [1389342448584511488]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, SUPER_FLEX, IDP_FLEX, DL, LB, DB
+  Power Pulse
+  roster 1: points a week 155.9 to 177.8, expected wins 6.64 to 6.46, playoff odds 63.7% to 59.0%, Pulse 39 to 38
+  roster 2: points a week 133.1 to 159.4, expected wins 3.00 to 3.33, playoff odds 1.3% to 2.1%, Pulse 7 to 7
+  roster 3: points a week 192.6 to 210.1, expected wins 11.30 to 10.72, playoff odds 100.0% to 99.8%, Pulse 96 to 95
+  roster 4: points a week 158.2 to 183.6, expected wins 5.94 to 6.23, playoff odds 48.6% to 55.3%, Pulse 49 to 50
+  roster 5: points a week 146.2 to 169.4, expected wins 6.19 to 6.13, playoff odds 43.2% to 41.3%, Pulse 25 to 22
+  roster 6: points a week 149.9 to 175.4, expected wins 6.04 to 6.29, playoff odds 44.9% to 51.4%, Pulse 29 to 33
+  roster 7: points a week 174.9 to 199.9, expected wins 8.75 to 8.78, playoff odds 95.7% to 95.5%, Pulse 87 to 88
+  roster 8: points a week 149.8 to 173.3, expected wins 5.56 to 5.61, playoff odds 29.0% to 30.2%, Pulse 32 to 28
+  roster 9: points a week 169.2 to 195.0, expected wins 9.31 to 9.48, playoff odds 97.4% to 97.8%, Pulse 79 to 82
+  roster 10: points a week 152.5 to 173.6, expected wins 7.27 to 6.96, playoff odds 76.1% to 67.7%, Pulse 39 to 44
+  Positional WAR (off | on)
+  QB: demand 20, rank 1 1.18, at demand 0.17 | demand 20, rank 1 1.14, at demand 0.17
+  RB: demand 30, rank 1 1.90, at demand 0.23 | demand 30, rank 1 1.83, at demand 0.22
+  WR: demand 30, rank 1 1.09, at demand 0.08 | demand 30, rank 1 1.05, at demand 0.07
+  TE: demand 10, rank 1 0.82, at demand 0.06 | demand 10, rank 1 0.79, at demand 0.06
+  DL: no curve | demand 10, rank 1 0.14, at demand 0.02
+  LB: no curve | demand 20, rank 1 0.18, at demand 0.02
+  DB: no curve | demand 10, rank 1 0.06, at demand 0.01
+  Manager Ledger
+  gradable slots 9 to 13, ungradable 4 to 0
+  roster 1: efficiency 80.1% to 79.5%, points left 78.0 to 93.1
+  roster 2: efficiency 66.5% to 71.0%, points left 79.7 to 79.7
+  roster 3: efficiency 90.5% to 91.7%, points left 42.4 to 42.4
+  roster 4: efficiency 81.4% to 83.3%, points left 63.1 to 63.1
+  roster 5: efficiency 88.8% to 90.8%, points left 30.3 to 30.3
+  roster 6: efficiency 80.6% to 84.3%, points left 63.6 to 63.6
+  roster 7: efficiency 88.0% to 85.8%, points left 43.8 to 61.8
+  roster 8: efficiency 70.1% to 69.4%, points left 89.1 to 104.6
+  roster 9: efficiency 94.7% to 95.4%, points left 20.1 to 20.1
+  roster 10: efficiency 92.9% to 93.9%, points left 24.2 to 26.2
+
+Franchise Mode [1315519641782620160]
+  slots: QB, RB, WR, WR, TE, FLEX, FLEX, K, DL, DL, DL, LB, LB, LB, DB, DB, DB, DB, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 154.9 to 251.4, expected wins 9.94 to 9.38, playoff odds 66.9% to 45.8%, Pulse 89 to 82
+  roster 2: points a week 140.5 to 248.0, expected wins 10.51 to 10.58, playoff odds 74.4% to 75.2%, Pulse 81 to 82
+  roster 3: points a week 117.2 to 226.8, expected wins 7.75 to 8.56, playoff odds 6.7% to 18.3%, Pulse 57 to 71
+  roster 4: points a week 131.9 to 220.9, expected wins 8.30 to 7.33, playoff odds 14.6% to 2.8%, Pulse 71 to 60
+  roster 5: points a week 132.9 to 217.6, expected wins 8.26 to 6.91, playoff odds 17.0% to 2.0%, Pulse 71 to 56
+  roster 6: points a week 84.8 to 195.3, expected wins 4.11 to 5.89, playoff odds 0.0% to 0.1%, Pulse 18 to 37
+  roster 7: points a week 135.3 to 220.3, expected wins 8.92 to 8.53, playoff odds 23.6% to 10.5%, Pulse 69 to 45
+  roster 8: points a week 90.3 to 181.7, expected wins 3.80 to 3.19, playoff odds 0.0% to 0.0%, Pulse 17 to 19
+  roster 9: points a week 99.5 to 162.3, expected wins 4.02 to 1.81, playoff odds 0.0% to 0.0%, Pulse 23 to 5
+  roster 10: points a week 99.6 to 214.3, expected wins 3.75 to 5.35, playoff odds 0.0% to 0.2%, Pulse 30 to 49
+  roster 11: points a week 74.1 to 151.4, expected wins 2.43 to 2.21, playoff odds 0.0% to 0.0%, Pulse 5 to 8
+  roster 12: points a week 107.6 to 168.9, expected wins 5.21 to 3.80, playoff odds 0.1% to 0.0%, Pulse 37 to 16
+  roster 13: points a week 129.2 to 231.0, expected wins 7.46 to 7.36, playoff odds 4.3% to 4.2%, Pulse 62 to 59
+  roster 14: points a week 55.2 to 161.9, expected wins 0.69 to 2.62, playoff odds 0.0% to 0.0%, Pulse 3 to 10
+  roster 15: points a week 97.7 to 193.3, expected wins 6.11 to 6.09, playoff odds 0.4% to 0.6%, Pulse 31 to 36
+  roster 16: points a week 79.1 to 181.6, expected wins 4.72 to 6.19, playoff odds 0.0% to 0.2%, Pulse 12 to 27
+  roster 17: points a week 104.3 to 196.2, expected wins 5.04 to 4.89, playoff odds 0.0% to 0.0%, Pulse 35 to 35
+  roster 18: points a week 146.4 to 257.4, expected wins 9.90 to 10.63, playoff odds 61.5% to 76.6%, Pulse 85 to 85
+  roster 19: points a week 133.8 to 234.2, expected wins 8.47 to 8.41, playoff odds 11.5% to 9.4%, Pulse 73 to 65
+  roster 20: points a week 65.9 to 162.4, expected wins 1.23 to 2.66, playoff odds 0.0% to 0.0%, Pulse 4 to 15
+  roster 21: points a week 124.6 to 231.1, expected wins 9.95 to 9.68, playoff odds 48.0% to 40.7%, Pulse 71 to 73
+  roster 22: points a week 161.5 to 288.8, expected wins 11.29 to 12.50, playoff odds 91.0% to 99.2%, Pulse 92 to 95
+  roster 23: points a week 118.5 to 233.5, expected wins 8.20 to 9.30, playoff odds 10.7% to 32.8%, Pulse 59 to 74
+  roster 24: points a week 162.7 to 251.1, expected wins 11.69 to 10.42, playoff odds 96.9% to 72.4%, Pulse 94 to 85
+  roster 25: points a week 95.8 to 178.5, expected wins 5.23 to 3.76, playoff odds 0.0% to 0.0%, Pulse 31 to 18
+  roster 26: points a week 124.7 to 230.7, expected wins 10.05 to 10.28, playoff odds 47.0% to 53.3%, Pulse 69 to 69
+  roster 27: points a week 105.7 to 193.4, expected wins 6.68 to 5.54, playoff odds 0.8% to 0.1%, Pulse 42 to 32
+  roster 28: points a week 130.6 to 249.6, expected wins 10.02 to 11.04, playoff odds 60.8% to 87.9%, Pulse 75 to 87
+  roster 29: points a week 142.4 to 254.1, expected wins 10.32 to 10.38, playoff odds 70.3% to 71.8%, Pulse 81 to 84
+  roster 30: points a week 119.0 to 228.3, expected wins 6.15 to 7.11, playoff odds 1.3% to 3.4%, Pulse 50 to 62
+  roster 31: points a week 73.5 to 104.2, expected wins 2.51 to 0.24, playoff odds 0.0% to 0.0%, Pulse 11 to 2
+  roster 32: points a week 152.8 to 262.3, expected wins 11.31 to 11.36, playoff odds 92.3% to 92.7%, Pulse 90 to 92
+  Positional WAR (off | on)
+  QB: demand 32, rank 1 3.86, at demand 1.64 | demand 32, rank 1 3.04, at demand 1.30
+  RB: demand 60, rank 1 3.37, at demand 0.15 | demand 60, rank 1 2.63, at demand 0.12
+  WR: demand 94, rank 1 3.00, at demand 0.17 | demand 94, rank 1 2.34, at demand 0.13
+  TE: demand 38, rank 1 2.62, at demand 0.16 | demand 38, rank 1 2.04, at demand 0.12
+  K: demand 32, rank 1 0.45, at demand 0.18 | demand 32, rank 1 0.35, at demand 0.14
+  DL: no curve | demand 99, rank 1 0.91, at demand 0.15
+  LB: no curve | demand 102, rank 1 1.04, at demand 0.00
+  DB: no curve | demand 151, rank 1 0.78, at demand 0.07
+  Manager Ledger
+  gradable slots 8 to 19, ungradable 11 to 0
+  roster 1: efficiency 86.3% to 85.3%, points left 46.5 to 88.4
+  roster 2: efficiency 99.2% to 87.5%, points left 2.4 to 70.6
+  roster 3: efficiency 90.4% to 90.4%, points left 24.3 to 52.4
+  roster 4: efficiency 89.5% to 88.3%, points left 23.7 to 59.2
+  roster 5: efficiency 100.0% to 97.9%, points left 0.0 to 10.0
+  roster 6: efficiency 69.1% to 72.4%, points left 54.8 to 129.4
+  roster 7: efficiency 91.3% to 86.2%, points left 17.9 to 54.9
+  roster 8: efficiency 82.9% to 83.6%, points left 25.3 to 61.3
+  roster 9: efficiency 82.6% to 69.1%, points left 28.1 to 93.7
+  roster 10: efficiency 85.2% to 86.6%, points left 25.9 to 58.9
+  roster 11: efficiency 87.9% to 87.0%, points left 20.5 to 51.3
+  roster 12: efficiency 100.0% to 87.9%, points left 0.0 to 42.2
+  roster 13: efficiency 98.5% to 85.1%, points left 3.4 to 65.8
+  roster 14: efficiency 94.7% to 75.8%, points left 4.2 to 78.2
+  roster 15: efficiency 95.2% to 91.5%, points left 8.2 to 34.0
+  roster 16: efficiency 98.9% to 92.2%, points left 1.8 to 31.2
+  roster 17: efficiency 51.1% to 71.8%, points left 97.3 to 140.3
+  roster 18: efficiency 96.8% to 88.2%, points left 7.5 to 63.8
+  roster 19: efficiency 87.9% to 74.7%, points left 34.6 to 119.7
+  roster 20: efficiency 92.4% to 79.2%, points left 11.8 to 97.4
+  roster 21: efficiency 93.0% to 87.8%, points left 20.9 to 64.6
+  roster 22: efficiency 91.5% to 89.9%, points left 24.1 to 64.2
+  roster 23: efficiency 99.0% to 94.3%, points left 1.7 to 28.7
+  roster 24: efficiency 82.6% to 81.4%, points left 67.4 to 114.1
+  roster 25: efficiency 76.7% to 88.3%, points left 32.2 to 32.2
+  roster 26: efficiency 98.7% to 83.0%, points left 3.1 to 79.9
+  roster 27: efficiency 75.2% to 71.8%, points left 47.4 to 123.8
+  roster 28: efficiency 97.4% to 94.1%, points left 7.1 to 35.3
+  roster 29: efficiency 98.0% to 92.1%, points left 4.7 to 43.4
+  roster 30: efficiency 79.2% to 82.6%, points left 61.7 to 92.7
+  roster 31: efficiency 77.5% to 66.2%, points left 30.8 to 77.9
+  roster 32: efficiency 97.0% to 90.8%, points left 8.5 to 62.5
+
+Fantasy League SK/AB [1394753722113851392]
+  slots: QB, RB, RB, WR, WR, WR, TE, WRRB_FLEX, K, LB, DB, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 110.4 to 145.6, expected wins 5.35 to 5.22, playoff odds 43.7% to 42.0%, Pulse 20 to 23
+  roster 2: points a week 112.9 to 157.7, expected wins 5.62 to 6.59, playoff odds 52.8% to 79.2%, Pulse 30 to 80
+  roster 3: points a week 110.3 to 140.5, expected wins 5.53 to 5.17, playoff odds 47.3% to 36.5%, Pulse 29 to 15
+  roster 4: points a week 120.9 to 160.2, expected wins 6.27 to 6.66, playoff odds 72.7% to 81.7%, Pulse 75 to 79
+  roster 5: points a week 114.0 to 147.9, expected wins 5.78 to 5.29, playoff odds 57.5% to 46.0%, Pulse 47 to 39
+  roster 6: points a week 106.6 to 143.5, expected wins 5.02 to 5.67, playoff odds 31.9% to 50.8%, Pulse 10 to 22
+  roster 7: points a week 124.4 to 162.2, expected wins 7.86 to 7.92, playoff odds 93.3% to 93.8%, Pulse 97 to 95
+  roster 8: points a week 120.3 to 159.1, expected wins 6.47 to 6.77, playoff odds 75.7% to 81.7%, Pulse 77 to 84
+  roster 9: points a week 118.2 to 145.6, expected wins 6.50 to 5.48, playoff odds 74.6% to 46.9%, Pulse 68 to 22
+  roster 10: points a week 111.5 to 144.2, expected wins 5.60 to 5.23, playoff odds 50.6% to 41.4%, Pulse 26 to 24
+  Positional WAR (off | on)
+  QB: demand 10, rank 1 0.84, at demand 0.16 | demand 10, rank 1 0.73, at demand 0.14
+  RB: demand 30, rank 1 1.52, at demand 0.11 | demand 30, rank 1 1.32, at demand 0.09
+  WR: demand 30, rank 1 1.17, at demand 0.09 | demand 30, rank 1 1.01, at demand 0.08
+  TE: demand 10, rank 1 0.71, at demand 0.06 | demand 10, rank 1 0.62, at demand 0.05
+  K: demand 10, rank 1 0.16, at demand 0.02 | demand 10, rank 1 0.14, at demand 0.01
+  LB: no curve | demand 20, rank 1 0.45, at demand 0.02
+  DB: no curve | demand 10, rank 1 0.22, at demand 0.02
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+32 man [1375706195679019008]
+  slots: QB, RB, RB, WR, WR, TE, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 73.2 to 92.1, expected wins none to none, playoff odds none to none, Pulse 56 to 66
+  roster 2: points a week 78.0 to 99.8, expected wins none to none, playoff odds none to none, Pulse 74 to 84
+  roster 3: points a week 67.1 to 83.0, expected wins none to none, playoff odds none to none, Pulse 31 to 20
+  roster 4: points a week 64.3 to 81.6, expected wins none to none, playoff odds none to none, Pulse 15 to 13
+  roster 5: points a week 87.2 to 105.5, expected wins none to none, playoff odds none to none, Pulse 95 to 93
+  roster 6: points a week 83.2 to 101.3, expected wins none to none, playoff odds none to none, Pulse 89 to 92
+  roster 7: points a week 76.8 to 95.7, expected wins none to none, playoff odds none to none, Pulse 72 to 68
+  roster 8: points a week 72.8 to 85.3, expected wins none to none, playoff odds none to none, Pulse 55 to 27
+  roster 9: points a week 79.3 to 98.7, expected wins none to none, playoff odds none to none, Pulse 76 to 82
+  roster 10: points a week 67.4 to 86.0, expected wins none to none, playoff odds none to none, Pulse 35 to 32
+  roster 11: points a week 60.6 to 82.0, expected wins none to none, playoff odds none to none, Pulse 4 to 8
+  roster 12: points a week 60.8 to 79.2, expected wins none to none, playoff odds none to none, Pulse 12 to 17
+  roster 13: points a week 80.2 to 98.6, expected wins none to none, playoff odds none to none, Pulse 83 to 76
+  roster 14: points a week 69.1 to 91.4, expected wins none to none, playoff odds none to none, Pulse 37 to 47
+  roster 16: points a week 54.8 to 69.1, expected wins none to none, playoff odds none to none, Pulse 5 to 2
+  roster 17: points a week 72.0 to 90.4, expected wins none to none, playoff odds none to none, Pulse 52 to 40
+  roster 18: points a week 74.6 to 93.7, expected wins none to none, playoff odds none to none, Pulse 61 to 61
+  roster 20: points a week 76.1 to 92.0, expected wins none to none, playoff odds none to none, Pulse 68 to 61
+  roster 21: points a week 65.0 to 87.4, expected wins none to none, playoff odds none to none, Pulse 12 to 36
+  roster 22: points a week 78.8 to 92.7, expected wins none to none, playoff odds none to none, Pulse 78 to 59
+  roster 23: points a week 85.2 to 103.6, expected wins none to none, playoff odds none to none, Pulse 93 to 92
+  roster 26: points a week 60.0 to 81.3, expected wins none to none, playoff odds none to none, Pulse 11 to 16
+  roster 27: points a week 68.2 to 86.5, expected wins none to none, playoff odds none to none, Pulse 38 to 33
+  roster 28: points a week 70.2 to 88.8, expected wins none to none, playoff odds none to none, Pulse 43 to 36
+  roster 29: points a week 66.7 to 89.8, expected wins none to none, playoff odds none to none, Pulse 29 to 41
+  roster 30: points a week 69.5 to 90.4, expected wins none to none, playoff odds none to none, Pulse 43 to 53
+  roster 31: points a week 68.6 to 82.8, expected wins none to none, playoff odds none to none, Pulse 36 to 31
+  roster 32: points a week 87.3 to 108.5, expected wins none to none, playoff odds none to none, Pulse 96 to 97
+  Positional WAR (off | on)
+  QB: demand 32, rank 1 4.14, at demand 1.68 | demand 32, rank 1 3.51, at demand 1.43
+  RB: demand 64, rank 1 3.65, at demand 0.14 | demand 64, rank 1 3.08, at demand 0.12
+  WR: demand 64, rank 1 2.65, at demand 0.17 | demand 64, rank 1 2.22, at demand 0.15
+  TE: demand 32, rank 1 2.42, at demand 0.20 | demand 32, rank 1 2.02, at demand 0.17
+  LB: no curve | demand 29, rank 1 0.97, at demand 0.07
+  DB: no curve | demand 3, rank 1 0.21, at demand 0.10
+  Manager Ledger
+  gradable slots 6 to 7, ungradable 1 to 0
+  roster 1: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 2: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 3: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 4: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 5: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 6: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 7: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 8: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 9: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 10: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 11: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 12: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 13: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 14: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 15: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 16: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 17: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 18: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 19: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 20: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 21: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 22: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 23: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 24: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 25: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 26: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 27: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 28: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 29: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 30: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 31: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+  roster 32: efficiency 100.0% to 100.0%, points left 0.0 to 0.0
+
+El Grande Americano [1314548376141832192]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, DL, DL, LB, LB, DB, DB
+  Power Pulse
+  roster 1: points a week 111.4 to 143.3, expected wins 5.47 to 5.30, playoff odds 61.7% to 56.6%, Pulse 56 to 38
+  roster 2: points a week 119.2 to 156.6, expected wins 7.02 to 7.33, playoff odds 90.5% to 94.3%, Pulse 77 to 85
+  roster 3: points a week 117.0 to 150.8, expected wins 6.20 to 6.14, playoff odds 78.5% to 78.3%, Pulse 70 to 71
+  roster 4: points a week 118.6 to 154.4, expected wins 6.48 to 6.73, playoff odds 83.9% to 87.7%, Pulse 78 to 83
+  roster 5: points a week 114.7 to 145.8, expected wins 5.60 to 5.36, playoff odds 67.3% to 59.7%, Pulse 58 to 56
+  roster 6: points a week 95.1 to 122.7, expected wins 3.36 to 2.95, playoff odds 9.6% to 5.3%, Pulse 5 to 3
+  roster 7: points a week 114.0 to 146.1, expected wins 5.88 to 5.83, playoff odds 72.8% to 70.4%, Pulse 55 to 53
+  roster 8: points a week 101.5 to 138.3, expected wins 3.85 to 4.24, playoff odds 18.3% to 27.8%, Pulse 12 to 22
+  roster 9: points a week 103.9 to 138.8, expected wins 4.06 to 4.35, playoff odds 24.4% to 31.4%, Pulse 19 to 30
+  roster 10: points a week 123.1 to 153.0, expected wins 7.08 to 6.77, playoff odds 93.2% to 88.5%, Pulse 91 to 83
+  Positional WAR (off | on)
+  QB: demand 10, rank 1 0.75, at demand 0.14 | demand 10, rank 1 0.69, at demand 0.13
+  RB: demand 24, rank 1 1.33, at demand 0.11 | demand 24, rank 1 1.23, at demand 0.10
+  WR: demand 26, rank 1 1.15, at demand 0.11 | demand 26, rank 1 1.06, at demand 0.10
+  TE: demand 10, rank 1 0.91, at demand 0.07 | demand 10, rank 1 0.84, at demand 0.06
+  DL: no curve | demand 20, rank 1 0.21, at demand 0.02
+  LB: no curve | demand 20, rank 1 0.20, at demand 0.02
+  DB: no curve | demand 20, rank 1 0.15, at demand 0.01
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+2025 Rat Pack [1312157867125526528]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, FLEX, FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 124.4 to 134.5, expected wins 12.95 to 12.84, playoff odds 39.6% to 36.4%, Pulse 46 to 45
+  roster 2: points a week 106.2 to 115.4, expected wins 5.41 to 5.34, playoff odds 0.2% to 0.1%, Pulse 13 to 12
+  roster 3: points a week 110.1 to 120.2, expected wins 9.66 to 9.63, playoff odds 6.6% to 5.9%, Pulse 18 to 24
+  roster 4: points a week 134.5 to 146.3, expected wins 17.19 to 17.40, playoff odds 91.7% to 92.2%, Pulse 76 to 79
+  roster 5: points a week 153.4 to 165.2, expected wins 21.32 to 21.49, playoff odds 99.7% to 99.8%, Pulse 94 to 94
+  roster 6: points a week 120.1 to 131.9, expected wins 14.01 to 14.42, playoff odds 55.8% to 61.7%, Pulse 43 to 52
+  roster 7: points a week 128.6 to 137.8, expected wins 15.58 to 15.19, playoff odds 76.8% to 71.2%, Pulse 65 to 58
+  roster 8: points a week 140.1 to 151.4, expected wins 18.90 to 19.01, playoff odds 97.3% to 97.5%, Pulse 86 to 86
+  roster 9: points a week 114.5 to 124.7, expected wins 8.52 to 8.56, playoff odds 3.2% to 3.1%, Pulse 18 to 18
+  roster 10: points a week 139.9 to 151.2, expected wins 15.21 to 15.36, playoff odds 79.5% to 79.9%, Pulse 80 to 74
+  roster 11: points a week 126.5 to 137.5, expected wins 13.42 to 13.64, playoff odds 49.7% to 52.2%, Pulse 54 to 59
+  roster 12: points a week 97.4 to 103.4, expected wins 3.84 to 3.14, playoff odds 0.0% to 0.0%, Pulse 7 to 5
+  Positional WAR (off | on)
+  QB: demand 12, rank 1 0.70, at demand 0.07 | demand 12, rank 1 0.68, at demand 0.07
+  RB: demand 34, rank 1 1.53, at demand 0.15 | demand 34, rank 1 1.50, at demand 0.15
+  WR: demand 54, rank 1 1.29, at demand 0.08 | demand 54, rank 1 1.26, at demand 0.08
+  TE: demand 20, rank 1 0.98, at demand 0.08 | demand 20, rank 1 0.96, at demand 0.08
+  LB: no curve | demand 12, rank 1 0.20, at demand 0.01
+  Manager Ledger
+  gradable slots 10 to 11, ungradable 1 to 0
+  roster 1: efficiency 77.1% to 76.7%, points left 50.3 to 60.5
+  roster 2: efficiency 86.0% to 84.4%, points left 29.5 to 36.5
+  roster 3: efficiency 92.9% to 91.9%, points left 18.6 to 24.4
+  roster 4: efficiency 83.6% to 83.4%, points left 52.8 to 62.8
+  roster 5: efficiency 90.7% to 89.8%, points left 35.5 to 42.7
+  roster 6: efficiency 96.1% to 89.4%, points left 11.8 to 36.3
+  roster 7: efficiency 81.3% to 80.3%, points left 55.3 to 64.3
+  roster 8: efficiency 91.7% to 92.3%, points left 28.4 to 28.4
+  roster 9: efficiency 76.0% to 74.9%, points left 52.4 to 59.9
+  roster 10: efficiency 87.1% to 81.5%, points left 30.8 to 48.0
+  roster 11: efficiency 81.8% to 77.2%, points left 55.6 to 76.3
+  roster 12: efficiency 79.4% to 79.9%, points left 50.2 to 50.2
+
+3 Rivers barbershop  [1389749815495135233]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, K, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 111.4 to 118.3, expected wins 5.90 to 5.92, playoff odds 64.6% to 65.5%, Pulse 54 to 51
+  roster 2: points a week 111.5 to 118.7, expected wins 6.00 to 5.84, playoff odds 66.7% to 63.4%, Pulse 54 to 51
+  roster 3: points a week 116.9 to 125.2, expected wins 6.81 to 6.87, playoff odds 83.5% to 84.6%, Pulse 79 to 80
+  roster 4: points a week 110.1 to 117.6, expected wins 5.72 to 5.80, playoff odds 58.8% to 60.5%, Pulse 43 to 43
+  roster 5: points a week 106.3 to 113.9, expected wins 5.63 to 5.58, playoff odds 53.4% to 52.6%, Pulse 32 to 31
+  roster 6: points a week 117.0 to 124.5, expected wins 6.72 to 6.71, playoff odds 82.2% to 82.5%, Pulse 68 to 67
+  roster 7: points a week 114.1 to 123.1, expected wins 6.63 to 7.04, playoff odds 78.8% to 85.5%, Pulse 70 to 81
+  roster 8: points a week 117.5 to 125.5, expected wins 6.96 to 7.05, playoff odds 85.4% to 86.5%, Pulse 76 to 77
+  roster 9: points a week 90.0 to 96.8, expected wins 2.43 to 2.43, playoff odds 2.2% to 2.1%, Pulse 1 to 1
+  roster 10: points a week 114.5 to 121.8, expected wins 6.29 to 6.25, playoff odds 74.7% to 74.5%, Pulse 71 to 68
+  roster 11: points a week 110.2 to 117.2, expected wins 6.09 to 6.00, playoff odds 67.2% to 65.8%, Pulse 46 to 44
+  roster 12: points a week 114.7 to 120.4, expected wins 6.83 to 6.51, playoff odds 82.5% to 76.4%, Pulse 65 to 56
+  Positional WAR (off | on)
+  QB: demand 12, rank 1 0.89, at demand 0.10 | demand 12, rank 1 0.87, at demand 0.10
+  RB: demand 27, rank 1 1.64, at demand 0.13 | demand 27, rank 1 1.60, at demand 0.12
+  WR: demand 32, rank 1 1.42, at demand 0.12 | demand 32, rank 1 1.39, at demand 0.11
+  TE: demand 13, rank 1 1.16, at demand 0.10 | demand 13, rank 1 1.13, at demand 0.10
+  K: demand 12, rank 1 0.12, at demand 0.02 | demand 12, rank 1 0.12, at demand 0.02
+  DL: no curve | demand 4, rank 1 0.07, at demand 0.07
+  LB: no curve | demand 8, rank 1 0.14, at demand 0.02
+  Manager Ledger
+  off: no settled weeks yet this season; on: no settled weeks yet this season
+
+The Benchwarmer Society [1350722949992181760]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, FLEX, SUPER_FLEX, DL, DL, LB, LB, DB, DB, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 178.3 to 231.0, expected wins 8.05 to 8.49, playoff odds 83.3% to 90.0%, Pulse 80 to 85
+  roster 2: points a week 158.2 to 203.8, expected wins 5.99 to 5.88, playoff odds 31.1% to 28.7%, Pulse 24 to 23
+  roster 3: points a week 185.2 to 237.5, expected wins 8.66 to 8.96, playoff odds 92.6% to 95.5%, Pulse 92 to 95
+  roster 4: points a week 175.2 to 219.1, expected wins 6.70 to 6.27, playoff odds 58.4% to 47.0%, Pulse 64 to 49
+  roster 5: points a week 169.0 to 213.5, expected wins 6.10 to 5.64, playoff odds 36.1% to 26.7%, Pulse 45 to 33
+  roster 6: points a week 157.9 to 202.3, expected wins 5.66 to 5.40, playoff odds 23.0% to 18.9%, Pulse 22 to 17
+  roster 7: points a week 169.6 to 220.6, expected wins 6.99 to 7.19, playoff odds 63.0% to 69.5%, Pulse 57 to 61
+  roster 8: points a week 177.8 to 232.7, expected wins 7.13 to 7.76, playoff odds 69.1% to 83.5%, Pulse 76 to 89
+  roster 9: points a week 165.4 to 219.1, expected wins 5.78 to 6.37, playoff odds 31.8% to 49.0%, Pulse 29 to 49
+  roster 10: points a week 149.1 to 197.5, expected wins 3.41 to 3.67, playoff odds 1.8% to 2.8%, Pulse 4 to 7
+  roster 11: points a week 163.8 to 211.2, expected wins 4.99 to 5.12, playoff odds 19.2% to 22.2%, Pulse 19 to 21
+  roster 12: points a week 183.6 to 218.4, expected wins 8.52 to 7.24, playoff odds 90.5% to 66.2%, Pulse 90 to 58
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.28, at demand 0.20 | demand 24, rank 1 1.16, at demand 0.18
+  RB: demand 33, rank 1 1.77, at demand 0.16 | demand 33, rank 1 1.61, at demand 0.14
+  WR: demand 42, rank 1 1.37, at demand 0.08 | demand 42, rank 1 1.25, at demand 0.07
+  TE: demand 21, rank 1 1.29, at demand 0.08 | demand 21, rank 1 1.17, at demand 0.08
+  DL: no curve | demand 30, rank 1 0.39, at demand 0.05
+  LB: no curve | demand 30, rank 1 0.25, at demand 0.00
+  DB: no curve | demand 24, rank 1 0.17, at demand 0.01
+  Manager Ledger
+  gradable slots 10 to 17, ungradable 7 to 0
+  roster 1: efficiency 95.3% to 91.2%, points left 7.3 to 22.3
+  roster 2: efficiency 84.9% to 80.3%, points left 28.1 to 54.6
+  roster 3: efficiency 95.6% to 90.0%, points left 11.2 to 32.8
+  roster 4: efficiency 93.6% to 87.5%, points left 12.0 to 31.4
+  roster 5: efficiency 61.3% to 68.2%, points left 55.7 to 61.2
+  roster 6: efficiency 93.9% to 88.9%, points left 8.7 to 21.4
+  roster 7: efficiency 85.1% to 86.1%, points left 32.5 to 42.7
+  roster 8: efficiency 85.6% to 84.1%, points left 28.5 to 41.3
+  roster 9: efficiency 82.7% to 74.9%, points left 36.8 to 73.4
+  roster 10: efficiency 67.8% to 66.1%, points left 35.8 to 69.2
+  roster 11: efficiency 97.1% to 90.3%, points left 5.5 to 27.0
+  roster 12: efficiency 80.2% to 81.5%, points left 47.3 to 52.3
+
+Fourth & Violence  [1361073366127083520]
+  slots: DL, DL, DL, DL, LB, LB, LB, DB, DB, DB, DB, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 0.0 to 240.1, expected wins 6.00 to 7.10, playoff odds 100.0% to 74.3%, Pulse 50 to 76
+  roster 2: points a week 0.0 to 213.3, expected wins 6.00 to 4.72, playoff odds 100.0% to 15.9%, Pulse 50 to 21
+  roster 3: points a week 0.0 to 221.4, expected wins 6.00 to 5.39, playoff odds 100.0% to 30.0%, Pulse 50 to 33
+  roster 4: points a week 0.0 to 219.2, expected wins 6.00 to 4.91, playoff odds 100.0% to 21.3%, Pulse 50 to 29
+  roster 5: points a week 0.0 to 239.4, expected wins 6.00 to 7.01, playoff odds 100.0% to 73.1%, Pulse 50 to 74
+  roster 6: points a week 0.0 to 234.2, expected wins 6.00 to 6.32, playoff odds 100.0% to 56.9%, Pulse 50 to 65
+  roster 7: points a week 0.0 to 251.2, expected wins 6.00 to 7.58, playoff odds 0.0% to 85.2%, Pulse 50 to 90
+  roster 8: points a week 0.0 to 188.4, expected wins 6.00 to 2.68, playoff odds 0.0% to 0.5%, Pulse 50 to 2
+  roster 9: points a week 0.0 to 235.3, expected wins 6.00 to 6.55, playoff odds 0.0% to 61.9%, Pulse 50 to 65
+  roster 10: points a week 0.0 to 234.9, expected wins 6.00 to 6.84, playoff odds 0.0% to 65.8%, Pulse 50 to 65
+  roster 11: points a week 0.0 to 236.2, expected wins 6.00 to 7.03, playoff odds 0.0% to 71.9%, Pulse 50 to 70
+  roster 12: points a week 0.0 to 229.3, expected wins 6.00 to 5.87, playoff odds 0.0% to 43.2%, Pulse 50 to 47
+  Positional WAR (off | on)
+  outcome: skipped (no curves) -> ran
+  DL: no curve | demand 48, rank 1 0.54, at demand 0.04
+  LB: no curve | demand 53, rank 1 0.99, at demand 0.07
+  DB: no curve | demand 79, rank 1 0.59, at demand 0.04
+  Manager Ledger
+  off: league has no startable slots this model can grade; on: no settled weeks yet this season
+
+207 Dynasty [1316492039281471488]
+  slots: QB, RB, RB, WR, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, K, DL, DL, DL, LB, LB, LB, DB, DB, DB, DB, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 239.7 to 376.3, expected wins 12.23 to 11.98, playoff odds 100.0% to 100.0%, Pulse 97 to 97
+  roster 2: points a week 202.9 to 338.2, expected wins 8.89 to 9.30, playoff odds 90.9% to 95.3%, Pulse 76 to 77
+  roster 3: points a week 160.3 to 298.5, expected wins 3.96 to 5.21, playoff odds 1.8% to 11.8%, Pulse 12 to 25
+  roster 4: points a week 182.8 to 298.6, expected wins 6.91 to 6.04, playoff odds 47.1% to 25.8%, Pulse 48 to 39
+  roster 5: points a week 161.7 to 273.3, expected wins 5.13 to 4.26, playoff odds 6.0% to 2.3%, Pulse 21 to 11
+  roster 6: points a week 198.7 to 341.1, expected wins 9.02 to 9.63, playoff odds 90.3% to 96.5%, Pulse 77 to 83
+  roster 7: points a week 193.0 to 311.3, expected wins 8.02 to 7.06, playoff odds 74.6% to 51.0%, Pulse 67 to 50
+  roster 8: points a week 170.2 to 291.8, expected wins 4.44 to 4.27, playoff odds 4.3% to 3.9%, Pulse 20 to 18
+  roster 9: points a week 151.7 to 266.8, expected wins 2.38 to 2.20, playoff odds 0.1% to 0.0%, Pulse 9 to 8
+  roster 10: points a week 191.9 to 309.4, expected wins 7.96 to 6.89, playoff odds 66.8% to 41.4%, Pulse 68 to 47
+  roster 11: points a week 181.9 to 315.6, expected wins 7.81 to 8.28, playoff odds 70.4% to 82.7%, Pulse 54 to 70
+  roster 12: points a week 173.7 to 320.0, expected wins 7.27 to 8.88, playoff odds 47.8% to 89.3%, Pulse 40 to 67
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.31, at demand 0.21 | demand 24, rank 1 1.00, at demand 0.16
+  RB: demand 35, rank 1 1.72, at demand 0.16 | demand 35, rank 1 1.31, at demand 0.12
+  WR: demand 48, rank 1 1.37, at demand 0.08 | demand 48, rank 1 1.04, at demand 0.06
+  TE: demand 13, rank 1 0.93, at demand 0.09 | demand 13, rank 1 0.70, at demand 0.07
+  K: demand 12, rank 1 0.13, at demand 0.01 | demand 12, rank 1 0.10, at demand 0.01
+  DL: no curve | demand 37, rank 1 0.58, at demand 0.07
+  LB: no curve | demand 47, rank 1 0.51, at demand 0.02
+  DB: no curve | demand 48, rank 1 0.28, at demand 0.01
+  Manager Ledger
+  gradable slots 11 to 22, ungradable 11 to 0
+  roster 1: efficiency 76.6% to 75.5%, points left 133.6 to 236.3
+  roster 2: efficiency 90.0% to 76.5%, points left 39.2 to 196.0
+  roster 3: efficiency 86.1% to 76.2%, points left 53.7 to 181.4
+  roster 4: efficiency 95.5% to 92.6%, points left 18.2 to 53.2
+  roster 5: efficiency 75.6% to 82.0%, points left 82.2 to 108.2
+  roster 6: efficiency 75.5% to 76.6%, points left 112.2 to 189.6
+  roster 7: efficiency 84.1% to 71.3%, points left 61.0 to 242.9
+  roster 8: efficiency 91.8% to 86.5%, points left 30.1 to 93.0
+  roster 9: efficiency 76.5% to 77.4%, points left 72.7 to 162.3
+  roster 10: efficiency 82.9% to 79.0%, points left 63.9 to 134.6
+  roster 11: efficiency 86.3% to 86.4%, points left 54.9 to 117.8
+  roster 12: efficiency 88.5% to 81.1%, points left 49.4 to 152.3
+
+Fantasy Freaks [1312930062940532736]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 120.3 to 128.5, expected wins 5.16 to 5.33, playoff odds 17.6% to 20.2%, Pulse 21 to 19
+  roster 2: points a week 137.9 to 146.2, expected wins 6.82 to 6.86, playoff odds 69.7% to 70.0%, Pulse 44 to 39
+  roster 3: points a week 127.1 to 133.2, expected wins 4.37 to 4.23, playoff odds 10.3% to 8.1%, Pulse 22 to 15
+  roster 4: points a week 140.7 to 149.5, expected wins 7.30 to 7.31, playoff odds 81.6% to 81.4%, Pulse 59 to 59
+  roster 5: points a week 130.0 to 138.8, expected wins 5.01 to 5.05, playoff odds 18.8% to 19.9%, Pulse 30 to 33
+  roster 6: points a week 146.8 to 154.1, expected wins 8.98 to 8.89, playoff odds 97.0% to 96.2%, Pulse 69 to 65
+  roster 7: points a week 136.3 to 143.2, expected wins 8.14 to 7.94, playoff odds 90.4% to 87.3%, Pulse 55 to 48
+  roster 8: points a week 173.1 to 180.2, expected wins 11.34 to 11.20, playoff odds 100.0% to 100.0%, Pulse 95 to 94
+  roster 9: points a week 154.4 to 162.9, expected wins 9.88 to 9.96, playoff odds 99.4% to 99.4%, Pulse 81 to 84
+  roster 10: points a week 148.7 to 156.4, expected wins 7.91 to 7.92, playoff odds 90.4% to 90.5%, Pulse 70 to 74
+  roster 11: points a week 124.0 to 131.3, expected wins 4.45 to 4.30, playoff odds 9.6% to 8.3%, Pulse 26 to 20
+  roster 12: points a week 176.3 to 185.9, expected wins 10.87 to 10.92, playoff odds 100.0% to 100.0%, Pulse 94 to 95
+  roster 13: points a week 102.8 to 112.2, expected wins 2.88 to 3.02, playoff odds 0.7% to 0.8%, Pulse 5 to 8
+  roster 14: points a week 122.0 to 131.0, expected wins 4.89 to 5.08, playoff odds 14.6% to 18.0%, Pulse 20 to 26
+  Positional WAR (off | on)
+  QB: demand 28, rank 1 2.01, at demand 0.85 | demand 28, rank 1 1.98, at demand 0.83
+  RB: demand 31, rank 1 1.66, at demand 0.14 | demand 31, rank 1 1.63, at demand 0.14
+  WR: demand 41, rank 1 1.48, at demand 0.13 | demand 41, rank 1 1.45, at demand 0.13
+  TE: demand 26, rank 1 1.92, at demand 0.33 | demand 26, rank 1 1.89, at demand 0.33
+  LB: no curve | demand 14, rank 1 0.23, at demand 0.02
+  Manager Ledger
+  gradable slots 9 to 10, ungradable 1 to 0
+  roster 1: efficiency 69.5% to 73.1%, points left 88.0 to 88.0
+  roster 2: efficiency 87.9% to 88.9%, points left 32.0 to 32.0
+  roster 3: efficiency 75.2% to 76.6%, points left 58.5 to 58.5
+  roster 4: efficiency 96.4% to 96.5%, points left 11.1 to 11.1
+  roster 5: efficiency 87.2% to 85.6%, points left 32.1 to 39.1
+  roster 6: efficiency 84.5% to 85.4%, points left 51.0 to 51.0
+  roster 7: efficiency 77.8% to 78.5%, points left 70.2 to 70.2
+  roster 8: efficiency 88.6% to 89.2%, points left 43.4 to 43.4
+  roster 9: efficiency 83.6% to 84.3%, points left 74.1 to 74.1
+  roster 10: efficiency 97.2% to 97.3%, points left 9.0 to 9.0
+  roster 11: efficiency 80.8% to 81.8%, points left 47.5 to 47.5
+  roster 12: efficiency 88.1% to 88.1%, points left 49.7 to 53.2
+  roster 13: efficiency 90.9% to 91.3%, points left 24.4 to 24.4
+  roster 14: efficiency 97.4% to 95.6%, points left 6.2 to 11.7
+
+12 Angry Men [1312177746184515584]
+  slots: QB, RB, RB, WR, WR, TE, FLEX, FLEX, SUPER_FLEX, K, IDP_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 134.9 to 158.9, expected wins 6.81 to 7.06, playoff odds 55.3% to 60.3%, Pulse 44 to 45
+  roster 2: points a week 140.8 to 162.8, expected wins 5.95 to 5.75, playoff odds 38.9% to 32.7%, Pulse 54 to 40
+  roster 3: points a week 139.4 to 162.2, expected wins 6.37 to 6.39, playoff odds 53.3% to 51.8%, Pulse 46 to 46
+  roster 4: points a week 133.5 to 158.4, expected wins 6.13 to 6.40, playoff odds 41.9% to 47.6%, Pulse 23 to 36
+  roster 5: points a week 149.1 to 166.9, expected wins 9.26 to 8.50, playoff odds 96.8% to 90.3%, Pulse 87 to 71
+  roster 6: points a week 139.2 to 166.5, expected wins 8.13 to 8.56, playoff odds 85.8% to 90.3%, Pulse 52 to 74
+  roster 7: points a week 137.5 to 160.8, expected wins 8.29 to 8.19, playoff odds 86.5% to 83.9%, Pulse 60 to 61
+  roster 8: points a week 121.0 to 144.1, expected wins 3.60 to 3.63, playoff odds 3.4% to 3.3%, Pulse 4 to 3
+  roster 9: points a week 133.1 to 159.1, expected wins 6.98 to 7.28, playoff odds 61.7% to 67.8%, Pulse 39 to 50
+  roster 10: points a week 136.4 to 160.8, expected wins 5.44 to 5.52, playoff odds 27.7% to 28.5%, Pulse 37 to 35
+  roster 11: points a week 159.3 to 181.5, expected wins 10.72 to 10.51, playoff odds 99.7% to 99.4%, Pulse 98 to 98
+  roster 12: points a week 135.0 to 157.6, expected wins 6.32 to 6.21, playoff odds 49.1% to 44.1%, Pulse 34 to 27
+  Positional WAR (off | on)
+  QB: demand 24, rank 1 1.28, at demand 0.21 | demand 24, rank 1 1.20, at demand 0.19
+  RB: demand 31, rank 1 1.65, at demand 0.12 | demand 31, rank 1 1.54, at demand 0.12
+  WR: demand 41, rank 1 1.46, at demand 0.08 | demand 41, rank 1 1.36, at demand 0.08
+  TE: demand 12, rank 1 0.98, at demand 0.13 | demand 12, rank 1 0.91, at demand 0.12
+  K: demand 12, rank 1 0.19, at demand 0.01 | demand 12, rank 1 0.17, at demand 0.01
+  DL: no curve | demand 11, rank 1 0.24, at demand 0.05
+  LB: no curve | demand 22, rank 1 0.27, at demand 0.02
+  DB: no curve | demand 3, rank 1 0.11, at demand 0.02
+  Manager Ledger
+  gradable slots 10 to 13, ungradable 3 to 0
+  roster 1: efficiency 84.9% to 84.1%, points left 44.0 to 55.0
+  roster 2: efficiency 62.8% to 61.2%, points left 107.4 to 140.9
+  roster 3: efficiency 90.1% to 89.6%, points left 29.0 to 36.0
+  roster 4: efficiency 94.8% to 92.0%, points left 12.5 to 27.5
+  roster 5: efficiency 88.9% to 90.2%, points left 39.4 to 39.4
+  roster 6: efficiency 85.9% to 80.9%, points left 51.6 to 83.1
+  roster 7: efficiency 91.2% to 87.1%, points left 26.0 to 49.0
+  roster 8: efficiency 74.8% to 77.1%, points left 62.7 to 73.2
+  roster 9: efficiency 82.3% to 82.0%, points left 51.9 to 71.4
+  roster 10: efficiency 87.0% to 82.0%, points left 35.1 to 55.1
+  roster 11: efficiency 83.4% to 84.3%, points left 74.8 to 77.8
+  roster 12: efficiency 85.5% to 86.7%, points left 50.1 to 50.1
+
+The IDP Experience Dynasty II [1356556150694215680]
+  slots: FLEX, FLEX, FLEX, FLEX, FLEX, FLEX, SUPER_FLEX, DL, LB, DB, IDP_FLEX, IDP_FLEX, IDP_FLEX, IDP_FLEX
+  Power Pulse
+  roster 1: points a week 104.8 to 173.0, expected wins 10.62 to 9.55, playoff odds 82.2% to 63.9%, Pulse 93 to 91
+  roster 2: points a week 92.1 to 169.9, expected wins 8.57 to 8.76, playoff odds 22.4% to 38.5%, Pulse 73 to 82
+  roster 3: points a week 92.7 to 161.2, expected wins 9.78 to 9.21, playoff odds 51.7% to 43.8%, Pulse 80 to 79
+  roster 4: points a week 81.0 to 155.2, expected wins 7.67 to 8.27, playoff odds 10.8% to 25.7%, Pulse 47 to 69
+  roster 5: points a week 92.3 to 172.5, expected wins 8.01 to 8.65, playoff odds 14.3% to 37.9%, Pulse 63 to 76
+  roster 6: points a week 104.3 to 162.3, expected wins 10.90 to 9.01, playoff odds 86.5% to 38.8%, Pulse 91 to 68
+  roster 7: points a week 92.5 to 163.2, expected wins 8.02 to 8.04, playoff odds 13.9% to 20.8%, Pulse 71 to 71
+  roster 8: points a week 89.3 to 154.2, expected wins 7.55 to 7.00, playoff odds 7.6% to 6.8%, Pulse 65 to 56
+  roster 9: points a week 94.3 to 175.4, expected wins 9.72 to 10.05, playoff odds 55.3% to 76.1%, Pulse 81 to 92
+  roster 10: points a week 81.7 to 159.1, expected wins 6.26 to 6.86, playoff odds 1.0% to 5.6%, Pulse 44 to 56
+  roster 11: points a week 75.7 to 154.2, expected wins 5.24 to 6.61, playoff odds 0.3% to 3.8%, Pulse 32 to 52
+  roster 12: points a week 92.2 to 158.7, expected wins 7.13 to 6.92, playoff odds 4.3% to 5.2%, Pulse 66 to 56
+  roster 13: points a week 89.6 to 165.8, expected wins 6.50 to 7.13, playoff odds 1.9% to 9.5%, Pulse 61 to 67
+  roster 14: points a week 78.4 to 138.0, expected wins 5.86 to 5.14, playoff odds 0.5% to 0.2%, Pulse 36 to 16
+  roster 15: points a week 73.9 to 143.8, expected wins 4.75 to 5.36, playoff odds 0.1% to 0.6%, Pulse 24 to 25
+  roster 16: points a week 88.7 to 156.7, expected wins 8.74 to 8.16, playoff odds 22.6% to 19.9%, Pulse 66 to 62
+  roster 17: points a week 58.3 to 129.0, expected wins 2.68 to 4.07, playoff odds 0.0% to 0.0%, Pulse 6 to 7
+  roster 18: points a week 60.1 to 142.4, expected wins 2.04 to 4.45, playoff odds 0.0% to 0.1%, Pulse 5 to 19
+  roster 19: points a week 68.0 to 123.0, expected wins 3.53 to 2.71, playoff odds 0.0% to 0.0%, Pulse 12 to 3
+  roster 20: points a week 72.2 to 141.9, expected wins 6.30 to 6.88, playoff odds 0.8% to 4.1%, Pulse 36 to 42
+  roster 21: points a week 78.9 to 137.9, expected wins 7.92 to 6.94, playoff odds 6.7% to 3.8%, Pulse 39 to 21
+  roster 22: points a week 86.9 to 150.3, expected wins 8.12 to 6.94, playoff odds 11.0% to 4.9%, Pulse 62 to 40
+  roster 23: points a week 103.2 to 179.1, expected wins 10.32 to 10.67, playoff odds 74.1% to 86.0%, Pulse 90 to 94
+  roster 24: points a week 93.8 to 160.2, expected wins 7.51 to 6.85, playoff odds 9.8% to 6.8%, Pulse 69 to 63
+  roster 25: points a week 63.3 to 149.8, expected wins 3.52 to 6.31, playoff odds 0.0% to 2.1%, Pulse 8 to 42
+  roster 26: points a week 69.5 to 143.2, expected wins 3.67 to 4.69, playoff odds 0.0% to 0.1%, Pulse 11 to 17
+  roster 27: points a week 81.2 to 150.4, expected wins 7.94 to 7.97, playoff odds 9.0% to 15.7%, Pulse 51 to 58
+  roster 28: points a week 43.9 to 108.6, expected wins 0.82 to 1.29, playoff odds 0.0% to 0.0%, Pulse 2 to 1
+  roster 29: points a week 81.3 to 141.3, expected wins 8.15 to 6.57, playoff odds 11.9% to 2.6%, Pulse 38 to 24
+  roster 30: points a week 108.9 to 177.1, expected wins 10.15 to 9.52, playoff odds 73.7% to 65.7%, Pulse 95 to 92
+  roster 31: points a week 87.3 to 158.7, expected wins 7.56 to 7.10, playoff odds 8.6% to 8.9%, Pulse 65 to 66
+  roster 32: points a week 88.8 to 148.7, expected wins 8.47 to 6.34, playoff odds 19.0% to 2.4%, Pulse 69 to 44
+  Positional WAR (off | on)
+  QB: demand 32, rank 1 3.95, at demand 1.61 | demand 32, rank 1 2.97, at demand 1.23
+  RB: demand 62, rank 1 3.09, at demand 0.17 | demand 62, rank 1 2.29, at demand 0.13
+  WR: demand 94, rank 1 2.52, at demand 0.19 | demand 94, rank 1 1.86, at demand 0.14
+  TE: demand 36, rank 1 3.02, at demand 0.17 | demand 36, rank 1 2.24, at demand 0.13
+  DL: no curve | demand 55, rank 1 0.75, at demand 0.10
+  LB: no curve | demand 65, rank 1 1.00, at demand 0.02
+  DB: no curve | demand 104, rank 1 0.68, at demand 0.04
+  Manager Ledger
+  gradable slots 7 to 14, ungradable 7 to 0
+  roster 1: efficiency 98.9% to 93.1%, points left 2.5 to 28.5
+  roster 2: efficiency 78.1% to 78.9%, points left 44.2 to 84.4
+  roster 3: efficiency 90.5% to 87.3%, points left 19.9 to 50.9
+  roster 4: efficiency 88.6% to 92.2%, points left 25.4 to 38.4
+  roster 5: efficiency 100.0% to 86.4%, points left 0.0 to 49.0
+  roster 6: efficiency 99.0% to 88.9%, points left 1.8 to 40.8
+  roster 7: efficiency 96.7% to 90.6%, points left 5.7 to 33.7
+  roster 8: efficiency 95.5% to 93.2%, points left 7.6 to 24.6
+  roster 9: efficiency 90.2% to 93.1%, points left 22.2 to 28.2
+  roster 10: efficiency 89.5% to 87.7%, points left 17.8 to 41.8
+  roster 11: efficiency 92.3% to 93.3%, points left 9.6 to 22.6
+  roster 12: efficiency 86.9% to 83.6%, points left 27.8 to 63.8
+  roster 13: efficiency 80.1% to 84.0%, points left 40.3 to 56.3
+  roster 14: efficiency 88.2% to 90.5%, points left 24.5 to 29.5
+  roster 15: efficiency 85.3% to 76.0%, points left 27.9 to 90.9
+  roster 16: efficiency 87.1% to 85.7%, points left 27.3 to 53.3
+  roster 17: efficiency 80.6% to 86.8%, points left 32.6 to 41.6
+  roster 18: efficiency 97.8% to 90.8%, points left 2.2 to 29.2
+  roster 19: efficiency 94.1% to 80.4%, points left 6.8 to 59.8
+  roster 20: efficiency 84.4% to 86.9%, points left 35.4 to 49.4
+  roster 21: efficiency 100.0% to 94.3%, points left 0.0 to 18.0
+  roster 22: efficiency 81.9% to 86.7%, points left 32.8 to 41.8
+  roster 23: efficiency 98.8% to 95.1%, points left 2.9 to 19.9
+  roster 24: efficiency 99.6% to 88.6%, points left 0.7 to 47.7
+  roster 25: efficiency 89.9% to 88.1%, points left 15.0 to 44.0
+  roster 26: efficiency 86.4% to 83.7%, points left 17.9 to 56.7
+  roster 27: efficiency 98.3% to 93.5%, points left 3.2 to 26.2
+  roster 28: efficiency 90.9% to 87.9%, points left 8.8 to 33.8
+  roster 29: efficiency 95.4% to 87.2%, points left 10.4 to 51.5
+  roster 30: efficiency 97.4% to 97.3%, points left 5.9 to 9.9
+  roster 31: efficiency 87.9% to 87.6%, points left 24.0 to 50.0
+  roster 32: efficiency 96.5% to 94.3%, points left 5.0 to 21.0
+
+RESULT: every sampled ordinary league is identical.

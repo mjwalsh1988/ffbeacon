@@ -49,18 +49,40 @@
  * Re-runnable: the unique constraint (player_id, format_config_id, source,
  * captured_at) plus ignoreDuplicates:true means a second run is a no-op.
  *
- * Run: npm run backfill:ktc
- *      (or npm run backfill:all to also rebuild player_value_trends after)
+ * Run: npm run backfill:ktc -- --from 2026-09-08 --to 2026-09-24 [--dry-run]
+ *      npm run backfill:ktc -- --all            (the original full-history run)
+ *
+ * A DATE WINDOW IS REQUIRED unless --all is passed. This script writes each
+ * day at UTC noon; the nightly sync writes each day at the moment it ran. A
+ * full rerun therefore adds a SECOND row for every day the nightly sync has
+ * already covered (the unique key includes captured_at, so nothing stops it),
+ * and every consumer that reads "the value on day D" would see two. The window
+ * form exists to fill a gap the nightly sync missed, and only that gap. First
+ * used 2026-09-25 for 2026-09-08 to 2026-09-24, when KTC moved its player list
+ * into a <script id="ktc-players"> element and the sync wrote nothing for
+ * eighteen nights (lib/ktc-page.ts).
+ *
+ * Inside a window it also fills draft_pick_values for the dynasty formats
+ * (the histories endpoint carries every pick KTC ranks, under the pick's own
+ * playerID), mirroring what the nightly sync writes: dynasty-ppr-std from
+ * oneQB, dynasty-ppr-sflex from superflex, and dynasty-ppr-tep-sflex as a copy
+ * of superflex (picks have no TE, so the TEP multiplier is a no-op). The full
+ * run leaves picks alone, as it always did.
  *
  * One-time operation, NOT in the nightly cron. After this runs, the daily
- * sync-ktc.ts script keeps history current going forward.
+ * sync-ktc.ts script keeps history current going forward. Removed from
+ * `npm run backfill:all` on 2026-09-25 for the reason above: that chain has
+ * no window to pass and a full KTC rerun would double every synced day.
  */
 
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getServiceClient } from "./_supabase";
+import { pathToFileURL } from "node:url";
 import { applyKtcTep, tepTierFromTePremiumBonus, type TepPlayer } from "../lib/ktc-tep";
+import { extractKtcPlayers } from "../lib/ktc-page";
+import { parsePickName } from "../lib/ktc-picks";
 import type { Json } from "../lib/database.types";
 
 type KtcFormatSection = {
@@ -242,6 +264,22 @@ type HistoryRowInsert = {
   metadata: Json;
 };
 
+type PickRowInsert = {
+  season: number;
+  round: number;
+  pick_position: "early" | "mid" | "late";
+  format_config_id: string;
+  source: string;
+  value: number;
+  captured_at: string;
+  metadata: Json;
+};
+
+function isPickPosition(raw: string | null | undefined): boolean {
+  const upper = (raw ?? "").toUpperCase();
+  return upper === "RDP" || upper === "PICK";
+}
+
 type ProductSnapshots = {
   product: "dynasty" | "redraft";
   // playerID -> { sflexByDate: Map<dateYmd, value>, oneQBByDate: Map<dateYmd, value> }
@@ -255,7 +293,38 @@ type ProductSnapshots = {
   unmatched: Array<{ ktcPlayerID: number }>;
 };
 
+type RunWindow = { from: string; to: string } | null;
+
+/** --from/--to (both YYYY-MM-DD, inclusive) or --all. Anything else is refused. Exported for tests. */
+export function parseRunArgs(argv: string[]): { window: RunWindow; dryRun: boolean } {
+  const valueOf = (flag: string) => {
+    const i = argv.indexOf(flag);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
+  const dryRun = argv.includes("--dry-run");
+  if (argv.includes("--all")) return { window: null, dryRun };
+  const from = valueOf("--from");
+  const to = valueOf("--to");
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  if (!from || !to || !ymd.test(from) || !ymd.test(to) || from > to) {
+    throw new Error(
+      "backfill-ktc-history: pass --from YYYY-MM-DD --to YYYY-MM-DD (inclusive), or --all for the full history. " +
+        "A full rerun duplicates every day the nightly sync already wrote; see the header.",
+    );
+  }
+  return { window: { from, to }, dryRun };
+}
+
+/** Inclusive date filter; no window keeps everything. Exported for tests. */
+export function inWindow(date: string, window: RunWindow): boolean {
+  return window === null || (date >= window.from && date <= window.to);
+}
+
 async function main() {
+  const { window, dryRun } = parseRunArgs(process.argv.slice(2));
+  console.log(
+    window ? `Window ${window.from} to ${window.to}${dryRun ? " (dry run)" : ""}` : `Full history${dryRun ? " (dry run)" : ""}`,
+  );
   const supabase = getServiceClient();
 
   // --- Load format_configs (with te_premium_bonus for TEP tier mapping)
@@ -347,6 +416,7 @@ async function main() {
 
   // --- Build history rows for the four base format slugs
   const allRows: HistoryRowInsert[] = [];
+  const pickRows: PickRowInsert[] = [];
   const unmatchedToPlayerByName: Array<{ ktcPlayerID: number; name: string; position: string; product: string }> = [];
   const unmatchedToKtcMeta: Array<{ ktcPlayerID: number; product: string }> = [];
 
@@ -369,8 +439,73 @@ async function main() {
 
     let matched = 0;
     let unmatched = 0;
-    for (const [ktcPlayerID, snaps] of prodSnap.perPlayer) {
+    for (const [ktcPlayerID, allSnaps] of prodSnap.perPlayer) {
       const meta = ktcMetaByID.get(ktcPlayerID)!;
+      const snaps = {
+        oneQB: allSnaps.oneQB.filter((e) => inWindow(e.date, window)),
+        sflex: allSnaps.sflex.filter((e) => inWindow(e.date, window)),
+      };
+
+      // A draft pick: only inside a window (see the header), only on the
+      // dynasty product, the same three formats the nightly sync writes.
+      if (window !== null && product.product === "dynasty" && isPickPosition(meta.position)) {
+        const parsed = parsePickName(meta.name);
+        if (parsed) {
+          const pick = {
+            season: parsed.season,
+            round: parsed.round,
+            pick_position: parsed.pick_position === "unknown" ? ("mid" as const) : parsed.pick_position,
+          };
+          const pushPicks = (entries: DecodedEntry[], formatSlug: string, variant: "oneQB" | "superflex") => {
+            const format = formatBySlug.get(formatSlug);
+            const pushed: PickRowInsert[] = [];
+            if (!format) return pushed;
+            for (const e of entries) {
+              pushed.push({
+                ...pick,
+                format_config_id: format.id,
+                source: SOURCE_SLUG,
+                value: e.value,
+                captured_at: dateToTimestamp(e.date),
+                metadata: {
+                  ktc_historical: {
+                    ktc_player_id: ktcPlayerID,
+                    pick_name: meta.name,
+                    product: product.product,
+                    format_slug: formatSlug,
+                    variant,
+                    date: e.date,
+                    value: e.value,
+                    raw_entry: e.rawValueEntry,
+                  },
+                } as unknown as Json,
+              });
+            }
+            pickRows.push(...pushed);
+            return pushed;
+          };
+          pushPicks(snaps.oneQB, "dynasty-ppr-std", "oneQB");
+          const sflexPickRows = pushPicks(snaps.sflex, "dynasty-ppr-sflex", "superflex");
+          // TEP is a copy of superflex for a pick, exactly as lib/sync-ktc.ts
+          // does, taken from this pick's own rows rather than a rescan of all.
+          const tep = formatBySlug.get("dynasty-ppr-tep-sflex");
+          if (tep) {
+            for (const row of sflexPickRows) {
+              pickRows.push({
+                ...row,
+                format_config_id: tep.id,
+                metadata: {
+                  derived_from: { source_slug: SOURCE_SLUG, base_format_slug: "dynasty-ppr-sflex" },
+                  algorithm: "copy",
+                  original: row.metadata,
+                } as unknown as Json,
+              });
+            }
+          }
+        }
+        continue;
+      }
+
       const position = normalizePosition(meta.position);
       if (!position) continue;
       const nameKey = `${normalizeName(meta.name)}|${position}`;
@@ -505,6 +640,15 @@ async function main() {
     );
   }
 
+  const dates = new Set(allRows.map((r) => r.captured_at.slice(0, 10)));
+  console.log(
+    `\nBuilt ${allRows.length} player_value_history rows over ${dates.size} dates and ${pickRows.length} draft_pick_values rows.`,
+  );
+  if (dryRun) {
+    console.log("Dry run: nothing written.");
+    return;
+  }
+
   // --- Write phase (idempotent via unique constraint)
   console.log(`\nUpserting ${allRows.length} player_value_history rows...`);
   let upserted = 0;
@@ -520,6 +664,19 @@ async function main() {
       console.log(`  progress: ${upserted}/${allRows.length}`);
     }
   }
+
+  // --- Draft picks (window runs only), same unique key the nightly sync upserts on.
+  let picksUpserted = 0;
+  for (let i = 0; i < pickRows.length; i += UPSERT_BATCH_SIZE) {
+    const chunk = pickRows.slice(i, i + UPSERT_BATCH_SIZE);
+    const { error } = await supabase.from("draft_pick_values").upsert(chunk, {
+      onConflict: "season,round,pick_position,format_config_id,source,captured_at",
+      ignoreDuplicates: true,
+    });
+    if (error) throw error;
+    picksUpserted += chunk.length;
+  }
+  if (pickRows.length > 0) console.log(`Upserted ${picksUpserted} draft_pick_values rows.`);
 
   // --- Unmatched log
   writeFileSync(
@@ -597,15 +754,10 @@ async function fetchKtcPlayerMeta(
     throw new Error(`KTC rankings ${res.status} ${res.statusText} for ${url}`);
   }
   const html = await res.text();
-  const m = html.match(/var\s+playersArray\s*=\s*(\[[\s\S]*?\])\s*;/);
-  if (!m) throw new Error(`No playersArray found at ${url}`);
-  let arr: unknown;
-  try {
-    arr = JSON.parse(m[1]);
-  } catch (err) {
-    throw new Error(`Failed to parse playersArray at ${url}: ${(err as Error).message}`);
-  }
-  if (!Array.isArray(arr)) throw new Error(`playersArray is not an array at ${url}`);
+  // Both page layouts KTC has served, through the same reader the nightly sync uses.
+  const extracted = extractKtcPlayers(html);
+  if (!extracted) throw new Error(`No KTC player list found at ${url} (markup changed?)`);
+  const arr = extracted.players;
   const out = new Map<number, { name: string; position: string }>();
   for (const raw of arr) {
     if (!raw || typeof raw !== "object") continue;
@@ -620,7 +772,10 @@ async function fetchKtcPlayerMeta(
   return out;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Run only when executed directly, so the tests can import the pure parts.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

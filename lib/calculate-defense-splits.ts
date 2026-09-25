@@ -241,13 +241,21 @@ async function loadSettings(supabase: ServiceClient): Promise<PowerPulseSettings
  * contributes at 3/(3+priorGames) strength rather than being trusted whole or
  * ignored until some arbitrary game count.
  */
-async function recentSeasons(supabase: ServiceClient): Promise<number[]> {
-  const { data } = await supabase
+/**
+ * The newest regular season we hold stats for, and the two before it.
+ *
+ * A FAILED read throws. It used to fall through to the calendar year, which
+ * rebuilt the wrong three seasons and let recordCronRun mark the run a
+ * success. Only an EMPTY table (a fresh database) uses the calendar fallback.
+ */
+export async function recentSeasons(supabase: ServiceClient): Promise<number[]> {
+  const { data, error } = await supabase
     .from("player_stats")
     .select("season")
     .eq("season_type", "regular")
     .order("season", { ascending: false })
     .limit(1);
+  if (error) throw new Error(`defense splits season lookup failed: ${error.message}`);
   const latest = data?.[0]?.season ? Number(data[0].season) : new Date().getFullYear() - 1;
   return [latest, latest - 1, latest - 2];
 }

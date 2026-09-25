@@ -34,7 +34,7 @@ export type ScheduleSlot = {
   /** Spelled out for a screen reader: "wide receiver or tight end flex". */
   description: string;
   group: SlotGroup;
-  /** False for IDP, which Sleeper publishes no projections for. */
+  /** False for a slot League Pulse does not project: every IDP slot while the IDP switch is off, and unmapped tokens (EDGE) either way. */
   projectable: boolean;
   /** Index in the league's own slot order. Ties break on this, so RB1 stays above RB2. */
   order: number;

@@ -13,6 +13,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  ACCURACY_WRITE_CHUNK,
+  replaceAccuracyRows,
   centeredShrunkMultiplier,
   currentSeasonWeekWeight,
   latestPlayedWeek,
@@ -267,5 +269,57 @@ describe("defenders graded on idp123 (IDP-115, hazard H)", () => {
     for (const key of Object.keys(IDP_PRESETS.idp123)) {
       if (key.startsWith("idp_")) expect(cols).toContain(key);
     }
+  });
+});
+
+describe("replaceAccuracyRows (C6: readers never see a partial table)", () => {
+  type Call = { op: "upsert" | "delete"; rows?: Array<Record<string, unknown>>; onConflict?: string; neq?: [string, string] };
+
+  function fakeClient(opts: { failUpsertAt?: number } = {}) {
+    const calls: Call[] = [];
+    let upserts = 0;
+    const client = {
+      from: () => ({
+        upsert: (rows: Array<Record<string, unknown>>, o: { onConflict: string }) => {
+          upserts += 1;
+          calls.push({ op: "upsert", rows, onConflict: o.onConflict });
+          const failed = opts.failUpsertAt === upserts;
+          return Promise.resolve({ error: failed ? { message: "duplicate key value" } : null });
+        },
+        delete: () => ({
+          neq: (col: string, value: string) => {
+            calls.push({ op: "delete", neq: [col, value] });
+            return Promise.resolve({ error: null });
+          },
+        }),
+      }),
+    };
+    return { client: client as unknown as Parameters<typeof replaceAccuracyRows>[0], calls };
+  }
+
+  const rows = Array.from({ length: ACCURACY_WRITE_CHUNK + 1 }, (_, i) => ({
+    player_id: `p${i}`,
+    season: i % 2 === 0 ? null : 2025,
+    scoring: "pts_ppr",
+    source: "sleeper",
+    computed_at: "2020-01-01T00:00:00.000Z",
+  }));
+
+  it("upserts every row on the full key, stamped with the run, and never deletes first", async () => {
+    const { client, calls } = fakeClient();
+    await replaceAccuracyRows(client, rows, "RUN");
+    expect(calls.map((c) => c.op)).toEqual(["upsert", "upsert", "delete"]);
+    expect(calls[0].onConflict).toBe("player_id,season,scoring,source");
+    const written = calls.filter((c) => c.op === "upsert").flatMap((c) => c.rows ?? []);
+    expect(written).toHaveLength(rows.length);
+    expect(written.every((r) => r.computed_at === "RUN")).toBe(true);
+    // Only rows this run did not write are removed.
+    expect(calls[2].neq).toEqual(["computed_at", "RUN"]);
+  });
+
+  it("skips the stale delete when an upsert fails, leaving every key readable", async () => {
+    const { client, calls } = fakeClient({ failUpsertAt: 2 });
+    await expect(replaceAccuracyRows(client, rows, "RUN")).rejects.toBeTruthy();
+    expect(calls.some((c) => c.op === "delete")).toBe(false);
   });
 });

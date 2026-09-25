@@ -46,6 +46,7 @@ import { StartSitBadge } from "@/components/start-sit-badge";
 import { FeatureSectionHeader } from "@/components/feature-section-header";
 import { POSITION_BADGE, POSITION_BADGE_FALLBACK } from "@/lib/on-the-clock/position-colors";
 import { START_SIT_CALL_LABEL_TEXT } from "@/lib/start-sit/copy";
+import { positionNoun, positionNounMap } from "@/lib/site";
 import { callLabelFor } from "@/lib/start-sit/confidence";
 import {
   comparePairsByCloseness,
@@ -335,11 +336,8 @@ export function ClosestCallsList({
 type ClosestCallsPositionKey = Exclude<StartSitPositionKey, "FLEX">;
 
 const CLOSEST_CALLS_POSITION_LABEL: Record<ClosestCallsPositionKey, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K_DEF: "defense and kicker",
+  ...positionNounMap(["QB", "RB", "WR", "TE"] as const),
+  K_DEF: `${positionNoun("DEF", "singular", "short")} and ${positionNoun("K")}`,
 };
 
 /** The heading plus the list, for one position, as one written-sections closestCalls slot. */

@@ -258,12 +258,12 @@ export function analyzeTradeTransaction(
           key: `mp-${cp.overall}`,
           kind: "made-pick",
           label: `${cp.round}.${pad2(cp.pickInRound)} - ${madeName(mp)}`,
+          // A defender's row already says "No market value" in its value
+          // column (noValue), so the detail does not say it a second time.
           detail:
-            val !== null
+            val !== null || unpriced
               ? `Pick used${posLabel}`
-              : unpriced
-                ? `Pick used${posLabel} - No market value`
-                : `Pick used${posLabel} - no FF Beacon value`,
+              : `Pick used${posLabel} - no FF Beacon value`,
           value: val ?? 0,
           estimated: false,
           noValue: val === null,

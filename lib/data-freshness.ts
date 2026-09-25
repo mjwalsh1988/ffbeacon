@@ -70,6 +70,14 @@ export type FreshnessSpec = {
    * silence is the correct behaviour rather than a symptom.
    */
   kickoffGated?: boolean;
+  /**
+   * Judge only the rows where this column equals this value. For a table
+   * several jobs write, where one job going quiet is hidden by the others.
+   * player_value_history is the case: KTC wrote nothing from 2026-09-08 to
+   * 2026-09-25 while FantasyCalc, DynastyProcess and FF Beacon kept the table
+   * as a whole fresh, so the table-wide check never fired.
+   */
+  match?: { column: string; value: string };
 };
 
 export type FreshnessResult = {
@@ -115,13 +123,29 @@ export const FRESHNESS_SPECS: readonly FreshnessSpec[] = [
     matters:
       "Power Pulse, playoff odds, Trade Ideas and the schedule board all read these. Stale rows do not look stale; they look like this week's numbers.",
   },
-  {
-    table: "player_value_history",
-    column: "captured_at",
-    label: "Player values",
-    maxAgeHours: 48,
-    matters: "Trade values, rankings and every trade evaluation are built on these snapshots.",
-  },
+  // One entry per value source rather than one for the table (see `match`).
+  // Each reads the (source, captured_at desc) index, so it is one index probe.
+  ...(
+    // DynastyProcess publishes about weekly and its rows carry ITS scrape date
+    // (lib/sync-dynastyprocess.ts), so its newest row is routinely 3 to 7 days
+    // old and 48 hours would email a false alarm most days: nine days is one
+    // missed weekly release plus slack. The other three write every night.
+    [
+      ["ktc", "KeepTradeCut", 48],
+      ["fantasycalc", "FantasyCalc", 48],
+      ["dynastyprocess", "DynastyProcess", 216],
+      ["ffbeacon", "FF Beacon", 48],
+    ] as const
+  ).map(
+    ([source, name, maxAgeHours]): FreshnessSpec => ({
+      table: "player_value_history",
+      column: "captured_at",
+      label: `Player values (${name})`,
+      maxAgeHours,
+      match: { column: "source", value: source },
+      matters: `Trade values, rankings and every trade evaluation read under ${name} are built on these snapshots. Another source writing on schedule keeps the table looking fresh, which is why each is checked on its own.`,
+    }),
+  ),
   {
     table: "player_value_trends",
     column: "updated_at",
@@ -285,9 +309,9 @@ export async function checkDataFreshness(
   const results = await Promise.all(
     specs.map(async (spec) => {
       try {
-        const { data, error } = await admin
-          .from(spec.table)
-          .select(spec.column)
+        let query = admin.from(spec.table).select(spec.column);
+        if (spec.match) query = query.eq(spec.match.column, spec.match.value);
+        const { data, error } = await query
           .order(spec.column, { ascending: false })
           .limit(1)
           .maybeSingle()

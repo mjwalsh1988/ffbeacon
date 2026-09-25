@@ -128,3 +128,30 @@ export function rawStarterIds(row: RawMatchupRow): string[] {
   const { ids } = pickStarterArrays(row);
   return ids.map((id) => (typeof id === "string" ? id : ""));
 }
+
+/**
+ * Every real player id the week's row itself names: the starters and every
+ * key of `player_points`, whatever that key's value is (a player whose game
+ * has not kicked off can carry a null and is still on the roster that week).
+ *
+ * A roster row is only as fresh as the league's last pulse; the week's row
+ * can be newer, so a reader of the week resolves players from both. A player
+ * resolved this way is a real player from then on: he is named, projected,
+ * and counted in the set total and the best-lineup comparison, where before
+ * he was an "Unknown player" left out of both sides.
+ */
+export function weekPlayerIds(row: RawMatchupRow): string[] {
+  const out = new Set<string>();
+  for (const id of pickStarterArrays(row).ids) {
+    const real = asPlayerId(id);
+    if (real !== null) out.add(real);
+  }
+  const raw = row.player_points;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const key of Object.keys(raw as Record<string, unknown>)) {
+      const real = asPlayerId(key);
+      if (real !== null) out.add(real);
+    }
+  }
+  return [...out];
+}

@@ -8,16 +8,41 @@
  * scoring it uses. ASCII only.
  */
 
-import { ChartFigure, DataTable, Td, Th } from "@/components/chart-kit";
+import {
+  ChartFigure,
+  DataTable,
+  PLAYER_SERIES,
+  POSITION_SERIES,
+  SERIES_A,
+  SERIES_B,
+  Td,
+  Th,
+} from "@/components/chart-kit";
 import { positionNoun } from "@/lib/site";
 import type { IdpLeagueFacts } from "@/lib/guides/idp-leagues";
 import { MIN_GAMES, type StabilityFigure } from "@/lib/guides/idp-stability";
 import type { EligibilityCounts, RankGroupRow } from "@/lib/guides/idp-scarcity";
 
-const PURPLE = "#A855F7";
-const CYAN = "#22D3EE";
-const LINE = "#2A2A3C";
-const INK_SUBTLE = "#8A8A9C";
+/*
+ * Colours come from the shared tokens, never typed here (review item 53).
+ * Bars take chart-kit's validated series hues, measured against the figure
+ * surface there: brand purple and cyan (SERIES_A, SERIES_B), the defensive
+ * line lime (POSITION_SERIES.DL, the same hue as tailwind position.dl) and
+ * ink.muted (PLAYER_SERIES[6]). Text and bar tracks take the tailwind colour
+ * utilities (fill-ink, fill-ink-subtle, fill-line-accent), so they follow
+ * tailwind.config.ts if a token moves. The site ships one theme; every pair
+ * here clears AA on it, and chart-kit.tsx records the ratios.
+ */
+const PURPLE = SERIES_A;
+const CYAN = SERIES_B;
+const LIME = POSITION_SERIES.DL.color;
+const GREY = PLAYER_SERIES[6].color;
+/** Value labels beside a bar. */
+const VALUE_TEXT = "fill-ink";
+/** Row labels and quieter annotations. */
+const LABEL_TEXT = "fill-ink-subtle";
+/** The empty track behind a bar. */
+const TRACK = "fill-line-accent";
 
 /** Lesson 1: how many defenders the leagues we hold actually start. */
 export function StarterCountFigure({ facts }: { facts: IdpLeagueFacts }) {
@@ -70,12 +95,12 @@ export function StarterCountFigure({ facts }: { facts: IdpLeagueFacts }) {
           const w = ((width - labelW - 40) * r.count) / max;
           return (
             <g key={r.label}>
-              <text x={0} y={y + barH * 0.7} fontSize={12} fill={INK_SUBTLE}>
+              <text x={0} y={y + barH * 0.7} fontSize={12} className={LABEL_TEXT}>
                 {r.label}
               </text>
-              <rect x={labelW} y={y} width={width - labelW - 40} height={barH} rx={4} fill={LINE} />
+              <rect x={labelW} y={y} width={width - labelW - 40} height={barH} rx={4} className={TRACK} />
               <rect x={labelW} y={y} width={Math.max(0, w)} height={barH} rx={4} fill={PURPLE} />
-              <text x={labelW + w + 6} y={y + barH * 0.7} fontSize={12} fill="#E5E5EE">
+              <text x={labelW + w + 6} y={y + barH * 0.7} fontSize={12} className={VALUE_TEXT}>
                 {r.count}
               </text>
             </g>
@@ -101,7 +126,7 @@ export function StabilityFigureView({
   const metrics = [
     { key: "points" as const, label: "Points per game", color: PURPLE },
     { key: "tackles" as const, label: "Tackles per game", color: CYAN },
-    { key: "sacks" as const, label: "Sacks per game", color: "#A3E635" },
+    { key: "sacks" as const, label: "Sacks per game", color: LIME },
   ];
   const width = 560;
   const groupH = 3 * 16 + 18;
@@ -148,7 +173,7 @@ export function StabilityFigureView({
       <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" aria-hidden="true">
         {figures.map((f, gi) => (
           <g key={f.position} transform={`translate(0, ${gi * groupH})`}>
-            <text x={0} y={14} fontSize={12} fill="#E5E5EE">
+            <text x={0} y={14} fontSize={12} className={VALUE_TEXT}>
               {positionNoun(f.position, "plural")}
             </text>
             {metrics.map((m, mi) => {
@@ -157,12 +182,12 @@ export function StabilityFigureView({
               const y = 20 + mi * 16;
               return (
                 <g key={m.key}>
-                  <text x={10} y={y + 10} fontSize={10} fill={INK_SUBTLE}>
+                  <text x={10} y={y + 10} fontSize={10} className={LABEL_TEXT}>
                     {m.label}
                   </text>
-                  <rect x={labelW} y={y} width={width - labelW - 50} height={12} rx={3} fill={LINE} />
+                  <rect x={labelW} y={y} width={width - labelW - 50} height={12} rx={3} className={TRACK} />
                   <rect x={labelW} y={y} width={w} height={12} rx={3} fill={m.color} />
-                  <text x={labelW + w + 6} y={y + 10} fontSize={10} fill="#E5E5EE">
+                  <text x={labelW + w + 6} y={y + 10} fontSize={10} className={VALUE_TEXT}>
                     {fmt(f[m.key])}
                   </text>
                 </g>
@@ -213,7 +238,7 @@ export function RankGroupFigure({ rows, season }: { rows: RankGroupRow[]; season
           )
           .join("; ")}.${steepest ? ` The steepest fall is at ${positionNoun(steepest.position)}.` : ""}`;
 
-  const colors = [PURPLE, CYAN, "#A3E635", INK_SUBTLE];
+  const colors = [PURPLE, CYAN, LIME, GREY];
   const max = Math.max(1, ...rows.flatMap((r) => r.groups.map((g) => g.perGame ?? 0)));
   const width = 560;
   const labelW = 150;
@@ -256,7 +281,7 @@ export function RankGroupFigure({ rows, season }: { rows: RankGroupRow[]; season
       <svg viewBox={`0 0 ${width} ${Math.max(1, height)}`} className="h-auto w-full" aria-hidden="true">
         {rows.map((r, gi) => (
           <g key={r.position} transform={`translate(0, ${gi * groupH})`}>
-            <text x={0} y={14} fontSize={12} fill="#E5E5EE">
+            <text x={0} y={14} fontSize={12} className={VALUE_TEXT}>
               {positionNoun(r.position, "plural")}
             </text>
             {r.groups.map((g, i) => {
@@ -265,12 +290,12 @@ export function RankGroupFigure({ rows, season }: { rows: RankGroupRow[]; season
               const y = 20 + i * (barH + 4);
               return (
                 <g key={g.label}>
-                  <text x={10} y={y + 10} fontSize={10} fill={INK_SUBTLE}>
+                  <text x={10} y={y + 10} fontSize={10} className={LABEL_TEXT}>
                     Ranks {g.label}
                   </text>
-                  <rect x={labelW} y={y} width={width - labelW - 50} height={barH} rx={3} fill={LINE} />
+                  <rect x={labelW} y={y} width={width - labelW - 50} height={barH} rx={3} className={TRACK} />
                   <rect x={labelW} y={y} width={w} height={barH} rx={3} fill={colors[i % colors.length]} />
-                  <text x={labelW + w + 6} y={y + 10} fontSize={10} fill="#E5E5EE">
+                  <text x={labelW + w + 6} y={y + 10} fontSize={10} className={VALUE_TEXT}>
                     {g.perGame === null ? "-" : g.perGame.toFixed(1)}
                   </text>
                 </g>
@@ -331,12 +356,12 @@ export function EligibilityFigure({ counts }: { counts: EligibilityCounts }) {
           const twoWay = r.label.includes(" and ");
           return (
             <g key={r.label}>
-              <text x={0} y={y + barH * 0.7} fontSize={12} fill={INK_SUBTLE}>
+              <text x={0} y={y + barH * 0.7} fontSize={12} className={LABEL_TEXT}>
                 {r.label}
               </text>
-              <rect x={labelW} y={y} width={width - labelW - 50} height={barH} rx={4} fill={LINE} />
+              <rect x={labelW} y={y} width={width - labelW - 50} height={barH} rx={4} className={TRACK} />
               <rect x={labelW} y={y} width={Math.max(0, w)} height={barH} rx={4} fill={twoWay ? CYAN : PURPLE} />
-              <text x={labelW + w + 6} y={y + barH * 0.7} fontSize={12} fill="#E5E5EE">
+              <text x={labelW + w + 6} y={y + barH * 0.7} fontSize={12} className={VALUE_TEXT}>
                 {r.count}
               </text>
             </g>

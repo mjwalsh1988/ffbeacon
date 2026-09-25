@@ -27,6 +27,8 @@ import {
 import type { MetricSide } from "@/lib/breakdown/metrics";
 import { loadLeagueMode, type LeagueModeResult } from "@/lib/breakdown/league-mode";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { IDP_PRESET_LABEL } from "@/lib/idp/scoring-presets";
 import { findPlayerTrades } from "@/lib/player-trades";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -43,7 +45,11 @@ import { searchFantasyPlayers } from "@/lib/player-search";
 import { readSleeperId } from "@/lib/player-profile";
 import { resolveSeasonClock } from "@/lib/start-sit/clock";
 import {
+  boardSide,
+  getsPickerChip,
   loadStartSitBoard,
+  unadjustedPositionsFrom,
+  type StartSitSide,
   normalizeStartSitSlugs,
   parseStartCountParam,
   remainingWeeksFrom,
@@ -155,15 +161,25 @@ function displayNameOf(row: {
  * string, and the lookup uses the request-cached admin client (these are
  * public player reads).
  */
-const resolveStartSitEntriesOnce = cache(async (entriesKey: string) =>
-  resolveStartSitEntries(createAdminClient(), JSON.parse(entriesKey) as string[]),
-);
+const resolveStartSitEntriesOnce = cache(async (entriesKey: string) => {
+  const admin = createAdminClient();
+  // The IDP switch decides whether a typed defender's name resolves and gets
+  // a chip. Memoised for a minute inside loadPowerPulseSettings.
+  const allowDefenders = idpEnabledFrom(await loadPowerPulseSettings(admin));
+  return resolveStartSitEntries(admin, JSON.parse(entriesKey) as string[], allowDefenders);
+});
 
 async function resolveStartSitEntries(
   supabase: AnySupabase,
   rawEntries: string[],
-): Promise<{ slugs: string[]; players: StartSitPickedPlayer[]; defenderSlugs: string[] }> {
-  if (rawEntries.length === 0) return { slugs: [], players: [], defenderSlugs: [] };
+  allowDefenders: boolean,
+): Promise<{
+  slugs: string[];
+  players: StartSitPickedPlayer[];
+  defenderSlugs: string[];
+  side: StartSitSide;
+}> {
+  if (rawEntries.length === 0) return { slugs: [], players: [], defenderSlugs: [], side: "offense" };
 
   const db = supabase as SupabaseClient<Database>;
   const { data } = await db
@@ -192,7 +208,12 @@ async function resolveStartSitEntries(
         };
       }
       try {
-        const results = await searchFantasyPlayers(supabase, { query: entry, limit: 1 });
+        const results = await searchFantasyPlayers(supabase, {
+          query: entry,
+          limit: 1,
+          // Defenders who pass the relevance gate, only while the switch is on.
+          ...(allowDefenders ? { pool: "ranked+idp" as const } : {}),
+        });
         const match = results[0];
         if (match) {
           return {
@@ -219,17 +240,26 @@ async function resolveStartSitEntries(
   );
 
   const slugs = normalizeStartSitSlugs(resolved.map((r) => r.slug));
-  // A defender keeps his slug, so the board refuses him in its own sentence,
-  // but gets no picker chip: a chip says "this player is in the comparison",
-  // and he is not (plan R-23, IDP-127).
-  const players = slugs
-    .map((slug) => resolved.find((r) => r.slug === slug)?.player ?? null)
-    .filter((p): p is StartSitPickedPlayer => p !== null && !isDefender(p.position));
+  // With the IDP switch on a defender is a real candidate and gets a chip.
+  // With it off he keeps his slug, so the board refuses him in its own
+  // sentence, but gets no chip: a chip says "this player is in the
+  // comparison", and he is not (plan R-23, IDP-127).
+  //
+  // The side comes from the SAME rule the board applies (boardSide), so a
+  // player the board will refuse as "other side" gets no chip either.
+  const bySlugResolved = slugs.map((slug) => resolved.find((r) => r.slug === slug)?.player ?? null);
+  const side = boardSide(
+    bySlugResolved.map((p) => p?.position ?? null),
+    allowDefenders,
+  );
+  const players = bySlugResolved.filter(
+    (p): p is StartSitPickedPlayer => p !== null && getsPickerChip(p.position, allowDefenders, side),
+  );
   const defenderSlugs = slugs.filter((slug) =>
     isDefender(resolved.find((r) => r.slug === slug)?.player?.position),
   );
 
-  return { slugs, players, defenderSlugs };
+  return { slugs, players, defenderSlugs, side };
 }
 
 /* ------------------------------------------------------------------ */
@@ -313,6 +343,9 @@ export default async function WhoShouldIStartPage({
   const admin = createAdminClient();
 
   const rawEntries = parseRawPlayerEntries(params);
+  // Started now, awaited below: it needs nothing from the first wave, so it
+  // runs beside it rather than after it (one round trip saved per render).
+  const entriesPromise = resolveStartSitEntriesOnce(JSON.stringify(rawEntries));
 
   const [clock, pulseSettings, formatResolution, sourceResolution, registry, activeFormats, isMember] =
     await Promise.all([
@@ -348,11 +381,21 @@ export default async function WhoShouldIStartPage({
     slugs: finalSlugs,
     players: initialPlayers,
     defenderSlugs,
-  } = await resolveStartSitEntriesOnce(JSON.stringify(rawEntries));
+    side: boardSideOfBall,
+  } = await entriesPromise;
   // The breakdown compares offensive players only and refuses a whole group
   // that holds a defender, so it is handed the others (IDP-127 review): one
   // linebacker in a shared link must not take the receivers' tabs with him.
-  const breakdownSlugs = finalSlugs.filter((slug) => !defenderSlugs.includes(slug));
+  //
+  // The board takes its side of the ball from the first player that resolves
+  // onto it (lib/start-sit/load.ts boardSide, the same rule the loader
+  // applies). On a defensive board the offensive players were refused from
+  // it, so the tabs must not go on to compare them as though they were the
+  // question.
+  const defensiveBoard = boardSideOfBall === "defense";
+  const breakdownSlugs = defensiveBoard
+    ? []
+    : finalSlugs.filter((slug) => !defenderSlugs.includes(slug));
   const hasPlayers = finalSlugs.length >= MIN_START_SIT_PLAYERS;
   const initialStart = clampStartCount(parseStartCountParam(params.start), finalSlugs.length);
 
@@ -465,10 +508,16 @@ export default async function WhoShouldIStartPage({
 
             <div className="mt-4 mx-auto max-w-5xl space-y-6">
               <StartSitPicker
+                // Remounted when the resolved list changes, so a chip the
+                // server refused (another side of the ball) cannot linger in
+                // the client's own state after navigation.
+                key={initialPlayers.map((p) => p.slug).join(",")}
                 basePath={TOOL_PATH}
                 initialPlayers={initialPlayers}
                 initialStart={initialStart}
-                formatDisplay={formatDisplay}
+                // On a defensive board every point is in the IDP scoring, not
+                // the reader's format, so the chip says that.
+                formatDisplay={boardSideOfBall === "defense" ? IDP_PRESET_LABEL.idp123 : formatDisplay}
                 sourceDisplay={sourceDisplay}
               />
               <WeekSelect currentWeek={clock.currentWeek} weeks={remainingWeeks} />
@@ -604,7 +653,7 @@ async function BoardSection({
   basePath,
 }: {
   finalSlugs: string[];
-  /** finalSlugs without defenders: the breakdown compares offense only. */
+  /** finalSlugs without defenders (empty on a defensive board): the breakdown compares offense only. */
   breakdownSlugs: string[];
   params: StartSitSearchParams;
   pulseSettings: Awaited<ReturnType<typeof loadPowerPulseSettings>>;
@@ -620,6 +669,8 @@ async function BoardSection({
       startParam: params.start,
       formatParam: params.format,
       sourceParam: params.source,
+      allowDefenders: idpEnabledFrom(pulseSettings),
+      unadjustedPositions: unadjustedPositionsFrom(pulseSettings.opponent.positionReliability),
     }),
     breakdownSlugs.length >= MIN_START_SIT_PLAYERS
       ? loadBreakdown(supabase, breakdownSlugs, {
@@ -636,7 +687,9 @@ async function BoardSection({
     startCount: board.startCount,
     week: board.week,
     season: board.season ?? Number(currentNflSeason()),
-    formatDisplay: board.format.display,
+    // The scoring every point on the board is in: the reader's format, or
+    // Sleeper's default IDP scoring on a defensive board.
+    formatDisplay: board.scoringLabel,
     projectionSource: board.projectionSource,
   });
 
@@ -861,6 +914,13 @@ async function BoardSection({
         recentForm={recentForm}
         basePath={basePath}
       />
+      {board.side === "defense" && board.candidates.length >= MIN_START_SIT_PLAYERS && (
+        <p className="rounded-card border border-dashed border-line bg-base/40 px-4 py-3 text-sm leading-relaxed text-ink-muted">
+          Defensive players are scored here under the {board.scoringLabel}, not under your format, so a
+          league with its own IDP scoring will see different totals. The comparison tabs and the league
+          view cover offensive players only.
+        </p>
+      )}
       {tabsContent}
     </div>
   );

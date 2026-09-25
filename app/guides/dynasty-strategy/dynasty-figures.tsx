@@ -8,6 +8,7 @@ import {
 } from "@/components/chart-kit";
 import { formatEasternShortDate } from "@/lib/datetime";
 import { teamStatusBands } from "@/lib/league-team-status";
+import { positionNounMap } from "@/lib/site";
 import {
   AGE_BANDS,
   AGE_MARKET_TOP_N,
@@ -441,12 +442,10 @@ const BAND_COLOR: Record<AgeBandKey, string> = {
   veteran: ROSE,
 };
 
-const POSITION_NAME: Record<string, string> = {
-  QB: "Quarterbacks",
-  RB: "Running backs",
-  WR: "Wide receivers",
-  TE: "Tight ends",
-};
+const POSITION_NAME: Record<string, string> = positionNounMap(["QB", "RB", "WR", "TE"] as const, {
+  form: "plural",
+  heading: true,
+});
 
 export function AgeMarketFigure({ market }: { market: DynastyAgeMarket }) {
   if (market.status !== "ok") {

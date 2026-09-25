@@ -25,6 +25,7 @@ import { alignedStartingSlots } from "./slots";
 import {
   readRosteredPlayerPoints,
   readSetLineup,
+  weekPlayerIds,
   type RawMatchupRow,
 } from "./lineups";
 import { buildMatchupView, type MatchupSideInput } from "./matchup";
@@ -381,10 +382,14 @@ export async function loadMatchupDetail(
 ): Promise<MatchupDetailResult> {
   const { leagueRowId, season, week, sleeperRosterId, currentWeek } = params;
 
-  const league = await loadLeague(admin, leagueRowId);
-  if (!league) return { ok: false, reason: "no-data" };
-
-  const { data: weekRows, error } = await supabase
+  // One wave for everything that depends only on (league, season, week):
+  // the league row, the week's rows, the rosters, the settings and the Pulse
+  // ranks used to be three waves in a row. A missing league or week now costs
+  // the other reads for nothing, which is the rare path; the page it serves
+  // saves two round trips on every render.
+  const [league, weekRes, rosters, settings, cacheRes] = await Promise.all([
+    loadLeague(admin, leagueRowId),
+    supabase
     .from("league_matchups")
     .select(
       // `player_ids` is deliberately absent. Nothing downstream reads it:
@@ -397,7 +402,17 @@ export async function loadMatchupDetail(
     )
     .eq("league_id", leagueRowId)
     .eq("season", season)
-    .eq("week", week);
+    .eq("week", week),
+    loadRosters(admin, leagueRowId),
+    loadPowerPulseSettings(admin),
+    supabase
+      .from("league_power_pulse_cache")
+      .select("roster_id, pulse_rank")
+      .eq("league_id", leagueRowId)
+      .eq("season", season),
+  ]);
+  if (!league) return { ok: false, reason: "no-data" };
+  const { data: weekRows, error } = weekRes;
   if (error || !weekRows || weekRows.length === 0)
     return { ok: false, reason: "not-found" };
 
@@ -415,22 +430,8 @@ export async function loadMatchupDetail(
             Number(r.sleeper_roster_id) !== sleeperRosterId,
         ) ?? null);
 
-  // The matchup header shows an @handle and an avatar beside each team name.
-  // Those used to arrive from a second `league_users` read and a second
-  // `rosters` read issued right here, on top of the two loadRosters had already
-  // done for the same league. loadRosters now carries ownerHandle and
-  // ownerAvatarId off its existing join, so this page and the share card each
-  // make two fewer round trips.
-  const [rosters, settings, cacheRes] = await Promise.all([
-    loadRosters(admin, leagueRowId),
-    loadPowerPulseSettings(admin),
-    supabase
-      .from("league_power_pulse_cache")
-      .select("roster_id, pulse_rank")
-      .eq("league_id", leagueRowId)
-      .eq("season", season),
-  ]);
-
+  // The matchup header's @handle and avatar come off loadRosters' existing
+  // join (read in the wave above), not a second league_users read.
   const involvedIds = [sleeperRosterId];
   if (awayRow) involvedIds.push(Number(awayRow.sleeper_roster_id));
   const involved = rosters.filter((r) =>
@@ -454,14 +455,33 @@ export async function loadMatchupDetail(
   const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
   const slots = alignedStartingSlots(league.rosterPositions, idpReads.slotMap);
 
+  const rawRowFor = (row: (typeof weekRows)[number]): RawMatchupRow => ({
+    starter_ids: row.starter_ids as Json,
+    starter_points: row.starter_points as Json,
+    player_ids: null,
+    player_points: row.player_points as Json,
+    metadata: row.metadata as Json,
+  });
+  const weekRawRows = [homeRow, ...(awayRow ? [awayRow] : [])].map(rawRowFor);
+
+  // The week's own starters and scorers are resolved as well as the stored
+  // roster. The roster row is only as fresh as the league's last pulse, and
+  // the OG matchup routes render without one, so a player started that week
+  // and added after that pulse would otherwise come back "Unknown player"
+  // while sitting in the players table the whole time. Once resolved he is
+  // projected and counted like anyone else, on both sides of the best-lineup
+  // gap (see lib/league-schedule/lineups.ts weekPlayerIds).
   const sleeperIds = Array.from(
     new Set(
-      involved.flatMap((r) => [
-        ...r.playerSleeperIds,
-        ...r.starterSleeperIds,
-        ...r.reserveSleeperIds,
-        ...r.taxiSleeperIds,
-      ]),
+      [
+        ...involved.flatMap((r) => [
+          ...r.playerSleeperIds,
+          ...r.starterSleeperIds,
+          ...r.reserveSleeperIds,
+          ...r.taxiSleeperIds,
+        ]),
+        ...weekRawRows.flatMap(weekPlayerIds),
+      ],
     ),
   );
   // Defenders are always NAMED (plan IDP-122). They are projected only when
@@ -521,13 +541,7 @@ export async function loadMatchupDetail(
     const roster = involved.find((r) => r.sleeperRosterId === rosterId);
     if (!roster) return null;
 
-    const raw: RawMatchupRow = {
-      starter_ids: row.starter_ids as Json,
-      starter_points: row.starter_points as Json,
-      player_ids: null,
-      player_points: row.player_points as Json,
-      metadata: row.metadata as Json,
-    };
+    const raw = rawRowFor(row);
 
     return {
       sleeperRosterId: rosterId,

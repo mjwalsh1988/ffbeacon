@@ -457,7 +457,9 @@ When integrating a new data source, investigate historical API access during the
 
 ABSOLUTE RULE: Backfill is a one-time operation. NEVER wire it into the nightly cron. Re-runs must be idempotent via the relevant unique constraint, but should not be scheduled — they would burn the public endpoint's resources for no new data.
 
-The backfill script for an existing source lives at `scripts/backfill-<source>-history.ts` and is invoked via `npm run backfill:<source>`. The canonical post-backfill chain (`npm run backfill:all`) runs every available backfill script and then `scripts/calculate-trends.ts` so the derived `player_value_trends` table reflects the freshly-imported snapshots.
+The backfill script for an existing source lives at `scripts/backfill-<source>-history.ts` and is invoked via `npm run backfill:<source>`. The canonical post-backfill chain (`npm run backfill:all`) runs the DynastyProcess and rookie ADP backfills and then `scripts/calculate-trends.ts` so the derived `player_value_trends` table reflects the freshly-imported snapshots.
+
+ABSOLUTE RULE: a backfill for a source that ALSO has a nightly sync writes only the days the sync missed. The backfill stamps a day at UTC noon and the sync stamps it at the moment it ran, and the unique key includes `captured_at`, so a full rerun adds a second row for every day already synced. That is why the KTC backfill is not in `backfill:all` and refuses to run without a window: `npx tsx --env-file=.env.local scripts/backfill-ktc-history.ts --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run]` (the `--all` flag is the original one-time full run). Under PowerShell, `npm run backfill:ktc -- --from ...` loses its flags; call tsx directly.
 
 ### When These Rules Apply
 

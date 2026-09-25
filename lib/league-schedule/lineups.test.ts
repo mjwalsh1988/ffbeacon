@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { readRosteredPlayerPoints, readSetLineup, rawStarterIds, type RawMatchupRow } from "./lineups";
+import {
+  readRosteredPlayerPoints,
+  readSetLineup,
+  rawStarterIds,
+  weekPlayerIds,
+  type RawMatchupRow,
+} from "./lineups";
 import { alignedStartingSlots } from "./slots";
 
 const SLOTS = alignedStartingSlots(["QB", "RB", "FLEX", "WR", "TE", "BN", "BN"]);
@@ -156,5 +162,24 @@ describe("rawStarterIds", () => {
     expect(
       rawStarterIds(row({ starter_ids: ["qb1"], metadata: { starters: ["qb1", "0"] } })),
     ).toEqual(["qb1", "0"]);
+  });
+});
+
+describe("weekPlayerIds", () => {
+  // The week's row can be newer than the stored roster (the OG matchup routes
+  // render with no pulse), so a starter added since the last pulse must still
+  // be named rather than printed as "Unknown player".
+  it("names the week's starters and everyone in player_points, placeholders dropped", () => {
+    const ids = weekPlayerIds(
+      row({
+        metadata: { starters: ["qb1", "0", "lb9"] },
+        player_points: { qb1: 20.1, bench2: null, lb9: 7 },
+      }),
+    );
+    expect(ids.sort()).toEqual(["bench2", "lb9", "qb1"]);
+  });
+
+  it("returns nothing for an empty row", () => {
+    expect(weekPlayerIds(row({}))).toEqual([]);
   });
 });

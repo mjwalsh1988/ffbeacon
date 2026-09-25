@@ -19,6 +19,7 @@
  * Pure and deterministic.
  */
 
+import { OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 import type { DraftPosition, RankedPlayer } from "./board-types";
 import type { ShapedPick } from "./types";
 
@@ -36,23 +37,14 @@ export interface DraftAlert {
   severity: number;
 }
 
-const POS_PLURAL: Record<DraftPosition, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+const POS_PLURAL: Record<DraftPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  form: "plural",
+  short: true,
+});
 
-const POS_SINGULAR: Record<DraftPosition, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POS_SINGULAR: Record<DraftPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  short: true,
+});
 
 function coercePosition(pos: string | null | undefined): DraftPosition | null {
   const p = (pos ?? "").toUpperCase();

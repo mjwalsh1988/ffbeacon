@@ -34,7 +34,7 @@
  * ("71 percent"), matching the plan's own example; points carry one decimal.
  */
 
-import { positionNoun } from "@/lib/site";
+import { isDefender, positionNoun } from "@/lib/site";
 import { ordinal } from "@/lib/league-team-status";
 import type { PulsePosition, StartSitCandidate, StartSitProjection } from "./types";
 
@@ -89,7 +89,11 @@ export type StartSitReasonInput = {
   bench: string[];
   /** P(starters[last] outscores bench[0]); null when either sigma is missing. */
   confidence: number | null;
-  /** The reader's format, for example "PPR" or "Half PPR". */
+  /**
+   * The scoring every point on the board is in: the reader's format ("PPR",
+   * "Half PPR") on an offensive board, "Sleeper default IDP scoring" on a
+   * defensive one (board.scoringLabel).
+   */
   formatDisplay: string;
 };
 
@@ -190,9 +194,16 @@ function matchupReason(input: StartSitReasonInput): string | null {
   const winnerProj = aBetter ? aProj : bProj;
   const winnerRank = aBetter ? aRank : bRank;
   if (!winnerProj.opponent) return null;
-  return `${winnerCandidate.name} has the better matchup: ${winnerProj.opponent} allows ${rankPhrase(
-    winnerRank,
-  )} points to ${positionPlural(winnerCandidate.position)}.`;
+  // Early in a season the rank is last season's (StartSitProjection
+  // defenseRankSeason), and the sentence says so rather than pass it off as now.
+  const past = winnerProj.defenseRankSeason;
+  return past != null
+    ? `${winnerCandidate.name} has the better matchup: ${winnerProj.opponent} allowed ${rankPhrase(
+        winnerRank,
+      )} points to ${positionPlural(winnerCandidate.position)} in ${past}.`
+    : `${winnerCandidate.name} has the better matchup: ${winnerProj.opponent} allows ${rankPhrase(
+        winnerRank,
+      )} points to ${positionPlural(winnerCandidate.position)}.`;
 }
 
 /** "{A} has beaten the projection in {m} of {n} graded weeks; {B} in {p} of {q}." */
@@ -215,6 +226,9 @@ function environmentReason(input: StartSitReasonInput): string | null {
   const rows: { candidate: StartSitCandidate; total: number }[] = [];
   for (const id of ids) {
     const c = findCandidate(input, id);
+    // A defender's own offense's implied total is not his opportunity, and
+    // nothing here models what is, so a defensive board says nothing about it.
+    if (c && isDefender(c.position)) return null;
     const p = findProjection(input, id);
     if (!c || !p || p.environment == null || p.environment.impliedTotal == null) return null;
     rows.push({ candidate: c, total: p.environment.impliedTotal });

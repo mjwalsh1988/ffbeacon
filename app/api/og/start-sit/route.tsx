@@ -1,8 +1,10 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
-import { loadStartSitBoard, normalizeStartSitSlugs } from "@/lib/start-sit/load";
+import { loadStartSitBoard, normalizeStartSitSlugs, unadjustedPositionsFrom } from "@/lib/start-sit/load";
 import { computeStartSit } from "@/lib/start-sit/engine";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
 import {
   MIN_START_SIT_PLAYERS,
   type StartSitProjection,
@@ -39,7 +41,7 @@ const BG = "#0F0F1A";
 const BG_BASE = "#07070D";
 const INK = "#F4F4F8";
 const INK_MUTED = "#A8A8B8";
-const INK_SUBTLE = "#6B6B7D";
+const INK_SUBTLE = "#8A8A9C";
 const PURPLE = "#A855F7";
 const CYAN = "#22D3EE";
 const LINE = "#1F1F33";
@@ -154,6 +156,8 @@ type CardOutcome =
  */
 async function buildCardOutcome(supabase: AnySupabase, url: URL): Promise<CardOutcome> {
   const slugs = normalizeStartSitSlugs((url.searchParams.get("p") ?? "").split(","));
+  // Read once; memoised for a minute. Service-role only, hence the admin client.
+  const pulseSettings = await loadPowerPulseSettings(createAdminClient());
 
   const board = await loadStartSitBoard({
     supabase,
@@ -162,6 +166,10 @@ async function buildCardOutcome(supabase: AnySupabase, url: URL): Promise<CardOu
     startParam: url.searchParams.get("start") ?? undefined,
     formatSlug: url.searchParams.get("format") ?? undefined,
     sourceSlug: url.searchParams.get("source") ?? undefined,
+    // The same switch the page reads, so a shared defensive board draws the
+    // same verdict the reader saw. Memoised for a minute.
+    allowDefenders: idpEnabledFrom(pulseSettings),
+    unadjustedPositions: unadjustedPositionsFrom(pulseSettings.opponent.positionReliability),
   });
 
   if (board.season == null) return { ok: false, reason: "No projections available yet" };
@@ -176,7 +184,7 @@ async function buildCardOutcome(supabase: AnySupabase, url: URL): Promise<CardOu
     startCount: board.startCount,
     week: board.week,
     season: board.season,
-    formatDisplay: board.format.display,
+    formatDisplay: board.scoringLabel,
     projectionSource: board.projectionSource,
   });
 
@@ -190,7 +198,7 @@ async function buildCardOutcome(supabase: AnySupabase, url: URL): Promise<CardOu
     confidence: verdict.confidence,
     callLabel: verdict.callLabel,
     week: verdict.week,
-    formatDisplay: board.format.display,
+    formatDisplay: board.scoringLabel,
     projectionSource: verdict.projectionSource,
   };
 }

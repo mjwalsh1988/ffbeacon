@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { readSleeperId } from "@/lib/ranking-boards";
 import { searchFantasyPlayers } from "@/lib/player-search";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
 
 /**
  * GET /api/breakdown/search?q=&limit=
@@ -53,7 +55,15 @@ export async function GET(req: Request) {
 
   let rows;
   try {
-    rows = await searchFantasyPlayers(supabase, { query, limit });
+    // Defenders are offered only while the IDP switch is on, because only then
+    // can the start/sit board score them (lib/start-sit/load.ts). The settings
+    // row is service-role only; the read is memoised for a minute.
+    const allowDefenders = idpEnabledFrom(await loadPowerPulseSettings(createAdminClient()));
+    rows = await searchFantasyPlayers(supabase, {
+      query,
+      limit,
+      ...(allowDefenders ? { pool: "ranked+idp" as const } : {}),
+    });
   } catch (error) {
     console.error("[breakdown/search] query failed", error);
     return NextResponse.json({ error: "Search failed" }, { status: 500 });

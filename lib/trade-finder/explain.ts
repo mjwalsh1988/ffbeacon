@@ -27,6 +27,8 @@ import type {
   TradePosition,
   TradeStrategy,
 } from "./types";
+import { TRADE_POSITIONS } from "./types";
+import { positionNounMap } from "@/lib/site";
 
 /** How the reader described what they were after, in the engine's own words. */
 const GOAL_CLAUSE: Record<TradeGoal, string> = {
@@ -610,14 +612,10 @@ export function buildCaveats(params: {
  * Kept local rather than added to TRADE_POSITION_LABEL, which is a heading
  * word ("Running back"), not a sentence word ("running backs").
  */
-const TENDENCY_POSITION_PLURAL: Record<TradePosition, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "wide receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+const TENDENCY_POSITION_PLURAL: Record<TradePosition, string> = positionNounMap(TRADE_POSITIONS, {
+  form: "plural",
+  short: ["DEF"],
+});
 
 /** "trades often..." becomes "Trades often...". Straight ASCII only, so no locale surprises. */
 function capitalize(s: string): string {

@@ -1,5 +1,6 @@
 import { getServiceClient } from "./_supabase";
 import { fetchAllRows } from "../lib/supabase/fetch-all";
+import { extractKtcPlayers } from "../lib/ktc-page";
 
 function normalizeName(name: string): string {
   return name
@@ -17,9 +18,9 @@ async function main() {
     headers: { "user-agent": "Mozilla/5.0 Chrome/120" },
   });
   const html = await response.text();
-  const match = html.match(/var\s+playersArray\s*=\s*(\[[\s\S]*?\]);/);
-  if (!match) return;
-  const ktc = JSON.parse(match[1]) as Array<{
+  const extracted = extractKtcPlayers(html);
+  if (!extracted) return;
+  const ktc = extracted.players as Array<{
     playerName: string;
     position: string;
     team: string;

@@ -17,6 +17,8 @@
  * a draft-state signal.
  */
 
+import { foldDefenderPosition } from "@/lib/site";
+
 export type PositionColorKey = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
 
 /** Coerce a raw Sleeper/FF Beacon position string to one of the six color keys. */
@@ -46,11 +48,9 @@ export type AnyPositionColorKey = PositionColorKey | IdpColorKey;
 export function positionColorKey(pos: string | null | undefined): AnyPositionColorKey | null {
   const six = normalizePositionColor(pos);
   if (six) return six;
-  const p = (pos ?? "").toUpperCase();
-  if (p === "DL" || p === "DE" || p === "DT" || p === "NT" || p === "EDGE") return "DL";
-  if (p === "LB" || p === "ILB" || p === "OLB" || p === "MLB") return "LB";
-  if (p === "DB" || p === "CB" || p === "S" || p === "SS" || p === "FS") return "DB";
-  return null;
+  // The one defender fold (lib/site.ts), shared with the players sync and the
+  // IDP guide so the three can never disagree about what "OLB" is.
+  return foldDefenderPosition(pos);
 }
 
 /** Tinted background + colored label for a small position tag/pill. */

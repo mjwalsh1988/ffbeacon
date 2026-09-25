@@ -3,6 +3,8 @@ import {
   expectationFor,
   retentionDaysFor,
   findMissedJobs,
+  findFailingJobs,
+  FREQUENT_FAILURE_STREAK,
   isStaleRunning,
   HIGH_FREQUENCY_RETENTION_DAYS,
   STANDARD_RETENTION_DAYS,
@@ -158,5 +160,35 @@ describe("PRUNE_BATCH", () => {
 
   it("is large enough that a nightly run makes real progress", () => {
     expect(PRUNE_BATCH).toBeGreaterThanOrEqual(100);
+  });
+});
+
+describe("findFailingJobs", () => {
+  const DAILY = { name: "sync-ktc", label: "KTC sync", schedule: "0 7 * * *" };
+  const MINUTE = { name: "league-sync-worker", label: "League sync worker", schedule: "* * * * *" };
+  const run = (status: string, error: string | null = null) => ({ started_at: "2026-09-25T07:00:00Z", status, error });
+
+  it("reports a daily job whose newest run failed, with its error and the streak", () => {
+    // The case nothing caught: eighteen nights of recorded failures.
+    const out = findFailingJobs([DAILY], new Map([["sync-ktc", [run("error", "wrote 0 rows"), run("error"), run("error")]]]));
+    expect(out).toHaveLength(1);
+    expect(out[0].failedInARow).toBe(3);
+    expect(out[0].error).toBe("wrote 0 rows");
+  });
+
+  it("stays quiet once the newest run succeeds", () => {
+    expect(findFailingJobs([DAILY], new Map([["sync-ktc", [run("success"), run("error")]]]))).toEqual([]);
+  });
+
+  it("does not page on one error in a job that runs every minute", () => {
+    const one = new Map([["league-sync-worker", [run("error"), run("success"), run("success")]]]);
+    expect(findFailingJobs([MINUTE], one)).toEqual([]);
+    const all = new Map([["league-sync-worker", Array.from({ length: FREQUENT_FAILURE_STREAK }, () => run("error"))]]);
+    expect(findFailingJobs([MINUTE], all)).toHaveLength(1);
+  });
+
+  it("skips ignored jobs and jobs with no runs", () => {
+    expect(findFailingJobs([DAILY], new Map([["sync-ktc", [run("error")]]]), new Set(["sync-ktc"]))).toEqual([]);
+    expect(findFailingJobs([DAILY], new Map())).toEqual([]);
   });
 });

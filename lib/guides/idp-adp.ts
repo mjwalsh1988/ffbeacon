@@ -28,39 +28,17 @@ import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 import { IDP_POSITIONS, type IdpPosition } from "./idp-scarcity";
+import { DEFENDER_POSITION_LABELS, foldDefenderPosition, positionNounMap } from "@/lib/site";
 
 const PAGE = 1000;
 
 /**
  * Every label a defender can carry in players.position, folded to the three
- * the guide counts. The players sync normally writes DL, LB or DB, but a few
- * rows keep Sleeper's finer label (two "DE" rows on 2026-09-24); dropping
- * them would quietly shrink the counts. Same folding as
- * lib/on-the-clock/position-colors.ts.
+ * the guide counts. The players sync writes DL, LB or DB through the same
+ * helper, so this is a guard for rows written before it did (two "DE" rows on
+ * 2026-09-24). The one copy lives in lib/site.ts.
  */
-const DEFENDER_LABELS: Readonly<Record<string, IdpPosition>> = {
-  DL: "DL",
-  DE: "DL",
-  DT: "DL",
-  NT: "DL",
-  EDGE: "DL",
-  LB: "LB",
-  ILB: "LB",
-  OLB: "LB",
-  MLB: "LB",
-  DB: "DB",
-  CB: "DB",
-  S: "DB",
-  FS: "DB",
-  SS: "DB",
-};
-
-/** One of the three guide positions, or null for anyone else. */
-export function foldDefenderPosition(
-  position: string | null | undefined,
-): IdpPosition | null {
-  return DEFENDER_LABELS[(position ?? "").toUpperCase()] ?? null;
-}
+export { foldDefenderPosition };
 /** The draft size rounds are counted in. */
 export const ADP_ROUND_TEAMS = 12;
 /** A format needs this many priced defenders before the guide quotes it. */
@@ -143,7 +121,7 @@ async function loadIdpAdp(): Promise<IdpAdpSummary | null> {
       .select("season, snapshot_date, adp, updated_at, players!inner(position)")
       .eq("source", "sleeper")
       .eq("season_type", "regular")
-      .in("players.position", Object.keys(DEFENDER_LABELS))
+      .in("players.position", [...DEFENDER_POSITION_LABELS])
       .order("sleeper_player_id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error)
@@ -195,16 +173,8 @@ export function loadIdpAdpCached(): Promise<IdpAdpSummary | null> {
   })();
 }
 
-const NOUN_PLURAL: Record<IdpPosition, string> = {
-  DL: "defensive linemen",
-  LB: "linebackers",
-  DB: "defensive backs",
-};
-const NOUN_SINGULAR: Record<IdpPosition, string> = {
-  DL: "defensive lineman",
-  LB: "linebacker",
-  DB: "defensive back",
-};
+const NOUN_PLURAL: Record<IdpPosition, string> = positionNounMap(IDP_POSITIONS, { form: "plural" });
+const NOUN_SINGULAR: Record<IdpPosition, string> = positionNounMap(IDP_POSITIONS);
 
 function list(parts: string[]): string {
   if (parts.length <= 1) return parts.join("");

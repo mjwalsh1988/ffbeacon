@@ -38,6 +38,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 import type { RecommendationCardData } from "./fixtures";
 import type { RationalePoint, RationaleTone, SeasonFinish } from "@/lib/on-the-clock/rationale";
 
@@ -206,14 +207,10 @@ function RationaleCard({ point }: { point: RationalePoint }) {
   );
 }
 
-const POSITION_PLURAL: Record<string, string> = {
-  QB: "quarterbacks",
-  RB: "running backs",
-  WR: "receivers",
-  TE: "tight ends",
-  K: "kickers",
-  DEF: "defenses",
-};
+const POSITION_PLURAL: Record<string, string> = positionNounMap(OFFENSE_POSITIONS, {
+  form: "plural",
+  short: true,
+});
 
 /**
  * Season-end positional finishes, newest first.

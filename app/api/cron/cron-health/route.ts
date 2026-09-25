@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { recordCronRun, CRON_JOBS } from "@/lib/cron-runs";
 import {
+  findFailingJobs,
   findMissedJobs,
   loadCronLedgerState,
   pruneCronRuns,
@@ -22,7 +23,10 @@ const SELF = new Set<string>(["cron-health"]);
 /**
  * GET /api/cron/cron-health
  *
- * Two jobs in one, both about the schedule rather than about any single run.
+ * Several checks in one, all about the schedule rather than any single run. The
+ * fourth, added 2026-09-25: jobs that ran and RECORDED A FAILURE (findFailingJobs).
+ * sync-ktc failed eighteen nights running with its error in the ledger and none
+ * of the checks below looked at a finished run's status.
  *
  * ONE: find jobs that should have run and did not. This is the only thing on the
  * site that can see that failure. cron_runs records invocations that STARTED, so
@@ -66,13 +70,15 @@ export async function GET(req: Request) {
     const result = await recordCronRun(supabase, "cron-health", async () => {
       const nowMs = Date.now();
 
-      const { lastRunByJob, stalled } = await loadCronLedgerState(
+      const { lastRunByJob, stalled, recentByJob } = await loadCronLedgerState(
         supabase,
         CRON_JOBS,
         nowMs,
       );
       const missed = findMissedJobs(CRON_JOBS, lastRunByJob, nowMs, SELF);
       const stalledReportable = stalled.filter((s) => !SELF.has(s.name));
+      // Jobs that ran and recorded a failure (see findFailingJobs).
+      const failing = findFailingJobs(CRON_JOBS, recentByJob, SELF);
 
       // Freshness never fails the job. A read that errors grades as unknown
       // rather than stale, and a thrown one here would take the missed-run
@@ -88,7 +94,9 @@ export async function GET(req: Request) {
       }
       const staleTables = staleOnly(freshness);
 
-      if (missed.length > 0 || stalledReportable.length > 0 || staleTables.length > 0) {
+      const anything =
+        missed.length > 0 || stalledReportable.length > 0 || staleTables.length > 0 || failing.length > 0;
+      if (anything) {
         // Loud in the platform log as well as in the mailbox: an alert that
         // depends on one delivery channel is an alert with a single point of
         // failure, and Resend can be unconfigured or down.
@@ -98,13 +106,16 @@ export async function GET(req: Request) {
           "| stalled:",
           stalledReportable.map((s) => s.name).join(", ") || "none",
           "| stale tables:",
-          staleTables.map((r) => `${r.table} (${r.ageHours?.toFixed(1) ?? "?"}h)`).join(", ") ||
+          staleTables.map((r) => `${r.label} (${r.ageHours?.toFixed(1) ?? "?"}h)`).join(", ") ||
             "none",
+          "| failing:",
+          failing.map((f) => `${f.name} (${f.failedInARow} in a row)`).join(", ") || "none",
         );
         await sendCronHealthEmail({
           missed,
           stalled: stalledReportable,
           stale: staleTables,
+          failing,
         });
       }
 
@@ -132,8 +143,8 @@ export async function GET(req: Request) {
           maxAgeHours: r.maxAgeHours,
         })),
         tablesChecked: freshness.length,
-        emailed:
-          missed.length > 0 || stalledReportable.length > 0 || staleTables.length > 0,
+        failing,
+        emailed: anything,
         pruned: pruned?.deleted ?? 0,
         pruneCapped: pruned?.capped ?? false,
         pruneByWindow: pruned?.byWindow ?? [],

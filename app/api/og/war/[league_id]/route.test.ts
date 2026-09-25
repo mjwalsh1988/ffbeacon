@@ -436,7 +436,7 @@ describe("brand constants (E5-3)", () => {
       BG_BASE: "#07070D",
       INK: "#F4F4F8",
       INK_MUTED: "#A8A8B8",
-      INK_SUBTLE: "#6B6B7D",
+      INK_SUBTLE: "#8A8A9C",
       PURPLE: "#A855F7",
       CYAN: "#22D3EE",
       LINE: "#1F1F33",

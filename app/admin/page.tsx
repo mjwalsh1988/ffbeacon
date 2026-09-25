@@ -458,7 +458,7 @@ function DataFreshnessSection({
         {results.map((result) => {
           const tone = freshnessTone(result);
           return (
-            <li key={result.table} className="rounded-card border border-line bg-surface/60 p-4">
+            <li key={result.label} className="rounded-card border border-line bg-surface/60 p-4">
               <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-ink">{result.label}</p>

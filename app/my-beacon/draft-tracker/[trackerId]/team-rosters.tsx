@@ -37,6 +37,7 @@ import { RotateCcw, Shuffle, UserRoundX } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { POSITION_BADGE, POSITION_BADGE_FALLBACK } from "@/lib/on-the-clock/position-colors";
 import { BOARD_POSITIONS, type BoardPosition, type TrackerPlayer } from "@/lib/draft-tracker/types";
+import { positionNounMap } from "@/lib/site";
 
 export type RosterEntry = {
   playerId: string;
@@ -66,14 +67,11 @@ export type RosterGroup = {
 const UNKNOWN_PLAYER_LABEL = "A player who is not on this board";
 
 /** The long name of a position, for anything read rather than scanned. */
-const POSITION_NAME: Record<BoardPosition, string> = {
-  QB: "Quarterbacks",
-  RB: "Running backs",
-  WR: "Wide receivers",
-  TE: "Tight ends",
-  K: "Kickers",
-  DEF: "Defenses",
-};
+const POSITION_NAME: Record<BoardPosition, string> = positionNounMap(BOARD_POSITIONS, {
+  form: "plural",
+  heading: true,
+  short: ["DEF"],
+});
 
 type PositionSection = {
   key: string;

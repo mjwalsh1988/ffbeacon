@@ -38,6 +38,7 @@ import type { ClueSettings, SignalTier } from "./types";
 import type { ClueCoverageInput } from "./eligibility";
 import type { StatsBundle } from "./stats-bundle";
 import { computeAgeYears, formatAge } from "@/lib/player-age";
+import { positionNounMap } from "@/lib/site";
 
 type Client = SupabaseClient<Database>;
 
@@ -523,12 +524,10 @@ function movementDisplay(pct: number): string {
   return `${direction} ${rounded}% in value over the last 30 days`;
 }
 
-const POSITION_NAMES: Record<string, string> = {
-  QB: "Quarterback",
-  RB: "Running back",
-  WR: "Wide receiver",
-  TE: "Tight end",
-};
+// The four positions Signal Scout plays with (R-15); anything else shows as its code.
+const POSITION_NAMES: Record<string, string> = positionNounMap(["QB", "RB", "WR", "TE"] as const, {
+  heading: true,
+});
 
 function exactPositionDisplay(position: string): string {
   return POSITION_NAMES[position.toUpperCase()] ?? position;

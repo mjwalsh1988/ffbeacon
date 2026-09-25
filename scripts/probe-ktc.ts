@@ -1,3 +1,5 @@
+import { extractKtcPlayers } from "../lib/ktc-page";
+
 async function main() {
   const url = "https://keeptradecut.com/dynasty-rankings?format=1";
   const response = await fetch(url, {
@@ -7,12 +9,13 @@ async function main() {
     },
   });
   const html = await response.text();
-  const match = html.match(/var\s+playersArray\s*=\s*(\[[\s\S]*?\]);/);
-  if (!match) {
-    console.log("no playersArray");
+  const extracted = extractKtcPlayers(html);
+  if (!extracted) {
+    console.log("no player list in the page");
     return;
   }
-  const players = JSON.parse(match[1]) as Array<Record<string, unknown>>;
+  const players = extracted.players as Array<Record<string, unknown>>;
+  console.log("Layout:", extracted.layout);
   console.log("Count:", players.length);
   console.log("First entry keys:", Object.keys(players[0]));
   console.log("First entry:", JSON.stringify(players[0], null, 2).slice(0, 2000));

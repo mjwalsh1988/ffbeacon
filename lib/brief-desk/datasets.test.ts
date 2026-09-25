@@ -4,6 +4,7 @@ import { figureColumns, formatColumnsFor } from "./dataset-read";
 import {
   buildAllDatasets,
   buildBoxScoreLinesDataset,
+  snapPercent,
   buildInjuryTimelineDataset,
   buildTopScorersDataset,
   buildValueMoversByFormatDataset,
@@ -176,6 +177,16 @@ describe("top scorers and box score lines", () => {
     expect(d.rows[0].pts_ppr).toBe(20.3);
   });
 
+  it("snap shares read as whole percentages under the % headers (review item 34)", () => {
+    expect(snapPercent(0.93)).toBe(93);
+    expect(snapPercent(1)).toBe(100);
+    expect(snapPercent(0.045)).toBe(5);
+    expect(snapPercent(null)).toBeNull();
+    expect(snapPercent(undefined)).toBeNull();
+    const d = buildBoxScoreLinesDataset(["p1"], [line("p1", 0, { snap_pct: 0.71 })], players, 2, AT);
+    expect(d.rows[0]?.snap_pct).toBe(71);
+  });
+
   it("box score lines keep only bundle players who have a line", () => {
     const d = buildBoxScoreLinesDataset(["p1", "p4", "p2"], lines, players, 2, AT);
     expect(d.rows.map((r) => r.player_id)).toEqual(["p2", "p1"]);
@@ -200,6 +211,8 @@ describe("top scorers and box score lines", () => {
     expect(lbRow.idp_tkl).toBe(15);
     expect(lbRow).not.toHaveProperty("rec_yd");
     expect(lbRow).not.toHaveProperty("pts_ppr");
+    // A 0 to 1 fraction in the table, a whole percentage under "Defensive snap %".
+    expect(lbRow.def_snap_pct).toBe(93);
     expect(d.columns).toContain("pts_idp123");
     expect(d.source_note).toContain("Sleeper default IDP scoring");
     // The source note no longer claims a missing row means no stat.

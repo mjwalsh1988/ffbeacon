@@ -20,6 +20,7 @@
  * Pure.
  */
 
+import { OFFENSE_POSITIONS, positionNounMap } from "@/lib/site";
 import type { BoardPosition, Opportunity, RosterRate } from "./types";
 
 /**
@@ -35,14 +36,9 @@ import type { BoardPosition, Opportunity, RosterRate } from "./types";
 const TOUCH_POSITIONS: readonly BoardPosition[] = ["QB", "RB", "WR", "TE"];
 
 /** The long form, for a sentence. "the last startable DEF" reads as an acronym. */
-const POSITION_WORD: Record<BoardPosition, string> = {
-  QB: "quarterback",
-  RB: "running back",
-  WR: "wide receiver",
-  TE: "tight end",
-  K: "kicker",
-  DEF: "defense",
-};
+const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
+  short: ["DEF"],
+});
 
 /**
  * How much of a position's edge over replacement actually survives the week.

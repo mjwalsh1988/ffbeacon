@@ -24,7 +24,7 @@
  * map, so a caller that does not pass one gets exactly what it always did.
  */
 
-import { positionNoun } from "@/lib/site";
+import { positionHeading, positionNoun, positionNounMap } from "@/lib/site";
 import { NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
 import type { SlotEligibilityMap } from "@/lib/power-pulse/lineup";
 import type { ScheduleSlot, SlotGroup } from "./types";
@@ -51,15 +51,11 @@ export const NON_STARTING_TOKENS: ReadonlySet<string> = NON_STARTING_SLOTS;
  * group to the union fails every consumer to compile until a label exists.
  */
 export const SLOT_GROUP_LABEL: Record<SlotGroup, string> = {
-  QB: "Quarterbacks",
-  RB: "Running backs",
-  WR: "Wide receivers",
-  TE: "Tight ends",
+  ...positionNounMap(["QB", "RB", "WR", "TE", "K"] as const, { form: "plural", heading: true }),
   FLEX: "Flex",
   SUPERFLEX: "Superflex",
   IDP: "Defensive players",
-  K: "Kickers",
-  DEF: "Team defense",
+  DEF: positionHeading("DEF", "singular"),
 };
 
 /**
