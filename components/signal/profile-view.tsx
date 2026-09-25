@@ -18,6 +18,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
+import { Suspense } from "react";
+import { SectionLoadingCard } from "@/components/section-loading-card";
 import { createClient } from "@/lib/supabase/server";
 import { getIsAdmin } from "@/lib/admin-auth";
 import { SITE } from "@/lib/site";
@@ -127,74 +129,88 @@ export async function ProfileView({
     permanentRedirect(`${canonicalBase}/${signal.handle}`);
   }
 
-  // Live path: the identity bundle still comes from the data cache, but the Wall
-  // is read live. We resolve the viewer here (the page is force-dynamic) so the
-  // comment composer, author edit/delete, and owner/admin moderation controls can
-  // render correctly. The viewer identity never enters the cached bundle.
-  if (isProfileLive(signal)) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const isWallOwner = !!user && user.id === signal.user_id;
-    const isAdmin = user ? await getIsAdmin(supabase) : false;
-    const canModerate = isWallOwner || isAdmin;
-
-    // Public posts (hidden excluded). Hidden comments are included only for a
-    // viewer who can moderate this Wall (owner or admin), and are flagged in UI.
-    const posts = await loadWallPosts(signal.id, {
-      includeHiddenComments: canModerate,
-    });
-    const reactions = await loadReactionsForTargets(
-      collectReactionTargets(posts),
-      user?.id ?? null,
-    );
-    // Follow state is read fresh (not from the cached bundle): the follower
-    // count is the denormalized counter and the viewer's follow row is their own.
-    const follow = await loadFollowState(signal.user_id, user?.id ?? null);
-    return (
-      <ProfileBody
-        bundle={bundle}
-        ownerPreview={false}
-        posts={posts}
-        viewerUserId={user?.id ?? null}
-        viewerIsAdmin={isAdmin}
-        viewerIsWallOwner={isWallOwner}
-        reactions={reactions}
-        followerCount={follow.followerCount}
-        viewerIsFollowing={follow.viewerIsFollowing}
-        personSchema={buildPersonSchema(bundle, canonicalBase)}
-      />
-    );
-  }
-
-  // Not live: the only viewer allowed is the owner (preview). This path reads
-  // cookies and shows the owner's hidden posts and hidden comments flagged.
+  // Every not-found and redirect decision is made above this line or in the
+  // owner check just below, BEFORE anything streams, so a mistyped handle or a
+  // profile that is not live still answers a real 404 (PERF-T034). Only the
+  // Wall, its reactions and the follow state, which are what take the time,
+  // stream behind the loading card.
+  const live = isProfileLive(signal);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || user.id !== signal.user_id) {
+
+  // Not live: the only viewer allowed is the owner (preview).
+  if (!live && (!user || user.id !== signal.user_id)) {
     notFound();
   }
 
-  const posts = await loadWallPosts(signal.id, {
-    includeHidden: true,
-    includeHiddenComments: true,
-  });
-  const reactions = await loadReactionsForTargets(
-    collectReactionTargets(posts),
-    user.id,
+  return (
+    <Suspense
+      fallback={
+        <main id="main">
+          <SectionLoadingCard section="Signal" message="Loading this profile." />
+        </main>
+      }
+    >
+      <ProfileWall
+        bundle={bundle}
+        live={live}
+        viewerUserId={user?.id ?? null}
+        canonicalBase={canonicalBase}
+      />
+    </Suspense>
   );
-  const follow = await loadFollowState(signal.user_id, user.id);
+}
+
+/**
+ * The Wall half of a profile, read live. The identity bundle comes from the
+ * data cache; the viewer identity never enters it.
+ *
+ * Live: public posts, with hidden comments shown only to a viewer who can
+ * moderate this Wall (owner or admin). Owner preview of a profile that is not
+ * live: the owner's hidden posts and hidden comments, flagged.
+ *
+ * The follow state does not depend on the posts, so it is read beside them
+ * rather than after them; reactions need the posts and follow them.
+ */
+async function ProfileWall({
+  bundle,
+  live,
+  viewerUserId,
+  canonicalBase,
+}: {
+  bundle: ProfileBundle;
+  live: boolean;
+  viewerUserId: string | null;
+  canonicalBase: string;
+}) {
+  const signal = bundle.signal as NonNullable<ProfileBundle["signal"]>;
+  const isWallOwner = !!viewerUserId && viewerUserId === signal.user_id;
+  const isAdmin = live && viewerUserId ? await getIsAdmin(await createClient()) : false;
+  const canModerate = isWallOwner || isAdmin;
+
+  const [posts, follow] = await Promise.all([
+    loadWallPosts(
+      signal.id,
+      live
+        ? { includeHiddenComments: canModerate }
+        : { includeHidden: true, includeHiddenComments: true },
+    ),
+    // Read fresh, not from the cached bundle: the follower count is the
+    // denormalized counter and the viewer's follow row is their own.
+    loadFollowState(signal.user_id, viewerUserId),
+  ]);
+  const reactions = await loadReactionsForTargets(collectReactionTargets(posts), viewerUserId);
+
   return (
     <ProfileBody
       bundle={bundle}
-      ownerPreview
+      ownerPreview={!live}
       posts={posts}
-      viewerUserId={user.id}
-      viewerIsAdmin={false}
-      viewerIsWallOwner
+      viewerUserId={viewerUserId}
+      viewerIsAdmin={isAdmin}
+      viewerIsWallOwner={isWallOwner}
       reactions={reactions}
       followerCount={follow.followerCount}
       viewerIsFollowing={follow.viewerIsFollowing}

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
 import { getOrCreateDraftSnapshot } from "@/lib/on-the-clock/draft-snapshot";
+import { changedInjuryIds, loadInjuryBySleeperId } from "@/lib/on-the-clock/injury-since-draft";
 import { isValidDraftId } from "@/lib/on-the-clock/validation";
 import { getTrustedClientIp } from "@/lib/client-ip";
 
@@ -110,8 +111,26 @@ export async function GET(req: Request) {
   });
 
   switch (outcome.status) {
-    case "ready":
-      return json({ ok: true, snapshot: outcome.snapshot, created: outcome.created });
+    case "ready": {
+      // RD-T063: which drafted players' injury designation has moved since
+      // the lock. Needs the stored baseline; without one, null, and the
+      // completion screen shows no banner. A failed read is also null.
+      const { injuryAtSnapshot, ...snapshot } = outcome.snapshot;
+      let injuryChangedSleeperIds: string[] | null = null;
+      if (injuryAtSnapshot) {
+        try {
+          const now = await loadInjuryBySleeperId(admin, Object.keys(injuryAtSnapshot));
+          injuryChangedSleeperIds = changedInjuryIds(injuryAtSnapshot, now);
+        } catch (error) {
+          console.error("[on-the-clock/snapshot] injury comparison failed", error);
+        }
+      }
+      return json({
+        ok: true,
+        snapshot: { ...snapshot, injuryChangedSleeperIds },
+        created: outcome.created,
+      });
+    }
     case "not-complete":
       // Not an error: the client falls back to live mode.
       return json({ ok: true, snapshot: null, reason: "not-complete" });

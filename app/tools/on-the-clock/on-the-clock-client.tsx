@@ -65,6 +65,7 @@ import type { PassedOn } from "@/lib/on-the-clock/draft-recap";
 import type { TradeItemGroup } from "@/lib/on-the-clock/trade-analyzer";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
 import type { DraftSnapshotPayload } from "@/lib/on-the-clock/snapshot-types";
+import { countChangedForRoster } from "@/lib/on-the-clock/injury-since-draft";
 import { recommend } from "@/lib/on-the-clock/recommend";
 import {
   buildCaveat,
@@ -2978,7 +2979,11 @@ export function OnTheClockClient({
                   // paint), and the roster count does not need that engine.
                   teamCount={draftCache.rosters.length}
                   onGoToView={selectView}
-                  changedSinceDraft={null}
+                  changedSinceDraft={countChangedForRoster(
+                    snapshot?.cache.picks ?? [],
+                    derived.myRosterId,
+                    snapshot?.injuryChangedSleeperIds,
+                  )}
                 />
               ) : (
                 <section aria-labelledby="draft-signal-title">

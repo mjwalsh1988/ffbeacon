@@ -9444,7 +9444,8 @@ RD-T062 | completed | League Pulse handoff card with what the tool offers next
      | files: app/tools/on-the-clock/draft-complete.tsx
      | depends on: RD-T060
      | verified: yes
-RD-T063 | deferred | What changed since your draft, from the projection vintage
+RD-T063 | completed | What changed since your draft, from the projection vintage (built 2026-09-25, NOT COMMITTED)
+     | resolution: the missing piece was a BASELINE, not a count: nothing kept a drafted player's injury designation at draft time (the snapshot stored only a date, players only today's status), so the count could not be computed honestly for any past draft. Now the snapshot records every drafted player's designation, by Sleeper id, in metadata.injury_at_snapshot at the moment it locks (lib/on-the-clock/draft-snapshot.ts); the snapshot route compares it with today's and returns injuryChangedSleeperIds (app/api/on-the-clock/draft/snapshot/route.ts); the client counts the reader's own picks among them and hands the count to the banner already built in draft-complete.tsx. NEW lib/on-the-clock/injury-since-draft.ts (+ test, 5 tests). "Changed" is either direction (picked one up, lost one, or moved between two); a player no longer found is left out. Snapshots written before this have no baseline and keep the banner hidden, deliberately: a baseline taken at first view would say "since you first looked", not "since you drafted". The lookup was checked against production (Sleeper id filter, the "0" placeholder ignored). No migration: metadata is jsonb.
      | files: app/tools/on-the-clock/draft-complete.tsx
      | depends on: RD-T062
      | verified: no
@@ -12554,7 +12555,8 @@ PERF-T033 | completed | The layout stops hydrating chat and guide code on every 
        it would add a round trip and a focus risk for no measurable gain, since
        the 60 to 80 kB the audit describes is BeamChat and GuidePanel.
 
-PERF-T034 | partially completed | Loading boundaries for the tool sections
+PERF-T034 | completed | Loading boundaries for the tool sections (the last two finished 2026-09-25, NOT COMMITTED)
+     | resolution: player pages and Signal profiles now have the loading card WITHOUT the soft-404 problem that kept them out: instead of a route-level loading.tsx (which flushes a 200 before the page runs), each page decides found or not found FIRST and only then streams its slow part behind a Suspense boundary showing the same branded card (NEW components/section-loading-card.tsx). app/players/[slug]/page.tsx: the one lookup that decides existence runs, notFound() still answers a real 404, and the rest (team row, finishes, hero, tabs) streams in PlayerPageBody. components/signal/profile-view.tsx: every redirect and not-found decision (unknown handle, casing 301, history 301, a non-live profile seen by anyone but its owner) happens before the boundary; the Wall, reactions and follow state stream in ProfileWall, and the follow state now loads beside the posts instead of after them. No noindex not-found render was needed.
      | files: app/tools/loading.tsx, app/rankings/loading.tsx, app/brief/loading.tsx
      | notes: three of the five the plan asked for, each reusing the branded
        card from app/leagues/loading.tsx: the PulseLoader mark, one

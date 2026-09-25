@@ -62,6 +62,7 @@ import {
 import { buildTeamRollups } from "./rosters";
 import { performDraftSync } from "./sleeper-sync";
 import type { DraftSnapshotPayload, FrozenBoard } from "./snapshot-types";
+import { loadInjuryBySleeperId, type InjuryBySleeperId } from "./injury-since-draft";
 import type { HistoryTransaction, TradeHistoryContext } from "./trade-history";
 import { shapeLeagueTrades } from "./transactions-shape";
 import type { OnTheClockSettings, ShapedDraftCache } from "./types";
@@ -134,7 +135,18 @@ function rowToPayload(row: SnapshotRow): DraftSnapshotPayload {
         ? (row.pulse as unknown as DraftPulseResult)
         : null,
     snapshotVersion: Number(row.snapshot_version) || 1,
+    injuryAtSnapshot: injuryBaselineFrom(meta.injury_at_snapshot),
   };
+}
+
+/** The stored baseline, or null for a snapshot written before it existed. */
+function injuryBaselineFrom(value: unknown): InjuryBySleeperId | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: InjuryBySleeperId = {};
+  for (const [id, status] of Object.entries(value as Record<string, unknown>)) {
+    out[id] = typeof status === "string" ? status : null;
+  }
+  return out;
 }
 
 function msFrom(value: unknown): number | null {
@@ -594,6 +606,19 @@ export async function getOrCreateDraftSnapshot(
   });
   const finalizedAt = new Date().toISOString();
 
+  // The baseline for "a new injury designation since you drafted" (RD-T063):
+  // every drafted player's designation as this snapshot locks. A failed read
+  // stores nothing, and the banner then stays hidden rather than guessing.
+  let injuryAtSnapshot: InjuryBySleeperId | null = null;
+  try {
+    injuryAtSnapshot = await loadInjuryBySleeperId(
+      admin,
+      cache.picks.map((p) => p.sleeperPlayerId).filter((id): id is string => !!id),
+    );
+  } catch (error) {
+    console.error("[on-the-clock/draft-snapshot] injury baseline read failed", error);
+  }
+
   const draftRow: SnapshotInsert = {
     sleeper_draft_id: draftId,
     sleeper_league_id: leagueId,
@@ -624,6 +649,7 @@ export async function getOrCreateDraftSnapshot(
     snapshot_version: SNAPSHOT_VERSION,
     metadata: {
       threshold_picks: threshold,
+      injury_at_snapshot: injuryAtSnapshot,
       adp_key_candidates: adpFormatKeyCandidates(formatSlug, pool),
       completed_at_source: completedAtMs !== null ? "last_picked" : "unknown",
       board_player_count: players.length,
@@ -666,6 +692,7 @@ export async function getOrCreateDraftSnapshot(
   }
 
   const payload: DraftSnapshotPayload = {
+    injuryAtSnapshot,
     sleeperDraftId: draftId,
     sleeperLeagueId: leagueId,
     season,

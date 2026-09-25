@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { SectionLoadingCard } from "@/components/section-loading-card";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -219,14 +220,51 @@ export default async function PlayerPage({
     formatParam: format,
     sourceParam: source,
   });
+  // Found or not found is decided HERE, before anything streams, so a
+  // renamed or mistyped slug still answers a real 404. Everything slower
+  // than that one lookup streams behind the loading card below (PERF-T034):
+  // a route-level loading.tsx would flush a 200 before this line ran and
+  // turn every missing player into a soft 404 on indexed URLs.
   if (!loaded) {
     notFound();
   }
-  const { player, sleeperId, context } = loaded;
 
   const activeTab: PlayerTabId = VALID_TABS.includes((tab ?? "") as PlayerTabId)
     ? (tab as PlayerTabId)
     : "overview";
+
+  return (
+    <main id="main">
+      <Suspense
+        fallback={<SectionLoadingCard section="Players" message="Loading this player page." />}
+      >
+        <PlayerPageBody
+          loaded={loaded}
+          slug={slug}
+          activeTab={activeTab}
+          format={format}
+          source={source}
+        />
+      </Suspense>
+    </main>
+  );
+}
+
+async function PlayerPageBody({
+  loaded,
+  slug,
+  activeTab,
+  format,
+  source,
+}: {
+  loaded: NonNullable<Awaited<ReturnType<typeof loadPlayerAndContext>>>;
+  slug: string;
+  activeTab: PlayerTabId;
+  format: string | undefined;
+  source: string | undefined;
+}) {
+  const supabase = await createClient();
+  const { player, sleeperId, context } = loaded;
 
   // Team colors/chant + positional finishes load once here; the last-3 slice is
   // shared by the hero and the overview sidebar so the RPC runs a single time.
@@ -314,7 +352,7 @@ export default async function PlayerPage({
   ];
 
   return (
-    <main id="main">
+    <>
       <script
         type="application/ld+json"
         suppressHydrationWarning
@@ -407,6 +445,6 @@ export default async function PlayerPage({
           )}
         </Suspense>
       </article>
-    </main>
+    </>
   );
 }

@@ -42,6 +42,14 @@ export interface FrozenBoard {
 }
 
 export interface DraftSnapshotPayload {
+  /**
+   * Each drafted player's injury designation when the snapshot locked, by
+   * Sleeper id (RD-T063). Null for a snapshot written before it was recorded.
+   * Server-side only: the route swaps it for injuryChangedSleeperIds.
+   */
+  injuryAtSnapshot?: Record<string, string | null> | null;
+  /** Drafted players whose designation has changed since the lock; null when unknown. */
+  injuryChangedSleeperIds?: string[] | null;
   sleeperDraftId: string;
   sleeperLeagueId: string;
   season: string;
