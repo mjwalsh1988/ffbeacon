@@ -217,7 +217,6 @@ export function analyzeTradeTransaction(
   ctx: TradeHistoryContext,
 ): HistoryEntry {
   const teams = ctx.teams > 0 ? ctx.teams : 12;
-  const availSorted = sortByValueDesc(ctx.available);
   const poolSorted = sortByValueDesc(ctx.poolBoard.length > 0 ? ctx.poolBoard : ctx.available);
   const pickLookup = buildPickValueLookup(ctx.futurePickValues);
 

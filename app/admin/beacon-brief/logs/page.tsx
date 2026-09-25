@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { BeaconBriefPageShell } from "@/components/admin/beacon-brief-page-shell";
@@ -169,12 +170,12 @@ export default async function BeaconBriefLogsPage({
 
         <p className="text-sm text-ink-muted">
           To edit the prompts the AI receives, go to the{" "}
-          <a
+          <Link
             href="/admin/beacon-brief/settings"
             className="font-semibold text-brand-cyan underline"
           >
             Settings
-          </a>{" "}
+          </Link>{" "}
           page.
         </p>
       </div>

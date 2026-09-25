@@ -137,7 +137,8 @@ export function SignalGuideMount() {
       unsubscribe();
       setSignalGuideAvailable(false);
     };
-  }, []);
+    // warm is a stable useCallback([]), so this still subscribes once per mount.
+  }, [warm]);
 
   if (!content) return null;
 

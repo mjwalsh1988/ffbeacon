@@ -61,6 +61,10 @@ export default function GlobalError({
               >
                 Try again
               </button>
+              {/* A plain anchor on purpose: this screen replaces the root
+                  layout after a crash, so a full page load is the recovery,
+                  not a client-side navigation through the broken tree. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a
                 href="/"
                 className="inline-flex min-h-11 items-center rounded-card border border-line bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

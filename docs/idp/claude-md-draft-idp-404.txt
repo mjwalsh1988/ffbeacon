@@ -1,0 +1,168 @@
+IDP-404: proposed CLAUDE.md changes. DRAFT FOR OWNER APPROVAL. Nothing below is in CLAUDE.md yet.
+
+Every replacement is written to be true in BOTH switch states, because production
+runs with the IDP switch off until IDP-405 and the text must not go false the day
+it flips (or the day before).
+
+
+1. Schedules section, the null-projection paragraph
+
+CURRENT:
+  ABSOLUTE RULE: a null projection is never a zero. Sleeper publishes projections
+  for QB, RB, WR, TE, K and DEF only (`PROJECTION_POSITIONS` in `lib/sleeper.ts`),
+  so IDP slots render the player with the words "No projection" and are excluded
+  from totals with a footnote saying how many. A zero would sum into the total and
+  be believed.
+
+PROPOSED:
+  ABSOLUTE RULE: a null projection is never a zero. We store Sleeper projections
+  for QB, RB, WR, TE, K and DEF (`PROJECTION_POSITIONS` in `lib/sleeper.ts`) and
+  for DL, LB and DB (`IDP_PROJECTION_POSITIONS`), but League Pulse projects a
+  defender only while the IDP switch is on (see "IDP (individual defensive
+  players)" below). Any slot we do not project (every defensive slot while the
+  switch is off, and tokens with no position mapping such as EDGE either way)
+  renders the player with the words "No projection" and is excluded from totals
+  with a footnote saying how many. A zero would sum into the total and be
+  believed.
+
+
+2. Schedules section, the slots paragraph
+
+CURRENT:
+  `lib/league-schedule/slots.ts alignedStartingSlots()` keeps every non-bench
+  token, including IDP. It deliberately differs from `lib/power-pulse/lineup.ts
+  startingSlots()`, which drops tokens it cannot project. Both are correct for
+  their own caller. Do not unify them.
+
+PROPOSED (one sentence added at the end):
+  ... Do not unify them. `startingSlots()` takes the slot map from
+  `slotEligibility(idpEnabled)`, so which tokens it keeps depends on the switch;
+  `alignedStartingSlots()` never does.
+
+
+3. Manager Ledger section, the gradable-slot paragraph
+
+CURRENT:
+  Both sides of the lineup comparison are measured over the SAME gradable slot
+  subset. `startingSlots` drops the tokens it has no position eligibility for
+  (IDP), so measuring the set lineup over every slot and the optimum over some of
+  them would invent a deficit that is really the linebackers. ...
+
+PROPOSED (first two sentences):
+  Both sides of the lineup comparison are measured over the SAME gradable slot
+  subset. `startingSlots` drops the tokens it has no position eligibility for
+  (every defensive slot while the IDP switch is off, unmapped tokens either way),
+  so measuring the set lineup over every slot and the optimum over some of them
+  would invent a deficit that is really the linebackers. ...
+
+And in the `LedgerWeek` paragraph, "adds the ungradable IDP slots" becomes "adds
+the ungradable slots (every IDP slot while the switch is off)".
+
+
+4. Lineups bullets
+
+CURRENT:
+  - ABSOLUTE RULE: a player currently in an unprojectable (IDP) slot is excluded
+    from the candidate pool, ...
+  - ... so in an IDP league the raw figure sits below the score beside it. ...
+
+PROPOSED:
+  - ABSOLUTE RULE: a player currently in an unprojectable slot (every IDP slot
+    while the IDP switch is off) is excluded from the candidate pool, ...
+  - ... so in a league with ungradable slots (an IDP league while the switch is
+    off) the raw figure sits below the score beside it. ...
+
+
+5. Power Pulse and Positional WAR position statements
+
+Power Pulse, after "It is computed from Sleeper's weekly projections rescored
+under the league's own literal `scoring_settings`", ADD:
+  With the IDP switch on, a league that starts defensive slots also projects its
+  DL, LB and DB starters, and depth counts a defensive position only when a
+  starting slot takes it.
+
+Positional WAR, after "one line per position", ADD:
+  In a league that starts defensive slots with the IDP switch on, the page draws
+  two charts, Offense and Defense; the OG card stays pinned to the six offensive
+  positions (`OFFENSE_POSITIONS`) and says the defensive curve is on the page.
+
+
+6. League Pulse route list (stale)
+
+CURRENT:
+  `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase)
+
+PROPOSED:
+  `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view)
+
+
+7. NEW SECTION, placed after "Positional WAR (League Pulse positional scarcity)"
+
+  ## IDP (individual defensive players)
+
+  Defenders (DL, LB, DB) are first-class players across the site: profiles,
+  search behind a relevance gate, the IDP guide, and League Pulse behind one
+  switch. Plan of record: `docs/idp/idp-guide-and-data-plan.md`.
+
+  ABSOLUTE RULE: `lib/site.ts` is the only source of defender checks and
+  position nouns. `isDefender(position)` decides whether a player is a defender,
+  `positionNoun(position)` spells a position out ("linebacker", never "LB") in
+  prose and accessible names. `OFFENSE_POSITIONS` pins every surface that must
+  stay at six; `POSITIONS` itself is not widened.
+
+  ABSOLUTE RULE: a defender is NEVER scored from `pts_ppr`, `pts_half_ppr`,
+  `pts_std` or `pts_idp`. Those are Sleeper's offensive-only figures. A defender
+  is scored from his stat line through `lib/idp/stat-line.ts` under
+  `lib/idp/scoring-presets.ts` (idp123 is Sleeper's default IDP scoring) or the
+  league's own scoring. A PROJECTED line keeps only `idp_*` keys (Sleeper
+  attaches team-defense and ADP keys to some defenders); an ACTUAL line keeps
+  everything Sleeper credited except its own derived figures.
+  `lib/idp/points-guard.test.ts` fails the suite if a defender module names a
+  stored points column. If a league's scoring has no nonzero `idp_*` key, a
+  defender's projection is null ("No projection"), decided before the dot
+  product.
+
+  ABSOLUTE RULE: the League Pulse switch is
+  `league_power_pulse_settings.settings.idp.enabled`. Every server loader reads
+  it ONCE and passes `idpEnabled` down as a plain boolean; no pure or client
+  module ever reads it. `lib/power-pulse/idp-reads.ts idpReadsFor()` turns it
+  into the slot map, the candidate positions and the scoring keys, and
+  `slotEligibility(false)` returns the very object `PULSE_SLOT_ELIGIBILITY`
+  always was, so switch-off output is identical by construction.
+  `npm run verify:idp-invariant` proves it against production: every league
+  that starts no defensive slot must print "identical" and the script exits 0.
+  Run it after any change to a League Pulse loader or engine.
+
+  No value source prices a defender. Wherever a value would appear, the words
+  "No market value" appear instead, never a zero; a trade grade with a defender
+  in it is marked partial and totals use priced pieces only. In a dynasty or
+  keeper league a defender is protected from the cut list when the optimiser
+  seats him in at least half the remaining regular-season weeks or he ranks
+  inside the league's IDP starter count at his position
+  (`lib/league-lineups/defender-protection.ts`).
+
+  Matchup adjustment for defenders uses `positionReliability` DL, LB and DB,
+  set only to measured values (`npm run backtest:idp`, the same year-over-year
+  method as the offensive positions).
+
+
+8. Lint (IDP-401; the owner chose to install ESLint on 2026-09-24)
+
+  Add to Project conventions:
+  - The gate, in order: `npm run typecheck`, `npm run lint`, `npm test`,
+    `npm run build`. Lint must finish with zero errors and zero warnings.
+    `next build` does not lint (next.config.ts), so a lint failure can never
+    stop a deploy; it stops the change instead.
+  - `eslint.config.mjs` is Next's presets, jsx-a11y's full recommended set and
+    FF Beacon's own rules (`scripts/eslint/ffbeacon-plugin.mjs`): no
+    typographic punctuation anywhere in source, no Sleeper host outside
+    lib/sleeper.ts, and no inline date formatter without a timeZone (a Date
+    held in a variable and formatted with toLocaleString is not checked,
+    because the same method formats numbers). Every exception
+    in code is an eslint-disable-next-line comment directly above the reported
+    line, with the reason on the line above it; a stale one fails the run.
+  - Write a character the punctuation rule bans as a JavaScript escape (a
+    backslash, the letter u and the four-digit code: u2014 for the em dash),
+    never the character itself. The editing tools used in these
+    sessions turn a typed escape into the literal character, so generate such
+    text from character codes in a script.

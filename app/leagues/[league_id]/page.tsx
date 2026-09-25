@@ -20,7 +20,6 @@ import { matchViewerRoster } from "@/lib/league-viewer";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import {
   viewerLinkUsername,
-  type SleeperViewer,
 } from "@/lib/sleeper-handle/types";
 import { TransactionVolumePanel } from "@/components/league-overview/transaction-volume-panel";
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";

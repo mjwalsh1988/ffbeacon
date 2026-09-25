@@ -61,13 +61,13 @@ function baseInput(
 }
 
 const BANNED_CHARACTERS = [
-  "—", // em dash
-  "–", // en dash
-  "“", // left curly double quote
-  "”", // right curly double quote
-  "‘", // left curly single quote
-  "’", // right curly single quote
-  "…", // ellipsis character
+  "\u2014", // em dash
+  "\u2013", // en dash
+  "\u201C", // left curly double quote
+  "\u201D", // right curly double quote
+  "\u2018", // left curly single quote
+  "\u2019", // right curly single quote
+  "\u2026", // ellipsis character
 ];
 
 function assertNoBannedCharacters(sentences: string[]): void {

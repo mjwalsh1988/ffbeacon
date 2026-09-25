@@ -42,7 +42,7 @@ import { SignalScoutStatusBar } from "./status-bar";
 import { MysteryProfileCard } from "./mystery-profile-card";
 import { MissionHeader } from "./mission-header";
 import { ScoutSectionHead } from "./scout-section-head";
-import { ClueGrid, TIER_DISPLAY_NAMES } from "./clue-grid";
+import { ClueGrid } from "./clue-grid";
 import { HintControls } from "./hint-controls";
 import { GuessCombobox } from "./guess-combobox";
 import { BadReads } from "./bad-reads";
@@ -360,7 +360,7 @@ export function SignalScoutClient({
 
       setHintError(result.message);
     },
-    [activeRound, hintPendingTier, announce],
+    [activeRound, hintPendingTier, announce, startingScore],
   );
 
   const handleBuyClick = useCallback(
@@ -505,7 +505,7 @@ export function SignalScoutClient({
     }
 
     setGuessError(result.message);
-  }, [activeRound, guessPending, skipPending, isAuthenticated, applyGuestStreakOutcome, announce]);
+  }, [activeRound, guessPending, skipPending, isAuthenticated, applyGuestStreakOutcome]);
 
   // Before a round, and when there is no round to be had. Once one is live the
   // masthead steps aside, and it stays aside through the reveal so the result

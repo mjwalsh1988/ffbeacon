@@ -100,10 +100,10 @@ export function withRelaySection(categorizePrompt: string, section: string): str
 /** Collapse whitespace and strip the characters the prompt forbids. */
 function cleanText(value: string): string {
   return value
-    .replace(/[–—]/g, ", ")
-    .replace(/[‘’]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/…/g, "...")
+    .replace(/[\u2013\u2014]/g, ", ")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, "...")
     .replace(/\s+/g, " ")
     .trim();
 }

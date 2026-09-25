@@ -52,13 +52,13 @@ export interface ValidationContext {
  * them, which is the one way this guard can fail without anyone noticing.
  */
 const BANNED_CHARACTERS: Array<[RegExp, string]> = [
-  [/—/g, "an em dash"],
-  [/–/g, "an en dash"],
-  [/[‘’]/g, "a curly apostrophe"],
-  [/[“”]/g, "a curly quote"],
-  [/…/g, "an ellipsis character"],
-  [/ /g, "a non-breaking space"],
-  [/·/g, "a middle dot"],
+  [/\u2014/g, "an em dash"],
+  [/\u2013/g, "an en dash"],
+  [/[\u2018\u2019]/g, "a curly apostrophe"],
+  [/[\u201C\u201D]/g, "a curly quote"],
+  [/\u2026/g, "an ellipsis character"],
+  [/\u00A0/g, "a non-breaking space"],
+  [/\u00B7/g, "a middle dot"],
   [/\p{Extended_Pictographic}/gu, "an emoji"],
 ];
 

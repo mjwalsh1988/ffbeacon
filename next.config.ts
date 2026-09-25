@@ -63,6 +63,11 @@ const RETIRED_BRIEF_SLUGS = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // `npm run lint` (eslint.config.mjs) is the lint gate, run beside typecheck
+  // and the tests before a change is done. The build does not repeat it: a
+  // deploy should never fail on a lint rule, and Next 16 removes build-time
+  // linting anyway.
+  eslint: { ignoreDuringBuilds: true },
   // Which user agents get the page's metadata inside <head> instead of streamed
   // into the body after the first flush. Next's default leaves out Googlebot and
   // every answer-engine crawler; see lib/seo/html-limited-bots.ts for the

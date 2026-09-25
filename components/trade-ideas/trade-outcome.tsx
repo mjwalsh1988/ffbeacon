@@ -298,7 +298,6 @@ function Headline({
  */
 function BalanceBar({
   outcome,
-  myTeamLabel,
   theirTeamLabel,
 }: {
   outcome: TradeOutcome;

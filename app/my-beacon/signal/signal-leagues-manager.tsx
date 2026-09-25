@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Trophy } from "lucide-react";
 import { saveSignalLeagues } from "./actions";
@@ -85,12 +86,12 @@ export function SignalLeaguesManager({
     return (
       <p className="rounded-card border border-dashed border-line bg-base/40 p-5 text-sm text-ink-muted">
         No synced leagues yet. Open a league from{" "}
-        <a
+        <Link
           href="/my-beacon/sleeper-leagues"
           className="font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           My Sleeper Leagues
-        </a>{" "}
+        </Link>{" "}
         and it will appear here to feature.
       </p>
     );

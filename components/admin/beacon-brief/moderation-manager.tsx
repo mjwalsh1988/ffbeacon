@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   approveModeration,
@@ -179,12 +180,12 @@ function DeletionRow({
       {item.articleSlug && (
         <p className="mt-1 text-xs text-ink-subtle">
           <span className="font-mono">{item.articleSlug}</span>{" "}
-          <a
+          <Link
             href="/admin/beacon-brief/articles"
             className="ml-2 font-semibold text-brand-cyan underline"
           >
             Open in Articles to review
-          </a>
+          </Link>
         </p>
       )}
       <p className="mt-1 text-sm text-ink-muted">
@@ -280,12 +281,12 @@ function MatchResolver({
               <span className="font-mono">{item.articleSlug}</span>
             </>
           ) : null}{" "}
-          <a
+          <Link
             href="/admin/beacon-brief/articles"
             className="ml-1 font-semibold text-brand-cyan underline"
           >
             Open in Articles
-          </a>
+          </Link>
         </p>
       )}
       {!item.articleReady && (
@@ -491,12 +492,12 @@ function FailedTaskRow({
               <span className="font-mono">{item.articleSlug}</span>
             </>
           ) : null}{" "}
-          <a
+          <Link
             href="/admin/beacon-brief/articles"
             className="ml-1 font-semibold text-brand-cyan underline"
           >
             Open in Articles
-          </a>
+          </Link>
         </p>
       )}
       {isRelayGrounding ? (

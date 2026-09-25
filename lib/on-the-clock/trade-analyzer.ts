@@ -245,11 +245,9 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
     futurePickValues,
     teamNameByRosterId,
     myRosterId,
-    draftSettings,
     currentSeason,
     simulated,
   } = input;
-  const teams = Number.isFinite(draftSettings.teams) && draftSettings.teams > 0 ? draftSettings.teams : 12;
 
   // No board at all: return an empty catalog so the UI shows the graceful
   // "values unavailable" state instead of floor-valued phantom picks.

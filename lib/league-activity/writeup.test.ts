@@ -362,7 +362,7 @@ describe("every kind produces a usable card", () => {
  * a banned character in it will only show up on the one league that happens to
  * hit that branch.
  */
-const BANNED = /[–—‘’“”…·• ]/;
+const BANNED = /[\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u00B7\u2022\u00A0]/;
 
 describe("punctuation", () => {
   it("never renders a banned character", () => {

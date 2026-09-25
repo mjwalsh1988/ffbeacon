@@ -16,6 +16,7 @@
 // parameter.
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getIsAdmin } from "@/lib/admin-auth";
@@ -309,12 +310,12 @@ function ProfileBody({
           {signal.hidden
             ? "This profile has been hidden by a moderator and is not visible to anyone. "
             : `Preview. Your profile is ${signal.status === "draft" ? "a draft" : "private"} and is not visible to anyone but you. `}
-          <a
+          <Link
             href="/my-beacon/signal"
             className="font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             Edit your Signal
-          </a>
+          </Link>
         </div>
       )}
 

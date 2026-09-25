@@ -356,7 +356,6 @@ export async function runCommunityArchiveBackfill(
     captureSflexForTep: boolean,
   ) => {
     const formatId = formatBySlug.get(targetFormat)!.id;
-    const dateColumn = 0;
     const playerHeaders = tab.headers.slice(1); // strip "Date"
     // Pre-resolve each column's (player_id, position) once
     const colResolved: Array<{ player_id: string; position: string } | null> = playerHeaders.map(

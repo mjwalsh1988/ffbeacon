@@ -50,9 +50,9 @@ export function ImageWithFallback({
 
   if (showImage) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- intentional: we
-      // need onError fallback handling that next/image doesn't expose cleanly,
-      // and many of these are external/CDN or signed URLs.
+      // Intentional: we need onError fallback handling that next/image does
+      // not expose cleanly, and many of these are external/CDN or signed URLs.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src ?? undefined}
         alt={alt}

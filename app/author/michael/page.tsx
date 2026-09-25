@@ -25,7 +25,6 @@ import {
   Workflow,
   type LucideIcon,
 } from "lucide-react";
-import { SITE } from "@/lib/site";
 import { AuthorPortrait } from "@/components/author-portrait";
 import { ContactPanel } from "@/components/contact-panel";
 import { EmailReveal } from "@/components/email-reveal";

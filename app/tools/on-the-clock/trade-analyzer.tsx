@@ -41,7 +41,6 @@ import type { TradeItemGroup, TradeItemOption } from "@/lib/on-the-clock/trade-a
 import {
   resolveDraftAsset,
   toSignalCheckAssets,
-  type DraftAssetRef,
   type ResolveContext,
   type ResolvedAsset,
 } from "@/lib/on-the-clock/trade-assets";

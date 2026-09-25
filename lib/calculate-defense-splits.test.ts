@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { groupPerformances, idp123FromColumns, pointsFor } from "./calculate-defense-splits";
+import {
+  computeSeasonSplits,
+  groupPerformances,
+  idp123FromColumns,
+  pointsFor,
+} from "./calculate-defense-splits";
 
 type Row = Parameters<typeof groupPerformances>[0][number];
 
@@ -57,5 +62,39 @@ describe("idp123FromColumns", () => {
       idp123FromColumns({ idp_tkl_solo: 8, idp_tkl_ast: 7, idp_tkl_loss: 3, idp_qb_hit: 2, idp_fum_rec: 1, idp_def_td: 1 }),
     ).toBe(40);
     expect(idp123FromColumns({ pts_ppr: 12 })).toBeNull();
+  });
+});
+
+describe("computeSeasonSplits (IDP-403 calibration reads this)", () => {
+  // Each week, one linebacker room faces NYG and another faces DAL. NYG gives
+  // up 30 a game to the top three linebackers, DAL 10, so the average is 20.
+  function lbWeek(defense: string, offense: string, week: number, top: number[]): Row[] {
+    return top.map((points, i) =>
+      row({ player_id: `${offense}-${i}`, position: "LB", opponent: defense, offense_team: offense, week, idp123: points }),
+    );
+  }
+  const rows: Row[] = [];
+  for (let week = 1; week <= 4; week += 1) {
+    // A fourth linebacker past the cap of three must not count.
+    rows.push(...lbWeek("NYG", week % 2 ? "CLE" : "PIT", week, [12, 10, 8, 7]));
+    rows.push(...lbWeek("DAL", week % 2 ? "PIT" : "CLE", week, [4, 3, 3]));
+  }
+  // A defense seen in only three games is below MIN_GAMES and is not published.
+  for (let week = 1; week <= 3; week += 1) rows.push(...lbWeek("MIA", "BUF", week, [9, 9, 9]));
+
+  it("sums the startable cap per game and clamps the raw multiplier", () => {
+    const splits = computeSeasonSplits(rows, "idp123");
+    const byTeam = new Map(splits.map((s) => [s.team, s]));
+    expect(byTeam.has("MIA")).toBe(false);
+    expect(byTeam.get("NYG")?.perGame).toBe(30);
+    expect(byTeam.get("DAL")?.perGame).toBe(10);
+    expect(byTeam.get("NYG")?.average).toBe(20);
+    expect(byTeam.get("NYG")?.multiplier).toBe(1.25);
+    expect(byTeam.get("DAL")?.multiplier).toBe(0.8);
+    expect(byTeam.get("NYG")?.games).toBe(4);
+  });
+
+  it("publishes nothing for a defender under a PPR base", () => {
+    expect(computeSeasonSplits(rows, "pts_ppr")).toEqual([]);
   });
 });

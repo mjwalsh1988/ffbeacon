@@ -223,7 +223,7 @@ export async function GET(
             flex: 1,
           }}
         >
-          {analysis.sides.slice(0, 2).map((side, idx) => {
+          {analysis.sides.slice(0, 2).map((side) => {
             const isWinner =
               analysis.verdict.winnerRosterId != null &&
               side.rosterId === analysis.verdict.winnerRosterId;

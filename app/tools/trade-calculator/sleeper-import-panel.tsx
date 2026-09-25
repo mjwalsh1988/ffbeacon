@@ -19,7 +19,6 @@ import { LeagueChoiceList } from "@/components/league-choice-list";
 import type { SavedSleeperHandle } from "@/lib/sleeper-handle/types";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import { NO_VERDICT_REASON } from "@/lib/trade-grading/partial";
-import type { SideKey } from "@/lib/signal-check/types";
 import { currentSection, trackEvent } from "@/lib/analytics";
 import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
 import {

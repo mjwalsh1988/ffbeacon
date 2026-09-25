@@ -71,7 +71,7 @@ interface ArticleResult {
 }
 
 // Curly quotes, em and en dashes, ellipsis, middle dot, non-breaking space.
-const BANNED_CHARS = /[—–‘’“”…· ]/g;
+const BANNED_CHARS = /[\u2014\u2013\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/g;
 
 function inRange(s: string, min: number, max: number): boolean {
   return s.length >= min && s.length <= max;

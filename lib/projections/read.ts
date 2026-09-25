@@ -26,7 +26,7 @@ import {
   type ProjectionRow,
 } from "@/lib/power-pulse/load";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { defenseSeasonsFor } from "./defense-seasons";
 import {

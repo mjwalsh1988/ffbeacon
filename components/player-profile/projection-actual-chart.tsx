@@ -87,7 +87,7 @@ export function ProjectionActualChart({
     if (p.actual != null) scaleVals.push(p.actual);
     if (p.prior != null) scaleVals.push(p.prior);
   }
-  let min = Math.min(...scaleVals);
+  const min = Math.min(...scaleVals);
   let max = Math.max(...scaleVals);
   if (min === max) max = min + 1;
 

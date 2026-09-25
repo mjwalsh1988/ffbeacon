@@ -254,7 +254,6 @@ async function hydrate(supabase: ReaderClient, rows: RelayRowLite[]): Promise<Re
  * Relays. The other filters are applied to the embedded Relay through the
  * dotted path, which with `!inner` restricts the parent rows too.
  */
-const PLAYER_JOIN = "relay_players!inner(player_id)";
 const TEAM_JOIN = "relay_teams!inner(team_id)";
 
 type JoinDriver = "relay_players" | "relay_teams";

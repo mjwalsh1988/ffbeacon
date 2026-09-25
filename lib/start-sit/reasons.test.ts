@@ -456,15 +456,15 @@ describe("buildStartSitVerdictLine", () => {
 
 describe("plain ASCII and no pronouns", () => {
   const banned = [
-    "—", // em dash
-    "–", // en dash
-    "“", // left curly double quote
-    "”", // right curly double quote
-    "‘", // left curly single quote
-    "’", // right curly single quote
-    "…", // ellipsis character
-    "·", // middle dot
-    " ", // non-breaking space
+    "\u2014", // em dash
+    "\u2013", // en dash
+    "\u201C", // left curly double quote
+    "\u201D", // right curly double quote
+    "\u2018", // left curly single quote
+    "\u2019", // right curly single quote
+    "\u2026", // ellipsis character
+    "\u00B7", // middle dot
+    "\u00A0", // non-breaking space
   ];
 
   function pronounWords(text: string): string[] {

@@ -56,8 +56,9 @@ export function TeamAnthem({ team }: { team: NflTeamRow }) {
              same URL the hero's team chip already loads, so the browser
              fetches and decodes it once for both. */}
       {crest && (
-        // eslint-disable-next-line @next/next/no-img-element -- external CDN
-        // image; next/image buys nothing for a fixed-size decorative layer.
+        // External CDN image; next/image buys nothing for a fixed-size
+        // decorative layer.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={crest}
           alt=""

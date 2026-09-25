@@ -149,6 +149,9 @@ export function VerdictTabs({
             Pick a view
           </p>
         </div>
+        {/* The WAI-ARIA tabs pattern: focus lands on the tabs themselves
+            (roving tabindex), never on the tablist that holds them. */}
+        {/* eslint-disable-next-line jsx-a11y/interactive-supports-focus */}
         <div
           role="tablist"
           aria-label="Trade evaluation detail"

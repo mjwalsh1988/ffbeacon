@@ -83,7 +83,7 @@ import { ENVIRONMENT_TIER_LABEL, type EnvironmentTier } from "@/lib/nfl-game-env
 import { matchupPhrase } from "@/lib/breakdown/scoring";
 import { MIN_GRADED_WEEKS } from "@/lib/start-sit/reasons";
 import { POSITION_BADGE, POSITION_BADGE_FALLBACK } from "@/lib/on-the-clock/position-colors";
-import type { StartSitCandidate, StartSitProjection, PulsePosition } from "@/lib/start-sit/types";
+import type { StartSitCandidate, StartSitProjection } from "@/lib/start-sit/types";
 import { ProjectionRange } from "./projection-range";
 import { RecentFormChart, type RecentForm } from "./recent-form-chart";
 

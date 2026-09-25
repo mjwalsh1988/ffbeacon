@@ -44,7 +44,7 @@ import { opponentLabel } from "@/components/league-schedule/format";
 // problem the moment both cards moved onto a heavier typeface: a fixed column
 // and a face wide enough to overflow it. One copy, so a name shortens the same
 // way whichever picture it lands on.
-import { clip, displayName } from "@/lib/og/display-name";
+import { displayName } from "@/lib/og/display-name";
 
 export { displayName };
 

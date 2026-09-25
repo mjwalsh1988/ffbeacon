@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronDown,
@@ -161,16 +161,19 @@ export function GuidePanel({
   }, [open, onClose]);
 
   const q = query.trim().toLowerCase();
-  const matches = (e: GuideEntry) =>
-    q.length === 0 ||
-    e.heading.toLowerCase().includes(q) ||
-    e.body.toLowerCase().includes(q);
+  const matches = useCallback(
+    (e: GuideEntry) =>
+      q.length === 0 ||
+      e.heading.toLowerCase().includes(q) ||
+      e.body.toLowerCase().includes(q),
+    [q],
+  );
 
   const questions = useMemo(
     () => content.questions.filter(matches),
-    [content.questions, q],
+    [content.questions, matches],
   );
-  const terms = useMemo(() => content.terms.filter(matches), [content.terms, q]);
+  const terms = useMemo(() => content.terms.filter(matches), [content.terms, matches]);
   const resultCount = questions.length + terms.length;
 
   useEffect(() => {

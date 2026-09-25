@@ -86,7 +86,7 @@ async function main() {
     }
     if (negatives > 0 || overCeiling > 0) pass = false;
     const posStr = ["QB", "RB", "WR", "TE", "K", "DEF"].map((p) => `${p}:${posCounts[p] ?? 0}`).join(" ");
-    console.log(`  ${slug.padEnd(28)} n=${String(m.size).padStart(4)}  ${posStr}  top=${Math.round(top)}  neg=${negatives} over=${overCeiling}`);
+    console.log(`  ${slug.padEnd(28)} n=${String(m.size).padStart(4)}  ${posStr}  top=${Math.round(top)} (${topPlayer})  neg=${negatives} over=${overCeiling}`);
   }
 
   console.log("\n==== DERIVATION INVARIANTS ====");

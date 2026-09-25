@@ -484,7 +484,7 @@ describe("selectToughestCalls: determinism", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("selectToughestCalls: verdict text", () => {
-  const BANNED_CHARACTERS = /[—–‘’“”…]/;
+  const BANNED_CHARACTERS = /[\u2014\u2013\u2018\u2019\u201C\u201D\u2026]/;
 
   it("never produces a banned AI-tell character in any verdict sentence", () => {
     const universe = [

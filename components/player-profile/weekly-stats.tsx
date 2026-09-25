@@ -17,13 +17,6 @@
 
 import { useState } from "react";
 import {
-  statColumns,
-  StatScroll,
-  lineFromGame,
-  fmtStatDelta,
-  deltaTone,
-  type StatLine,
-  type StatCol,
   type WeeklyGameRow,
   type AccuracyPoint,
   type BeatRate,
@@ -66,21 +59,16 @@ export function WeeklyStats({
   // Per-stat differentials are on by default so the feature is visible; a reader
   // who wants the plain stat line can collapse them without losing any column.
   const [compare, setCompare] = useState<boolean>(true);
-  const cols = statColumns(position);
   const rows = (rowsBySeason[season] ?? []).slice().sort((a, b) => a.week - b.week);
 
   /**
    * The weeks still to come, merged in so the table is the whole season.
    *
-   * THE CLOCK COMES FROM THE SERVER. `nowIso` is stamped during the render, not
-   * read from `Date.now()` here. This is a client component inside a server
-   * render, so reading the browser clock would make the first paint disagree
-   * with the HTML and React would patch it: a reader on a machine whose clock
-   * is a day out would see a spinner appear after hydration on a game that
-   * finished yesterday. Falling back to the client clock is only for a caller
-   * that passes nothing, and no caller does.
+   * No clock is read here. `nowIso` is stamped during the server render and
+   * passed straight to the table below, which decides whether a game is today;
+   * reading the browser clock instead would make the first paint disagree with
+   * the HTML.
    */
-  const now = nowIso ? new Date(nowIso) : new Date();
   const pending = (pendingBySeason?.[season] ?? [])
     .filter((p) => !rows.some((r) => r.week === p.week))
     .slice()

@@ -60,7 +60,6 @@ import { TradingSection } from "@/components/manager-pulse/trading-section";
 import { RosterOpsSection } from "@/components/manager-pulse/roster-ops-section";
 import { NarrativeSection } from "@/components/manager-pulse/narrative-section";
 import { LeaguesSection } from "@/components/manager-pulse/leagues-section";
-import { SectionFrame } from "@/components/manager-pulse/section-frame";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

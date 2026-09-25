@@ -20,7 +20,6 @@ import {
   NOT_ENOUGH,
   moneyPctText,
   newestBuiltAt,
-  pctText,
   readCell,
   sampleText,
   shareText,

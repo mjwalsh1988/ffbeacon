@@ -196,7 +196,7 @@ describe("buildPollMessage", () => {
   it("truncates with three periods, never the ellipsis character", () => {
     const msg = mustBuild(busyRound(), OPTS);
     const all = [msg.content ?? "", ...(msg.poll?.answers ?? [])].join("\n");
-    expect(all).not.toContain("…");
+    expect(all).not.toContain("\u2026");
   });
 
   it("pings only the roles it was given, and lists them for allowed_mentions", () => {

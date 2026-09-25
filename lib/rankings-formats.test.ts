@@ -197,7 +197,7 @@ describe("rankingsSeoCopy", () => {
   it("uses plain ASCII punctuation only", () => {
     // Project rule: no em dashes, en dashes, curly quotes, or ellipsis characters
     // anywhere, including generated copy.
-    const banned = /[–—‘’“”… ·]/;
+    const banned = /[\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u00A0\u00B7]/;
     for (const superflex of [true, false]) {
       for (const tep of ["0", "0.5"]) {
         for (const league of ["dynasty", "redraft"]) {

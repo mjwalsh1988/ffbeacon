@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import type { BeamAnswer, BeamCapability, BeamContext } from "@/lib/beam/types";
+import type { BeamAnswer, BeamCapability } from "@/lib/beam/types";
 import {
   BEAM_STAT_IDS,
   getStat,

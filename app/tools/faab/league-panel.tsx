@@ -356,7 +356,6 @@ export function LeaguePanel({
     };
     // `leagues`, `sleeperUserId` and the acting handle all come through refs
     // above, so none of them belongs here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [committedLeagueId, formatSlug, sourceSlug]);
 
   // Any lookup at all, auto-run or pressed, counts as the auto-run having

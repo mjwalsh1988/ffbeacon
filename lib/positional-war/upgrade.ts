@@ -296,7 +296,6 @@ export async function runUpgradeWhatIf(
   const targetPlayer = players.get(targetSleeperId);
   if (!targetPlayer) return { ok: false, reason: "no-candidates" };
 
-  const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(league.season);
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 

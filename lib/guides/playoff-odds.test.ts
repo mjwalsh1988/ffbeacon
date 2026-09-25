@@ -123,7 +123,7 @@ describe("swingByWeek", () => {
 
 describe("deadlineCall", () => {
   it("answers every band and window with a plain ASCII reason", () => {
-    const banned = /[–—‘’“”…· ]/;
+    const banned = /[\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/;
     for (const b of ODDS_BANDS) {
       for (const w of ROSTER_WINDOWS) {
         const r = deadlineCall(b.key, w.key);

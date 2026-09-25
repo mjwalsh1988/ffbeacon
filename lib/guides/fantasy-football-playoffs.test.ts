@@ -120,7 +120,7 @@ describe("the model facts the guide quotes", () => {
 describe("the guide's copy", () => {
   it("uses plain ASCII punctuation only", () => {
     // Em dash, en dash, curly quotes, ellipsis, middle dot, non-breaking space.
-    const banned = /[–—‘’“”…· ]/;
+    const banned = /[\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/;
     for (const f of [...GUIDE_FILES, "lib/guides/playoff-odds.ts", "lib/guides/playoff-luck-example.ts"]) {
       const lines = read(f).split("\n");
       lines.forEach((line, i) => expect(banned.test(line), `${f}:${i + 1}`).toBe(false));

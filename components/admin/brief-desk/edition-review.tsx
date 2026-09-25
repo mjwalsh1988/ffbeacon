@@ -65,7 +65,6 @@ function TickBox({
   tick,
   checked,
   onToggle,
-  pending,
   children,
   note,
   detail,

@@ -24,6 +24,6 @@
 
 const SIDE_TOKEN = /\bSide ([AB])\b/g;
 
-export function useTeamNames(text: string): string {
+export function withTeamNames(text: string): string {
   return text.replace(SIDE_TOKEN, "Team $1");
 }

@@ -34,7 +34,6 @@ type Mover = {
 };
 
 export function ValueMoversBlock({
-  id,
   caption,
   conclusion,
   dataset,

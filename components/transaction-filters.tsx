@@ -277,6 +277,9 @@ export function TransactionFilters({
             <ul
               className="flex max-h-24 min-w-0 flex-1 flex-wrap gap-1.5 overflow-y-auto"
               aria-label="Team filter options, scrollable list"
+              // Focusable because it scrolls on its own (max-h-24): a keyboard
+              // reader must be able to reach the teams below the fold.
+              // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
               tabIndex={0}
             >
               {teams.map((team) => {

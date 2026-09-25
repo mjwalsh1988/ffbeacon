@@ -102,7 +102,6 @@ import {
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
-import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import { computeStartSit } from "@/lib/start-sit/engine";
 import type { StartSitCandidate, StartSitProjection, PulsePosition } from "@/lib/start-sit/types";
 

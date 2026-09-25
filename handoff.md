@@ -1,6 +1,29 @@
 # Handoff
 
-## NEXT SESSION: START HERE. IDP PHASE 4 (launch) IS NEXT, NOT STARTED
+## NEXT SESSION: START HERE. IDP PHASE 4 IS HALF DONE, NOTHING COMMITTED (2026-09-24, eighth pass)
+
+- Phase 3 is still committed locally and NOT pushed. This session's work is
+  UNCOMMITTED in the working tree, by instruction. The IDP switch is OFF and no
+  production data or settings were changed.
+- DONE (details in progress.md, IDP-401, IDP-402, IDP-4R):
+  IDP-401 ESLint installed and customised; `npm run lint` is part of the gate
+  (typecheck, lint, test, build) and passes with zero errors and warnings.
+  IDP-402 backtest: `npm run backtest:idp`, report in
+  docs/idp/idp-accuracy-backtest.txt.
+- MEASURED, NOT SAVED (IDP-403): DL 0.33, LB 0, DB 0 (owner chose 0 for DB).
+  Owner chose to save these in the same step as the switch-on (IDP-405).
+- OPEN OWNER DECISIONS:
+  1. DB reliability: DECIDED, 0.
+  2. CLAUDE.md wording: APPROVED AND APPLIED (IDP-404 done).
+  3. Phase 3 and this session are COMMITTED AND PUSHED at the owner's
+     instruction. When the deploy is live the owner will ask for
+     `npm run verify:idp-invariant`; IDP-405 waits on it and on the go-ahead.
+  4. FAAB urgencySignal was dead code (never wired into the output) and was
+     deleted; say if it should come back as a real signal.
+- Tool gotcha: the file-writing tool turns a typed backslash-u escape into the
+  literal character. Generate such text from character codes in a script.
+
+## PREVIOUS: IDP PHASE 4 (launch) WAS NEXT, NOT STARTED (kept for history)
 
 ### Where things stand (end of 2026-09-24, seventh pass)
 

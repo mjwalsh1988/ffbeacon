@@ -65,7 +65,6 @@ import {
   zScores,
   zToDisplay,
 } from "@/lib/power-pulse/math";
-import { type PulsePosition } from "@/lib/power-pulse/types";
 import type { PlayerProjection, ProjectionBoard } from "./projection-board";
 import { weekFor } from "./week-index";
 import { buildWaiverPool, fillFromWaivers } from "./waiver-replacement";

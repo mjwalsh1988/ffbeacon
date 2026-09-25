@@ -571,7 +571,6 @@ function PlayerRow({
   slotDescription,
   player,
   status,
-  isFinal,
   onOpen,
   onSwap,
   ids,

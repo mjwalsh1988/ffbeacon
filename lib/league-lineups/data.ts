@@ -734,7 +734,7 @@ async function buildWaivers(args: {
   idpReads: IdpReads;
   leagueRowId: string;
 }) {
-  const { admin, buildInput, built, freeAgents, slots, week, season, projectionSource, scoringBase, status, slotMap, idpReads, leagueRowId } =
+  const { admin, buildInput, built, freeAgents, slots, week, season, projectionSource, status, slotMap, idpReads, leagueRowId } =
     args;
 
   if (!freeAgents) return [];

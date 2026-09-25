@@ -33,7 +33,7 @@ import {
   type LineupCandidate,
   type SlotEligibilityMap,
 } from "@/lib/power-pulse/lineup";
-import { slotEligibility, type PulsePosition } from "@/lib/power-pulse/types";
+import { slotEligibility } from "@/lib/power-pulse/types";
 import {
   buildMergedFill,
   positionWeekStats,

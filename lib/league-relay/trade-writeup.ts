@@ -47,7 +47,6 @@ import {
   bandFromRank,
   describeBand,
   listOf,
-  ordinal,
   pct,
   ppChange,
   pulseFieldSize,

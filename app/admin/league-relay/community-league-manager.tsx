@@ -334,7 +334,6 @@ function LeagueRow({
             type="button"
             disabled={busy}
             onClick={() => {
-              // eslint-disable-next-line no-alert
               if (!window.confirm(`Remove ${league.name} from the relay? What it has already posted is kept.`)) return;
               act(() => removeCommunityLeagueAction(league.id));
             }}

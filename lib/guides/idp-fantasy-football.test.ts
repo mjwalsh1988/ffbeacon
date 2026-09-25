@@ -47,7 +47,6 @@ describe("the IDP guide page", () => {
   it("is plain ASCII in every file", () => {
     for (const file of FILES) {
       const src = read(file);
-      // eslint-disable-next-line no-control-regex
       const bad = src.match(/[^\x00-\x7F]/g);
       expect(bad, `${file} has non-ASCII characters`).toBeNull();
     }

@@ -211,6 +211,23 @@ Status values: pending | in_progress | blocked | completed
 - File-per-component, kebab-case file names, PascalCase exports
 - Migrations: numbered 0001, 0002... in /supabase/migrations/
 - Database types: /lib/database.types.ts (generated, do not edit by hand)
+- The gate, in order: `npm run typecheck`, `npm run lint`, `npm test`,
+  `npm run build`. Lint must finish with zero errors and zero warnings.
+  `next build` does not lint (next.config.ts), so a lint failure can never
+  stop a deploy; it stops the change instead.
+- `eslint.config.mjs` is Next's presets, jsx-a11y's full recommended set and
+  FF Beacon's own rules (`scripts/eslint/ffbeacon-plugin.mjs`): no
+  typographic punctuation anywhere in source, no Sleeper host outside
+  lib/sleeper.ts, and no inline date formatter without a timeZone (a Date
+  held in a variable and formatted with toLocaleString is not checked,
+  because the same method formats numbers). Every exception in code is an
+  eslint-disable-next-line comment directly above the reported line, with
+  the reason on the line above it; a stale one fails the run.
+- Write a character the punctuation rule bans as a JavaScript escape (a
+  backslash, the letter u and the four-digit code: u2014 for the em dash),
+  never the character itself. The editing tools used in these sessions
+  turn a typed escape into the literal character, so generate such text
+  from character codes in a script.
 
 
 ## Time Display (Non-Negotiable)
@@ -461,7 +478,7 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 
 Naming rules:
 - Feature name in copy/docs: "League Pulse".
-- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/lineups` (one team's starters and bench for one week, plus the optimiser), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/decisions` (the Manager Ledger), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/lineups` (one team's starters and bench for one week, plus the optimiser), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/decisions` (the Manager Ledger), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view).
 - `/leagues/[sleeper_league_id]/trade-finder` was renamed to `trade-ideas`. `next.config.ts` holds a permanent 308 for the old path; keep it forever, shared links use it.
 - `/leagues/[sleeper_league_id]/activity` was REMOVED. It rendered the same `LeagueActivityPanel`, from the same `loadLeagueActivity`, that the league overview already carries; the only thing the route added was the per-team filter, which now renders on the panel itself behind a `<details>` disclosure. `next.config.ts` holds a permanent 308 to the overview; keep it forever, the Copy link button published that path. There is deliberately no Activity entry in `LEAGUE_NAV_ITEMS`.
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
@@ -505,6 +522,8 @@ ABSOLUTE RULE: Power Pulse NEVER counts draft picks. It is a competitive score, 
 
 ABSOLUTE RULE: Power Pulse does NOT vary by value source or by `format_config_id`. It is computed from Sleeper's weekly projections rescored under the league's own literal `scoring_settings`, so there is exactly one row per (league, roster, season) in `league_power_pulse_cache`. Never add a format/source loop to it. The source toggle on a league page must not invalidate it.
 
+With the IDP switch on, a league that starts defensive slots also projects its DL, LB and DB starters, and depth counts a defensive position only when a starting slot takes it.
+
 ABSOLUTE RULE: The rankings table on `/leagues/[id]` defaults to Power Pulse ordering. `?rank=value` restores the trade-value ordering. Whichever mode is active, BOTH numbers stay visible (the Pulse column and the Value column with its rank), so switching never hides data.
 
 ABSOLUTE RULE: Power Pulse is recomputed ONLY on demand through `pulseLeague` (gated by `POWER_PULSE_TTL_MS`, 12 hours, plus a recompute whenever the live NFL week passes the stored `through_week` or the stored `model_version` changes), or manually via `npm run calculate:power-pulse`. NEVER wire per-league Power Pulse into a nightly cron, for the same scaling reason as league power rankings.
@@ -533,6 +552,8 @@ Observability: `leagues.power_pulse_status` (`pending`, `ok`, `skipped`, `settle
 
 Positional WAR is a multi-series curve, one line per position, showing wins over replacement by position rank, specific to the league being viewed. It answers "which positions are worth spending on in THIS league", and the shape of the line is the answer: steep means the position runs out fast, flat means the next player down is nearly as good.
 
+In a league that starts defensive slots with the IDP switch on, the page draws two charts, Offense and Defense; the OG card stays pinned to the six offensive positions (`OFFENSE_POSITIONS`) and says the defensive curve is on the page.
+
 ABSOLUTE RULE, the naming rule. The token "WAR" names exactly ONE metric in this product, the player-independent positional one, and it carries the word "Positional" adjacent to it on first use in any surface. Nothing that measures one specific roster may be called WAR, in code, in copy, in a column name, or in a chart axis. Team-specific work stays `winsDelta` / `expectedWins` in code and "projected wins" / "wins added" in copy. A surface that shows both must show both labels and must NOT place them in the same column. `lib/positional-war/naming.test.ts` enforces this: inside `lib/trade-impact/`, `lib/faab/` and `lib/power-pulse/`, every occurrence of the token `WAR` must have the literal `Positional` within 40 characters before it.
 
 The two metrics, and why they legitimately disagree: Positional WAR is player-independent, evaluates every player against a league-average reference team and a league-average opponent, reads NO roster, and runs the lineup optimizer once per week per league. Projected wins is team-specific, depends on who owns whom, and reruns the optimizer per candidate (`lib/power-pulse/what-if.ts`, `lib/faab/marginal.ts`). A league where QB1 carries 0.65 Positional WAR still gives a reader who already starts QB2 almost no wins added by acquiring him.
@@ -558,6 +579,53 @@ Module map:
 Storage: `league_positional_war_cache`, one row per (league, season, position), six rows for a normal league. `positional_war_curves` is keyed by fingerprint and shares the COMPUTE across leagues on the WRITE path only; the read path is unchanged, so every consumer still issues exactly one query against the per-league table. It is service-role only and nothing in the UI reads it.
 
 Observability: `leagues.positional_war_status` / `_detail` / `_attempted_at` / `_succeeded_at` (migration 0212), `POSITIONAL_WAR_RETRY_MS` 15 minutes, and the `settled` verdict clears stored rows the same way Power Pulse does, because a degenerate answer outlives the run that produced it. `positional_war_detail` is server-written, never user-controlled, and rendered as text, never as HTML.
+
+## IDP (individual defensive players)
+
+Defenders (DL, LB, DB) are first-class players across the site: profiles,
+search behind a relevance gate, the IDP guide, and League Pulse behind one
+switch. Plan of record: `docs/idp/idp-guide-and-data-plan.md`.
+
+ABSOLUTE RULE: `lib/site.ts` is the only source of defender checks and
+position nouns. `isDefender(position)` decides whether a player is a defender,
+`positionNoun(position)` spells a position out ("linebacker", never "LB") in
+prose and accessible names. `OFFENSE_POSITIONS` pins every surface that must
+stay at six; `POSITIONS` itself is not widened.
+
+ABSOLUTE RULE: a defender is NEVER scored from `pts_ppr`, `pts_half_ppr`,
+`pts_std` or `pts_idp`. Those are Sleeper's offensive-only figures. A defender
+is scored from his stat line through `lib/idp/stat-line.ts` under
+`lib/idp/scoring-presets.ts` (idp123 is Sleeper's default IDP scoring) or the
+league's own scoring. A PROJECTED line keeps only `idp_*` keys (Sleeper
+attaches team-defense and ADP keys to some defenders); an ACTUAL line keeps
+everything Sleeper credited except its own derived figures.
+`lib/idp/points-guard.test.ts` fails the suite if a defender module names a
+stored points column. If a league's scoring has no nonzero `idp_*` key, a
+defender's projection is null ("No projection"), decided before the dot
+product.
+
+ABSOLUTE RULE: the League Pulse switch is
+`league_power_pulse_settings.settings.idp.enabled`. Every server loader reads
+it ONCE and passes `idpEnabled` down as a plain boolean; no pure or client
+module ever reads it. `lib/power-pulse/idp-reads.ts idpReadsFor()` turns it
+into the slot map, the candidate positions and the scoring keys, and
+`slotEligibility(false)` returns the very object `PULSE_SLOT_ELIGIBILITY`
+always was, so switch-off output is identical by construction.
+`npm run verify:idp-invariant` proves it against production: every league
+that starts no defensive slot must print "identical" and the script exits 0.
+Run it after any change to a League Pulse loader or engine.
+
+No value source prices a defender. Wherever a value would appear, the words
+"No market value" appear instead, never a zero; a trade grade with a defender
+in it is marked partial and totals use priced pieces only. In a dynasty or
+keeper league a defender is protected from the cut list when the optimiser
+seats him in at least half the remaining regular-season weeks or he ranks
+inside the league's IDP starter count at his position
+(`lib/league-lineups/defender-protection.ts`).
+
+Matchup adjustment for defenders uses `positionReliability` DL, LB and DB,
+set only to measured values (`npm run backtest:idp`, the same year-over-year
+method as the offensive positions).
 
 ## Manager Ledger (League Pulse decision grading)
 
@@ -644,8 +712,8 @@ the same manager with nothing to say which is right.
 `LedgerWeek` stores `setPoints`, `optimalPoints` and `ungradedSlots` as of
 `ledger-4`. They were computed and dropped until the Lineups page drew a
 per-week efficiency chart, and there is no honest way to derive one without
-them: `officialPoints / (officialPoints + pointsLeft)` adds the ungradable IDP
-slots to both halves of the ratio, which pulls it toward 1 and flatters every
+them: `officialPoints / (officialPoints + pointsLeft)` adds the ungradable
+slots (every IDP slot while the switch is off) to both halves of the ratio, which pulls it toward 1 and flatters every
 manager in an IDP league.
 
 ABSOLUTE RULE: the staleness gate never builds the compute context. Every field
@@ -657,8 +725,9 @@ matchups, transactions, picks and players to answer "nothing changed" is what
 
 Both sides of the lineup comparison are measured over the SAME gradable slot
 subset. `startingSlots` drops the tokens it has no position eligibility for
-(IDP), so measuring the set lineup over every slot and the optimum over some of
-them would invent a deficit that is really the linebackers. The head-to-head
+(every defensive slot while the IDP switch is off, unmapped tokens either way),
+so measuring the set lineup over every slot and the optimum over some of them
+would invent a deficit that is really the linebackers. The head-to-head
 result adds the deficit onto the league's own official score rather than
 rebuilding the total from parts, and the ungraded slots are counted and stated
 in the UI.
@@ -749,13 +818,19 @@ comes back.
 `lib/league-schedule/slots.ts alignedStartingSlots()` keeps every non-bench
 token, including IDP. It deliberately differs from `lib/power-pulse/lineup.ts
 startingSlots()`, which drops tokens it cannot project. Both are correct for
-their own caller. Do not unify them.
+their own caller. Do not unify them. `startingSlots()` takes the slot map from
+`slotEligibility(idpEnabled)`, so which tokens it keeps depends on the switch;
+`alignedStartingSlots()` never does.
 
-ABSOLUTE RULE: a null projection is never a zero. Sleeper publishes projections
-for QB, RB, WR, TE, K and DEF only (`PROJECTION_POSITIONS` in `lib/sleeper.ts`),
-so IDP slots render the player with the words "No projection" and are excluded
-from totals with a footnote saying how many. A zero would sum into the total and
-be believed.
+ABSOLUTE RULE: a null projection is never a zero. We store Sleeper projections
+for QB, RB, WR, TE, K and DEF (`PROJECTION_POSITIONS` in `lib/sleeper.ts`) and
+for DL, LB and DB (`IDP_PROJECTION_POSITIONS`), but League Pulse projects a
+defender only while the IDP switch is on (see "IDP (individual defensive
+players)" above). Any slot we do not project (every defensive slot while the
+switch is off, and tokens with no position mapping such as EDGE either way)
+renders the player with the words "No projection" and is excluded from totals
+with a footnote saying how many. A zero would sum into the total and be
+believed.
 
 The board reads every projected number from `league_power_pulse_cache.weekly`
 rather than recomputing, so the Schedule page and the Power Pulse page can never
@@ -839,7 +914,7 @@ Lineups:
 - ABSOLUTE RULE: THE OPTIMISER IS RUN ONCE AND DIFFED ON LINEUP MEMBERSHIP, never on slot assignment. `buildOptimalLineup` is free to seat the same nine players in different slots than the manager did (RB1 and RB2 swapping, a receiver moving to the flex); none of that changes the score, and reporting it would bury the one move worth eleven points under four worth nothing. This is deliberately a different question from `lib/league-schedule/matchup.ts`, which lists the best INDEPENDENT single swaps and says out loud that theirs do not sum. Do not unify them.
 - ABSOLUTE RULE: an incoming player is paired with an outgoing one who is ELIGIBLE FOR THE SLOT HE TAKES, cheapest such starter first. Pairing purely by value (biggest addition against weakest starter) prints sentences that are not moves: in a lineup where a QB slot and an RB slot are both being upgraded it said "start the running back over the quarterback" and attached a gain belonging to neither swap. The gains over ALL pairs sum to exactly `pointsLeftOnBench`; the DISPLAYED list is filtered by `MIN_MOVE_GAIN`, so it can sum to less, and the remainder is reported as `unlistedGain` and said out loud rather than leaving two figures on one screen that do not reconcile.
 - ABSOLUTE RULE: both totals come from the SAME candidate pool. A roster can hold a Sleeper id our `players` table has not caught up with, and Sleeper still scores him. Counting his points in the set total while the optimal fill cannot use him understates the optimum, floors the gap at zero and makes the page say "you set the best lineup you had" about a week it could not measure. `gradableSleeperIds` is decided first and the set lineup is scored by looking each starter up in it; ungradable slots are excluded from both sides and counted in `ungradedSlotCount`. Same rule, same reason, as the Manager Ledger.
-- ABSOLUTE RULE: a player currently in an unprojectable (IDP) slot is excluded from the candidate pool, and an IR or taxi player is never seated. An optimum a manager cannot actually set in Sleeper is not an optimum.
+- ABSOLUTE RULE: a player currently in an unprojectable slot (every IDP slot while the IDP switch is off) is excluded from the candidate pool, and an IR or taxi player is never seated. An optimum a manager cannot actually set in Sleeper is not an optimum.
 - A settled week is graded on RESULTS, an unplayed one on projections, through the one `grade()` switch in `lib/league-lineups/build.ts`. The headline "Scored" figure prefers the league's own official `league_matchups.points` over re-adding the parts, for the same reason the Manager Ledger does.
 - Sleeper's starters array is POSITIONAL and `rosters.starter_ids` CANNOT be used for it: `lib/league-pulse.ts` filters the "0" placeholders out before storing, which shifts every slot below a gap up by one. The week's `league_matchups` row is read first (`rawStarterIds`), and a week Sleeper has not published falls back to `rosters.metadata.starters`, which holds the raw array. That fallback is stated on the page (`usedRosterFallback`), never hidden.
 - The cut list and the free agent list are framed by `lib/league-team-status.ts` (Contender / Loaded / Bubble / Rebuilder). A contender is ranked on points this week; a dynasty rebuilder on overall rank. Loaded and Bubble both take the contender ordering, because both are still within range of the bracket. A redraft league is ALWAYS contending, whatever the record: there is no next season to hold an asset for.
@@ -851,7 +926,7 @@ Lineups:
 - ABSOLUTE RULE: "in progress" means POINTS ARE ON THE BOARD, not that the calendar says so. Sleeper publishes the current week's matchup row from Tuesday with every score at zero, so a phase decided by week number alone labels four quiet days as live and shows a roster of 0.0s as though those were results. `hasLivePoints` is the test.
 - ABSOLUTE RULE: `actualsVisible` and `isFinal` are DIFFERENT SWITCHES and must stay that way. A week in progress DISPLAYS real points; the optimum, the gap and every move stay graded on projections until the week settles. Grading a Sunday afternoon against partial scores tells a manager they left forty points on the bench because three of their starters play at four o'clock. For the same reason the optimiser panel does not render at all during a live week.
 - On a week with results the headline figure on every row is the SCORE, with the projection kept beside it in small type and the difference signed. Neither number is dropped: "18.4, projected 11.2, plus 7.2" is the story of a Sunday and half of it is not.
-- ABSOLUTE RULE: "best you had" on a settled week is the optimiser's deficit ADDED TO SLEEPER'S OWN OFFICIAL TOTAL, never `optimalTotal` printed raw. The optimiser measures over gradable slots only, so in an IDP league the raw figure sits below the score beside it. Same arithmetic, same reason, as `lib/manager-ledger/lineup.ts`.
+- ABSOLUTE RULE: "best you had" on a settled week is the optimiser's deficit ADDED TO SLEEPER'S OWN OFFICIAL TOTAL, never `optimalTotal` printed raw. The optimiser measures over gradable slots only, so in a league with ungradable slots (an IDP league while the switch is off) the raw figure sits below the score beside it. Same arithmetic, same reason, as `lib/manager-ledger/lineup.ts`.
 - The best-lineup result is ONE-SIDED. The opponent scored what they scored and their bench is left alone, because a reader cannot set their opponent's lineup. "You lost a game your own bench would have won" is the loudest sentence on the page when it is true and absent when it is not.
 - The season charts are two, not one, and they are drawn apart on purpose: scored against best available is a DECISION gap, scored against projected is VARIANCE. Layering them invites a reader to read one as the other. Every chart is `role="img"` with a summary for its name and a real `<table>` under a disclosure carrying the numbers.
 - A past week's projection is rebuilt from the row published for that week, adjusted with TODAY's opponent and reliability figures. That is a fair read on whether the model was about right; it is not a snapshot of what the page showed that Sunday, and the footnote says so.

@@ -43,7 +43,6 @@ import {
   effectiveProjectedPoints,
   summarizeProjections,
   pointsFromProjectedSet,
-  activePointsFromStatRow,
   type PlayerRow,
   type ScoringKey,
 } from "@/lib/player-profile";

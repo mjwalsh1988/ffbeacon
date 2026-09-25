@@ -75,7 +75,7 @@ describe("glossary copy", () => {
 
   it("uses plain ASCII punctuation only", () => {
     // Em dash, en dash, curly quotes, ellipsis, middle dot, non-breaking space.
-    const banned = /[–—‘’“”…· ]/;
+    const banned = /[\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/;
     for (const s of everyString) expect(banned.test(s), s).toBe(false);
   });
 

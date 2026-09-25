@@ -185,7 +185,7 @@ describe("buildVerdict", () => {
   it("never emits a banned typographic character", () => {
     const text = buildVerdict(scored({ roomAdp: 140, roomPicksSampled: 20 }), CTX);
     // Em dash, en dash, curly quotes, ellipsis, middle dot.
-    expect(text).not.toMatch(/[—–‘’“”…· ]/);
+    expect(text).not.toMatch(/[\u2014\u2013\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/);
   });
 });
 

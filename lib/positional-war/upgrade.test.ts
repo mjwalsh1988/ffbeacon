@@ -25,6 +25,8 @@
  * computation for free.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as marginalModule from "@/lib/faab/marginal";
 import * as whatIfModule from "@/lib/power-pulse/what-if";
@@ -498,8 +500,6 @@ const fakeSupabase = makeFakeSupabase();
 
 describe("E1b-1: the simulation never runs during a page render", () => {
   it("is unreachable from the three GET pages: none of them names the simulating functions", () => {
-    const fs = require("node:fs") as typeof import("node:fs");
-    const path = require("node:path") as typeof import("node:path");
     const root = path.resolve(__dirname, "..", "..");
 
     const filesToCheck = [

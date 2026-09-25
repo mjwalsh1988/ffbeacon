@@ -20,7 +20,6 @@
 import { useMemo } from "react";
 import type { Route } from "next";
 import type { NavNode } from "@/lib/nav-types";
-import type { NavIconName } from "@/components/app-shell/nav-icons";
 import { RegisterRailSections } from "@/components/app-shell/rail-sections";
 import type { SidebarCategory } from "@/lib/beacon-brief-feed";
 import { CATEGORY_ICONS } from "./category-icons";

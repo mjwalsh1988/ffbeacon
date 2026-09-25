@@ -1,0 +1,105 @@
+IDP accuracy backtest and opponent-split calibration (IDP-402, IDP-403)
+Run 2026-09-24T23:46:57.661Z. Seasons 2020 to 2025, regular season, Sleeper projections, idp123.
+Defenders by today's primary position: 4365.
+Naive forecast: average of the previous 4 played weeks that season, at least 2. Starter level: either forecast at least 6 points.
+
+PART 1. PROJECTION AGAINST A NAIVE LAST-FOUR-WEEKS AVERAGE
+
+DL, 2020 to 2025 pooled
+  every graded week: 18220 weeks
+    correlation   projection 0.375   naive 0.351
+    mean error    projection 4.97   naive 5.18 points
+    bias          projection 0.54   naive -0.00 points (actual minus forecast)
+    projection closer in 51.3 percent of weeks
+    verdict: not worse than naive
+  starter level: 11621 weeks
+    correlation   projection 0.275   naive 0.227
+    mean error    projection 5.85   naive 6.27 points
+    bias          projection 0.29   naive -0.71 points (actual minus forecast)
+    projection closer in 53.5 percent of weeks
+    verdict: not worse than naive
+  by season, starter level (weeks, correlation projection / naive, error projection / naive):
+    2020: 1918, 0.257 / 0.214, 5.74 / 5.92
+    2021: 1855, 0.313 / 0.257, 5.90 / 6.24
+    2022: 2124, 0.300 / 0.241, 5.99 / 6.27
+    2023: 1628, 0.266 / 0.199, 6.04 / 6.70
+    2024: 2044, 0.293 / 0.190, 5.67 / 6.41
+    2025: 2052, 0.247 / 0.234, 5.79 / 6.15
+
+LB, 2020 to 2025 pooled
+  every graded week: 11222 weeks
+    correlation   projection 0.636   naive 0.649
+    mean error    projection 5.01   naive 4.59 points
+    bias          projection -0.31   naive 0.14 points (actual minus forecast)
+    projection closer in 41.7 percent of weeks
+    verdict: WORSE THAN NAIVE on both correlation and error
+  starter level: 7414 weeks
+    correlation   projection 0.429   naive 0.455
+    mean error    projection 6.01   naive 5.92 points
+    bias          projection -0.06   naive -0.18 points (actual minus forecast)
+    projection closer in 49.1 percent of weeks
+    verdict: WORSE THAN NAIVE on both correlation and error
+  by season, starter level (weeks, correlation projection / naive, error projection / naive):
+    2020: 1342, 0.464 / 0.518, 6.09 / 5.56  WORSE
+    2021: 1245, 0.429 / 0.418, 6.09 / 6.11
+    2022: 1225, 0.474 / 0.404, 5.92 / 6.21
+    2023: 1131, 0.369 / 0.481, 6.32 / 5.96  WORSE
+    2024: 1221, 0.430 / 0.446, 5.85 / 5.84  WORSE
+    2025: 1250, 0.397 / 0.413, 5.83 / 5.89
+
+DB, 2020 to 2025 pooled
+  every graded week: 18149 weeks
+    correlation   projection 0.458   naive 0.483
+    mean error    projection 4.78   naive 4.73 points
+    bias          projection 0.62   naive 0.01 points (actual minus forecast)
+    projection closer in 47.3 percent of weeks
+    verdict: WORSE THAN NAIVE on both correlation and error
+  starter level: 13320 weeks
+    correlation   projection 0.231   naive 0.248
+    mean error    projection 5.33   naive 5.48 points
+    bias          projection 0.81   naive -0.39 points (actual minus forecast)
+    projection closer in 51.4 percent of weeks
+    verdict: not worse than naive
+  by season, starter level (weeks, correlation projection / naive, error projection / naive):
+    2020: 2075, 0.233 / 0.249, 5.33 / 5.43
+    2021: 2279, 0.290 / 0.251, 5.10 / 5.40
+    2022: 2364, 0.273 / 0.227, 5.38 / 5.62
+    2023: 1841, 0.156 / 0.249, 5.82 / 5.88
+    2024: 2428, 0.238 / 0.270, 5.30 / 5.27  WORSE
+    2025: 2333, 0.227 / 0.224, 5.15 / 5.35
+
+PART 2. DOES A DEFENSE'S IDP MATCHUP NUMBER REPEAT NEXT SEASON
+Year-over-year correlation of each team's multiplier, raw and opponent adjusted.
+
+Check against the stored table: 192 of 192 stored defender rows matched, largest difference 0.0000 (the table rounds to four places, and a later stats correction since the nightly run can move a figure).
+
+DL
+  2025/2024: raw 0.340, adjusted 0.292 over 32 teams  (counts toward the figure)
+  2024/2023: raw 0.400, adjusted 0.300 over 32 teams  (counts toward the figure)
+  2023/2022: raw 0.415, adjusted 0.425 over 32 teams  (context)
+  2022/2021: raw 0.355, adjusted 0.383 over 32 teams  (context)
+  2021/2020: raw 0.094, adjusted 0.126 over 32 teams  (context)
+  measured reliability (mean of the four recent figures, floored at zero): 0.33
+
+LB
+  2025/2024: raw 0.094, adjusted 0.108 over 32 teams  (counts toward the figure)
+  2024/2023: raw 0.336, adjusted 0.179 over 32 teams  (counts toward the figure)
+  2023/2022: raw -0.177, adjusted -0.152 over 32 teams  (context)
+  2022/2021: raw 0.296, adjusted 0.334 over 32 teams  (context)
+  2021/2020: raw 0.210, adjusted 0.296 over 32 teams  (context)
+  measured reliability (mean of the four recent figures, floored at zero): 0.18
+  projection is worse than naive at starter level, so the plan ships this position at 0.
+
+DB
+  2025/2024: raw 0.442, adjusted 0.425 over 32 teams  (counts toward the figure)
+  2024/2023: raw -0.094, adjusted -0.068 over 32 teams  (counts toward the figure)
+  2023/2022: raw 0.123, adjusted 0.119 over 32 teams  (context)
+  2022/2021: raw 0.154, adjusted 0.250 over 32 teams  (context)
+  2021/2020: raw -0.033, adjusted -0.072 over 32 teams  (context)
+  measured reliability (mean of the four recent figures, floored at zero): 0.18
+
+RECOMMENDED positionReliability (IDP-403), not saved by this script:
+  DL: 0.33
+  LB: 0.00
+  DB: 0.18
+With 32 teams the standard error on any one correlation is about 0.18, as the offensive calibration notes.

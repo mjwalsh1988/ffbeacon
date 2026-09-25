@@ -99,8 +99,9 @@ export function PlayerHero({
           so all three share one fetch and one decode. Static: no animation,
           no layout cost, one small PNG. */}
       {crest && (
-        // eslint-disable-next-line @next/next/no-img-element -- external CDN
-        // image; next/image buys nothing for a fixed-size decorative layer.
+        // External CDN image; next/image buys nothing for a fixed-size
+        // decorative layer.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={crest}
           alt=""

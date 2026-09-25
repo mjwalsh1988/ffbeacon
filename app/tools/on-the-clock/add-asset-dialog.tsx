@@ -79,6 +79,9 @@ export function AddAssetDialog({
   const unresolvable = asset.signalCheck === null;
 
   return (
+    // A mouse convenience only: the keyboard closes this dialog with Escape
+    // (the document listener above), so the backdrop needs no key handler.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
       // Clicking the backdrop closes, matching the rest of the site's dialogs.

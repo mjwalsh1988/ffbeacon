@@ -115,7 +115,7 @@ describe("POST /api/games/signal-scout/round/[id]/hint", () => {
 
   it("claims the rate limit before calling purchaseHint (order matters)", async () => {
     const calls: string[] = [];
-    rpcMock.mockImplementation((name: string) => {
+    rpcMock.mockImplementation(() => {
       calls.push("claim");
       return Promise.resolve({ data: true, error: null });
     });

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse, after } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { getTrustedClientIp } from "@/lib/client-ip";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { validateLearningRequest } from "@/lib/beam/validate";
 import { loadBeamSettings } from "@/lib/beam/settings";

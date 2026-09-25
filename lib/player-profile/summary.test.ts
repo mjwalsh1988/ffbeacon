@@ -25,7 +25,7 @@ function fullFacts(overrides: Partial<PlayerSummaryFacts> = {}): PlayerSummaryFa
 
 // Banned punctuation per project style rules: em dash, en dash, curly quotes,
 // curly apostrophe, ellipsis character, middle dot, non-breaking space.
-const BANNED_CHARS = /[—–‘’“”…· ]/;
+const BANNED_CHARS = /[\u2014\u2013\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/;
 
 describe("buildPlayerSummary", () => {
   it("renders both sentences from a full fact set", () => {

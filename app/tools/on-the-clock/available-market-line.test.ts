@@ -70,7 +70,7 @@ describe("describeAvailableVsMarket", () => {
     // Escaped rather than literal: an em dash and a non-breaking space are hard
     // to tell apart from their plain neighbours in source, and a stray literal
     // space in this class makes the assertion match every string.
-    const BANNED = /[—–‘’“”…· ]/;
+    const BANNED = /[\u2014\u2013\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/;
     const cases = [
       describeAvailableVsMarket(player({ beaconPick: 92, adp: 120 }), 6),
       describeAvailableVsMarket(player({ beaconPick: 120, adp: 80 }), 6),

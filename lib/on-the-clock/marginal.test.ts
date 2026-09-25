@@ -278,7 +278,7 @@ describe("the probe identity", () => {
         const candidate = b.players[candidateId];
         // Brute force: rebuild the lineup with him in it, every week.
         const gains: number[] = [];
-        for (const week of WEEKS) {
+        for (const _week of WEEKS) {
           const rosterWeek = rosterIds
             .map((id) => b.players[id])
             .filter(Boolean)

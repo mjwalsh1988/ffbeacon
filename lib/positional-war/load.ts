@@ -139,7 +139,7 @@ import {
   type DefenseRow,
   type ProjectionRow,
 } from "@/lib/power-pulse/load";
-import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { type PulsePosition } from "@/lib/power-pulse/types";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";

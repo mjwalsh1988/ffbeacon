@@ -32,7 +32,7 @@ import { matchViewerRoster } from "@/lib/league-viewer";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatRelative } from "@/lib/datetime";
-import { games, pct, pts, record } from "@/components/manager-ledger/format";
+import { pct, pts, record } from "@/components/manager-ledger/format";
 import { ListChecks } from "lucide-react";
 import type { SleeperLeague } from "@/lib/sleeper";
 

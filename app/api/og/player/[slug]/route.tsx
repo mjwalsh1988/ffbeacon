@@ -15,7 +15,6 @@ const INK_MUTED = "#A8A8B8";
 const INK_SUBTLE = "#6B6B7D";
 const PURPLE = "#A855F7";
 const CYAN = "#22D3EE";
-const LINE = "#1F1F33";
 
 const PLAYER_IMAGE_BASE = "https://sleepercdn.com/content/nfl/players";
 

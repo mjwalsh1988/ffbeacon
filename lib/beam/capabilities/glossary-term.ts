@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import type { BeamAnswer, BeamCapability } from "@/lib/beam/types";
-import { buildContext, buildSpeech } from "@/lib/beam/answers/templates";
+import { buildContext } from "@/lib/beam/answers/templates";
 import { parseWith } from "./shared";
 
 const schema = z.object({

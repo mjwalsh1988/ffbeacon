@@ -287,7 +287,7 @@ const TEMPLATES: Template[] = [
   },
   {
     templateId: "front_loaded_moves",
-    build: (report, w) => {
+    build: (report) => {
       const shape = report.rosterOps.moveShape.all;
       const totalSeasons = report.counts.leagueSeasons;
       if (shape !== "front-loaded" || totalSeasons === 0) return null;
@@ -300,7 +300,7 @@ const TEMPLATES: Template[] = [
   },
   {
     templateId: "wins",
-    build: (report, w) => {
+    build: (report) => {
       const championships = report.results.championships.all;
       const sample = report.results.sampleSize.all;
       if (championships === null || sample === null || championships === 0) return null;

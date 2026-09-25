@@ -51,7 +51,7 @@
  */
 
 import { OFFENSE_POSITIONS } from "@/lib/site";
-import type { DraftPosition, RankedPlayer } from "./board-types";
+import type { RankedPlayer } from "./board-types";
 import type { OnTheClockSettings, ShapedPick } from "./types";
 import type { DraftPulseTeam } from "./draft-pulse";
 import {
@@ -63,7 +63,6 @@ import {
 import { tradeMarginsFor } from "./trade-margins";
 import type { TeamRollup } from "./rosters";
 import {
-  analyzeTradeTransaction,
   type HistoryTransaction,
   type TradeHistoryContext,
 } from "./trade-history";
@@ -188,16 +187,6 @@ export interface DraftAwardsInput {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Coerce a Sleeper pick position string to one of the six draft buckets. */
-function coercePosition(pos: string | null | undefined): DraftPosition | null {
-  const p = (pos ?? "").toUpperCase();
-  if (p === "QB" || p === "RB" || p === "WR" || p === "TE" || p === "K")
-    return p;
-  if (p === "DEF" || p === "DST") return "DEF";
-  if (p === "PK") return "K";
-  return null;
-}
 
 function fmtValue(v: number): string {
   return Math.round(v).toLocaleString();
@@ -398,7 +387,6 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     picks,
     draftSettings,
     settings,
-    adpBySleeperId,
     board,
     pulseTeams,
     isDynasty,

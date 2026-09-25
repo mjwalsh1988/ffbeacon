@@ -51,10 +51,13 @@ export function RosterSheet({
   const myCount = myGroup.entries.length;
   const otherCount = otherGroups.reduce((sum, group) => sum + group.entries.length, 0);
 
-  const tabs: { id: TabId; label: string; count: number }[] = [
-    { id: "mine", label: "Your team", count: myCount },
-    { id: "others", label: "Off the board", count: otherCount },
-  ];
+  const tabs: { id: TabId; label: string; count: number }[] = useMemo(
+    () => [
+      { id: "mine", label: "Your team", count: myCount },
+      { id: "others", label: "Off the board", count: otherCount },
+    ],
+    [myCount, otherCount],
+  );
 
   // Memoized so the memo on TeamRosters can actually hold: a fresh array every
   // render would re-reconcile every roster row on every pick.

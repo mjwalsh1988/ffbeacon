@@ -38,7 +38,7 @@ import {
 } from "@/lib/signal-check/copy";
 import type { LeagueTradeSignalCheck } from "@/lib/league-signal-check";
 import { gradeLeagueTrades, tradeRosterPair, WYR_LEAGUE_COLUMNS, type WyrLeagueRow } from "./grade";
-import { useTeamNames } from "./side-names";
+import { withTeamNames } from "./side-names";
 import { compactLeagueFormat, leagueFormatBullets } from "./poll-text";
 import type {
   WyrAsset,
@@ -677,8 +677,8 @@ export async function buildReview(
   const view = showVerdict
     ? {
         ...loaded.graded.view,
-        verdictLabel: useTeamNames(loaded.graded.view.verdictLabel),
-        explanation: useTeamNames(loaded.graded.view.explanation),
+        verdictLabel: withTeamNames(loaded.graded.view.verdictLabel),
+        explanation: withTeamNames(loaded.graded.view.explanation),
       }
     : null;
 

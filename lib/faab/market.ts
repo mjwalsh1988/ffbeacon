@@ -254,24 +254,6 @@ export function urgencyMultiplier(input: MarketInput): number {
   return early + (late - early) * t;
 }
 
-function urgencySignal(input: MarketInput, multiplier: number): FaabSignal | null {
-  if (!input.settings.urgency.enabled) return null;
-  if (Math.abs(multiplier - 1) < 0.03) return null;
-
-  const weeksLeft = Math.max(0, input.lastRegularWeek - input.currentWeek + 1);
-  const late = multiplier > 1;
-  return {
-    id: "urgency",
-    label: late ? "Money you do not spend is wasted" : "It is early, budget has option value",
-    detail: late
-      ? `${weeksLeft} regular season week${weeksLeft === 1 ? "" : "s"} left. Leftover FAAB buys nothing, so the right bid climbs from here.`
-      : `Week ${input.currentWeek}. Every dollar now is one you cannot spend on whoever breaks out in November.`,
-    tone: "neutral",
-    multiplier,
-    spread: 0,
-  };
-}
-
 export function buildMarket(input: MarketInput): {
   read: MarketRead;
   signals: FaabSignal[];

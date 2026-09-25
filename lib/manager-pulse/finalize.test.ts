@@ -19,7 +19,7 @@ vi.mock("./fingerprint", () => ({ managerPulseFingerprint: vi.fn() }));
 
 import { loadManagerPulseInput } from "./load";
 import { computeFootprint } from "./engine";
-import { buildTendency, tendencySamples } from "./tendencies";
+import { buildTendency } from "./tendencies";
 import { managerPulseFingerprint } from "./fingerprint";
 import { finalizeManagerPulseRun } from "./finalize";
 import { DEFAULT_MANAGER_PULSE_SETTINGS } from "./default-settings";

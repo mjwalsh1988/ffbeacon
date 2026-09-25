@@ -196,7 +196,7 @@ export function calculateFaabRecommendation(input: FaabCalcInput): FaabResult {
 
   let lowPct: number;
   let highPct: number;
-  let tierLabel = band.tierLabel;
+  const tierLabel = band.tierLabel;
 
   if (isDumpCandidate) {
     const range = settings.dump.ranges[needLevel] ?? settings.dump.ranges.medium;

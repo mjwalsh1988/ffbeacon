@@ -87,11 +87,10 @@ class FakeClient {
     return new FakeBuilder(call, this.handler);
   }
   from(table: string) {
-    const self = this;
     return {
-      select: () => self.record({ table, op: "select", filters: {} }),
-      insert: (payload: unknown) => self.record({ table, op: "insert", payload, filters: {} }),
-      update: (payload: unknown) => self.record({ table, op: "update", payload, filters: {} }),
+      select: () => this.record({ table, op: "select", filters: {} }),
+      insert: (payload: unknown) => this.record({ table, op: "insert", payload, filters: {} }),
+      update: (payload: unknown) => this.record({ table, op: "update", payload, filters: {} }),
     };
   }
   rpc(name: string, args: unknown) {

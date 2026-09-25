@@ -13,7 +13,7 @@ import {
 } from "./recommend";
 import { DEFAULT_ON_THE_CLOCK_SETTINGS } from "./default-settings";
 import type { OnTheClockSettings } from "./types";
-import type { DraftPosition, RankedPlayer } from "./board-types";
+import type { RankedPlayer } from "./board-types";
 
 // ---------------------------------------------------------------------------
 // Fixtures

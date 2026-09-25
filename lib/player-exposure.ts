@@ -77,7 +77,6 @@ export const EMPTY_PLAYER_EXPOSURE: PlayerExposure = {
 };
 
 const PAGE = 1000;
-const RESOLVE_CHUNK = 200;
 
 /** Sleeper writes "0" into an empty roster slot. It is not a player. */
 function validPlayerId(id: unknown): id is string {

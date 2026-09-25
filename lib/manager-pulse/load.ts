@@ -910,7 +910,6 @@ export async function loadManagerPulseInput(
     }
 
     const keptLeagueRowIds = Array.from(leagueRowIdToSeason.keys());
-    const bySleeperLeagueId = new Map(leagueSeasons.map((s) => [s.sleeperLeagueId, s]));
 
     // Phase 2: league users, for handles and trade-grading side labels.
     const leagueUsersByLeagueRowId = await fetchLeagueUsers(admin, keptLeagueRowIds);

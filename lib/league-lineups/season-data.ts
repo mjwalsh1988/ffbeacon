@@ -1,7 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, Json } from "@/lib/database.types";
+import type { Json } from "@/lib/database.types";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import {
   loadAccuracy,
@@ -59,11 +58,6 @@ import { buildSeasonSeries, projectionAccuracy, type SeasonSeries, type Projecti
  * depend on each other, none of which the lineup board needs, so nothing here
  * delays the thing a reader came for.
  */
-
-type ServiceClient = SupabaseClient<Database>;
-type AnyClient =
-  | SupabaseClient<Database>
-  | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
 /** The season figures the report header quotes, straight off the ledger row. */
 export type SeasonLedgerSummary = {

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import type { LineupCandidate } from "@/lib/power-pulse/lineup";
-import { buildOptimalLineup, pulseEligibility, startingSlots } from "@/lib/power-pulse/lineup";
+import { pulseEligibility, startingSlots } from "@/lib/power-pulse/lineup";
 import { winProbability } from "@/lib/power-pulse/math";
 import {
   simulateWithReplacements,
@@ -97,11 +97,6 @@ export type ValidatedProposal = {
   identity: RosterIdentity;
 };
 
-function assetKeyOf(asset: BuildAsset): string {
-  return asset.kind === "player"
-    ? `p:${asset.playerId}`
-    : `k:${asset.season}:${asset.round}`;
-}
 
 
 /**

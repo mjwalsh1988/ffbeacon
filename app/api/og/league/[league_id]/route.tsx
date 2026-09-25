@@ -67,7 +67,7 @@ export async function GET(
   const sourceDisplay =
     context.coverage === "none" ? null : context.sourceDisplay;
 
-  let topTeams: Array<{ teamName: string; rank: number; totalValue: number }> = [];
+  const topTeams: Array<{ teamName: string; rank: number; totalValue: number }> = [];
   if (formatConfigId && effectiveSourceSlug) {
     const { data: cache } = await supabase
       .from("league_power_rankings_cache")

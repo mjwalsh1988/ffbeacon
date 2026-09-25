@@ -95,11 +95,11 @@ const PAGE = 1000;
  * figure worth reading and an offensive player has no idp123 one, so each
  * cross case scores null and never enters a bucket (plan IDP-118).
  */
-const SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std", "idp123"] as const;
-type ScoringBase = (typeof SCORING_BASES)[number];
+export const SCORING_BASES = ["pts_ppr", "pts_half_ppr", "pts_std", "idp123"] as const;
+export type ScoringBase = (typeof SCORING_BASES)[number];
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"] as const;
-type Position = (typeof POSITIONS)[number];
+export type Position = (typeof POSITIONS)[number];
 
 /**
  * How many of each position a typical lineup starts league-wide. Used to keep
@@ -132,7 +132,7 @@ const MIN_GAMES = 4;
  */
 const ADJUSTMENT_ITERATIONS = 4;
 
-type StatRow = {
+export type StatRow = {
   player_id: string | null;
   season: number;
   week: number;
@@ -252,7 +252,7 @@ async function recentSeasons(supabase: ServiceClient): Promise<number[]> {
   return [latest, latest - 1, latest - 2];
 }
 
-async function loadSeasonStats(supabase: ServiceClient, season: number): Promise<StatRow[]> {
+export async function loadSeasonStats(supabase: ServiceClient, season: number): Promise<StatRow[]> {
   const out: StatRow[] = [];
   // Keyset paging (id > last), not offset: the typed IDP columns make every page
   // wider, and a deep offset over a 50,000-row season is what times out.
@@ -344,13 +344,27 @@ export function groupPerformances(
   return byGame;
 }
 
-async function buildSeasonScoring(
-  supabase: ServiceClient,
-  season: number,
-  scoring: ScoringBase,
-  rows: StatRow[],
-  settings: PowerPulseSettings,
-): Promise<number> {
+/** One defense's figures at one position for one season, before any shrink. */
+export type DefenseSplit = {
+  team: string;
+  position: Position;
+  perGame: number;
+  adjustedPerGame: number;
+  average: number;
+  multiplier: number;
+  adjustedMultiplier: number;
+  games: number;
+};
+
+/**
+ * The raw and opponent-adjusted multiplier for every defense at every position
+ * under one scoring base. Pure, and exported so the reliability calibration
+ * (scripts/backtest-idp-accuracy.ts) measures exactly the figures this file
+ * stores rather than a copy of the arithmetic. The shrink and the rank are
+ * applied by the caller, because the shrink reads the very reliability the
+ * calibration is measuring.
+ */
+export function computeSeasonSplits(rows: StatRow[], scoring: ScoringBase): DefenseSplit[] {
   // Group performances by (defense, week, position) so we can keep only the
   // startable ones per game. The offense is carried alongside, because every
   // row in one bucket comes from the single team that played that defense in
@@ -420,10 +434,7 @@ async function buildSeasonScoring(
     );
   }
 
-  const inserts: Database["public"]["Tables"]["nfl_defense_vs_position"]["Insert"][] = [];
-  const rankPool = new Map<Position, Array<{ team: string; perGame: number }>>();
-  const computedAt = new Date().toISOString();
-
+  const splits: DefenseSplit[] = [];
   for (const [key, accum] of byDefense) {
     if (accum.games < MIN_GAMES) continue;
     const [team, positionRaw] = key.split("|");
@@ -450,9 +461,37 @@ async function buildSeasonScoring(
       MAX_MULTIPLIER,
     );
 
+    splits.push({
+      team,
+      position,
+      perGame,
+      adjustedPerGame,
+      average,
+      multiplier,
+      adjustedMultiplier,
+      games: accum.games,
+    });
+  }
+  return splits;
+}
+
+async function buildSeasonScoring(
+  supabase: ServiceClient,
+  season: number,
+  scoring: ScoringBase,
+  rows: StatRow[],
+  settings: PowerPulseSettings,
+): Promise<number> {
+  const inserts: Database["public"]["Tables"]["nfl_defense_vs_position"]["Insert"][] = [];
+  const rankPool = new Map<Position, Array<{ team: string; perGame: number }>>();
+  const computedAt = new Date().toISOString();
+
+  for (const split of computeSeasonSplits(rows, scoring)) {
+    const { team, position, perGame, adjustedPerGame, average, multiplier, adjustedMultiplier } =
+      split;
     const shrunk = shrinkMultiplier({
       adjustedMultiplier,
-      gamesSampled: accum.games,
+      gamesSampled: split.games,
       positionReliability: settings.opponent.positionReliability[position] ?? 0,
       priorGames: settings.opponent.priorGames,
       min: MIN_MULTIPLIER,
@@ -478,7 +517,7 @@ async function buildSeasonScoring(
       adjusted_multiplier: round(adjustedMultiplier, 4),
       shrunk_multiplier: round(shrunk, 4),
       generosity_rank: null,
-      games_sampled: accum.games,
+      games_sampled: split.games,
       computed_at: computedAt,
     });
   }

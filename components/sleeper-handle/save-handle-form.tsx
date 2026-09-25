@@ -85,8 +85,9 @@ export function SaveHandleForm({
           autoComplete="username"
           autoCapitalize="none"
           spellCheck={false}
-          // eslint-disable-next-line jsx-a11y/no-autofocus -- only ever true
-          // when the reader just pressed the control that revealed this field.
+          // autoFocus is only ever true when the reader just pressed the
+          // control that revealed this field.
+          // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus={autoFocus}
           value={username}
           onChange={(event) => setUsername(event.target.value)}

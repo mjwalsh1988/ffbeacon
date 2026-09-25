@@ -299,7 +299,6 @@ export function solveTradeBalance(
   if (largestSide < config.minAssetsForAdjustment) return unadjusted;
 
   const favoured = base.favoured;
-  const trailing: QualitySideKey = favoured === "a" ? "b" : "a";
   const favouredValues = favoured === "a" ? valuesA : valuesB;
   const trailingValues = favoured === "a" ? valuesB : valuesA;
   const rawFavoured = favoured === "a" ? rawA : rawB;

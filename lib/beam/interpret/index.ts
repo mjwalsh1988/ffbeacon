@@ -23,8 +23,6 @@
  */
 
 import { positionNoun as sitePositionNoun } from "@/lib/site";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
 import type {
   AnyBeamCapability,
   BeamClarification,

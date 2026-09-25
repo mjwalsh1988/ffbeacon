@@ -74,7 +74,6 @@ import {
   readTradePosition,
   readTradeStrategy,
   type TradePosition,
-  type TradeStrategy,
   type TradeSuggestion,
 } from "@/lib/trade-finder/types";
 

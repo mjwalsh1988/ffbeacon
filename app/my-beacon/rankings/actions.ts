@@ -650,7 +650,7 @@ export async function replaceBoardFromImport(
   // Remap source tiers to contiguous board tiers (1..N) when tiers are on.
   const tiersEnabled = owned.tiersEnabled;
   let tierCount = owned.tierCount;
-  let tierLabels: Record<string, string> = {};
+  const tierLabels: Record<string, string> = {};
   let importedTiers = false;
   const tierByPlayer = new Map<string, number | null>();
   if (tiersEnabled) {

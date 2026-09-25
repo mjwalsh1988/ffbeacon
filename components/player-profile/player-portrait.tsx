@@ -47,8 +47,9 @@ export function PlayerPortrait({
         />
       )}
       {showImage ? (
-        // eslint-disable-next-line @next/next/no-img-element -- external CDN image
-        // with onError fallback, which next/image doesn't expose cleanly.
+        // External CDN image with onError fallback, which next/image does not
+        // expose cleanly.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src ?? undefined}
           alt={name}
