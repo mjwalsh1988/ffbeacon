@@ -557,6 +557,7 @@ async function LineupBody({
                 unprojectableSlotCount={view.unprojectableSlotCount}
                 unprojectedSlotCount={view.unprojectedSlotCount}
                 idpEnabled={view.idpEnabled}
+                nowIso={new Date().toISOString()}
               />
             </div>
           </Panel>

@@ -5,6 +5,7 @@ import {
   countSwapCandidates,
   eligiblePositionsFor,
   isEligibleFor,
+  isLockedAt,
   pointsDirection,
   probabilityDirection,
   simulateSwap,
@@ -328,5 +329,41 @@ describe("direction bands", () => {
     expect(probabilityDirection(0.02)).toBe("up");
     expect(probabilityDirection(-0.02)).toBe("down");
     expect(probabilityDirection(null)).toBe("flat");
+  });
+});
+
+describe("the what-if during a live week (players whose games have started are locked)", () => {
+  const NOW = Date.parse("2026-09-27T18:00:00Z");
+  function withKickoff(sleeperId: string, kickoffAt: string | null): LineupPlayer {
+    return player({
+      sleeperId,
+      position: "WR",
+      environment: kickoffAt
+        ? ({ kickoffAt } as unknown as NonNullable<LineupPlayer["environment"]>)
+        : null,
+    });
+  }
+  const played = withKickoff("1", "2026-09-25T00:15:00Z");
+  const early = withKickoff("2", "2026-09-27T17:00:00Z");
+  const late = withKickoff("3", "2026-09-27T20:25:00Z");
+  const unknown = withKickoff("4", null);
+
+  it("locks nobody before the games, so an upcoming week is unchanged", () => {
+    expect(isLockedAt(played, null)).toBe(false);
+    expect(isLockedAt(unknown, null)).toBe(false);
+    expect(countSwapCandidates([played, early, late, unknown], "WR")).toBe(4);
+  });
+
+  it("locks a player once his kickoff has passed, and one with no kickoff on record", () => {
+    expect(isLockedAt(played, NOW)).toBe(true);
+    expect(isLockedAt(early, NOW)).toBe(true);
+    expect(isLockedAt(late, NOW)).toBe(false);
+    expect(isLockedAt(unknown, NOW)).toBe(true);
+  });
+
+  it("offers only the bench players still to play", () => {
+    const bench = [played, early, late, unknown];
+    expect(swapCandidates(bench, "WR", false, NOW).map((p) => p.sleeperId)).toEqual(["3"]);
+    expect(countSwapCandidates(bench, "WR", false, NOW)).toBe(1);
   });
 });

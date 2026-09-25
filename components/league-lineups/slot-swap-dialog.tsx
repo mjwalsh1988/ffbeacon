@@ -81,6 +81,7 @@ export function SlotSwapDialog({
   opponentName,
   onClose,
   idpEnabled = false,
+  liveNowMs = null,
 }: {
   /** Null closes the dialog. */
   target: SwapTarget | null;
@@ -92,6 +93,8 @@ export function SlotSwapDialog({
   onClose: () => void;
   /** The IDP switch, passed down from the server loader (plan R-25). */
   idpEnabled?: boolean;
+  /** Set during a live week: players whose games have started are left out. */
+  liveNowMs?: number | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const headingId = useId();
@@ -106,8 +109,8 @@ export function SlotSwapDialog({
   }, [token, target?.player?.sleeperId]);
 
   const candidates = useMemo(
-    () => (target ? swapCandidates(bench, target.token, idpEnabled) : []),
-    [bench, target, idpEnabled],
+    () => (target ? swapCandidates(bench, target.token, idpEnabled, liveNowMs) : []),
+    [bench, target, idpEnabled, liveNowMs],
   );
 
   if (!target) return null;
@@ -150,6 +153,9 @@ export function SlotSwapDialog({
           <p className="mt-1 text-xs leading-relaxed text-ink-muted">
             This slot takes {eligibleWords(target.token, idpEnabled)}. Pick anyone on your bench to see
             what starting him there would do. Nothing here changes your lineup.
+            {liveNowMs !== null
+              ? " Games are under way this week, so only players whose games have not kicked off are listed."
+              : ""}
           </p>
         </header>
 

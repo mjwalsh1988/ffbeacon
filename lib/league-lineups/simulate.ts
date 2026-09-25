@@ -98,11 +98,13 @@ export function swapCandidates(
   bench: LineupPlayer[],
   token: string,
   idpEnabled = false,
+  liveNowMs: number | null = null,
 ): LineupPlayer[] {
   return bench
     .filter((p) => p.rosterSlot === "bench")
     .filter((p) => p.projected !== null)
     .filter((p) => isEligibleFor(token, positionsOf(p), idpEnabled))
+    .filter((p) => !isLockedAt(p, liveNowMs))
     .sort((a, b) => (b.projected ?? 0) - (a.projected ?? 0));
 }
 
@@ -118,15 +120,37 @@ export function countSwapCandidates(
   bench: LineupPlayer[],
   token: string,
   idpEnabled = false,
+  liveNowMs: number | null = null,
 ): number {
   let count = 0;
   for (const player of bench) {
     if (player.rosterSlot !== "bench") continue;
     if (player.projected === null) continue;
     if (!isEligibleFor(token, positionsOf(player), idpEnabled)) continue;
+    if (isLockedAt(player, liveNowMs)) continue;
     count += 1;
   }
   return count;
+}
+
+/**
+ * Has this player's game started? Only asked during a LIVE week
+ * (`liveNowMs` non-null); before the games nobody is locked, which keeps the
+ * what-if exactly as it was on an upcoming week.
+ *
+ * Sleeper locks a player at his game's kickoff, so once it has passed he can
+ * neither come off the bench nor be benched, and a what-if about him is not a
+ * move anyone can make. The kickoff comes from the stored game lines
+ * (nfl_game_odds.kickoff_at, via the player's game environment). A player
+ * with no kickoff on record during a live week (a bye, or no line published)
+ * is treated as locked: we cannot show his game is still to come, and
+ * offering a move Sleeper may refuse is worse than offering none. Pure.
+ */
+export function isLockedAt(player: LineupPlayer, liveNowMs: number | null): boolean {
+  if (liveNowMs === null) return false;
+  const kickoff = player.environment?.kickoffAt ? Date.parse(player.environment.kickoffAt) : NaN;
+  if (!Number.isFinite(kickoff)) return true;
+  return kickoff <= liveNowMs;
 }
 
 /** The week's numbers a simulation is measured against. */

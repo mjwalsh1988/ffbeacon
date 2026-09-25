@@ -88,6 +88,7 @@ import { shortSlotLabel } from "@/lib/league-schedule/slots";
 import {
   baselineSigma,
   countSwapCandidates,
+  isLockedAt,
   type LineupBaseline,
 } from "@/lib/league-lineups/simulate";
 import type {
@@ -135,6 +136,7 @@ export function LineupBoard({
   unprojectableSlotCount,
   unprojectedSlotCount,
   idpEnabled = false,
+  nowIso = null,
 }: {
   groups: LineupGroup[];
   bench: LineupPlayer[];
@@ -163,6 +165,12 @@ export function LineupBoard({
    * component never reads the settings document itself.
    */
   idpEnabled?: boolean;
+  /**
+   * Server render time. During a live week it decides whose games have
+   * kicked off (they are locked, so not offered in the what-if); read from
+   * the server so the first paint agrees with the HTML.
+   */
+  nowIso?: string | null;
 }) {
   const [openPlayer, setOpenPlayer] = useState<LineupPlayer | null>(null);
   const [swapTarget, setSwapTarget] = useState<SwapTarget | null>(null);
@@ -221,7 +229,16 @@ export function LineupBoard({
    * live one forward, so it would have offered a full what-if with the win
    * probability silently missing from it.
    */
-  const canSimulate = status.showsAdvice && optimization.setTotal !== null;
+  // The what-if runs before the games AND during them. A live week used to
+  // switch it off entirely, which took the slot buttons away for the whole
+  // weekend the moment Thursday's game kicked off, exactly when managers set
+  // lineups. During a live week only players whose games have not started are
+  // offered (isLockedAt); a settled week still has no what-if, because a week
+  // that has been played cannot be changed.
+  const live = status.phase === "live";
+  const liveNowMs = live && nowIso ? Date.parse(nowIso) : null;
+  const canSimulate =
+    (status.showsAdvice || (live && liveNowMs !== null)) && optimization.setTotal !== null;
 
   /**
    * How many bench players could hold each slot token, worked out ONCE.
@@ -242,11 +259,14 @@ export function LineupBoard({
       for (const entry of group.entries) {
         if (!entry.slot.projectable) continue;
         if (counts.has(entry.slot.token)) continue;
-        counts.set(entry.slot.token, countSwapCandidates(bench, entry.slot.token, idpEnabled));
+        counts.set(
+          entry.slot.token,
+          countSwapCandidates(bench, entry.slot.token, idpEnabled, liveNowMs),
+        );
       }
     }
     return counts;
-  }, [bench, canSimulate, groups, idpEnabled]);
+  }, [bench, canSimulate, groups, idpEnabled, liveNowMs]);
 
   // A league that starts defenders gets one plain link to what IDP scoring is
   // (plan IDP-223, IDP-305). It sits in the footnotes rather than inside the
@@ -379,7 +399,9 @@ export function LineupBoard({
                   isFinal={isFinal}
                   onOpen={setOpenPlayer}
                   onSwap={
-                    (swapOptionsByToken.get(entry.slot.token) ?? 0) > 0
+                    (swapOptionsByToken.get(entry.slot.token) ?? 0) > 0 &&
+                    // A starter whose game has started is locked in his slot.
+                    !(entry.player && isLockedAt(entry.player, liveNowMs))
                       ? () =>
                           setSwapTarget({
                             token: entry.slot.token,
@@ -505,6 +527,7 @@ export function LineupBoard({
         opponentName={opponent?.teamName ?? null}
         onClose={closeSwap}
         idpEnabled={idpEnabled}
+        liveNowMs={liveNowMs}
       />
     </>
   );
