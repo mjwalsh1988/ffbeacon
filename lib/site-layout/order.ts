@@ -94,6 +94,22 @@ export function packRows<T>(
   return rows.map((row) => ({ items: row.items, empty: columns - row.used }));
 }
 
+/**
+ * The homepage grid a preview must model for a given column count: the tracks
+ * it really has (six from `md`, so a half-row card is exact) and how many of
+ * them a card of each width spans. Mirrors CARD_WIDTH_CLASSES in
+ * components/tool-badge.tsx; the two must agree.
+ */
+export function gridTracks(columns: number): number {
+  return columns >= 3 ? 6 : Math.max(1, columns);
+}
+
+export function cardSpan(width: number, columns: number): number {
+  if (columns >= 3) return Math.round(width * 2);
+  if (columns === 2) return width >= 2 ? 2 : 1;
+  return 1;
+}
+
 /** Move one entry up or down a list. Returns the same array when it cannot move. */
 export function moveEntry<T>(list: readonly T[], index: number, direction: "up" | "down"): T[] {
   const target = direction === "up" ? index - 1 : index + 1;

@@ -90,12 +90,14 @@ export const CARD_GLOW: Record<HighlightColor, string> = {
 };
 
 /**
- * Column span on the homepage grid, which is one column on a phone, two from
- * `sm` and three from `md`. A full-row card spans both columns at `sm`, so it
- * is full width at every breakpoint.
+ * Column span on the homepage grid: one column on a phone, two from `sm`, and
+ * six tracks from `md` so a half-row card is exact (a third spans 2, a half 3,
+ * two thirds 4, the full row 6). Keep in step with cardSpan in
+ * lib/site-layout/order.ts, which the admin preview draws with.
  */
 export const CARD_WIDTH_CLASSES: Record<CardWidth, string> = {
-  1: "",
-  2: "sm:col-span-2",
-  3: "sm:col-span-2 md:col-span-3",
+  1: "md:col-span-2",
+  1.5: "md:col-span-3",
+  2: "sm:col-span-2 md:col-span-4",
+  3: "sm:col-span-2 md:col-span-6",
 };

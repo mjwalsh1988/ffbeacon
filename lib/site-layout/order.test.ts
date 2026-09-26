@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { applyOrder, isPermutationOf, moveEntry, normalizeOrder, packRows } from "./order";
+import {
+  applyOrder,
+  cardSpan,
+  gridTracks,
+  isPermutationOf,
+  moveEntry,
+  normalizeOrder,
+  packRows,
+} from "./order";
 
 describe("normalizeOrder", () => {
   const known = ["a", "b", "c"] as const;
@@ -83,5 +91,24 @@ describe("moveEntry", () => {
     const list = ["a", "b"];
     expect(moveEntry(list, 0, "up")).toBe(list);
     expect(moveEntry(list, 1, "down")).toBe(list);
+  });
+});
+
+describe("half-row cards", () => {
+  it("span exact tracks on the six-track wide grid and one column on tablets", () => {
+    expect(gridTracks(3)).toBe(6);
+    expect([1, 1.5, 2, 3].map((w) => cardSpan(w, 3))).toEqual([2, 3, 4, 6]);
+    expect([1, 1.5, 2, 3].map((w) => cardSpan(w, 2))).toEqual([1, 1, 2, 2]);
+  });
+
+  it("two half-row cards share a row on the wide grid", () => {
+    const rows = packRows([1.5, 1.5, 1, 1, 1], (w) => cardSpan(w, 3), gridTracks(3));
+    expect(rows.map((r) => r.items)).toEqual([[1.5, 1.5], [1, 1, 1]]);
+    expect(rows.every((r) => r.empty === 0)).toBe(true);
+  });
+
+  it("a half next to a third leaves a sixth of the row empty", () => {
+    const rows = packRows([1.5, 1, 1.5], (w) => cardSpan(w, 3), gridTracks(3));
+    expect(rows[0]).toEqual({ items: [1.5, 1], empty: 1 });
   });
 });

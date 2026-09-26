@@ -45,7 +45,7 @@ import {
   type SiteLayoutSettings,
   type ToolBadgeKey,
 } from "@/lib/site-layout/default-settings";
-import { applyOrder, moveEntry, packRows } from "@/lib/site-layout/order";
+import { applyOrder, cardSpan, gridTracks, moveEntry, packRows } from "@/lib/site-layout/order";
 import type { ToolHref } from "@/lib/tools-catalog";
 import { saveSiteLayoutAction } from "./actions";
 
@@ -370,8 +370,22 @@ function CardRow({
 }
 
 /** "2 columns, New features tag, green border", for one preview box. */
-function describeCardExtras(card: HomepageToolCard, span: number): string {
-  const parts = [plural(span, "column")];
+/** A card's width in words at one preview size. */
+function describeWidth(card: HomepageToolCard, columns: number): string {
+  if (columns >= 3) return card.width === 1.5 ? "half the row" : plural(card.width, "column");
+  return cardSpan(card.width, columns) >= columns ? "full row" : "1 column";
+}
+
+/** Empty tracks at the end of a row, in words. */
+function describeEmpty(tracks: number, columns: number): string {
+  if (columns < 3) return plural(tracks, "empty column");
+  if (tracks % 2 === 0) return plural(tracks / 2, "empty column");
+  if (tracks === 3) return "half the row empty";
+  return tracks === 1 ? "a sixth of the row empty" : "five sixths of the row empty";
+}
+
+function describeCardExtras(card: HomepageToolCard, columns: number): string {
+  const parts = [describeWidth(card, columns)];
   if (card.badge) parts.push(`${TOOL_BADGES[card.badge].label} tag`);
   if (card.highlight) parts.push(`${HIGHLIGHT_LABELS[card.highlight].toLowerCase()} border`);
   return parts.join(", ");
@@ -391,7 +405,8 @@ function GridPreview({
   columns: number;
   heading: string;
 }) {
-  const rows = packRows(cards, (card) => card.width, columns);
+  const tracks = gridTracks(columns);
+  const rows = packRows(cards, (card) => cardSpan(card.width, columns), tracks);
   const gaps = rows.filter((row) => row.empty > 0 && row !== rows[rows.length - 1]).length;
   const summary =
     `${plural(rows.length, "row")}. ` +
@@ -409,10 +424,10 @@ function GridPreview({
             <span className="sr-only">Row {r + 1}: </span>
             <div
               className="grid gap-2"
-              style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${tracks}, minmax(0, 1fr))` }}
             >
               {row.items.map((card) => {
-                const span = Math.min(card.width, columns);
+                const span = cardSpan(card.width, columns);
                 return (
                   <div
                     key={card.href}
@@ -424,7 +439,7 @@ function GridPreview({
                         says the same thing by eye and by ear. */}
                     <span className="block text-ink-muted">
                       <span className="sr-only">, </span>
-                      {describeCardExtras(card, span)}
+                      {describeCardExtras(card, columns)}
                     </span>
                   </div>
                 );
@@ -435,7 +450,7 @@ function GridPreview({
                   className="rounded-card border border-dashed border-line px-3 py-2 text-xs text-ink-muted"
                 >
                   <span className="sr-only">then </span>
-                  {plural(row.empty, "empty column")}
+                  {describeEmpty(row.empty, columns)}
                 </div>
               )}
             </div>

@@ -606,7 +606,7 @@ function ToolsSection({ cards }: { cards: HomepageToolCard[] }) {
             NOT dense, so a gap a wide card leaves is left empty rather than
             filled by a card drawn out of order; the visual order always matches
             the reading and tab order. /admin/site-layout previews the rows. */}
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 md:grid-cols-3">
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 md:grid-cols-6">
           {cards.map((card, i) => (
             <ToolCard key={card.href} card={card} index={i} />
           ))}

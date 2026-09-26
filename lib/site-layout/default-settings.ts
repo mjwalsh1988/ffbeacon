@@ -178,16 +178,20 @@ export const TONE_TO_HIGHLIGHT: Record<ToolBadgeTone, HighlightColor> = {
 };
 
 /**
- * How many of the homepage grid's columns a card spans. The grid is three
- * columns wide from `md`, two from `sm`, and one below that, so a wide card is
- * capped at the columns there are and every card is full width on a phone.
+ * How much of a homepage row a card takes, in thirds of the row: 1 is one of
+ * three columns, 1.5 is HALF the row (two cards side by side), 2 is two of
+ * three columns, 3 is the full row. From `md` the grid runs on six tracks so a
+ * half is exact (a third spans 2, a half 3, two thirds 4, the row 6). From
+ * `sm` it is two columns, where a third or a half takes one and anything wider
+ * takes both, and every card is full width on a phone.
  */
-export const CARD_WIDTHS = [1, 2, 3] as const;
+export const CARD_WIDTHS = [1, 1.5, 2, 3] as const;
 
 export type CardWidth = (typeof CARD_WIDTHS)[number];
 
 export const CARD_WIDTH_LABELS: Record<CardWidth, string> = {
-  1: "One column",
+  1: "One column (a third)",
+  1.5: "Half row",
   2: "Two columns",
   3: "Full row",
 };

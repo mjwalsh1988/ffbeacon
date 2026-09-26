@@ -123,7 +123,7 @@ const strictSchema = z.strictObject({
       .array(
         z.strictObject({
           href: toolHref,
-          width: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+          width: z.union([z.literal(1), z.literal(1.5), z.literal(2), z.literal(3)]),
           badge: z.enum(TOOL_BADGE_KEYS as [ToolBadgeKey, ...ToolBadgeKey[]]).nullable(),
           highlight: z.enum(HIGHLIGHT_COLORS).nullable(),
         }),
