@@ -2,6 +2,8 @@ import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveAccent, accentGradient } from "@/lib/signal";
 import { signalMediaUrl } from "@/lib/signal-profile";
+import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
+import { OgBrandMark } from "@/lib/og/brand";
 
 export const runtime = "nodejs";
 
@@ -64,7 +66,7 @@ export async function GET(
           flexDirection: "column",
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           padding: 64,
           position: "relative",
         }}
@@ -75,7 +77,7 @@ export async function GET(
             position: "absolute",
             top: 0,
             left: 0,
-            width: "100%",
+            right: 0,
             height: 6,
             background: gradient,
           }}
@@ -85,17 +87,7 @@ export async function GET(
         <div
           style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 48 }}
         >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5, margin: 0 }}>
-            FF Beacon
-          </p>
+          <OgBrandMark size={36} />
         </div>
 
         {/* Identity */}
@@ -123,7 +115,7 @@ export async function GET(
                 style={{ width: 180, height: 180, objectFit: "cover" }}
               />
             ) : (
-              <span style={{ fontSize: 80, fontWeight: 700, color: BG_BASE }}>
+              <span style={{ fontSize: 80, fontWeight: 900, color: BG_BASE }}>
                 {signal.display_name.slice(0, 1).toUpperCase()}
               </span>
             )}
@@ -133,7 +125,7 @@ export async function GET(
             <h1
               style={{
                 fontSize: 64,
-                fontWeight: 700,
+                fontWeight: 900,
                 letterSpacing: -2,
                 margin: 0,
                 lineHeight: 1.05,
@@ -146,7 +138,7 @@ export async function GET(
                 fontSize: 32,
                 color: accent.hex,
                 margin: "8px 0 0 0",
-                fontFamily: "monospace",
+                fontFamily: OG_FONT_FAMILY,
               }}
             >
               @{signal.handle}
@@ -184,7 +176,7 @@ export async function GET(
       </div>
     ),
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       headers: {
         "cache-control": "public, s-maxage=3600, stale-while-revalidate=86400",
       },
@@ -205,7 +197,7 @@ function fallbackImage(): Response {
           justifyContent: "center",
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
         <div
@@ -217,14 +209,14 @@ function fallbackImage(): Response {
             background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
           }}
         />
-        <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+        <p style={{ fontSize: 48, fontWeight: 900, margin: 0 }}>FF Beacon</p>
         <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 12 }}>
           Your signal through the fantasy noise.
         </p>
       </div>
     ),
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       headers: {
         "cache-control": "public, s-maxage=3600, stale-while-revalidate=86400",
       },

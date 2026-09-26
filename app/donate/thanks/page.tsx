@@ -8,12 +8,21 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import { formatUsd } from "@/lib/donate/amounts";
 import { isCheckoutSessionId, retrieveCheckoutSession } from "@/lib/donate/stripe";
 import { donationOutcome, type DonationOutcome } from "@/lib/donate/outcome";
+import { pageShareMetadata } from "@/lib/page-og";
 import { SITE } from "@/lib/site";
 import { DonationCompleteTracker } from "@/components/donate/donation-complete-tracker";
 
 export const metadata: Metadata = {
   title: "Thank you",
   description: "Your donation to FF Beacon.",
+  // Nobody shares a receipt on purpose, but a pasted one should still look
+  // like the site: it carries the donate card rather than the homepage one.
+  ...pageShareMetadata({
+    key: "donate",
+    title: "Support FF Beacon",
+    description: "FF Beacon is free for everyone. Donations keep it that way.",
+    path: "/donate",
+  }),
   // A receipt is nobody's landing page and has no business in an index.
   robots: { index: false, follow: false },
 };

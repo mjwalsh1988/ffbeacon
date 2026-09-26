@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { pageShareMetadata } from "@/lib/page-og";
+import { shareMetadata } from "@/lib/page-og";
 import { SITE } from "@/lib/site";
 import { loadRelayBySlug, loadRelayChain, loadRelayStatusBySlug } from "@/lib/relays/load";
 import { RelayCard } from "@/components/relays/relay-card";
@@ -52,7 +52,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     description: description.slice(0, 160),
     alternates: { canonical: `${SITE.url}/brief/relay/${slug}` },
     robots: { index: false, follow: true, googleBot: { index: false, follow: true } },
-    ...pageShareMetadata({ key: "brief", title, description: description.slice(0, 160), path: `/brief/relay/${slug}` }),
+    // Its own card, drawn from the published Relay; a missing or retracted one
+    // falls back to the Brief's card inside the image route.
+    ...shareMetadata({
+      imagePath: `/api/og/relay/${slug}`,
+      title,
+      description: description.slice(0, 160),
+      path: `/brief/relay/${slug}`,
+      type: "article",
+    }),
   };
 }
 

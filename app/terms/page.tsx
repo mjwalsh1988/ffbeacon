@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { pageShareMetadata } from "@/lib/page-og";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -9,6 +10,13 @@ export const metadata: Metadata = {
   title: "Terms of Service",
   description:
     "The rules and expectations for using FF Beacon: what you can do, what we expect, how donations work, and how the service is provided.",
+  ...pageShareMetadata({
+    key: "terms",
+    title: "Terms of Service",
+    description:
+      "The rules and expectations for using FF Beacon: what you can do, what we expect, how donations work, and how the service is provided.",
+    path: "/terms",
+  }),
 };
 
 const EFFECTIVE_DATE = "September 6, 2026";

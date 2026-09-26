@@ -17,6 +17,8 @@ import {
   notReadyImage,
   notFoundImage,
 } from "./card";
+import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
+import { OgBrandMark } from "@/lib/og/brand";
 
 export const runtime = "nodejs";
 
@@ -74,7 +76,7 @@ export async function GET(
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (!league) {
-    return notFoundImage(`League ${sleeperLeagueId} not found`);
+    return notFoundImage("League not found");
   }
 
   const { data: cacheRows } = await supabase
@@ -124,7 +126,7 @@ export async function GET(
           flexDirection: "column",
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           padding: "40px 48px 28px 48px",
           position: "relative",
         }}
@@ -135,7 +137,7 @@ export async function GET(
             position: "absolute",
             top: 0,
             left: 0,
-            width: "100%",
+            right: 0,
             height: 6,
             background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
           }}
@@ -143,15 +145,7 @@ export async function GET(
 
         {/* Brand wordmark */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+          <OgBrandMark size={28} />
         </div>
 
         {/* League meta line, matching the comma separator the other OG routes use */}
@@ -164,7 +158,7 @@ export async function GET(
         <h1
           style={{
             fontSize: 34,
-            fontWeight: 700,
+            fontWeight: 900,
             letterSpacing: -0.5,
             margin: "8px 0 0 0",
           }}
@@ -198,7 +192,7 @@ export async function GET(
                   background: row.color,
                 }}
               />
-              <p style={{ fontSize: 18, fontWeight: 600, color: INK, margin: 0, fontFamily: "monospace" }}>
+              <p style={{ fontSize: 18, fontWeight: 900, color: INK, margin: 0, fontFamily: OG_FONT_FAMILY }}>
                 {row.label}
               </p>
             </div>
@@ -206,7 +200,7 @@ export async function GET(
         </div>
 
         {/* Deterministic headline, matching the rail summary's template */}
-        <p style={{ fontSize: 20, color: INK, margin: "14px 0 0 0", fontWeight: 600 }}>{headline}</p>
+        <p style={{ fontSize: 20, color: INK, margin: "14px 0 0 0", fontWeight: 900 }}>{headline}</p>
         {defensiveNote && (
           <p style={{ fontSize: 16, color: INK_MUTED, margin: "6px 0 0 0" }}>{defensiveNote}</p>
         )}
@@ -227,7 +221,7 @@ export async function GET(
       </div>
     ),
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       headers: {
         "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
       },

@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { pageShareMetadata } from "@/lib/page-og";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
   title: "Sign in",
   description:
     "Sign in or create an FF Beacon account to vote, save your Sleeper username, and follow players.",
+  ...pageShareMetadata({
+    key: "login",
+    title: "Sign in to FF Beacon",
+    description:
+      "Sign in or create an FF Beacon account to vote, save your Sleeper username, and follow players.",
+    path: "/login",
+  }),
 };
 
 export default function LoginPage({

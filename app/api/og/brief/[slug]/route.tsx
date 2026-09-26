@@ -2,6 +2,8 @@ import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
 import { parseEditionMetadata } from "@/lib/brief-desk/edition-metadata";
 import { formatPeriod, periodChipLabel, periodLabel } from "@/lib/brief-desk/period";
+import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
+import { fitText, OG_COLORS, OgBrandMark } from "@/lib/og/brand";
 
 export const runtime = "nodejs";
 
@@ -34,6 +36,7 @@ const INK_MUTED = "#A8A8B8";
 const INK_SUBTLE = "#8A8A9C";
 const PURPLE = "#A855F7";
 const CYAN = "#22D3EE";
+const LINE = OG_COLORS.line;
 
 /**
  * GET /api/og/brief/[slug]
@@ -92,7 +95,7 @@ export async function GET(
           flexDirection: "column",
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           padding: 64,
           position: "relative",
         }}
@@ -102,7 +105,7 @@ export async function GET(
             position: "absolute",
             top: 0,
             left: 0,
-            width: "100%",
+            right: 0,
             height: 6,
             background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
           }}
@@ -121,15 +124,7 @@ export async function GET(
 
         {/* Brand wordmark */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 40 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5, margin: 0 }}>FF Beacon</p>
+          <OgBrandMark size={36} />
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
@@ -140,7 +135,7 @@ export async function GET(
               margin: 0,
               textTransform: "uppercase",
               letterSpacing: 4,
-              fontWeight: 700,
+              fontWeight: 900,
             }}
           >
             {clip(eyebrow, 40)}
@@ -148,7 +143,7 @@ export async function GET(
           <h1
             style={{
               fontSize: title.length > 70 ? 52 : 64,
-              fontWeight: 700,
+              fontWeight: 900,
               letterSpacing: -1.5,
               margin: "14px 0 0 0",
               lineHeight: 1.06,
@@ -170,7 +165,7 @@ export async function GET(
       </div>
     ),
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       headers: {
         "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
       },
@@ -206,8 +201,14 @@ function editionImage({
           { label: "Formats", value: meta.formats.length ? String(meta.formats.length) : "2" },
         ];
   const tall = ratio !== "16x9";
-  const headline = clip(title, tall ? 140 : 110);
-  const titleSize = tall ? (headline.length > 80 ? 60 : 72) : headline.length > 70 ? 50 : 60;
+  // Sized to its box and given its height up front: a three-line week title
+  // at the old fixed 50px left no room above the tiles, so the byline sat on
+  // their bottom border.
+  const headline = fitText(title, { width: 1072, maxSize: tall ? 72 : 56, minSize: 34, maxLines: tall ? 4 : 3 });
+  const headlineLineHeight = 1.08;
+  // Tile labels wrap to two lines rather than being cut at 28 characters
+  // ("Players ruled out or placed..." lost the half that said what it counted).
+  const tileLabelWidth = Math.floor((1072 - 2 * 16) / 3) - 44;
 
   return new ImageResponse(
     (
@@ -219,29 +220,40 @@ function editionImage({
           flexDirection: "column",
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           padding: 64,
           position: "relative",
         }}
       >
-        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: 6, background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)` }} />
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)` }} />
         <div style={{ position: "absolute", top: -120, right: -80, width: 520, height: 520, borderRadius: 9999, background: `radial-gradient(circle at center, ${PURPLE}22 0%, transparent 70%)` }} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: tall ? 48 : 32 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)` }} />
-          <p style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5, margin: 0 }}>FF Beacon</p>
+          <OgBrandMark size={36} />
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
-          <p style={{ fontSize: 22, color: CYAN, margin: 0, textTransform: "uppercase", letterSpacing: 4, fontWeight: 700 }}>
+          <p style={{ fontSize: 22, color: CYAN, margin: 0, textTransform: "uppercase", letterSpacing: 4, fontWeight: 900 }}>
             THE BEACON BRIEF
           </p>
-          <h1 style={{ fontSize: titleSize, fontWeight: 700, letterSpacing: -1.5, margin: "14px 0 0 0", lineHeight: 1.06 }}>{headline}</h1>
-          <p style={{ fontSize: 26, color: INK_MUTED, margin: "20px 0 0 0", lineHeight: 1.3 }}>
+          <h1
+            style={{
+              fontSize: headline.fontSize,
+              fontWeight: 900,
+              letterSpacing: -1,
+              margin: "14px 0 0 0",
+              lineHeight: headlineLineHeight,
+              height: Math.ceil(headline.lines * headline.fontSize * headlineLineHeight),
+              flexShrink: 0,
+            }}
+          >
+            {headline.text}
+          </h1>
+          <p style={{ fontSize: 24, color: INK_MUTED, margin: "16px 0 0 0", lineHeight: 1.3 }}>
             {period ? `${chip}. Covers ${period}.` : `${chip}.`}
           </p>
 
-          <div style={{ display: "flex", gap: 16, marginTop: tall ? 48 : 32 }}>
+          <div style={{ display: "flex", gap: 16, marginTop: tall ? 48 : 24, flexShrink: 0 }}>
             {tiles.map((t, i) => (
               <div
                 key={`${t.label}-${i}`}
@@ -249,16 +261,16 @@ function editionImage({
                   display: "flex",
                   flexDirection: "column",
                   flex: 1,
-                  padding: "18px 22px",
+                  padding: "14px 22px",
                   borderRadius: 14,
                   border: `1px solid ${i % 2 === 0 ? PURPLE : CYAN}55`,
                   background: `${BG}CC`,
                 }}
               >
-                <p style={{ fontSize: 16, color: INK_SUBTLE, margin: 0, textTransform: "uppercase", letterSpacing: 2, fontWeight: 700 }}>
-                  {clip(t.label, 28)}
+                <p style={{ fontSize: 15, color: INK_SUBTLE, margin: 0, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 900, lineHeight: 1.25 }}>
+                  {fitText(t.label.toUpperCase(), { width: tileLabelWidth, maxSize: 15, minSize: 13, maxLines: 2 }).text}
                 </p>
-                <p style={{ fontSize: t.value.length > 14 ? 26 : 36, fontWeight: 700, margin: "8px 0 0 0", color: i % 2 === 0 ? PURPLE : CYAN, lineHeight: 1.1 }}>
+                <p style={{ fontSize: t.value.length > 14 ? 26 : 36, fontWeight: 900, margin: "8px 0 0 0", color: i % 2 === 0 ? PURPLE : CYAN, lineHeight: 1.1 }}>
                   {clip(t.value, 40)}
                 </p>
               </div>
@@ -266,14 +278,25 @@ function editionImage({
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderTop: `1px solid ${LINE}`,
+            paddingTop: 14,
+            marginTop: 20,
+            flexShrink: 0,
+          }}
+        >
           <p style={{ fontSize: 20, color: INK_SUBTLE, margin: 0 }}>By Michael Walsh, founder of FF Beacon</p>
-          <p style={{ fontSize: 20, color: INK_SUBTLE, margin: 0 }}>ffbeacon.com</p>
+          <p style={{ fontSize: 20, fontWeight: 900, color: INK_MUTED, margin: 0 }}>ffbeacon.com</p>
         </div>
       </div>
     ),
     {
       ...size,
+      fonts: OG_FONTS,
       headers: {
         "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
       },
@@ -294,14 +317,14 @@ function notFoundImage(reason: string): Response {
           justifyContent: "center",
           background: BG,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
-        <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+        <p style={{ fontSize: 48, fontWeight: 900, margin: 0 }}>FF Beacon</p>
         <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
       </div>
     ),
-    { ...SIZE, status: 404 },
+    { ...SIZE, fonts: OG_FONTS, status: 404, headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } },
   );
 }
 

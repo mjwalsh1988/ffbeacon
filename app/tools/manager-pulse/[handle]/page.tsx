@@ -10,6 +10,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { isValidSleeperHandle } from "@/lib/manager-pulse/discover";
 import type { LeagueLens, ManagerReport } from "@/lib/manager-pulse/types";
 import { formatEastern } from "@/lib/datetime";
+import { SITE } from "@/lib/site";
 import { ManagerShell, LensSwitch, defaultLens } from "@/components/manager-shell";
 import { ManagerSearchForm } from "../manager-search-form";
 import { ManagerReportSkeleton } from "./report-skeleton";
@@ -83,10 +84,23 @@ export async function generateMetadata({
   // lib/manager-pulse/handle.ts), and this template stays at or under 150
   // characters at that length, so no separate truncation is needed.
   const description = `${handle}'s Sleeper scouting report: draft tendencies, trade patterns, and roster moves across every league they've played.`;
+  // The card names the handle only when a stored report backs it
+  // (app/api/og/manager-pulse/[handle]/route.tsx).
+  const image = `${SITE.url}/api/og/manager-pulse/${handle}`;
+  const title = `Manager Pulse: ${handle}`;
   return {
-    title: `Manager Pulse: ${handle}`,
+    title,
     description,
     robots: { index: false, follow: false },
+    openGraph: {
+      title,
+      description,
+      url: `${SITE.url}/tools/manager-pulse/${handle}`,
+      siteName: SITE.name,
+      type: "profile",
+      images: [{ url: image, width: 1200, height: 630, alt: `${title}, on FF Beacon` }],
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 

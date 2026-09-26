@@ -7,6 +7,7 @@ import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
 import { shortFormatName } from "@/lib/format-display";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
+import { pageShareMetadata } from "@/lib/page-og";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { PageRailProvider } from "@/components/app-shell/page-rail";
@@ -21,6 +22,15 @@ export const metadata: Metadata = {
   },
   description:
     "My Beacon is your personal fantasy cockpit: leagues, rankings, custom boards, and every FF Beacon tool in one accessible place.",
+  // Every page under /my-beacon is private, but a link to one still gets
+  // pasted into chats; it should say what My Beacon is, not show the homepage.
+  ...pageShareMetadata({
+    key: "my-beacon",
+    title: "My Beacon",
+    description:
+      "Your saved Sleeper leagues, custom ranking boards, draft trackers and bookmarks, in one place on FF Beacon.",
+    path: "/my-beacon",
+  }),
 };
 
 // Force-dynamic across the entire /my-beacon space because every page

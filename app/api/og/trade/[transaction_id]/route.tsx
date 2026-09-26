@@ -7,6 +7,8 @@ import { analyzeTrade } from "@/lib/trade-analyzer";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 import { loadStartupPickIndex, collectStartupPickQueries } from "@/lib/league-startup-picks";
 import type { SleeperLeague } from "@/lib/sleeper";
+import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
+import { OgBrandMark } from "@/lib/og/brand";
 
 export const runtime = "nodejs";
 
@@ -53,7 +55,7 @@ export async function GET(
     )
     .eq("sleeper_transaction_id", txId)
     .maybeSingle();
-  if (!txRow) return notFoundImage(`Trade ${txId} not found`);
+  if (!txRow) return notFoundImage("Trade not found");
   if (txRow.type !== "trade") {
     return notFoundImage("Not a trade transaction");
   }
@@ -157,7 +159,7 @@ export async function GET(
           flexDirection: "column",
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           padding: 48,
           position: "relative",
         }}
@@ -168,7 +170,7 @@ export async function GET(
             position: "absolute",
             top: 0,
             left: 0,
-            width: "100%",
+            right: 0,
             height: 6,
             background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
           }}
@@ -177,15 +179,7 @@ export async function GET(
         {/* Brand + league */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-              }}
-            />
-            <p style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+            <OgBrandMark size={28} />
           </div>
           <p style={{ fontSize: 16, color: INK_MUTED, margin: 0 }}>
             {clip(league.name, 40)}, {league.season}
@@ -199,7 +193,7 @@ export async function GET(
             margin: 0,
             textTransform: "uppercase",
             letterSpacing: 3,
-            fontWeight: 700,
+            fontWeight: 900,
           }}
         >
           Trade
@@ -207,7 +201,7 @@ export async function GET(
         <h1
           style={{
             fontSize: 44,
-            fontWeight: 700,
+            fontWeight: 900,
             letterSpacing: -1,
             margin: "8px 0 24px 0",
           }}
@@ -244,7 +238,7 @@ export async function GET(
                   <p
                     style={{
                       fontSize: 24,
-                      fontWeight: 700,
+                      fontWeight: 900,
                       color: INK,
                       margin: 0,
                     }}
@@ -254,10 +248,10 @@ export async function GET(
                   <p
                     style={{
                       fontSize: 28,
-                      fontWeight: 700,
+                      fontWeight: 900,
                       color: isWinner ? CYAN : INK,
                       margin: 0,
-                      fontFamily: "monospace",
+                      fontFamily: OG_FONT_FAMILY,
                     }}
                   >
                     {formatNumber(side.totalValue)}
@@ -300,7 +294,7 @@ export async function GET(
                         // AA; the INK_SUBTLE constant above predates it.
                         <p style={{ margin: 0, color: "#8A8A9C" }}>No market value</p>
                       ) : (
-                        <p style={{ margin: 0, color: INK_MUTED, fontFamily: "monospace" }}>
+                        <p style={{ margin: 0, color: INK_MUTED, fontFamily: OG_FONT_FAMILY }}>
                           {formatNumber(p.value)}
                         </p>
                       )}
@@ -324,7 +318,7 @@ export async function GET(
                           </span>
                         )}
                       </p>
-                      <p style={{ margin: 0, color: INK_MUTED, fontFamily: "monospace" }}>
+                      <p style={{ margin: 0, color: INK_MUTED, fontFamily: OG_FONT_FAMILY }}>
                         {formatNumber(pick.value)}
                       </p>
                     </div>
@@ -362,7 +356,7 @@ export async function GET(
       </div>
     ),
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       headers: {
         "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
       },
@@ -396,14 +390,14 @@ function notFoundImage(reason: string): Response {
           justifyContent: "center",
           background: BG,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
-        <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+        <p style={{ fontSize: 48, fontWeight: 900, margin: 0 }}>FF Beacon</p>
         <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
       </div>
     ),
-    { ...SIZE, status: 404 },
+    { ...SIZE, fonts: OG_FONTS, status: 404, headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } },
   );
 }
 

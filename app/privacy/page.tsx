@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { pageShareMetadata } from "@/lib/page-og";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -10,6 +11,13 @@ export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "What FF Beacon collects, why, who we share it with, what happens when you donate, and how to delete it.",
+  ...pageShareMetadata({
+    key: "privacy",
+    title: "Privacy Policy",
+    description:
+      "What FF Beacon collects, why, who we share it with, what happens when you donate, and how to delete it.",
+    path: "/privacy",
+  }),
 };
 
 const EFFECTIVE_DATE = "September 26, 2026";

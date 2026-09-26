@@ -9,6 +9,8 @@ import type {
   MatchupSide,
   MatchupSlotEntry,
 } from "@/lib/league-schedule/types";
+import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
+import { fitText, OgBrandMark } from "@/lib/og/brand";
 
 export const runtime = "nodejs";
 
@@ -23,8 +25,12 @@ const CYAN = "#22D3EE";
 const LINE = "#1F1F33";
 const PANEL = "#0B0B14";
 
-/** Starters named on the card. Five per side is what fits at 630px tall. */
-const TOP_STARTERS = 5;
+/** Starters named on the card. Seven per side fits at 630px with 18px names (rendered and checked). */
+const TOP_STARTERS = 7;
+/** Fits "SUPERFLEX", the longest slot label, at 12px Black. */
+const SLOT_LABEL_WIDTH = 84;
+/** The panel's row less its padding, the slot column, the team code, the points and the gaps. */
+const NAME_WIDTH = 230;
 
 /**
  * The largest roster number this route will look up.
@@ -154,7 +160,7 @@ export async function GET(
         flexDirection: "column",
         background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
         color: INK,
-        fontFamily: "sans-serif",
+        fontFamily: OG_FONT_FAMILY,
         padding: "36px 40px 28px 40px",
         position: "relative",
       }}
@@ -165,7 +171,7 @@ export async function GET(
           position: "absolute",
           top: 0,
           left: 0,
-          width: "100%",
+          right: 0,
           height: 6,
           background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
         }}
@@ -180,15 +186,7 @@ export async function GET(
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+          <OgBrandMark size={26} />
         </div>
         <p style={{ fontSize: 15, color: INK_MUTED, margin: 0 }}>
           {clip(league.name, 38)}, week {week}, {state.toLowerCase()}
@@ -216,7 +214,7 @@ export async function GET(
           <p
             style={{
               fontSize: 13,
-              fontWeight: 700,
+              fontWeight: 900,
               letterSpacing: 3,
               color: INK_SUBTLE,
               margin: 0,
@@ -255,7 +253,7 @@ export async function GET(
               padding: "18px 20px",
             }}
           >
-            <p style={{ fontSize: 26, fontWeight: 700, margin: 0 }}>
+            <p style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>
               No opponent
             </p>
             <p style={{ fontSize: 15, color: INK_MUTED, margin: "10px 0 0 0" }}>
@@ -287,7 +285,7 @@ export async function GET(
       </div>
     </div>,
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       headers: {
         "cache-control":
           "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
@@ -347,7 +345,7 @@ function SidePanel({
         <p
           style={{
             fontSize: 30,
-            fontWeight: 700,
+            fontWeight: 900,
             letterSpacing: -0.6,
             margin: 0,
           }}
@@ -371,9 +369,9 @@ function SidePanel({
           <p
             style={{
               fontSize: 52,
-              fontWeight: 700,
+              fontWeight: 900,
               margin: 0,
-              fontFamily: "monospace",
+              fontFamily: OG_FONT_FAMILY,
               color: INK,
             }}
           >
@@ -405,37 +403,44 @@ function SidePanel({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
-                padding: "7px 16px",
+                gap: 10,
+                padding: "8px 18px",
                 borderTop: i === 0 ? "none" : `1px solid rgba(31, 31, 51, 0.6)`,
               }}
             >
+              {/* A fixed column wide enough for the longest label Sleeper
+                  uses. At 46px, "SUPERFLEX" ran straight into the name. */}
               <p
                 style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: 1,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: 0.5,
                   color: INK_SUBTLE,
                   margin: 0,
-                  width: 46,
+                  width: SLOT_LABEL_WIDTH,
+                  flexShrink: 0,
+                  textTransform: "uppercase",
                 }}
               >
                 {entry.slotLabel}
               </p>
-              <p style={{ fontSize: 15, color: INK, margin: 0, flex: 1 }}>
-                {clip(entry.name, 18)}
+              <p style={{ fontSize: fitText(entry.name, { width: NAME_WIDTH, maxSize: 19, minSize: 15, maxLines: 1, weight: 500 }).fontSize, color: INK, margin: 0, width: NAME_WIDTH, flexShrink: 0 }}>
+                {fitText(entry.name, { width: NAME_WIDTH, maxSize: 19, minSize: 15, maxLines: 1, weight: 500 }).text}
               </p>
-              <p style={{ fontSize: 11, color: INK_SUBTLE, margin: 0 }}>
+              <p style={{ fontSize: 13, color: INK_SUBTLE, margin: 0, flex: 1, justifyContent: "flex-end", display: "flex" }}>
                 {entry.team ?? "FA"}
               </p>
               <p
                 style={{
-                  fontSize: 14,
+                  fontSize: 18,
+                  fontWeight: 900,
                   color: INK_MUTED,
                   margin: 0,
-                  fontFamily: "monospace",
-                  width: 46,
-                  textAlign: "right",
+                  fontFamily: OG_FONT_FAMILY,
+                  width: 56,
+                  flexShrink: 0,
+                  justifyContent: "flex-end",
+                  display: "flex",
                 }}
               >
                 {entry.points === null ? "--" : entry.points.toFixed(1)}
@@ -496,14 +501,14 @@ function notFoundImage(reason: string): Response {
         justifyContent: "center",
         background: BG,
         color: INK,
-        fontFamily: "sans-serif",
+        fontFamily: OG_FONT_FAMILY,
       }}
     >
-      <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+      <p style={{ fontSize: 48, fontWeight: 900, margin: 0 }}>FF Beacon</p>
       <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
     </div>,
     {
-      ...SIZE,
+      ...SIZE, fonts: OG_FONTS,
       status: 404,
       // next/og defaults a header-less response to `immutable, max-age=31536000`,
       // which would pin "no game stored for this roster" at the edge for a year

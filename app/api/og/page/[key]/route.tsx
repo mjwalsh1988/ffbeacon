@@ -1,18 +1,6 @@
-import { ImageResponse } from "next/og";
+import { renderHeadlineCard } from "@/lib/og/headline-card";
 
 export const runtime = "nodejs";
-
-const SIZE = { width: 1200, height: 630 } as const;
-
-// FF Beacon brand colors (CLAUDE.md). No DPC gold/violet, no #0c0c18.
-const BG = "#0F0F1A";
-const BG_BASE = "#07070D";
-const INK = "#F4F4F8";
-const INK_MUTED = "#A8A8B8";
-const INK_SUBTLE = "#8A8A9C";
-const PURPLE = "#A855F7";
-const CYAN = "#22D3EE";
-const LINE = "#1F1F33";
 
 type PageCard = {
   /** Small uppercase line above the headline. Says what kind of thing this is. */
@@ -160,6 +148,56 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/rankings/community",
     badge: "Community Rankings",
   },
+  "manager-pulse": {
+    eyebrow: "Sleeper manager report",
+    headlineTop: "Know who you are",
+    headlineBottom: "trading with",
+    subhead:
+      "Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, and what they overpay for.",
+    facts: ["Free", "Every season they played", "Sleeper"],
+    path: "/tools/manager-pulse",
+    badge: "Manager Pulse",
+  },
+  "my-beacon": {
+    eyebrow: "Your FF Beacon account",
+    headlineTop: "Your leagues and boards,",
+    headlineBottom: "in one place",
+    subhead:
+      "Saved Sleeper leagues, custom ranking boards, draft trackers and bookmarks, kept together and synced across your devices.",
+    facts: ["Free account", "Syncs everywhere"],
+    path: "/my-beacon",
+    badge: "My Beacon",
+  },
+  login: {
+    eyebrow: "Sign in",
+    headlineTop: "Save your handle.",
+    headlineBottom: "Skip the typing.",
+    subhead:
+      "A free account remembers your Sleeper username, keeps your ranking boards, and lets you vote in the games.",
+    facts: ["Free", "Google, Discord or email"],
+    path: "/login",
+    badge: "Sign in",
+  },
+  privacy: {
+    eyebrow: "Privacy policy",
+    headlineTop: "What we collect,",
+    headlineBottom: "and how to delete it",
+    subhead:
+      "What FF Beacon stores, why it stores it, who it is shared with, what happens when you donate, and how to remove all of it.",
+    facts: ["Plain English", "No data sold"],
+    path: "/privacy",
+    badge: "Privacy",
+  },
+  terms: {
+    eyebrow: "Terms of service",
+    headlineTop: "The rules for",
+    headlineBottom: "using FF Beacon",
+    subhead:
+      "What you can do with the site, what we expect in return, how donations work, and how the service is provided.",
+    facts: ["Plain English"],
+    path: "/terms",
+    badge: "Terms",
+  },
   "free-agent-finder": {
     eyebrow: "Free agent finder",
     headlineTop: "Is he free in",
@@ -263,177 +301,12 @@ export async function GET(
   { params }: { params: Promise<{ key: string }> },
 ) {
   const { key } = await params;
-  const card = PAGE_CARDS[key];
+  const card = Object.hasOwn(PAGE_CARDS, key) ? PAGE_CARDS[key] : undefined;
   if (!card) {
     return new Response("Not found", { status: 404 });
   }
-
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: SIZE.width,
-          height: SIZE.height,
-          display: "flex",
-          flexDirection: "column",
-          background: `linear-gradient(135deg, ${BG_BASE} 0%, ${BG} 60%, ${BG_BASE} 100%)`,
-          color: INK,
-          padding: 64,
-          fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
-          position: "relative",
-        }}
-      >
-        {/* Beacon gradient accent along the top edge. */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: 6,
-            background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-          }}
-        />
-        {/* Corner glows, the same two the site paints behind its own panels. */}
-        <div
-          style={{
-            position: "absolute",
-            top: -140,
-            left: -140,
-            width: 520,
-            height: 520,
-            borderRadius: 260,
-            background: "radial-gradient(circle, rgba(168,85,247,0.20) 0%, rgba(168,85,247,0) 70%)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: -120,
-            right: -160,
-            width: 480,
-            height: 480,
-            borderRadius: 240,
-            background: "radial-gradient(circle, rgba(34,211,238,0.16) 0%, rgba(34,211,238,0) 70%)",
-          }}
-        />
-
-        {/* Brand wordmark */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 34 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 10,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p style={{ fontSize: 32, fontWeight: 700, letterSpacing: -0.5, margin: 0 }}>
-            FF Beacon
-          </p>
-        </div>
-
-        <p
-          style={{
-            fontSize: 20,
-            color: CYAN,
-            margin: 0,
-            textTransform: "uppercase",
-            letterSpacing: 4,
-            fontWeight: 600,
-          }}
-        >
-          {card.eyebrow}
-        </p>
-
-        <h1
-          style={{
-            fontSize: 72,
-            fontWeight: 700,
-            letterSpacing: -2,
-            margin: "16px 0 4px 0",
-            lineHeight: 1.04,
-          }}
-        >
-          {card.headlineTop}
-        </h1>
-        <h1
-          style={{
-            fontSize: 72,
-            fontWeight: 700,
-            letterSpacing: -2,
-            margin: 0,
-            lineHeight: 1.04,
-            background: `linear-gradient(90deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            backgroundClip: "text",
-            color: "transparent",
-            display: "flex",
-          }}
-        >
-          {card.headlineBottom}
-        </h1>
-
-        <p
-          style={{
-            fontSize: 25,
-            color: INK_MUTED,
-            margin: "24px 0 0 0",
-            lineHeight: 1.4,
-            maxWidth: 950,
-          }}
-        >
-          {card.subhead}
-        </p>
-
-        {/* Reasons to click, as pills. */}
-        <div style={{ display: "flex", gap: 12, marginTop: 26 }}>
-          {card.facts.slice(0, 3).map((fact) => (
-            <div
-              key={fact}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                border: `1px solid ${LINE}`,
-                borderRadius: 999,
-                padding: "8px 18px",
-                fontSize: 21,
-                color: INK_MUTED,
-                background: "rgba(15,15,26,0.7)",
-              }}
-            >
-              {fact}
-            </div>
-          ))}
-        </div>
-
-        <div
-          style={{
-            position: "absolute",
-            bottom: 52,
-            left: 64,
-            right: 64,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderTop: `1px solid ${LINE}`,
-            paddingTop: 20,
-          }}
-        >
-          <p style={{ fontSize: 22, color: INK_SUBTLE, margin: 0, letterSpacing: 1 }}>
-            ffbeacon.com{card.path === "/" ? "" : card.path}
-          </p>
-          <p style={{ fontSize: 22, color: INK_SUBTLE, margin: 0, letterSpacing: 1 }}>
-            {card.badge}
-          </p>
-        </div>
-      </div>
-    ),
-    {
-      ...SIZE,
-      headers: {
-        "Cache-Control":
-          "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
-      },
-    },
-  );
+  return renderHeadlineCard({
+    ...card,
+    footerLeft: card.path === "/" ? "ffbeacon.com" : `ffbeacon.com${card.path}`,
+  });
 }

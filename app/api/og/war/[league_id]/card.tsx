@@ -25,6 +25,7 @@ import { POSITION_SERIES, markerPath } from "@/components/chart-kit";
 import { selectScarcestAndDeepest } from "@/components/league-war/selection";
 import type { ChartGeometry } from "@/lib/positional-war/chart-geometry";
 import type { PositionCurve, PulsePosition, WarCurvePoint } from "@/lib/positional-war/types";
+import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
 
 export const SIZE = { width: 1200, height: 630 } as const;
 export const CHART = { width: 1040, height: 380 } as const;
@@ -220,10 +221,10 @@ export function notReadyImage(leagueName: string, season: number): Response {
           justifyContent: "center",
           background: BG,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
-        <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+        <p style={{ fontSize: 48, fontWeight: 900, margin: 0 }}>FF Beacon</p>
         <p style={{ fontSize: 20, color: INK_MUTED, marginTop: 12 }}>
           {clip(leagueName, 60)}, {season}
         </p>
@@ -232,7 +233,7 @@ export function notReadyImage(leagueName: string, season: number): Response {
         </p>
       </div>
     ),
-    { ...SIZE, status: 200 },
+    { ...SIZE, fonts: OG_FONTS, status: 200 },
   );
 }
 
@@ -250,13 +251,14 @@ export function notFoundImage(reason: string): Response {
           justifyContent: "center",
           background: BG,
           color: INK,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
-        <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+        <p style={{ fontSize: 48, fontWeight: 900, margin: 0 }}>FF Beacon</p>
         <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
       </div>
     ),
-    { ...SIZE, status: 404 },
+    // A header-less next/og response is cached as immutable for a year.
+    { ...SIZE, fonts: OG_FONTS, status: 404, headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } },
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { pageShareMetadata } from "@/lib/page-og";
+import { shareMetadata } from "@/lib/page-og";
 import { notFound } from "next/navigation";
 import { createCachedReadClient, createClient } from "@/lib/supabase/server";
 import { readPosition } from "@/lib/format";
@@ -80,11 +80,10 @@ export async function generateMetadata({
     // Canonical drops every query param, so ?source= and ?position= variants
     // consolidate here instead of competing with this page.
     alternates: { canonical: `/rankings/${format.slug}` },
-    // Every format shares the rankings card. The headline and description
-    // still name the format, so the preview reads correctly for the one the
-    // reader is actually sending.
-    ...pageShareMetadata({
-      key: "rankings",
+    // Each format has its own card: the format's name and its top five, on
+    // the registry's default source for that format.
+    ...shareMetadata({
+      imagePath: `/api/og/rankings/${format.slug}`,
       title: copy.title,
       description: copy.description,
       path: `/rankings/${format.slug}`,

@@ -1,44 +1,56 @@
 import { ImageResponse } from "next/og";
-import { formatTeamLabelCompact } from "@/lib/team-label";
+import { teamLabelParts } from "@/lib/team-label";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import type { SleeperLeague } from "@/lib/sleeper";
+import {
+  fitText,
+  OG_COLORS as C,
+  OG_ROOT_STYLE,
+  OgAccentBar,
+  OgBrandMark,
+  ogResponseOptions,
+} from "@/lib/og/brand";
 
 export const runtime = "nodejs";
 
-const SIZE = { width: 1200, height: 630 } as const;
+const CACHE = "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
 
-// FF Beacon brand colors per CLAUDE.md / plan.md. NEVER reference DPC's
-// gold or violet on #0c0c18.
-const BG = "#0F0F1A";
-const BG_BASE = "#07070D";
-const INK = "#F4F4F8";
-const INK_MUTED = "#A8A8B8";
-const INK_SUBTLE = "#8A8A9C";
-const PURPLE = "#A855F7";
-const CYAN = "#22D3EE";
-const LINE = "#1F1F33";
+/** Content width inside the 64px side padding. */
+const INNER = 1072;
+const LEFT_WIDTH = 540;
+const COLUMN_GAP = 48;
+const RIGHT_WIDTH = INNER - LEFT_WIDTH - COLUMN_GAP;
+/** Room for a team name in a row: the column less the rank badge, the value and the gaps. */
+const TEAM_NAME_WIDTH = RIGHT_WIDTH - 52 - 110 - 2 * 16 - 2 * 18;
+const TITLE_LINE_HEIGHT = 1.08;
+
+type TopTeam = { primary: string; owner: string | null; rank: number; totalValue: number };
 
 /**
  * GET /api/og/league/[league_id]
  *
- * 1200x630 OG image showing the league name, season, team count, and
- * top-3 power rankings (when cache rows exist). FF Beacon brand only.
+ * 1200x630 share card for every League Pulse page: the league name, season,
+ * team count and the top three rosters by value (when cache rows exist).
  *
- * Values rendered here use the league's contextual format resolution
- * (CLAUDE.md → League Pulse Format Resolution): we accept ?source= for
- * the active source slug, otherwise read the highest-priority source
- * that publishes rankings.
+ * TWO COLUMNS, AND EVERY TEXT BLOCK SIZED TO ITS BOX. The first version stacked
+ * the name, a subtitle and three ranking rows in one column with a fixed 72px
+ * title, which is taller than 630px as soon as the name wraps. Satori answers
+ * that by shrinking the flex children, so the subtitle and the rankings header
+ * were drawn through the title on every league, long name or not ("S2"
+ * overlapped too). Now the name has its own column, its size comes from
+ * fitText, and nothing below it in that column depends on how long it is.
  *
- * Cached for 1 hour at the CDN edge via cache-control headers.
+ * Values use the league's contextual format (CLAUDE.md, League Pulse Format
+ * Resolution): ?source= overrides the source, the format comes from the
+ * league's own Sleeper settings.
  */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ league_id: string }> },
 ) {
   const { league_id: sleeperLeagueId } = await params;
-  const url = new URL(request.url);
-  const sourceParam = url.searchParams.get("source");
+  const sourceParam = new URL(request.url).searchParams.get("source");
 
   if (!sleeperLeagueId || sleeperLeagueId.length > 64) {
     return new Response("Invalid league id", { status: 400 });
@@ -50,24 +62,15 @@ export async function GET(
     .select("id, name, season, total_rosters, status, metadata")
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
-  if (!league) {
-    return notFoundImage(`League ${sleeperLeagueId} not found`);
-  }
+  if (!league) return notFoundImage();
 
-  // Use the same league-contextual format resolution the rest of the site
-  // uses. The format isn't user-controlled inside a league view, it's
-  // derived from the actual Sleeper rules. This keeps the OG card aligned
-  // with what users see on /leagues/[id].
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
   const context = await resolveLeagueContext(supabase, sleeperLeague, sourceParam);
-  const formatConfigId =
-    context.coverage === "none" ? null : context.formatConfigId;
-  const effectiveSourceSlug =
-    context.coverage === "none" ? null : context.sourceSlug;
-  const sourceDisplay =
-    context.coverage === "none" ? null : context.sourceDisplay;
+  const formatConfigId = context.coverage === "none" ? null : context.formatConfigId;
+  const effectiveSourceSlug = context.coverage === "none" ? null : context.sourceSlug;
+  const sourceDisplay = context.coverage === "none" ? null : context.sourceDisplay;
 
-  const topTeams: Array<{ teamName: string; rank: number; totalValue: number }> = [];
+  const topTeams: TopTeam[] = [];
   if (formatConfigId && effectiveSourceSlug) {
     const { data: cache } = await supabase
       .from("league_power_rankings_cache")
@@ -79,249 +82,146 @@ export async function GET(
       .limit(3);
     const rosterIds = (cache ?? []).map((c) => c.roster_id);
     if (rosterIds.length > 0) {
-      const { data: rosters } = await supabase
-        .from("rosters")
-        .select("id, sleeper_roster_id, owner_user_id")
-        .in("id", rosterIds);
-      const { data: users } = await supabase
-        .from("league_users")
-        .select("sleeper_user_id, display_name, team_name")
-        .eq("league_id", league.id);
+      const [{ data: rosters }, { data: users }] = await Promise.all([
+        supabase.from("rosters").select("id, sleeper_roster_id, owner_user_id").in("id", rosterIds),
+        supabase.from("league_users").select("sleeper_user_id, display_name, team_name").eq("league_id", league.id),
+      ]);
       const userBySleeperId = new Map(users?.map((u) => [u.sleeper_user_id, u]) ?? []);
       const rosterById = new Map(rosters?.map((r) => [r.id, r]) ?? []);
       for (const c of cache ?? []) {
         const r = rosterById.get(c.roster_id);
         if (!r) continue;
         const u = r.owner_user_id ? userBySleeperId.get(r.owner_user_id) : null;
-        // Trimmed here rather than at render, so the clip lands on the team
-        // name and the handle beside it survives at full length.
-        const teamName = formatTeamLabelCompact(
-          {
-            teamName: u?.team_name,
-            username: u?.display_name,
-            sleeperRosterId: r.sleeper_roster_id,
-          },
-          16,
-        );
-        topTeams.push({
-          teamName,
-          rank: c.overall_rank ?? 0,
-          totalValue: Number(c.total_value),
+        const parts = teamLabelParts({
+          teamName: u?.team_name,
+          username: u?.display_name,
+          sleeperRosterId: r.sleeper_roster_id,
         });
+        topTeams.push({ ...parts, rank: c.overall_rank ?? 0, totalValue: Number(c.total_value) });
       }
     }
   }
 
+  const title = fitText(league.name, { width: LEFT_WIDTH, maxSize: 72, minSize: 40, maxLines: 3 });
+  const details = [`${league.season} season`, `${league.total_rosters ?? "?"} teams`].join(", ");
+
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
-          color: INK,
-          fontFamily: "sans-serif",
-          padding: 64,
-          position: "relative",
-        }}
-      >
-        {/* Beacon gradient accent */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: 6,
-            background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-          }}
-        />
+      <div style={{ ...OG_ROOT_STYLE, padding: "52px 64px 40px 64px" }}>
+        <OgAccentBar />
 
-        {/* Brand wordmark */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 36,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p
-            style={{
-              fontSize: 28,
-              fontWeight: 700,
-              letterSpacing: -0.5,
-              margin: 0,
-            }}
-          >
-            FF Beacon
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <OgBrandMark />
+          <p style={{ fontSize: 20, fontWeight: 900, color: C.cyan, margin: 0, letterSpacing: 4, textTransform: "uppercase" }}>
+            League Pulse
           </p>
         </div>
 
-        {/* League name */}
-        <p
-          style={{
-            fontSize: 24,
-            color: CYAN,
-            margin: 0,
-            textTransform: "uppercase",
-            letterSpacing: 4,
-            fontWeight: 600,
-          }}
-        >
-          League Pulse
-        </p>
-        <h1
-          style={{
-            fontSize: 72,
-            fontWeight: 700,
-            letterSpacing: -2,
-            margin: "16px 0 8px 0",
-            lineHeight: 1.05,
-          }}
-        >
-          {clip(league.name, 60)}
-        </h1>
-        <p style={{ fontSize: 28, color: INK_MUTED, margin: 0 }}>
-          {league.season}, {league.total_rosters ?? "?"} teams
-          {sourceDisplay ? `, ${sourceDisplay}` : ""}
-        </p>
-
-        {/* Top 3 power rankings */}
-        {topTeams.length > 0 && (
-          <div
-            style={{
-              marginTop: 48,
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
-            }}
-          >
+        <div style={{ display: "flex", flex: 1, alignItems: "center", gap: COLUMN_GAP, minHeight: 0 }}>
+          {/* Left: the league itself. */}
+          <div style={{ display: "flex", flexDirection: "column", width: LEFT_WIDTH, flexShrink: 0 }}>
+            <p style={{ fontSize: 24, color: C.inkMuted, margin: "0 0 14px 0" }}>{details}</p>
             <p
               style={{
-                fontSize: 18,
-                color: INK_SUBTLE,
+                fontSize: title.fontSize,
+                fontWeight: 900,
+                lineHeight: TITLE_LINE_HEIGHT,
+                letterSpacing: -1,
                 margin: 0,
-                textTransform: "uppercase",
-                letterSpacing: 3,
-                fontWeight: 600,
+                // Reserved, not merely allowed: the height the fitted title
+                // needs is claimed up front so the line below can never be
+                // pulled up into it.
+                height: Math.ceil(title.lines * title.fontSize * TITLE_LINE_HEIGHT),
+                flexShrink: 0,
               }}
             >
-              Top power rankings
+              {title.text}
             </p>
-            {topTeams.map((t) => (
-              <div
-                key={t.rank}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 16,
-                  padding: "12px 16px",
-                  borderRadius: 12,
-                  border: `1px solid ${LINE}`,
-                  background: "rgba(168, 85, 247, 0.05)",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 36,
-                    fontWeight: 700,
-                    color: CYAN,
-                    margin: 0,
-                    minWidth: 60,
-                  }}
-                >
-                  #{t.rank}
-                </p>
-                <p
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: INK,
-                    margin: 0,
-                    flex: 1,
-                  }}
-                >
-                  {t.teamName}
-                </p>
-                <p
-                  style={{
-                    fontSize: 24,
-                    color: INK_MUTED,
-                    margin: 0,
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {formatNumber(t.totalValue)}
-                </p>
-              </div>
-            ))}
+            {sourceDisplay && (
+              <p style={{ fontSize: 22, color: C.inkSubtle, margin: "18px 0 0 0" }}>Values on {sourceDisplay}</p>
+            )}
           </div>
-        )}
 
-        {/* Footer URL */}
-        <p
-          style={{
-            position: "absolute",
-            bottom: 32,
-            right: 64,
-            fontSize: 20,
-            color: INK_SUBTLE,
-            margin: 0,
-          }}
-        >
-          ffbeacon.com
-        </p>
+          {/* Right: the top three, or what the page offers when there are none yet. */}
+          <div style={{ display: "flex", flexDirection: "column", width: RIGHT_WIDTH, gap: 12, flexShrink: 0 }}>
+            <p style={{ fontSize: 17, fontWeight: 900, color: C.inkSubtle, margin: "0 0 2px 0", letterSpacing: 3, textTransform: "uppercase" }}>
+              {topTeams.length > 0 ? "Most valuable rosters" : "Inside the league"}
+            </p>
+            {topTeams.length > 0
+              ? topTeams.map((t) => <RankRow key={t.rank} team={t} />)
+              : ["Every roster and its value", "Power rankings and playoff odds", "Every trade, graded"].map((line) => (
+                  <div key={line} style={{ display: "flex", padding: "16px 18px", borderRadius: 12, border: `1px solid ${C.line}`, background: "rgba(15,15,26,0.7)" }}>
+                    <p style={{ fontSize: 24, color: C.ink, margin: 0 }}>{line}</p>
+                  </div>
+                ))}
+          </div>
+        </div>
+
+        <Footer />
       </div>
     ),
-    {
-      ...SIZE,
-      headers: {
-        "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
-      },
-    },
+    ogResponseOptions(CACHE),
   );
 }
 
-function notFoundImage(reason: string): Response {
+function RankRow({ team }: { team: TopTeam }) {
+  const name = fitText(team.primary, { width: TEAM_NAME_WIDTH, maxSize: 26, minSize: 18, maxLines: 1 });
+  const owner = team.owner ? fitText(team.owner, { width: TEAM_NAME_WIDTH, maxSize: 18, minSize: 16, maxLines: 1, weight: 500 }) : null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        padding: "12px 18px",
+        height: 78,
+        borderRadius: 12,
+        border: `1px solid ${C.line}`,
+        background: "rgba(168, 85, 247, 0.06)",
+        flexShrink: 0,
+      }}
+    >
+      <p style={{ fontSize: 30, fontWeight: 900, color: C.cyan, margin: 0, width: 52, flexShrink: 0 }}>#{team.rank}</p>
+      <div style={{ display: "flex", flexDirection: "column", width: TEAM_NAME_WIDTH, flexShrink: 0 }}>
+        <p style={{ fontSize: name.fontSize, fontWeight: 900, margin: 0, lineHeight: 1.15 }}>{name.text}</p>
+        {owner && <p style={{ fontSize: owner.fontSize, color: C.inkMuted, margin: "2px 0 0 0" }}>{owner.text}</p>}
+      </div>
+      <p style={{ fontSize: 22, color: C.inkMuted, margin: 0, width: 110, flexShrink: 0, justifyContent: "flex-end", display: "flex" }}>
+        {Math.round(team.totalValue).toLocaleString("en-US")}
+      </p>
+    </div>
+  );
+}
+
+function Footer() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderTop: `1px solid ${C.line}`,
+        paddingTop: 16,
+        flexShrink: 0,
+      }}
+    >
+      <p style={{ fontSize: 20, color: C.inkSubtle, margin: 0 }}>Rosters, trades and power rankings for your Sleeper league</p>
+      <p style={{ fontSize: 20, fontWeight: 900, color: C.inkMuted, margin: 0 }}>ffbeacon.com</p>
+    </div>
+  );
+}
+
+function notFoundImage(): Response {
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          background: BG,
-          color: INK,
-          fontFamily: "sans-serif",
-        }}
-      >
-        <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
-        <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
+      <div style={{ ...OG_ROOT_STYLE, alignItems: "center", justifyContent: "center", gap: 24 }}>
+        <OgAccentBar />
+        <OgBrandMark size={64} />
+        <p style={{ fontSize: 30, color: C.inkMuted, margin: 0 }}>League Pulse: every Sleeper league on one page</p>
       </div>
     ),
-    { ...SIZE, status: 404 },
+    // Short, so a league shared just before its first sync gets its real card
+    // minutes later rather than a day later.
+    ogResponseOptions("public, max-age=60, s-maxage=300", { status: 404 }),
   );
-}
-
-function clip(s: string, n: number): string {
-  if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "...";
-}
-
-function formatNumber(n: number): string {
-  return Math.round(n).toLocaleString();
 }

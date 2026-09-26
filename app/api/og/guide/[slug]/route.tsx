@@ -1,18 +1,6 @@
-import { ImageResponse } from "next/og";
+import { renderHeadlineCard } from "@/lib/og/headline-card";
 
 export const runtime = "nodejs";
-
-const SIZE = { width: 1200, height: 630 } as const;
-
-// FF Beacon brand colors (CLAUDE.md). No DPC gold/violet, no #0c0c18.
-const BG = "#0F0F1A";
-const BG_BASE = "#07070D";
-const INK = "#F4F4F8";
-const INK_MUTED = "#A8A8B8";
-const INK_SUBTLE = "#8A8A9C";
-const PURPLE = "#A855F7";
-const CYAN = "#22D3EE";
-const LINE = "#1F1F33";
 
 type GuideCard = {
   eyebrow: string;
@@ -105,6 +93,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "Linebackers, defensive linemen and defensive backs. How IDP scoring changes which of them matter, and how to draft and manage them.",
     badge: "10 lessons",
   },
+  "faab-settings-by-platform": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "FAAB and waiver settings,",
+    headlineBottom: "platform by platform",
+    subhead:
+      "What every waiver setting actually does on Sleeper, Yahoo, ESPN and NFL.com, and which ones change how your season plays.",
+    badge: "4 platforms",
+  },
   "chopped-league-strategy": {
     eyebrow: "Fantasy Football Guide",
     headlineTop: "Chopped and guillotine:",
@@ -119,7 +115,8 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
  * GET /api/og/guide/[slug]
  *
  * 1200x630 Open Graph and Twitter card for a published FF Beacon guide. Static
- * per slug, so it caches hard at the edge.
+ * per slug, so it caches hard at the edge. Drawn by the shared headline card
+ * (lib/og/headline-card.tsx), the same template as the fixed pages.
  */
 export async function GET(
   _request: Request,
@@ -130,155 +127,5 @@ export async function GET(
   if (!card) {
     return new Response("Not found", { status: 404 });
   }
-
-  return new ImageResponse(
-    <div
-      style={{
-        width: SIZE.width,
-        height: SIZE.height,
-        display: "flex",
-        flexDirection: "column",
-        background: `linear-gradient(135deg, ${BG_BASE} 0%, ${BG} 60%, ${BG_BASE} 100%)`,
-        color: INK,
-        padding: 64,
-        fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
-        position: "relative",
-      }}
-    >
-      {/* Beacon gradient accent */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: 6,
-          background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-        }}
-      />
-
-      {/* Brand wordmark */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          marginBottom: 40,
-        }}
-      >
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-          }}
-        />
-        <p
-          style={{
-            fontSize: 32,
-            fontWeight: 700,
-            letterSpacing: -0.5,
-            margin: 0,
-          }}
-        >
-          FF Beacon
-        </p>
-      </div>
-
-      <p
-        style={{
-          fontSize: 20,
-          color: CYAN,
-          margin: 0,
-          textTransform: "uppercase",
-          letterSpacing: 4,
-          fontWeight: 600,
-        }}
-      >
-        {card.eyebrow}
-      </p>
-
-      <h1
-        style={{
-          fontSize: 76,
-          fontWeight: 700,
-          letterSpacing: -2,
-          margin: "18px 0 6px 0",
-          lineHeight: 1.04,
-        }}
-      >
-        {card.headlineTop}
-      </h1>
-      <h1
-        style={{
-          fontSize: 76,
-          fontWeight: 700,
-          letterSpacing: -2,
-          margin: 0,
-          lineHeight: 1.04,
-          background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-          backgroundClip: "text",
-          color: "transparent",
-          display: "flex",
-        }}
-      >
-        {card.headlineBottom}
-      </h1>
-
-      <p
-        style={{
-          fontSize: 26,
-          color: INK_MUTED,
-          margin: "28px 0 0 0",
-          lineHeight: 1.4,
-          maxWidth: 940,
-        }}
-      >
-        {card.subhead}
-      </p>
-
-      <div
-        style={{
-          position: "absolute",
-          bottom: 56,
-          left: 64,
-          right: 64,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          borderTop: `1px solid ${LINE}`,
-          paddingTop: 20,
-        }}
-      >
-        <p
-          style={{
-            fontSize: 22,
-            color: INK_SUBTLE,
-            margin: 0,
-            letterSpacing: 1,
-          }}
-        >
-          ffbeacon.com/guides/{slug}
-        </p>
-        <p
-          style={{
-            fontSize: 22,
-            color: INK_SUBTLE,
-            margin: 0,
-            letterSpacing: 1,
-          }}
-        >
-          {card.badge}
-        </p>
-      </div>
-    </div>,
-    {
-      ...SIZE,
-      headers: {
-        "Cache-Control":
-          "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
-      },
-    },
-  );
+  return renderHeadlineCard({ ...card, footerLeft: `ffbeacon.com/guides/${slug}` });
 }

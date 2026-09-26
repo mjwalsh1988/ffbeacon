@@ -151,7 +151,7 @@ export async function generateMetadata({
       locale: "en_US",
       images: [
         {
-          url: `${SITE.url}/api/og/page/waiver-wire`,
+          url: `${SITE.url}/api/og/waiver-wire/week-${week}`,
           width: 1200,
           height: 630,
           alt: `Week ${week} waiver wire on FF Beacon`,
@@ -162,7 +162,7 @@ export async function generateMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`${SITE.url}/api/og/page/waiver-wire`],
+      images: [`${SITE.url}/api/og/waiver-wire/week-${week}`],
     },
   };
 }

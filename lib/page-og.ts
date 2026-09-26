@@ -33,7 +33,29 @@ export function pageShareMetadata({
   path: string;
   type?: "website" | "article" | "profile";
 }): Metadata {
-  const image = `${SITE.url}/api/og/page/${key}`;
+  return shareMetadata({ imagePath: `/api/og/page/${key}`, title, description, path, type });
+}
+
+/**
+ * The same Open Graph and Twitter block for any 1200x630 card, for a page
+ * whose image is not one of the fixed page cards (a Relay, a report).
+ */
+export function shareMetadata({
+  imagePath,
+  title,
+  description,
+  path,
+  type = "website",
+}: {
+  /** The card's path on this site, leading slash, e.g. "/api/og/relay/some-slug". */
+  imagePath: string;
+  title: string;
+  description: string;
+  /** Canonical path, leading slash, no domain. */
+  path: string;
+  type?: "website" | "article" | "profile";
+}): Metadata {
+  const image = `${SITE.url}${imagePath}`;
   const url = `${SITE.url}${path}`;
   return {
     openGraph: {
