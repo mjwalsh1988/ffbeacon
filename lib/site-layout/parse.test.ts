@@ -12,7 +12,7 @@ import {
 } from "./default-settings";
 import { mergeSiteLayout, validateSiteLayout } from "./parse";
 
-const SHIPPED_ORDER = [
+const SHIPPED_ORDER_2026_09_14 = [
   "/tools/league-pulse",
   "/tools/trade-calculator",
   "/tools/who-should-i-start",
@@ -20,6 +20,10 @@ const SHIPPED_ORDER = [
   "/tools/manager-pulse",
   "/tools/on-the-clock",
 ];
+
+/** 2026-09-26: Beacon Ranker (/tools/custom-rankings) joins last, which is
+ * where normalizeOrder puts it in a stored row that predates it. */
+const SHIPPED_ORDER = [...SHIPPED_ORDER_2026_09_14, "/tools/custom-rankings"];
 
 /** The layout the site carried on 2026-09-14, frozen. What migration 0282 seeds. */
 const LAYOUT_2026_09_14 = {
@@ -35,9 +39,9 @@ const LAYOUT_2026_09_14 = {
       "about",
       "admin",
     ],
-    toolOrder: SHIPPED_ORDER,
+    toolOrder: SHIPPED_ORDER_2026_09_14,
   },
-  toolsPage: { toolOrder: SHIPPED_ORDER },
+  toolsPage: { toolOrder: SHIPPED_ORDER_2026_09_14 },
   homepage: {
     cards: [
       { href: "/tools/league-pulse", width: 1, badge: "new-features", highlight: "green" },
@@ -60,11 +64,23 @@ const LAYOUT_2026_09_14 = {
  *   2026-09-22: the Waiver Wire section, a new top level between Rankings and
  *   Games. The stored row is migrated to match (migration 0293); a row that is
  *   not gets the id appended by normalizeOrder, which is safe but puts it last.
+ *
+ *   2026-09-26: Beacon Ranker (/tools/custom-rankings), last in both tool
+ *   orders and as a one-column "New tool" homepage card. A stored row that
+ *   predates it gets exactly this from normalizeOrder and mergeCards.
  */
 const LAYOUT_TODAY = {
   ...LAYOUT_2026_09_14,
+  toolsPage: { toolOrder: SHIPPED_ORDER },
+  homepage: {
+    cards: [
+      ...LAYOUT_2026_09_14.homepage.cards,
+      { href: "/tools/custom-rankings", width: 1, badge: "new-tool", highlight: "cyan" },
+    ],
+  },
   menu: {
     ...LAYOUT_2026_09_14.menu,
+    toolOrder: SHIPPED_ORDER,
     sectionOrder: [
       "home",
       "tools",
@@ -97,6 +113,7 @@ describe("the defaults", () => {
       ["/tools/league-pulse", "new-features", "green"],
       ["/tools/who-should-i-start", "new-features", "green"],
       ["/tools/manager-pulse", "new-tool", "cyan"],
+      ["/tools/custom-rankings", "new-tool", "cyan"],
     ]);
     expect(DEFAULT_SITE_LAYOUT.homepage.cards.every((c) => c.width === 1)).toBe(true);
   });

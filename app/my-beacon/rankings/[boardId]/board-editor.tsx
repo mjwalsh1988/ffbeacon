@@ -1,139 +1,125 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  Download,
-  GripVertical,
-  Layers,
-  ListFilter,
-  Plus,
-  X,
-} from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, GripVertical, Layers, SeparatorHorizontal, X } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { TierBreakLine } from "@/components/ranking-boards/tier-break-line";
+import { RankGapChip } from "@/components/ranking-boards/rank-gap-chip";
+import { saveBoardPlayers, saveBoardMeta, replaceBoardFromImport } from "../actions";
 import {
-  saveBoardPlayers,
-  saveBoardMeta,
-  replaceBoardFromImport,
-} from "../actions";
-import {
+  addTierBreak,
+  BOARD_POSITIONS,
   computeBoardRanks,
-  ELIGIBLE_POSITIONS,
-  isUntiered,
+  isSinglePositionScope,
   MAX_BOARD_NAME_LENGTH,
-  MAX_TIERS,
-  orderBoardForDisplay,
+  moveTierBreak,
+  normalizeTierBreaks,
+  removeTierBreak,
   scopeLabel,
-  tierLabel,
+  scopePositions,
+  shiftLabelsForAddedBreak,
+  shiftLabelsForRemovedBreak,
+  tierForRank,
+  tierRanges,
   type BoardPlayer,
-  type BoardRank,
   type BoardScope,
   type ImportedRankingPlayer,
   type SearchablePlayer,
 } from "@/lib/ranking-boards";
-
-import type { Position } from "@/lib/site";
+import { readerRanksFor, rankGap, type RankComparison } from "@/lib/ranking-boards/compare";
+import { isDefender, positionNoun } from "@/lib/site";
+import { AddPlayerCombobox } from "./add-player-combobox";
+import { ImportFromRankings, type ImportFormat, type ImportSource } from "./import-from-rankings";
+import { PositionFilterBar, type PositionFilter } from "./position-filter-bar";
+import { AddTierBreakForm, TierBreakLineControls } from "./tier-break-controls";
+import { CommunityPanel } from "./community-panel";
 
 const SAVE_DEBOUNCE_MS = 700;
-const SEARCH_DEBOUNCE_MS = 250;
-const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
 
-/** The board's position filter: every player, or one position in isolation.
- * Filtering is a read-only view (see PositionFilterBar for why). */
-type PositionFilter = "all" | Position;
+type DragItem = { kind: "player"; id: string } | { kind: "break"; rank: number };
 
-type ImportSource = {
-  slug: string;
-  displayName: string;
-  supportedFormatSlugs: string[] | null;
-};
-type ImportFormat = { slug: string; displayName: string };
+export type { ImportFormat, ImportSource };
 
 export function BoardEditor({
   boardId,
   initialName,
   scope,
+  includesDefenders,
   initialTiersEnabled,
-  initialTierCount,
+  initialTierBreaks,
   initialTierLabels,
   initialPlayers,
   importSources,
   importFormats,
   defaultSourceSlug,
+  boardFormatSlug,
+  comparisons,
+  community,
 }: {
   boardId: string;
   initialName: string;
   scope: BoardScope;
+  includesDefenders: boolean;
   initialTiersEnabled: boolean;
-  initialTierCount: number;
+  initialTierBreaks: number[];
   initialTierLabels: Record<string, string>;
   initialPlayers: BoardPlayer[];
   importSources: ImportSource[];
   importFormats: ImportFormat[];
   defaultSourceSlug: string | null;
+  /** The format the board was built for, when it has one. */
+  boardFormatSlug: string | null;
+  /** "vs FF Beacon" and, once published, "vs community". Two columns, never
+   * one column for both. */
+  comparisons: RankComparison[];
+  /** The quiet community side panel (plan 9.1). */
+  community: {
+    optOut: boolean;
+    minPlayers: number;
+    hasFormat: boolean;
+    formats: { slug: string; displayName: string }[];
+  };
 }) {
   // Ties the position chips to the list they filter, for aria-controls.
   const listId = useId();
 
   const [name, setName] = useState(initialName);
   const [tiersEnabled, setTiersEnabled] = useState(initialTiersEnabled);
-  const [tierCount, setTierCount] = useState(initialTierCount);
-  const [tierLabels, setTierLabels] =
-    useState<Record<string, string>>(initialTierLabels);
-  const [players, setPlayers] = useState<BoardPlayer[]>(initialPlayers);
-  // Overall boards can be viewed one position at a time. Positional boards are
-  // already a single position, so the filter never applies to them.
-  const [positionFilter, setPositionFilter] = useState<PositionFilter>("all");
-
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
+  const [tierBreaks, setTierBreaks] = useState<number[]>(
+    () => normalizeTierBreaks(initialTierBreaks, initialPlayers.length).breaks,
   );
+  const [tierLabels, setTierLabels] = useState<Record<string, string>>(initialTierLabels);
+  const [players, setPlayers] = useState<BoardPlayer[]>(initialPlayers);
+  const [positionFilter, setPositionFilter] = useState<PositionFilter>("all");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   // Polite, human announcement of the most recent structural change, for
   // screen readers (the visual list updates instantly for sighted users).
   const [announcement, setAnnouncement] = useState("");
 
-  // The board in the exact order it renders, which is the order rank_position
-  // is persisted in. Derived here rather than from the tier groups below so
-  // the debounced save can read it without depending on render internals.
-  const orderedPlayers = useMemo(
-    () => orderBoardForDisplay(players, tiersEnabled, tierCount),
-    [players, tiersEnabled, tierCount],
-  );
+  const boardPositions = scopePositions(scope, includesDefenders);
+  const holdsDefenders = boardPositions.some((p) => isDefender(p));
 
   // ----- persistence plumbing -------------------------------------------
-  // Player rows removed since the last flush; deleted by player_id on save.
   const pendingRemovals = useRef<Set<string>>(new Set());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Always read the freshest order inside the debounced flush.
-  const orderedPlayersRef = useRef(orderedPlayers);
-  orderedPlayersRef.current = orderedPlayers;
+  // Always read the freshest state inside the debounced flush.
+  const playersRef = useRef(players);
+  playersRef.current = players;
+  const breaksRef = useRef(tierBreaks);
+  breaksRef.current = tierBreaks;
 
   const flushPlayers = useCallback(async () => {
-    // Persist in display order so a stored rank_position always means the same
-    // thing as the number the user sees. Anything reading the board back by
-    // rank_position (the public profile's Top N, for one) then agrees with the
-    // editor instead of reconstructing a different board. The saveBoardPlayers
-    // action re-derives ownership and re-validates every id and tier before
-    // writing; it also decides whether tier values apply based on the
-    // board's OWN tiers_enabled row, so a stale local flag here is caught.
-    const snapshot = orderedPlayersRef.current;
+    const snapshot = playersRef.current;
     const removals = Array.from(pendingRemovals.current);
     pendingRemovals.current = new Set();
     setSaveState("saving");
+    // The action re-derives ownership, validates every id and normalises the
+    // breaks against the saved length.
     const result = await saveBoardPlayers(
       boardId,
       removals,
-      snapshot.map((p) => ({ playerId: p.playerId, tier: p.tier })),
+      snapshot.map((p) => p.playerId),
+      breaksRef.current,
     );
     if (result.ok) {
       setSaveState("saved");
@@ -147,6 +133,7 @@ export function BoardEditor({
   const schedulePlayerSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
       void flushPlayers();
     }, SAVE_DEBOUNCE_MS);
   }, [flushPlayers]);
@@ -162,13 +149,9 @@ export function BoardEditor({
   }, [flushPlayers]);
 
   // ----- board meta persistence -----------------------------------------
-  // Queued board-meta patch. Held as data rather than captured in the timer
-  // closure so a burst of edits collapses into one write, and so an import can
-  // take the queue over instead of racing whatever is still in it.
   type MetaPatch = {
     name?: string;
     tiersEnabled?: boolean;
-    tierCount?: number;
     tierLabels?: Record<string, string>;
   };
   const pendingMeta = useRef<MetaPatch>({});
@@ -177,8 +160,6 @@ export function BoardEditor({
   const writeMeta = useCallback(
     async (patch: MetaPatch): Promise<boolean> => {
       setSaveState("saving");
-      // saveBoardMeta re-derives ownership and validates every field against
-      // the same bounds the database enforces.
       const result = await saveBoardMeta(boardId, patch);
       setSaveState(result.ok ? "saved" : "error");
       return result.ok;
@@ -200,9 +181,8 @@ export function BoardEditor({
     [writeMeta],
   );
 
-  /** Cancel and hand back any queued meta patch, so a caller doing its own
-   * meta write can fold the queue into that write rather than let it land
-   * afterwards and clobber the newer values. */
+  /** Cancel and hand back any queued meta patch, so an import can write it
+   * first rather than let it land afterwards and clobber newer values. */
   const takePendingMeta = useCallback((): MetaPatch => {
     if (metaTimer.current) {
       clearTimeout(metaTimer.current);
@@ -213,28 +193,42 @@ export function BoardEditor({
     return queued;
   }, []);
 
-  // Replace the whole board with our current rankings for a (source, format).
-  // Cancels any pending debounced save and writes atomically (delete all rows,
-  // then insert) so the board ends up as exactly the imported set.
-  //
-  // When the board has tiers enabled, the source's published tiers are carried
-  // over: distinct source tiers are remapped to contiguous board tiers (1..N),
-  // tier_count is set to match, and the tier labels reset to defaults. When
-  // tiers are off, imported players land in "no tier".
+  /** Apply a new player list, keeping the lines at their ranks and dropping
+   * (and announcing) any line the shorter board no longer reaches. */
+  const commitPlayers = useCallback(
+    (next: BoardPlayer[], message: string) => {
+      const { breaks, removed } = normalizeTierBreaks(breaksRef.current, next.length);
+      let labels = tierLabels;
+      for (const rank of removed) {
+        labels = shiftLabelsForRemovedBreak(labels, breaksRef.current, rank);
+      }
+      setPlayers(next);
+      if (removed.length > 0) {
+        setTierBreaks(breaks);
+        setTierLabels(labels);
+        saveMeta({ tierLabels: labels });
+      }
+      const lineNote =
+        removed.length > 0 && tiersEnabled
+          ? ` The tier line after rank ${removed.join(" and ")} was removed because the board is now shorter.`
+          : "";
+      setAnnouncement(`${message}${lineNote}`);
+      schedulePlayerSave();
+    },
+    [tierLabels, tiersEnabled, saveMeta, schedulePlayerSave],
+  );
+
   const importRankings = useCallback(
-    async (imported: ImportedRankingPlayer[]): Promise<boolean> => {
+    async (
+      imported: ImportedRankingPlayer[],
+      provenance: { formatSlug: string; sourceSlug: string | null },
+    ): Promise<boolean> => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
       }
       pendingRemovals.current = new Set();
 
-      // Flush any queued meta patch FIRST, so the replaceBoardFromImport
-      // action (which reads tiers_enabled/tier_count from the database, never
-      // from this component) sees the reader's latest toggle rather than a
-      // stale persisted value. A tier_count write left over from the tier
-      // controls landing AFTER the import would otherwise shrink the board
-      // back and strand the rows the import just wrote.
       const queuedMeta = takePendingMeta();
       if (Object.keys(queuedMeta).length > 0) {
         const ok = await writeMeta(queuedMeta);
@@ -248,15 +242,15 @@ export function BoardEditor({
       const result = await replaceBoardFromImport(
         boardId,
         imported.map((p) => ({ playerId: p.playerId, tier: p.tier })),
+        provenance,
       );
       if (!result.ok) {
         setSaveState("error");
         return false;
       }
 
-      // The table never stores name/position/etc, so rebuild the display
-      // list from the import payload we already have, in the SERVER's
-      // persisted order (result.order), never a locally-recomputed one.
+      // The table never stores name/position/etc, so rebuild the display list
+      // from the import payload, in the SERVER's persisted order.
       const byId = new Map(imported.map((p) => [p.playerId, p]));
       const next: BoardPlayer[] = result.order.flatMap((playerId) => {
         const src = byId.get(playerId);
@@ -270,34 +264,33 @@ export function BoardEditor({
             position: src.position,
             team: src.team,
             sleeperId: src.sleeperId,
-            tier: result.tierByPlayer[playerId] ?? null,
           },
         ];
       });
       setPlayers(next);
-      if (result.importedTiers) {
-        setTierCount(result.tierCount);
-        setTierLabels(result.tierLabels);
-      }
-
+      setTierBreaks(result.tierBreaks);
+      setTierLabels({});
       setSaveState("saved");
+      const tierNote =
+        result.importedTiers && tiersEnabled
+          ? ` with ${result.tierBreaks.length + 1} tiers from the source`
+          : "";
       setAnnouncement(
-        `Imported ${next.length} player${next.length === 1 ? "" : "s"} from rankings${
-          result.importedTiers ? ` into ${result.tierCount} tiers` : ""
-        }.`,
+        `Imported ${next.length} player${next.length === 1 ? "" : "s"} from rankings${tierNote}.`,
       );
       return true;
     },
-    [boardId, takePendingMeta, writeMeta],
+    [boardId, takePendingMeta, writeMeta, tiersEnabled],
   );
 
   // ----- mutations -------------------------------------------------------
   const addPlayer = useCallback(
     (p: SearchablePlayer) => {
-      setPlayers((prev) => {
-        if (prev.some((x) => x.playerId === p.playerId)) return prev;
-        pendingRemovals.current.delete(p.playerId);
-        const next: BoardPlayer = {
+      if (players.some((x) => x.playerId === p.playerId)) return;
+      pendingRemovals.current.delete(p.playerId);
+      const next: BoardPlayer[] = [
+        ...players,
+        {
           rowId: null,
           playerId: p.playerId,
           slug: p.slug,
@@ -305,145 +298,128 @@ export function BoardEditor({
           position: p.position,
           team: p.team,
           sleeperId: p.sleeperId,
-          tier: null,
-        };
-        return [...prev, next];
-      });
+        },
+      ];
       // A player added while a different position is on view lands on the
       // board but not in the visible list, so say so rather than report a
       // success the reader cannot find.
-      setAnnouncement(
+      commitPlayers(
+        next,
         positionFilter !== "all" && p.position !== positionFilter
-          ? `Added ${p.name} to the board. They are a ${p.position}, so they are not shown in the current ${positionFilter} view.`
-          : `Added ${p.name} to the board.`,
+          ? `Added ${p.name} to the board at rank ${next.length}. They are not shown in the current ${positionNoun(positionFilter, "plural")} view.`
+          : `Added ${p.name} to the board at rank ${next.length}.`,
       );
-      schedulePlayerSave();
     },
-    [schedulePlayerSave, positionFilter],
+    [players, positionFilter, commitPlayers],
   );
 
   const removePlayer = useCallback(
     (playerId: string) => {
-      setPlayers((prev) => {
-        const target = prev.find((x) => x.playerId === playerId);
-        if (target) {
-          pendingRemovals.current.add(playerId);
-          setAnnouncement(`Removed ${target.name} from the board.`);
-        }
-        return prev.filter((x) => x.playerId !== playerId);
-      });
-      schedulePlayerSave();
+      const target = players.find((x) => x.playerId === playerId);
+      if (!target) return;
+      pendingRemovals.current.add(playerId);
+      commitPlayers(
+        players.filter((x) => x.playerId !== playerId),
+        `Removed ${target.name} from the board.`,
+      );
     },
-    [schedulePlayerSave],
+    [players, commitPlayers],
   );
 
-  /** Move within the relevant neighbour set: same-tier members when tiers are
-   * on, otherwise the whole list. */
   const movePlayer = useCallback(
     (playerId: string, direction: "up" | "down") => {
-      setPlayers((prev) => {
-        const index = prev.findIndex((x) => x.playerId === playerId);
-        if (index < 0) return prev;
-        const player = prev[index];
-        // Candidate neighbour indices in the chosen direction.
-        const step = direction === "up" ? -1 : 1;
-        let swapWith = -1;
-        for (let i = index + step; i >= 0 && i < prev.length; i += step) {
-          if (!tiersEnabled || prev[i].tier === player.tier) {
-            swapWith = i;
-            break;
-          }
-        }
-        if (swapWith < 0) return prev;
-        const next = [...prev];
-        [next[index], next[swapWith]] = [next[swapWith], next[index]];
-        return next;
-      });
-      schedulePlayerSave();
-    },
-    [tiersEnabled, schedulePlayerSave],
-  );
-
-  /** Assign a tier (or null) and drop the player at the end of that group. */
-  const assignTier = useCallback(
-    (playerId: string, tier: number | null) => {
-      setPlayers((prev) => {
-        const index = prev.findIndex((x) => x.playerId === playerId);
-        if (index < 0) return prev;
-        const moved = { ...prev[index], tier };
-        const without = prev.filter((x) => x.playerId !== playerId);
-        return [...without, moved];
-      });
-      setAnnouncement(
-        tier === null
-          ? "Moved to no tier."
-          : `Moved to ${tierLabel(tierLabels, tier)}.`,
+      const index = players.findIndex((x) => x.playerId === playerId);
+      const swapWith = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || swapWith < 0 || swapWith >= players.length) return;
+      const next = [...players];
+      [next[index], next[swapWith]] = [next[swapWith], next[index]];
+      const passed = players[swapWith];
+      const newRank = swapWith + 1;
+      const tierNote =
+        tiersEnabled && tierForRank(tierBreaks, newRank) !== tierForRank(tierBreaks, index + 1)
+          ? `, now in tier ${tierForRank(tierBreaks, newRank)}`
+          : "";
+      // The row moves under the reader's focus: say where he landed and who
+      // he passed, since nothing else would.
+      commitPlayers(
+        next,
+        `${players[index].name} moved ${direction} to rank ${newRank}, ${
+          direction === "up" ? "above" : "below"
+        } ${passed.name}${tierNote}.`,
       );
-      schedulePlayerSave();
     },
-    [tierLabels, schedulePlayerSave],
+    [players, tiersEnabled, tierBreaks, commitPlayers],
   );
 
-  /** Reorder via drag: move `fromId` to sit at `toId`'s slot, adopting its
-   * tier when tiers are on so cross-group drags change tier intuitively. */
+  /** Drag a player onto another's slot. A drag never changes a line: the
+   * lines stay at their ranks and the players move past them. */
   const reorderByDrag = useCallback(
     (fromId: string, toId: string) => {
       if (fromId === toId) return;
-      setPlayers((prev) => {
-        const fromIndex = prev.findIndex((x) => x.playerId === fromId);
-        const toIndex = prev.findIndex((x) => x.playerId === toId);
-        if (fromIndex < 0 || toIndex < 0) return prev;
-        const next = [...prev];
-        const [moved] = next.splice(fromIndex, 1);
-        if (tiersEnabled) moved.tier = prev[toIndex].tier;
-        const insertAt = next.findIndex((x) => x.playerId === toId);
-        next.splice(insertAt, 0, moved);
-        return next;
-      });
-      schedulePlayerSave();
+      const fromIndex = players.findIndex((x) => x.playerId === fromId);
+      const toIndex = players.findIndex((x) => x.playerId === toId);
+      if (fromIndex < 0 || toIndex < 0) return;
+      const next = [...players];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      commitPlayers(next, `${moved.name} moved to rank ${toIndex + 1}.`);
     },
-    [tiersEnabled, schedulePlayerSave],
+    [players, commitPlayers],
   );
 
-  // ----- tier controls ---------------------------------------------------
-  const toggleTiers = (enabled: boolean) => {
-    setTiersEnabled(enabled);
-    saveMeta({ tiersEnabled: enabled });
-    setAnnouncement(enabled ? "Tiers enabled." : "Tiers disabled.");
-    // Re-persist player rows so tier values are written/cleared to match.
+  // ----- tier lines ------------------------------------------------------
+  const lineAnnouncement = (tier: number, startRank: number) =>
+    `Tier ${tier} now starts at rank ${startRank}, ${players[startRank - 1]?.name ?? ""}.`;
+
+  const addLine = (rank: number) => {
+    const next = addTierBreak(tierBreaks, rank, players.length);
+    if (next.length === tierBreaks.length) return;
+    const labels = shiftLabelsForAddedBreak(tierLabels, tierBreaks, rank);
+    setTierBreaks(next);
+    setTierLabels(labels);
+    saveMeta({ tierLabels: labels });
+    const tier = tierForRank(next, rank + 1);
+    setAnnouncement(
+      `Tier line added after rank ${rank}. ${lineAnnouncement(tier, rank + 1)} There are now ${next.length + 1} tiers.`,
+    );
     schedulePlayerSave();
   };
 
-  const addTier = () => {
-    setTierCount((prev) => {
-      const next = Math.min(MAX_TIERS, prev + 1);
-      saveMeta({ tierCount: next });
-      return next;
-    });
+  const moveLine = (from: number, to: number) => {
+    const next = moveTierBreak(tierBreaks, from, to, players.length);
+    if (!next) return;
+    setTierBreaks(next);
+    setAnnouncement(lineAnnouncement(tierForRank(next, to + 1), to + 1));
+    schedulePlayerSave();
   };
 
-  const removeTier = () => {
-    setTierCount((prev) => {
-      const next = Math.max(1, prev - 1);
-      if (next !== prev) {
-        // Any player parked in a now-removed tier drops back to "no tier".
-        setPlayers((cur) =>
-          cur.map((p) => (p.tier && p.tier > next ? { ...p, tier: null } : p)),
-        );
-        saveMeta({ tierCount: next });
-        schedulePlayerSave();
-      }
-      return next;
-    });
+  const removeLine = (rank: number) => {
+    const labels = shiftLabelsForRemovedBreak(tierLabels, tierBreaks, rank);
+    const next = removeTierBreak(tierBreaks, rank);
+    setTierBreaks(next);
+    setTierLabels(labels);
+    saveMeta({ tierLabels: labels });
+    setAnnouncement(
+      `Tier line after rank ${rank} removed. There ${next.length === 0 ? "is now 1 tier" : `are now ${next.length + 1} tiers`}.`,
+    );
+    schedulePlayerSave();
+  };
+
+  const toggleTiers = (enabled: boolean) => {
+    setTiersEnabled(enabled);
+    saveMeta({ tiersEnabled: enabled });
+    setAnnouncement(
+      enabled
+        ? `Tiers shown. ${tierBreaks.length === 0 ? "Add a tier line to split the board." : `${tierBreaks.length + 1} tiers.`}`
+        : "Tiers hidden. Your tier lines are kept.",
+    );
   };
 
   const renameTier = (tier: number, label: string) => {
-    setTierLabels((prev) => {
-      const next = { ...prev, [String(tier)]: label };
-      if (label.trim().length === 0) delete next[String(tier)];
-      saveMeta({ tierLabels: next });
-      return next;
-    });
+    const next = { ...tierLabels, [String(tier)]: label };
+    if (label.trim().length === 0) delete next[String(tier)];
+    setTierLabels(next);
+    saveMeta({ tierLabels: next });
   };
 
   const commitName = (value: string) => {
@@ -456,68 +432,36 @@ export function BoardEditor({
     saveMeta({ name: cleaned });
   };
 
-  const excludeIds = useMemo(
-    () => new Set(players.map((p) => p.playerId)),
-    [players],
+  const excludeIds = useMemo(() => new Set(players.map((p) => p.playerId)), [players]);
+  const ranks = useMemo(() => computeBoardRanks(players), [players]);
+
+  // Comparable ranks per comparison (positional on a one-position board, rank
+  // among offensive players on an overall one; see lib/ranking-boards/compare).
+  const comparisonRanks = useMemo(
+    () => comparisons.map((c) => readerRanksFor(players, c)),
+    [comparisons, players],
   );
 
-  // Tier groups for rendering when tiers are on: each numbered tier plus a
-  // trailing "No tier" bucket. Sliced out of the already-ordered list, so
-  // flattening these groups reproduces orderedPlayers exactly and the ranks
-  // below always match the rows on screen.
-  const tierGroups = useMemo(() => {
-    if (!tiersEnabled) return null;
-    const groups: { tier: number | null; label: string; items: BoardPlayer[] }[] =
-      [];
-    for (let t = 1; t <= tierCount; t += 1) {
-      groups.push({
-        tier: t,
-        label: tierLabel(tierLabels, t),
-        items: orderedPlayers.filter((p) => p.tier === t),
-      });
-    }
-    groups.push({
-      tier: null,
-      label: "No tier",
-      items: orderedPlayers.filter((p) => isUntiered(p.tier, tierCount)),
-    });
-    return groups;
-  }, [tiersEnabled, tierCount, tierLabels, orderedPlayers]);
+  // Only multi-position boards get positional ranks and filters.
+  const supportsPositionViews = !isSinglePositionScope(scope);
 
-  // Overall and positional rank for every player, computed once per change and
-  // read by each row. Positional ranks are what let one overall board answer
-  // "who is my QB3" without the user building a separate QB board.
-  const ranks = useMemo(() => computeBoardRanks(orderedPlayers), [orderedPlayers]);
-
-  // Only overall boards get positional ranks and filters: on a QB board the
-  // positional rank is just the overall rank, so both would be noise.
-  const supportsPositionViews = scope === "overall";
-
-  // Counted over the rendered order, not the raw array, so a chip can never
-  // promise more players than the filtered view can show.
   const positionCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    orderedPlayers.forEach((p) =>
-      counts.set(p.position, (counts.get(p.position) ?? 0) + 1),
-    );
+    players.forEach((p) => counts.set(p.position, (counts.get(p.position) ?? 0) + 1));
     return counts;
-  }, [orderedPlayers]);
+  }, [players]);
 
-  // Chips for positions actually on the board, in canonical position order.
   const filterPositions = useMemo(
-    () => ELIGIBLE_POSITIONS.filter((pos) => (positionCounts.get(pos) ?? 0) > 0),
+    () => BOARD_POSITIONS.filter((pos) => (positionCounts.get(pos) ?? 0) > 0),
     [positionCounts],
   );
 
-  const activeFilter: PositionFilter = supportsPositionViews
-    ? positionFilter
-    : "all";
+  const activeFilter: PositionFilter = supportsPositionViews ? positionFilter : "all";
   const isFiltered = activeFilter !== "all";
 
   // An import can replace the board while a filter is active, leaving the
-  // filter pointed at a position that is gone, or leaving one position on the
-  // board. Either way the chips stop rendering, so the filter must release or
-  // the board would sit read-only with no control left to clear it.
+  // filter pointed at a position that is gone. Release it, or the board would
+  // sit read-only with no control left to clear it.
   useEffect(() => {
     if (
       positionFilter !== "all" &&
@@ -527,40 +471,77 @@ export function BoardEditor({
     }
   }, [positionFilter, filterPositions]);
 
-  const visibleGroups = useMemo(() => {
-    if (!tierGroups) return null;
-    if (!isFiltered) return tierGroups;
-    // Drop tiers with no players at this position so the filtered view reads
-    // as a clean positional list instead of a wall of empty tiers.
-    return tierGroups
-      .map((g) => ({ ...g, items: g.items.filter((p) => p.position === activeFilter) }))
-      .filter((g) => g.items.length > 0);
-  }, [tierGroups, isFiltered, activeFilter]);
-
   const visiblePlayers = useMemo(
-    () =>
-      isFiltered
-        ? orderedPlayers.filter((p) => p.position === activeFilter)
-        : orderedPlayers,
-    [orderedPlayers, isFiltered, activeFilter],
+    () => (isFiltered ? players.filter((p) => p.position === activeFilter) : players),
+    [players, isFiltered, activeFilter],
   );
 
   const changeFilter = (next: PositionFilter) => {
     setPositionFilter(next);
-    const total = orderedPlayers.length;
+    const total = players.length;
     const count = next === "all" ? total : positionCounts.get(next) ?? 0;
     setAnnouncement(
       next === "all"
         ? `Showing all ${total} player${total === 1 ? "" : "s"}. Reordering is back on.`
-        : `Showing ${count} ${next} player${count === 1 ? "" : "s"}. Reordering is off.`,
+        : `Showing ${count} ${positionNoun(next, count === 1 ? "singular" : "plural")}. Reordering is off.`,
     );
   };
+
+  // ----- drag ------------------------------------------------------------
+  const [drag, setDrag] = useState<DragItem | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const endDrag = () => {
+    setDrag(null);
+    setOverId(null);
+  };
+  const dropOn = (playerId: string) => {
+    if (!drag) return;
+    if (drag.kind === "player") {
+      reorderByDrag(drag.id, playerId);
+    } else {
+      const rank = players.findIndex((p) => p.playerId === playerId) + 1;
+      moveLine(drag.rank, rank);
+    }
+    endDrag();
+  };
+
+  const rowProps = (player: BoardPlayer, index: number) => {
+    const rank = ranks.get(player.playerId);
+    const overall = rank?.overall ?? index + 1;
+    return {
+      player,
+      rank: overall,
+      positionRank: supportsPositionViews ? rank?.positionRank ?? null : null,
+      tier: tiersEnabled ? tierForRank(tierBreaks, overall) : null,
+      isFirst: overall === 1,
+      isLast: overall === players.length,
+      readOnly: isFiltered,
+      canAddLineBelow:
+        tiersEnabled && !isFiltered && overall < players.length && !tierBreaks.includes(overall),
+      comparisons: comparisons.map((c, i) => ({
+        comparison: c,
+        gap: rankGap(c, player, comparisonRanks[i].get(player.playerId)),
+      })),
+      isDragging: drag?.kind === "player" && drag.id === player.playerId,
+      isDropTarget: overId === player.playerId,
+      onMove: movePlayer,
+      onRemove: removePlayer,
+      onAddLineBelow: addLine,
+      onDragStart: () => setDrag({ kind: "player", id: player.playerId }),
+      onDragEnterRow: () => setOverId(player.playerId),
+      onDragEndRow: endDrag,
+      onDropRow: () => dropOn(player.playerId),
+    } satisfies PlayerRowProps;
+  };
+
+  const ranges = tiersEnabled && !isFiltered ? tierRanges(tierBreaks, players.length) : null;
 
   return (
     <div className="space-y-8">
       <BoardHeader
         name={name}
         scope={scope}
+        includesDefenders={includesDefenders}
         playerCount={players.length}
         saveState={saveState}
         onCommitName={commitName}
@@ -571,12 +552,22 @@ export function BoardEditor({
         {announcement}
       </p>
 
+      <CommunityPanel
+        boardId={boardId}
+        initialOptOut={community.optOut}
+        playerCount={players.length}
+        minPlayers={community.minPlayers}
+        hasFormat={community.hasFormat}
+        formats={community.formats}
+      />
+
       <TierControls
         tiersEnabled={tiersEnabled}
-        tierCount={tierCount}
+        tierCount={tierBreaks.length + 1}
+        players={players}
+        tierBreaks={tierBreaks}
         onToggle={toggleTiers}
-        onAddTier={addTier}
-        onRemoveTier={removeTier}
+        onAddLine={addLine}
       />
 
       <ImportFromRankings
@@ -584,24 +575,24 @@ export function BoardEditor({
         sources={importSources}
         formats={importFormats}
         defaultSourceSlug={defaultSourceSlug}
+        defaultFormatSlug={boardFormatSlug}
         currentPlayerCount={players.length}
         onImport={importRankings}
       />
 
       <AddPlayerCombobox
-        scope={scope}
+        positions={boardPositions}
+        holdsDefenders={holdsDefenders}
         excludeIds={excludeIds}
         onAdd={addPlayer}
       />
 
-      {/* With fewer than two positions on the board, every chip would show the
-          same list, so the filter earns nothing. */}
       {supportsPositionViews && filterPositions.length > 1 && (
         <PositionFilterBar
           positions={filterPositions}
           counts={positionCounts}
           active={activeFilter}
-          totalCount={orderedPlayers.length}
+          totalCount={players.length}
           visibleCount={visiblePlayers.length}
           listId={listId}
           onChange={changeFilter}
@@ -611,41 +602,60 @@ export function BoardEditor({
       <div id={listId}>
         {players.length === 0 ? (
           <p className="rounded-card border border-dashed border-line bg-base/40 p-6 text-sm text-ink-muted">
-            No players on this board yet. Search above to add your first one.
+            No players on this board yet. Build it by comparing, import our rankings, or search
+            above to add your first one.
           </p>
-        ) : visibleGroups ? (
-          <div className="space-y-6">
-            {visibleGroups.map((group) => (
-              <TierGroup
-                key={group.tier ?? "none"}
-                group={group}
-                ranks={ranks}
-                showPositionRank={supportsPositionViews}
-                readOnly={isFiltered}
-                tierCount={tierCount}
-                tierLabels={tierLabels}
-                onRenameTier={renameTier}
-                onMove={movePlayer}
-                onRemove={removePlayer}
-                onAssignTier={assignTier}
-                onReorderDrag={reorderByDrag}
-              />
-            ))}
+        ) : ranges ? (
+          <div className="space-y-4">
+            {ranges.map((range) => {
+              const headingId = `${listId}-tier-${range.tier}`;
+              const custom = tierLabels[String(range.tier)]?.trim() || null;
+              const lineRank = range.start - 1;
+              return (
+                <section
+                  key={range.tier}
+                  aria-labelledby={headingId}
+                  onDragOver={(event) => {
+                    if (drag?.kind === "break") event.preventDefault();
+                  }}
+                >
+                  <TierBreakLine tier={range.tier} label={custom} headingLevel={3} id={headingId}>
+                    <TierLabelInput
+                      tier={range.tier}
+                      value={tierLabels[String(range.tier)] ?? ""}
+                      onCommit={renameTier}
+                    />
+                    {range.tier > 1 && (
+                      <TierBreakLineControls
+                        tier={range.tier}
+                        rank={lineRank}
+                        players={players}
+                        breaks={tierBreaks}
+                        onMove={moveLine}
+                        onRemove={removeLine}
+                        onDragStart={(rank) => setDrag({ kind: "break", rank })}
+                        onDragEnd={endDrag}
+                      />
+                    )}
+                  </TierBreakLine>
+                  <p className="sr-only">
+                    Ranks {range.start} to {range.end}.
+                  </p>
+                  <ol start={range.start} className="flex flex-col gap-2">
+                    {players.slice(range.start - 1, range.end).map((player, i) => (
+                      <PlayerRow key={player.playerId} {...rowProps(player, range.start - 1 + i)} />
+                    ))}
+                  </ol>
+                </section>
+              );
+            })}
           </div>
         ) : (
-          <PlayerList
-            players={visiblePlayers}
-            ranks={ranks}
-            showPositionRank={supportsPositionViews}
-            readOnly={isFiltered}
-            tiersEnabled={false}
-            tierCount={tierCount}
-            tierLabels={tierLabels}
-            onMove={movePlayer}
-            onRemove={removePlayer}
-            onAssignTier={assignTier}
-            onReorderDrag={reorderByDrag}
-          />
+          <ol className="flex flex-col gap-2">
+            {visiblePlayers.map((player, i) => (
+              <PlayerRow key={player.playerId} {...rowProps(player, i)} />
+            ))}
+          </ol>
         )}
       </div>
     </div>
@@ -657,12 +667,14 @@ export function BoardEditor({
 function BoardHeader({
   name,
   scope,
+  includesDefenders,
   playerCount,
   saveState,
   onCommitName,
 }: {
   name: string;
   scope: BoardScope;
+  includesDefenders: boolean;
   playerCount: number;
   saveState: "idle" | "saving" | "saved" | "error";
   onCommitName: (value: string) => void;
@@ -674,7 +686,10 @@ function BoardHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 flex-1">
-        <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
+        <label
+          htmlFor={inputId}
+          className="block text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan"
+        >
           Board name
         </label>
         <input
@@ -692,7 +707,7 @@ function BoardHeader({
           className="mt-2 w-full max-w-xl rounded-card border border-transparent bg-transparent px-0 py-1 text-2xl font-semibold tracking-tight text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-3 focus:outline-none sm:text-3xl"
         />
         <p className="mt-1 text-sm text-ink-muted">
-          {scopeLabel(scope)} board, {playerCount} player
+          {scopeLabel(scope, includesDefenders)} board, {playerCount} player
           {playerCount === 1 ? "" : "s"}.
         </p>
       </div>
@@ -701,11 +716,7 @@ function BoardHeader({
   );
 }
 
-function SaveIndicator({
-  state,
-}: {
-  state: "idle" | "saving" | "saved" | "error";
-}) {
+function SaveIndicator({ state }: { state: "idle" | "saving" | "saved" | "error" }) {
   const map = {
     idle: { text: "All changes saved", tone: "text-ink-subtle" },
     saving: { text: "Saving...", tone: "text-ink-muted" },
@@ -714,10 +725,7 @@ function SaveIndicator({
   } as const;
   const { text, tone } = map[state];
   return (
-    <p
-      aria-live="polite"
-      className={`shrink-0 text-xs font-medium ${tone}`}
-    >
+    <p aria-live="polite" className={`shrink-0 text-xs font-medium ${tone}`}>
       {text}
     </p>
   );
@@ -728,398 +736,144 @@ function SaveIndicator({
 function TierControls({
   tiersEnabled,
   tierCount,
+  players,
+  tierBreaks,
   onToggle,
-  onAddTier,
-  onRemoveTier,
+  onAddLine,
 }: {
   tiersEnabled: boolean;
   tierCount: number;
+  players: readonly BoardPlayer[];
+  tierBreaks: readonly number[];
   onToggle: (enabled: boolean) => void;
-  onAddTier: () => void;
-  onRemoveTier: () => void;
+  onAddLine: (rank: number) => void;
 }) {
   const switchId = useId();
+  const hintId = useId();
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface p-4">
-      <div className="flex items-center gap-3">
-        <button
-          id={switchId}
-          type="button"
-          role="switch"
-          aria-checked={tiersEnabled}
-          onClick={() => onToggle(!tiersEnabled)}
-          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
-            tiersEnabled
-              ? "border-brand-purple bg-brand-purple/30"
-              : "border-line bg-base"
-          }`}
-        >
-          <span
-            aria-hidden="true"
-            className={`inline-block h-4 w-4 transform rounded-full bg-ink transition-transform ${
-              tiersEnabled ? "translate-x-6" : "translate-x-1"
+    <div className="space-y-4 rounded-card border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            id={switchId}
+            type="button"
+            role="switch"
+            aria-checked={tiersEnabled}
+            aria-describedby={hintId}
+            onClick={() => onToggle(!tiersEnabled)}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+              tiersEnabled ? "border-brand-purple bg-brand-purple/30" : "border-line bg-base"
             }`}
-          />
-        </button>
-        <label htmlFor={switchId} className="flex items-center gap-2 text-sm font-medium text-ink">
-          <Layers aria-hidden="true" className="h-4 w-4 text-brand-purple" />
-          Tiers
-        </label>
-      </div>
-
-      {tiersEnabled && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-ink-muted">{tierCount} tiers</span>
-          <button
-            type="button"
-            onClick={onRemoveTier}
-            disabled={tierCount <= 1}
-            aria-label="Remove the last tier"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40 sm:h-8 sm:w-8"
           >
-            <span aria-hidden="true">-</span>
+            <span
+              aria-hidden="true"
+              className={`inline-block h-4 w-4 transform rounded-full bg-ink transition-transform ${
+                tiersEnabled ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
           </button>
-          <button
-            type="button"
-            onClick={onAddTier}
-            disabled={tierCount >= MAX_TIERS}
-            aria-label="Add a tier"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40 sm:h-8 sm:w-8"
-          >
-            <Plus aria-hidden="true" className="h-4 w-4" />
-          </button>
+          <label htmlFor={switchId} className="flex items-center gap-2 text-sm font-medium text-ink">
+            <Layers aria-hidden="true" className="h-4 w-4 text-brand-purple" />
+            Tiers
+          </label>
         </div>
+        {tiersEnabled && (
+          <span className="text-sm text-ink-muted">
+            {tierCount} tier{tierCount === 1 ? "" : "s"}
+          </span>
+        )}
+        <p id={hintId} className="text-xs text-ink-subtle">
+          {tiersEnabled
+            ? "A tier line sits after a rank. It stays at that rank when players move past it."
+            : "Turn on tiers to draw lines that split the board into bands."}
+        </p>
+      </div>
+      {tiersEnabled && (
+        <AddTierBreakForm players={players} breaks={tierBreaks} onAdd={onAddLine} />
       )}
-      <p className="text-xs text-ink-subtle">
-        {tiersEnabled
-          ? "Group players into tiers. Use each row's tier menu or drag a player into a tier."
-          : "Turn on tiers to group players into named bands."}
-      </p>
     </div>
   );
 }
 
-/* ---------------- Tier group ---------------- */
-
-function TierGroup({
-  group,
-  ranks,
-  showPositionRank,
-  readOnly,
-  tierCount,
-  tierLabels,
-  onRenameTier,
-  onMove,
-  onRemove,
-  onAssignTier,
-  onReorderDrag,
+function TierLabelInput({
+  tier,
+  value,
+  onCommit,
 }: {
-  group: { tier: number | null; label: string; items: BoardPlayer[] };
-  ranks: Map<string, BoardRank>;
-  showPositionRank: boolean;
-  readOnly: boolean;
-  tierCount: number;
-  tierLabels: Record<string, string>;
-  onRenameTier: (tier: number, label: string) => void;
-  onMove: (playerId: string, direction: "up" | "down") => void;
-  onRemove: (playerId: string) => void;
-  onAssignTier: (playerId: string, tier: number | null) => void;
-  onReorderDrag: (fromId: string, toId: string) => void;
+  tier: number;
+  value: string;
+  onCommit: (tier: number, label: string) => void;
 }) {
   const inputId = useId();
   return (
-    // Named directly rather than via aria-labelledby: in the editable branch
-    // the name would otherwise resolve to the rename input's value, which is
-    // empty for an untitled tier and would leave this landmark unnamed.
-    <section aria-label={group.label} className="rounded-card border border-line bg-surface/40 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        {group.tier === null ? (
-          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-            {group.label}
-          </h3>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="inline-flex h-7 min-w-7 items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 px-2 font-mono text-sm font-semibold text-brand-purple"
-            >
-              {group.tier}
-            </span>
-            {readOnly ? (
-              // Filtering turns off retiering, so the tier name is a plain
-              // heading rather than an editable field.
-              <h3 className="text-base font-semibold text-ink sm:text-sm">
-                {group.label}
-              </h3>
-            ) : (
-              <>
-                <label htmlFor={inputId} className="sr-only">
-                  Tier {group.tier} label
-                </label>
-                <input
-                  id={inputId}
-                  defaultValue={tierLabels[String(group.tier)] ?? ""}
-                  placeholder={`Tier ${group.tier}`}
-                  maxLength={40}
-                  onBlur={(event) => onRenameTier(group.tier as number, event.target.value)}
-                  className="w-40 max-w-full rounded-card border border-transparent bg-transparent px-1 py-1.5 text-base font-semibold text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-2 focus:outline-none sm:w-auto sm:py-0.5 sm:text-sm"
-                />
-              </>
-            )}
-          </div>
-        )}
-        <span className="text-xs text-ink-subtle">
-          {group.items.length} player{group.items.length === 1 ? "" : "s"}
-        </span>
-      </div>
-      {group.items.length === 0 ? (
-        <p className="rounded-card border border-dashed border-line/60 bg-base/30 px-3 py-4 text-xs text-ink-subtle">
-          Empty. Use a player&apos;s tier menu to move them here.
-        </p>
-      ) : (
-        <PlayerList
-          players={group.items}
-          ranks={ranks}
-          showPositionRank={showPositionRank}
-          readOnly={readOnly}
-          tiersEnabled
-          tierCount={tierCount}
-          tierLabels={tierLabels}
-          onMove={onMove}
-          onRemove={onRemove}
-          onAssignTier={onAssignTier}
-          onReorderDrag={onReorderDrag}
-        />
-      )}
-    </section>
+    <>
+      <label htmlFor={inputId} className="sr-only">
+        Tier {tier} label
+      </label>
+      <input
+        id={inputId}
+        key={`${tier}:${value}`}
+        defaultValue={value}
+        placeholder="Add a label"
+        maxLength={40}
+        onBlur={(event) => {
+          if (event.target.value !== value) onCommit(tier, event.target.value);
+        }}
+        className="h-11 w-36 rounded-card border border-transparent bg-transparent px-2 text-base text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:outline-none sm:h-8 sm:text-sm"
+      />
+    </>
   );
 }
 
-/* ---------------- Position filter ---------------- */
+/* ---------------- Player row ---------------- */
 
-function filterChipClass(active: boolean): string {
-  return active
-    ? "border-brand-purple/70 bg-brand-purple/15 text-ink hover:bg-brand-purple/25"
-    : "border-line bg-surface/60 text-ink-muted hover:border-brand-cyan/50 hover:text-ink";
-}
-
-/**
- * Quick filters that narrow an overall board to a single position, turning it
- * into that positional list without the user maintaining a separate board.
- *
- * Filtering is deliberately read-only. Reordering inside a filtered subset is
- * ambiguous: moving your QB3 "up one" says nothing about where he belongs in
- * the overall order, so we show the positional view and keep edits on the full
- * board. Chips are single-select toggle buttons in a group, matching the chip
- * bars elsewhere on the site.
- */
-function PositionFilterBar({
-  positions,
-  counts,
-  active,
-  totalCount,
-  visibleCount,
-  listId,
-  onChange,
-}: {
-  positions: readonly Position[];
-  counts: Map<string, number>;
-  active: PositionFilter;
-  totalCount: number;
-  visibleCount: number;
-  /** Id of the list these chips filter, for aria-controls. */
-  listId: string;
-  onChange: (next: PositionFilter) => void;
-}) {
-  const headingId = useId();
-  // The explanation lives once on the group rather than on all seven chips,
-  // so arrowing across them does not repeat it every time.
-  const descId = useId();
-  const isFiltered = active !== "all";
-
-  return (
-    <section
-      aria-labelledby={headingId}
-      className="rounded-card border border-line bg-surface p-4"
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h3
-          id={headingId}
-          className="flex items-center gap-2 text-sm font-medium text-ink"
-        >
-          <ListFilter aria-hidden="true" className="h-4 w-4 text-brand-purple" />
-          View by position
-        </h3>
-        <div
-          role="group"
-          aria-label="Filter the board by position"
-          aria-describedby={descId}
-          className="flex flex-wrap items-center gap-1.5"
-        >
-          <button
-            type="button"
-            onClick={() => onChange("all")}
-            aria-pressed={active === "all"}
-            aria-controls={listId}
-            aria-label={`Show all positions, ${totalCount} player${totalCount === 1 ? "" : "s"}`}
-            className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 sm:min-w-0 ${filterChipClass(
-              active === "all",
-            )}`}
-          >
-            <span>All</span>
-            <span className="font-mono text-[10px] tabular-nums opacity-70">
-              {totalCount}
-            </span>
-          </button>
-
-          {positions.map((pos) => {
-            const count = counts.get(pos) ?? 0;
-            const isOn = active === pos;
-            return (
-              <button
-                key={pos}
-                type="button"
-                onClick={() => onChange(pos)}
-                aria-pressed={isOn}
-                aria-controls={listId}
-                aria-label={`Show ${pos} only, ${count} player${count === 1 ? "" : "s"}`}
-                className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 sm:min-w-0 ${filterChipClass(
-                  isOn,
-                )}`}
-              >
-                <span>{pos}</span>
-                <span className="font-mono text-[10px] tabular-nums opacity-70">
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Names only what filtering actually turns off. Adding, importing, and
-          the tier controls above stay live in this view. */}
-      <p id={descId} className="mt-2 text-xs text-ink-muted">
-        {isFiltered
-          ? `Showing your ${visibleCount} ranked ${active}${visibleCount === 1 ? "" : "s"} of ${totalCount} players, in board order. Reordering, retiering, and removing are off here. Choose All to edit the board.`
-          : "Each player shows their overall rank and their rank at their position. Pick a position to see just that list."}
-      </p>
-    </section>
-  );
-}
-
-/* ---------------- Player list + row ---------------- */
-
-function PlayerList({
-  players,
-  ranks,
-  showPositionRank,
-  readOnly,
-  tiersEnabled,
-  tierCount,
-  tierLabels,
-  onMove,
-  onRemove,
-  onAssignTier,
-  onReorderDrag,
-}: {
-  players: BoardPlayer[];
-  ranks: Map<string, BoardRank>;
-  showPositionRank: boolean;
-  /** True while a position filter is on: rows render as display-only. */
-  readOnly: boolean;
-  tiersEnabled: boolean;
-  tierCount: number;
-  tierLabels: Record<string, string>;
-  onMove: (playerId: string, direction: "up" | "down") => void;
-  onRemove: (playerId: string) => void;
-  onAssignTier: (playerId: string, tier: number | null) => void;
-  onReorderDrag: (fromId: string, toId: string) => void;
-}) {
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
-
-  return (
-    <ol role="list" className="flex flex-col gap-2">
-      {players.map((player, index) => {
-        const rank = ranks.get(player.playerId);
-        return (
-          <PlayerRow
-            key={player.playerId}
-            player={player}
-            position={rank?.overall ?? index + 1}
-            positionRank={showPositionRank ? rank?.positionRank ?? null : null}
-            isFirst={index === 0}
-            isLast={index === players.length - 1}
-            readOnly={readOnly}
-            tiersEnabled={tiersEnabled}
-            tierCount={tierCount}
-            tierLabels={tierLabels}
-            isDragging={dragId === player.playerId}
-            isDropTarget={overId === player.playerId && dragId !== player.playerId}
-            onMove={onMove}
-            onRemove={onRemove}
-            onAssignTier={onAssignTier}
-            onDragStart={() => setDragId(player.playerId)}
-            onDragEnterRow={() => setOverId(player.playerId)}
-            onDragEndRow={() => {
-              setDragId(null);
-              setOverId(null);
-            }}
-            onDropRow={() => {
-              if (dragId) onReorderDrag(dragId, player.playerId);
-              setDragId(null);
-              setOverId(null);
-            }}
-          />
-        );
-      })}
-    </ol>
-  );
-}
-
-function PlayerRow({
-  player,
-  position,
-  positionRank,
-  isFirst,
-  isLast,
-  readOnly,
-  tiersEnabled,
-  tierCount,
-  tierLabels,
-  isDragging,
-  isDropTarget,
-  onMove,
-  onRemove,
-  onAssignTier,
-  onDragStart,
-  onDragEnterRow,
-  onDragEndRow,
-  onDropRow,
-}: {
+type PlayerRowProps = {
   player: BoardPlayer;
-  position: number;
-  /** Rank among same-position players, or null when the board is already
-   * scoped to one position (where it would just repeat the overall rank). */
+  rank: number;
+  /** Rank among same-position players, or null on a one-position board
+   * (where it would just repeat the rank). */
   positionRank: number | null;
+  /** The player's tier when tiers are shown. */
+  tier: number | null;
   isFirst: boolean;
   isLast: boolean;
   readOnly: boolean;
-  tiersEnabled: boolean;
-  tierCount: number;
-  tierLabels: Record<string, string>;
+  canAddLineBelow: boolean;
+  comparisons: { comparison: RankComparison; gap: ReturnType<typeof rankGap> }[];
   isDragging: boolean;
   isDropTarget: boolean;
   onMove: (playerId: string, direction: "up" | "down") => void;
   onRemove: (playerId: string) => void;
-  onAssignTier: (playerId: string, tier: number | null) => void;
+  onAddLineBelow: (rank: number) => void;
   onDragStart: () => void;
   onDragEnterRow: () => void;
   onDragEndRow: () => void;
   onDropRow: () => void;
-}) {
-  const tierSelectId = useId();
+};
+
+const rowButton =
+  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30 sm:h-9 sm:w-9";
+
+function PlayerRow({
+  player,
+  rank,
+  positionRank,
+  tier,
+  isFirst,
+  isLast,
+  readOnly,
+  canAddLineBelow,
+  comparisons,
+  isDragging,
+  isDropTarget,
+  onMove,
+  onRemove,
+  onAddLineBelow,
+  onDragStart,
+  onDragEnterRow,
+  onDragEndRow,
+  onDropRow,
+}: PlayerRowProps) {
   const dragProps = readOnly
     ? {}
     : {
@@ -1151,46 +905,30 @@ function PlayerRow({
             : "border-line"
       }`}
     >
-      {/* Identity: full-width on mobile, flexes on desktop. */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {!readOnly && (
-          <span
-            aria-hidden="true"
-            title="Drag to reorder"
-            className="hidden cursor-grab text-ink-subtle sm:block"
-          >
+          <span aria-hidden="true" title="Drag to reorder" className="hidden cursor-grab text-ink-subtle sm:block">
             <GripVertical className="h-4 w-4" />
           </span>
         )}
 
-        {/* Ranks read as one sentence for screen readers; the visual split of
-            overall number plus positional badge is decorative. */}
-        <span className="sr-only">
-          {positionRank == null
-            ? `Rank ${position}.`
-            : `Overall rank ${position}, ${player.position} rank ${positionRank}.`}
-        </span>
-        <span
-          aria-hidden="true"
-          className="flex shrink-0 items-center gap-1.5"
-        >
-          <span className="w-6 text-center font-mono text-sm tabular-nums text-ink-subtle">
-            {position}
+        {/* One real text node per figure; only the missing words are sr-only. */}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="w-7 text-center font-mono text-sm tabular-nums text-ink-subtle">
+            <span className="sr-only">Rank </span>
+            {rank}
+            {tier != null && <span className="sr-only">, tier {tier}</span>}
           </span>
           {positionRank != null && (
             <span className="rounded-full border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-brand-cyan">
-              {player.position}
+              <span className="sr-only">, {positionNoun(player.position)} rank </span>
+              <span aria-hidden="true">{player.position}</span>
               {positionRank}
             </span>
           )}
         </span>
 
-        <PlayerHeadshot
-          sleeperId={player.sleeperId}
-          position={player.position}
-          name={player.name}
-          size={36}
-        />
+        <PlayerHeadshot sleeperId={player.sleeperId} position={player.position} name={player.name} size={36} />
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{player.name}</p>
@@ -1199,531 +937,62 @@ function PlayerRow({
             {player.team ? `, ${player.team}` : ""}
           </p>
         </div>
-      </div>
 
-      {/* Controls: drop onto their own right-aligned row on mobile so nothing
-          gets crushed. 44px tap targets on mobile, compact on desktop.
-          A filtered view is display-only, so the row carries no controls: a
-          move inside one position has no meaning for the full board's order. */}
-      {!readOnly && (
-      <div className="flex items-center justify-end gap-1.5 sm:shrink-0 sm:gap-1">
-        {tiersEnabled && (
-          <>
-            <label htmlFor={tierSelectId} className="sr-only">
-              Tier for {player.name}
-            </label>
-            <select
-              id={tierSelectId}
-              value={player.tier ?? ""}
-              onChange={(event) =>
-                onAssignTier(
-                  player.playerId,
-                  event.target.value === "" ? null : Number(event.target.value),
-                )
-              }
-              className="h-11 min-w-0 flex-1 rounded-card border border-line bg-surface px-2 text-base text-ink focus:border-brand-purple focus:outline-none sm:h-9 sm:flex-none sm:text-xs"
-            >
-              <option value="">No tier</option>
-              {Array.from({ length: tierCount }, (_, i) => i + 1).map((t) => (
-                <option key={t} value={t}>
-                  {tierLabel(tierLabels, t)}
-                </option>
-              ))}
-            </select>
-          </>
+        {comparisons.length > 0 && (
+          <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+            {comparisons.map(({ comparison, gap }) => (
+              <span key={comparison.label} className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-[0.1em] text-ink-subtle">
+                  {comparison.label}
+                </span>
+                <RankGapChip gap={gap} subject={comparison.subject} />
+              </span>
+            ))}
+          </div>
         )}
-
-        <button
-          type="button"
-          onClick={() => onMove(player.playerId, "up")}
-          disabled={isFirst}
-          aria-label={`Move ${player.name} up`}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30 sm:h-9 sm:w-9"
-        >
-          <ChevronUp aria-hidden="true" className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onMove(player.playerId, "down")}
-          disabled={isLast}
-          aria-label={`Move ${player.name} down`}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30 sm:h-9 sm:w-9"
-        >
-          <ChevronDown aria-hidden="true" className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onRemove(player.playerId)}
-          aria-label={`Remove ${player.name} from the board`}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:h-9 sm:w-9"
-        >
-          <X aria-hidden="true" className="h-4 w-4" />
-        </button>
       </div>
+
+      {!readOnly && (
+        <div className="flex items-center justify-end gap-1.5 sm:shrink-0 sm:gap-1">
+          <button
+            type="button"
+            onClick={() => onMove(player.playerId, "up")}
+            disabled={isFirst}
+            aria-label={`Move ${player.name} up`}
+            className={rowButton}
+          >
+            <ChevronUp aria-hidden="true" className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(player.playerId, "down")}
+            disabled={isLast}
+            aria-label={`Move ${player.name} down`}
+            className={rowButton}
+          >
+            <ChevronDown aria-hidden="true" className="h-4 w-4" />
+          </button>
+          {canAddLineBelow && (
+            <button
+              type="button"
+              onClick={() => onAddLineBelow(rank)}
+              aria-label={`Add a tier line below ${player.name}`}
+              title="Add a tier line below"
+              className={rowButton}
+            >
+              <SeparatorHorizontal aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onRemove(player.playerId)}
+            aria-label={`Remove ${player.name} from the board`}
+            className={`${rowButton} hover:border-signal-danger/60 hover:text-signal-danger`}
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
       )}
     </li>
-  );
-}
-
-/* ---------------- Add-player combobox ---------------- */
-
-function AddPlayerCombobox({
-  scope,
-  excludeIds,
-  onAdd,
-}: {
-  scope: BoardScope;
-  excludeIds: Set<string>;
-  onAdd: (player: SearchablePlayer) => void;
-}) {
-  const inputId = useId();
-  const listboxId = useId();
-  const helpId = useId();
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchablePlayer[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
-
-  // Debounced server search.
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ q });
-        if (scope !== "overall") params.set("position", scope);
-        const res = await fetch(`/api/players/search?${params.toString()}`, {
-          headers: FETCH_HEADERS,
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          setResults([]);
-        } else {
-          const json = (await res.json()) as { players: SearchablePlayer[] };
-          setResults(json.players ?? []);
-        }
-      } catch {
-        if (!controller.signal.aborted) setResults([]);
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [query, scope]);
-
-  const matches = useMemo(
-    () => results.filter((p) => !excludeIds.has(p.playerId)),
-    [results, excludeIds],
-  );
-
-  useEffect(() => {
-    if (activeIdx >= matches.length) setActiveIdx(0);
-  }, [matches.length, activeIdx]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent | TouchEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("touchstart", onDown);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("touchstart", onDown);
-    };
-  }, [open]);
-
-  const commit = (player: SearchablePlayer) => {
-    onAdd(player);
-    // Keep the box open and clear the query so the user can add several in a
-    // row without re-focusing.
-    setQuery("");
-    setResults([]);
-    setActiveIdx(0);
-    inputRef.current?.focus();
-  };
-
-  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.min(matches.length - 1, i + 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
-    } else if (event.key === "Enter") {
-      if (open && matches[activeIdx]) {
-        event.preventDefault();
-        commit(matches[activeIdx]);
-      }
-    } else if (event.key === "Escape") {
-      if (open) {
-        event.preventDefault();
-        setOpen(false);
-      }
-    }
-  };
-
-  return (
-    <div ref={wrapperRef} className="relative">
-      <label htmlFor={inputId} className="block text-sm font-medium text-ink">
-        Add a player
-      </label>
-      <input
-        ref={inputRef}
-        id={inputId}
-        type="text"
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        aria-activedescendant={
-          open && matches[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
-        }
-        aria-describedby={helpId}
-        autoComplete="off"
-        spellCheck={false}
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        placeholder={
-          scope === "overall"
-            ? "Search any active player"
-            : `Search active ${scope}s`
-        }
-        className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-base text-ink placeholder:text-ink-subtle caret-brand-purple focus:border-brand-purple focus:outline-none sm:text-sm"
-      />
-      <p id={helpId} className="mt-1 text-xs text-ink-subtle">
-        {scope === "overall"
-          ? "Type at least two letters. Active NFL players only."
-          : `Type at least two letters. Active ${scope}s only.`}
-      </p>
-
-      {open && query.trim().length >= 2 && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label="Player search results"
-          className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface-elevated shadow-2xl shadow-black/50"
-        >
-          {loading ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">Searching...</li>
-          ) : matches.length === 0 ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">
-              No active players match &quot;{query.trim()}&quot;.
-            </li>
-          ) : (
-            matches.map((p, i) => {
-              const isActive = i === activeIdx;
-              return (
-                <li
-                  key={p.playerId}
-                  id={`${listboxId}-opt-${i}`}
-                  role="option"
-                  aria-selected={isActive}
-                  onMouseEnter={() => setActiveIdx(i)}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    commit(p);
-                  }}
-                  className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition-colors ${
-                    isActive ? "bg-brand-purple/15 text-ink" : "text-ink-muted"
-                  }`}
-                >
-                  <PlayerHeadshot
-                    sleeperId={p.sleeperId}
-                    position={p.position}
-                    name={p.name}
-                    size={28}
-                  />
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="text-ink">{p.name}</span>
-                    <span className="ml-2 text-xs text-ink-subtle">
-                      {p.position}
-                      {p.team ? `, ${p.team}` : ""}
-                    </span>
-                  </span>
-                  <Plus aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-                </li>
-              );
-            })
-          )}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/* ---------------- Import from FF Beacon rankings ---------------- */
-
-/** A source supports a format when its list is null ("all") or contains the
- * slug. Mirrors lib/source.ts sourceSupportsFormat for client-side gating. */
-function supportsFormat(source: ImportSource | undefined, formatSlug: string) {
-  if (!source) return false;
-  return source.supportedFormatSlugs === null
-    ? true
-    : source.supportedFormatSlugs.includes(formatSlug);
-}
-
-function ImportFromRankings({
-  scope,
-  sources,
-  formats,
-  defaultSourceSlug,
-  currentPlayerCount,
-  onImport,
-}: {
-  scope: BoardScope;
-  sources: ImportSource[];
-  formats: ImportFormat[];
-  defaultSourceSlug: string | null;
-  currentPlayerCount: number;
-  onImport: (players: ImportedRankingPlayer[]) => Promise<boolean>;
-}) {
-  const sourceId = useId();
-  const formatId = useId();
-  const headingId = useId();
-
-  const [sourceSlug, setSourceSlug] = useState<string>(
-    defaultSourceSlug ?? sources[0]?.slug ?? "",
-  );
-  const activeSource = sources.find((s) => s.slug === sourceSlug);
-
-  // Formats the chosen source actually publishes rankings for.
-  const supportedFormats = useMemo(
-    () => formats.filter((f) => supportsFormat(activeSource, f.slug)),
-    [formats, activeSource],
-  );
-
-  const [formatSlug, setFormatSlug] = useState<string>(
-    supportedFormats[0]?.slug ?? formats[0]?.slug ?? "",
-  );
-
-  // Keep the format valid whenever the source (and its supported set) changes.
-  useEffect(() => {
-    if (!supportedFormats.some((f) => f.slug === formatSlug)) {
-      setFormatSlug(supportedFormats[0]?.slug ?? "");
-    }
-  }, [supportedFormats, formatSlug]);
-
-  const [importing, setImporting] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [message, setMessage] = useState<{
-    kind: "success" | "error";
-    text: string;
-  } | null>(null);
-
-  const scopeWord = scope === "overall" ? "overall" : `${scope}`;
-
-  // Clicking Import: confirm first (via modal) when the board already has
-  // players, otherwise import straight away.
-  const handleImportClick = () => {
-    if (!sourceSlug || !formatSlug) return;
-    if (currentPlayerCount > 0) {
-      setConfirmOpen(true);
-      return;
-    }
-    void performImport();
-  };
-
-  const performImport = async () => {
-    if (!sourceSlug || !formatSlug) return;
-    setImporting(true);
-    setMessage(null);
-    try {
-      const params = new URLSearchParams({
-        source: sourceSlug,
-        format: formatSlug,
-        scope,
-      });
-      const res = await fetch(`/api/rankings/import?${params.toString()}`, {
-        headers: FETCH_HEADERS,
-      });
-      if (!res.ok) {
-        setMessage({ kind: "error", text: "Import failed. Please try again." });
-        return;
-      }
-      const json = (await res.json()) as {
-        players: ImportedRankingPlayer[];
-        sourceDisplay: string | null;
-        requestedDisplay: string;
-        formatDisplay: string;
-        fellBack: boolean;
-      };
-      if (!json.players || json.players.length === 0) {
-        setMessage({
-          kind: "error",
-          text: `No ranked ${scopeWord} players found for that source and format.`,
-        });
-        return;
-      }
-      const ok = await onImport(json.players);
-      if (!ok) {
-        setMessage({
-          kind: "error",
-          text: "Imported the rankings but saving failed. Try again.",
-        });
-        return;
-      }
-      const fallbackNote = json.fellBack
-        ? ` ${json.requestedDisplay} has no data for ${json.formatDisplay}, so we used ${json.sourceDisplay}.`
-        : "";
-      setMessage({
-        kind: "success",
-        text: `Imported ${json.players.length} player${
-          json.players.length === 1 ? "" : "s"
-        } from ${json.sourceDisplay}, ${json.formatDisplay}.${fallbackNote}`,
-      });
-    } catch {
-      setMessage({ kind: "error", text: "Import failed. Please try again." });
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  if (sources.length === 0 || formats.length === 0) return null;
-
-  return (
-    <section
-      aria-labelledby={headingId}
-      className="rounded-card border border-line bg-surface p-4 sm:p-5"
-    >
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-        >
-          <Download className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <h3 id={headingId} className="text-base font-semibold text-ink">
-            Start from our rankings
-          </h3>
-          <p className="mt-1 text-sm text-ink-muted">
-            Import our current {scopeWord} rankings as a starting point, then
-            reorder and customize. Pick the source and format to import from.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <div>
-          <label htmlFor={sourceId} className="block text-sm font-medium text-ink">
-            Source
-          </label>
-          <select
-            id={sourceId}
-            value={sourceSlug}
-            onChange={(event) => setSourceSlug(event.target.value)}
-            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-base text-ink focus:border-brand-purple focus:outline-none sm:py-2 sm:text-sm"
-          >
-            {sources.map((s) => (
-              <option key={s.slug} value={s.slug}>
-                {s.displayName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={formatId} className="block text-sm font-medium text-ink">
-            Format
-          </label>
-          <select
-            id={formatId}
-            value={formatSlug}
-            onChange={(event) => setFormatSlug(event.target.value)}
-            disabled={supportedFormats.length === 0}
-            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-base text-ink focus:border-brand-purple focus:outline-none disabled:opacity-50 sm:py-2 sm:text-sm"
-          >
-            {supportedFormats.length === 0 ? (
-              <option value="">No formats for this source</option>
-            ) : (
-              supportedFormats.map((f) => (
-                <option key={f.slug} value={f.slug}>
-                  {f.displayName}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-        <button
-          type="button"
-          onClick={handleImportClick}
-          disabled={importing || !sourceSlug || !formatSlug}
-          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-card border border-line bg-surface-elevated px-4 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:h-10"
-        >
-          <Download aria-hidden="true" className="h-4 w-4" />
-          {importing ? "Importing..." : "Import rankings"}
-        </button>
-      </div>
-
-      {currentPlayerCount > 0 && (
-        <p className="mt-2 text-xs text-ink-subtle">
-          Importing replaces the {currentPlayerCount} player
-          {currentPlayerCount === 1 ? "" : "s"} already on this board.
-        </p>
-      )}
-
-      <div aria-live="polite" className="min-h-[1.25rem]">
-        {message && (
-          <p
-            role={message.kind === "error" ? "alert" : undefined}
-            className={`mt-2 text-sm ${
-              message.kind === "error"
-                ? "text-signal-danger"
-                : "text-signal-success"
-            }`}
-          >
-            {message.text}
-          </p>
-        )}
-      </div>
-
-      {confirmOpen && (
-        <ConfirmDialog
-          icon={AlertTriangle}
-          tone="danger"
-          title="Replace this board?"
-          description={
-            <>
-              Importing rankings will replace the{" "}
-              <span className="font-semibold text-ink">
-                {currentPlayerCount} player
-                {currentPlayerCount === 1 ? "" : "s"}
-              </span>{" "}
-              currently on this board, including any custom order and tiers.
-              This cannot be undone.
-            </>
-          }
-          confirmLabel="Replace board"
-          cancelLabel="Keep current"
-          onConfirm={() => {
-            setConfirmOpen(false);
-            void performImport();
-          }}
-          onCancel={() => setConfirmOpen(false)}
-        />
-      )}
-    </section>
   );
 }

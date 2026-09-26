@@ -56,10 +56,14 @@ describe("search pool by surface", () => {
     });
   }
 
-  it("the players search route defaults to ranked and only the Free Agent Finder asks for more", () => {
+  it("the players search route defaults to ranked; the Free Agent Finder and defender boards ask for more", () => {
     const route = read("app/api/players/search/route.ts");
     expect(route).toMatch(/=== "ranked\+idp" \? "ranked\+idp" : "ranked"/);
     expect(read("components/free-agent-finder-panel.tsx")).toContain('pool: "ranked+idp"');
-    expect(read("app/my-beacon/rankings/[boardId]/board-editor.tsx")).not.toContain("ranked+idp");
+    // Changed on purpose by Beacon Ranker (plan decision 2): boards cover
+    // defenders. The editor asks for the IDP pool ONLY when the board can hold
+    // a defender; an offense-only board stays on the default pool.
+    const editor = read("app/my-beacon/rankings/[boardId]/add-player-combobox.tsx");
+    expect(editor).toMatch(/holdsDefenders \? "ranked\+idp" : null/);
   });
 });

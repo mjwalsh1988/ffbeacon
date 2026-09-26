@@ -22,6 +22,7 @@ import { AuthorPortrait } from "@/components/author-portrait";
 import {
   Workflow,
   Calculator,
+  ListChecks,
   Scale,
   Swords,
   Shield,
@@ -137,6 +138,13 @@ const TOOL_CARD_CONTENT: Record<ToolHref, ToolCardContent> = {
       "Put your players in and get a start/sit verdict built from this week's projections and matchups, with the confidence to back it.",
     cta: "Find out who to start",
     icon: Swords,
+  },
+  "/tools/custom-rankings": {
+    title: "Beacon Ranker: Custom Rankings",
+    description:
+      "Build your own fantasy football rankings by picking between two players at a time. Start from our rankings, draw tiers, and see where you disagree with FF Beacon.",
+    cta: "Build your rankings",
+    icon: ListChecks,
   },
   "/tools/faab": {
     title: "FAAB Calculator",

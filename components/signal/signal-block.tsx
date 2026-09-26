@@ -115,7 +115,7 @@ export async function FeaturedBoardBlock({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-cyan">
           <ListOrdered aria-hidden="true" className="h-3.5 w-3.5 text-brand-purple" />
-          {scopeLabel(board.scope)}
+          {scopeLabel(board.scope, board.includesDefenders)}
         </span>
         {board.playerCount > players.length && (
           <span className="text-xs text-ink-muted">

@@ -32,7 +32,8 @@ export type ToolHref =
   | "/tools/manager-pulse"
   | "/tools/who-should-i-start"
   | "/tools/trade-calculator"
-  | "/tools/faab";
+  | "/tools/faab"
+  | "/tools/custom-rankings";
 
 export type ToolCatalogEntry = {
   href: ToolHref;
@@ -132,5 +133,19 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
       "Live power rankings, startup draft grades, and awards",
     ],
     cta: "Open the draft room",
+  },
+  {
+    href: "/tools/custom-rankings",
+    eyebrow: "Your own rankings",
+    title: "Beacon Ranker: Custom Rankings Builder",
+    pitch:
+      "Build your own fantasy football rankings by answering one question at a time: which of these two players would you rather have? Start from FF Beacon's rankings or another source, and the board assembles itself from your answers.",
+    bullets: [
+      "Two players at a time, with team, age and last three finishes, and no ranks to lean on",
+      "Every placement compared with FF Beacon's rankings today, in spots up or down",
+      "Tier lines, IDP boards, and a share link with its own social card",
+      "Your boards feed the community rankings for each format",
+    ],
+    cta: "Build your rankings",
   },
 ];

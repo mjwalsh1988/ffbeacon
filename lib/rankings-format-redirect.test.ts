@@ -89,4 +89,11 @@ describe("rankingsFormatRedirect", () => {
     expect(redirectFor("/rankingsx?format=dynasty-ppr-sflex")).toBeNull();
     expect(redirectFor("/?format=dynasty-ppr-sflex")).toBeNull();
   });
+
+  it("leaves the community page alone, which reads its format from the query", () => {
+    expect(redirectFor("/rankings/community?format=dynasty-ppr-sflex")).toBeNull();
+    expect(
+      redirectFor("/rankings/community?format=dynasty-ppr-sflex&pos=QB"),
+    ).toBeNull();
+  });
 });

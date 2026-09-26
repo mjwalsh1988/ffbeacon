@@ -8,6 +8,7 @@ import { getDefaultSourceSlug } from "@/lib/source";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import type { BoardScope } from "@/lib/ranking-boards";
 import { isBoardScope } from "@/lib/ranking-boards";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { nflTeamName } from "@/lib/nfl-teams";
 import {
   type ProfileLayout,
@@ -106,6 +107,7 @@ export type FeaturedBoardMeta = {
   id: string;
   name: string;
   scope: BoardScope;
+  includesDefenders: boolean;
   tiersEnabled: boolean;
   isPrimary: boolean;
   topN: number;
@@ -197,7 +199,6 @@ function parseProfileLinks(value: unknown): SignalProfileLink[] {
 
 export type BoardTopNPlayer = {
   rank: number;
-  tier: number | null;
   playerId: string;
   slug: string;
   name: string;
@@ -401,7 +402,7 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
   const { data: boardRows } = await supabase
     .from("user_ranking_boards")
     .select(
-      "id, name, scope, tiers_enabled, profile_is_primary, profile_sort, profile_top_n, updated_at, user_ranking_board_players(count)",
+      "id, name, scope, includes_defenders, tiers_enabled, profile_is_primary, profile_sort, profile_top_n, updated_at, user_ranking_board_players(count)",
     )
     .eq("user_id", signal.user_id)
     .eq("profile_visible", true);
@@ -417,6 +418,7 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
           id: row.id,
           name: row.name,
           scope: isBoardScope(row.scope) ? row.scope : "overall",
+          includesDefenders: row.includes_defenders,
           tiersEnabled: row.tiers_enabled,
           isPrimary,
           topN: row.profile_top_n ?? defaultTopN(isPrimary),
@@ -577,6 +579,35 @@ export function loadProfileBundle(handle: string): Promise<ProfileBundle> {
 // Featured board Top-N (per board, tagged board:{id})
 // ---------------------------------------------------------------------------
 
+type TopNRow = {
+  rank_position: number;
+  players: {
+    id: string;
+    slug: string;
+    full_name: string | null;
+    first_name: string;
+    last_name: string;
+    position: string;
+    team: string | null;
+  } | null;
+};
+
+function toTopNPlayer(row: TopNRow): BoardTopNPlayer | null {
+  const p = row.players;
+  if (!p) return null;
+  return {
+    rank: row.rank_position,
+    playerId: p.id,
+    slug: p.slug,
+    name: p.full_name || `${p.first_name} ${p.last_name}`.trim(),
+    position: p.position,
+    team: p.team,
+  };
+}
+
+const TOP_N_SELECT =
+  "rank_position, players(id, slug, full_name, first_name, last_name, position, team)";
+
 async function buildBoardTopN(
   boardId: string,
   limit: number,
@@ -584,36 +615,30 @@ async function buildBoardTopN(
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("user_ranking_board_players")
-    .select(
-      "rank_position, tier, players(id, slug, full_name, first_name, last_name, position, team)",
-    )
+    .select(TOP_N_SELECT)
     .eq("board_id", boardId)
     .order("rank_position", { ascending: true })
     .limit(limit);
+  return ((data ?? []) as unknown as TopNRow[])
+    .map(toTopNPlayer)
+    .filter((p): p is BoardTopNPlayer => p !== null);
+}
 
-  return (data ?? [])
-    .map((row) => {
-      const p = row.players as unknown as {
-        id: string;
-        slug: string;
-        full_name: string | null;
-        first_name: string;
-        last_name: string;
-        position: string;
-        team: string | null;
-      } | null;
-      if (!p) return null;
-      const name = p.full_name || `${p.first_name} ${p.last_name}`.trim();
-      return {
-        rank: row.rank_position,
-        tier: row.tier,
-        playerId: p.id,
-        slug: p.slug,
-        name,
-        position: p.position,
-        team: p.team,
-      } satisfies BoardTopNPlayer;
-    })
+/** Every player on a board, paged past the 1000-row cap. A board holds up to
+ * 2,000 (MAX_BOARD_PLAYERS), and the public page shows all of them. */
+async function buildWholeBoard(boardId: string): Promise<BoardTopNPlayer[]> {
+  const supabase = createAdminClient();
+  const rows = await fetchAllRows("public board players", (from, to) =>
+    supabase
+      .from("user_ranking_board_players")
+      .select(TOP_N_SELECT)
+      .eq("board_id", boardId)
+      .order("rank_position", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return (rows as unknown as TopNRow[])
+    .map(toTopNPlayer)
     .filter((p): p is BoardTopNPlayer => p !== null);
 }
 
@@ -643,8 +668,14 @@ export type PublicBoardView = {
     id: string;
     name: string;
     scope: BoardScope;
+    includesDefenders: boolean;
     tiersEnabled: boolean;
+    /** Ranks a tier line falls after (migration 0305). */
+    tierBreaks: number[];
     tierLabels: Record<string, string>;
+    /** The format the board was built for, or null for a board made before
+     * boards remembered one. */
+    formatConfigId: string | null;
     updatedAt: string;
   };
   owner: { handle: string; displayName: string };
@@ -662,7 +693,7 @@ async function buildPublicBoard(boardId: string): Promise<PublicBoardView | null
   const { data: board } = await supabase
     .from("user_ranking_boards")
     .select(
-      "id, name, scope, tiers_enabled, tier_labels, updated_at, profile_visible, user_id",
+      "id, name, scope, includes_defenders, tiers_enabled, tier_breaks, tier_labels, format_config_id, updated_at, profile_visible, user_id",
     )
     .eq("id", boardId)
     .maybeSingle();
@@ -682,15 +713,18 @@ async function buildPublicBoard(boardId: string): Promise<PublicBoardView | null
     return null;
   }
 
-  const players = await buildBoardTopN(boardId, 1000);
+  const players = await buildWholeBoard(boardId);
 
   return {
     board: {
       id: board.id,
       name: board.name,
       scope: isBoardScope(board.scope) ? board.scope : "overall",
+      includesDefenders: board.includes_defenders,
       tiersEnabled: board.tiers_enabled,
+      tierBreaks: board.tier_breaks ?? [],
       tierLabels: (board.tier_labels as Record<string, string>) ?? {},
+      formatConfigId: board.format_config_id,
       updatedAt: board.updated_at,
     },
     owner: { handle: signal.handle, displayName: signal.display_name },

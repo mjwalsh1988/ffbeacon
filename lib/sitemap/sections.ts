@@ -63,6 +63,8 @@
  *                       ahead of the master switch. Relays are never indexed.
  *   /brief/editions     While no edition is published. The page sets noindex for
  *                       the same reason, from the same read (hasPublishedEditions).
+ *   /rankings/community While no format's community board is published. The page
+ *                       is noindex until one is; see communityRankingPaths.
  */
 
 import { idpRelevantPlayerIdSet } from "@/lib/player-search";
@@ -115,6 +117,7 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/tools/manager-pulse", priority: 0.6 },
   { path: "/tools/trade-calculator", priority: 0.6 },
   { path: "/tools/free-agent-finder", priority: 0.5 },
+  { path: "/tools/custom-rankings", priority: 0.6 },
   { path: "/games", priority: 0.4 },
   { path: "/games/signal-scout", priority: 0.4 },
   { path: "/games/would-you-rather", priority: 0.4 },
@@ -126,6 +129,28 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/privacy", priority: 0.2 },
   { path: "/terms", priority: 0.2 },
 ];
+
+/**
+ * The community rankings URLs worth listing, matching the page's own canonical
+ * rule (app/rankings/community/page.tsx): the bare path is the FIRST published
+ * format in display order, and every other published format is its own
+ * ?format=slug page. A format that has not published is noindex on the page,
+ * so it is not listed, and with nothing published nothing is listed.
+ *
+ * activeSlugs must be in display order, the order the page reads them in.
+ */
+export function communityRankingPaths(
+  activeSlugs: readonly string[],
+  publishedSlugs: readonly string[],
+): string[] {
+  const published = new Set(publishedSlugs);
+  const ordered = activeSlugs.filter((slug) => published.has(slug));
+  if (ordered.length === 0) return [];
+  return [
+    "/rankings/community",
+    ...ordered.slice(1).map((slug) => `/rankings/community?format=${slug}`),
+  ];
+}
 
 /** Newest of a set of timestamps, or undefined when there is nothing to go on. */
 function newest(values: Array<string | null | undefined>): Date | undefined {
@@ -278,8 +303,12 @@ export async function idpPlayerSlugs(supabase: Admin): Promise<string[]> {
  * their own file means a crawl budget spent on 800 player profiles cannot bury them.
  */
 async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
-  const [{ data: rankingFormats }, { data: latestRanking }, { data: newestRelay }] =
-    await Promise.all([
+  const [
+    { data: rankingFormats },
+    { data: latestRanking },
+    { data: newestRelay },
+    { data: communityFormats },
+  ] = await Promise.all([
       supabase
         .from("format_configs")
         .select("slug")
@@ -299,6 +328,12 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
         .eq("status", "published")
         .order("source_posted_at", { ascending: false })
         .limit(1),
+      // Which formats have a published community board. One row per format at
+      // most, so no paging.
+      supabase
+        .from("community_ranking_formats")
+        .select("published, format_configs!inner(slug)")
+        .eq("published", true),
     ]);
 
   // The same filter hasPublishedEditions() counts, so the file and the page
@@ -387,6 +422,21 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
       for (const week of boardWeeks(clock.currentWeek)) {
         urls.push({ loc: `${SITE.url}${weekPath(week)}`, priority: 0.7 });
       }
+    }
+  }
+
+  // Community rankings: listed only once a format has published, because the
+  // page is noindex until then (rule 1).
+  {
+    const publishedSlugs = ((communityFormats ?? []) as unknown as Array<{
+      format_configs: { slug: string } | Array<{ slug: string }> | null;
+    }>).flatMap((row) => {
+      const embed = Array.isArray(row.format_configs) ? row.format_configs[0] : row.format_configs;
+      return embed?.slug ? [embed.slug] : [];
+    });
+    const activeSlugs = (rankingFormats ?? []).map((f) => f.slug);
+    for (const path of communityRankingPaths(activeSlugs, publishedSlugs)) {
+      urls.push({ loc: `${SITE.url}${path}`, priority: 0.4 });
     }
   }
 

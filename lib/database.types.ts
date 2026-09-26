@@ -1217,6 +1217,101 @@ export type Database = {
           },
         ];
       };
+      community_ranking_formats: {
+        Row: {
+          built_at: string;
+          eligible_accounts: number;
+          eligible_boards: number;
+          format_config_id: string;
+          groups: string[];
+          players_listed: number;
+          previous_built_at: string | null;
+          published: boolean;
+        };
+        Insert: {
+          built_at?: string;
+          eligible_accounts?: number;
+          eligible_boards?: number;
+          format_config_id: string;
+          groups?: string[];
+          players_listed?: number;
+          previous_built_at?: string | null;
+          published?: boolean;
+        };
+        Update: {
+          built_at?: string;
+          eligible_accounts?: number;
+          eligible_boards?: number;
+          format_config_id?: string;
+          groups?: string[];
+          players_listed?: number;
+          previous_built_at?: string | null;
+          published?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "community_ranking_formats_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: true;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      community_rankings: {
+        Row: {
+          boards_count: number;
+          built_at: string;
+          format_config_id: string;
+          group_key: string;
+          overall_rank: number;
+          player_id: string;
+          position: string;
+          position_rank: number;
+          previous_rank: number | null;
+          strength: number;
+        };
+        Insert: {
+          boards_count: number;
+          built_at?: string;
+          format_config_id: string;
+          group_key?: string;
+          overall_rank: number;
+          player_id: string;
+          position: string;
+          position_rank: number;
+          previous_rank?: number | null;
+          strength: number;
+        };
+        Update: {
+          boards_count?: number;
+          built_at?: string;
+          format_config_id?: string;
+          group_key?: string;
+          overall_rank?: number;
+          player_id?: string;
+          position?: string;
+          position_rank?: number;
+          previous_rank?: number | null;
+          strength?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "community_rankings_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "community_rankings_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       cron_runs: {
         Row: {
           created_at: string;
@@ -5373,6 +5468,136 @@ export type Database = {
           },
         ];
       };
+      ranking_builder_runs: {
+        Row: {
+          answer_count: number;
+          answers: Json;
+          board_id: string;
+          checkpoint_count: number;
+          created_at: string;
+          id: string;
+          setup: Json;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          answer_count?: number;
+          answers?: Json;
+          board_id: string;
+          checkpoint_count?: number;
+          created_at?: string;
+          id?: string;
+          setup: Json;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          answer_count?: number;
+          answers?: Json;
+          board_id?: string;
+          checkpoint_count?: number;
+          created_at?: string;
+          id?: string;
+          setup?: Json;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ranking_builder_runs_board_id_fkey";
+            columns: ["board_id"];
+            isOneToOne: true;
+            referencedRelation: "user_ranking_boards";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ranking_builder_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      ranking_guest_boards: {
+        Row: {
+          actor_key: string | null;
+          answer_count: number;
+          created_at: string;
+          format_config_id: string | null;
+          guest_id: string;
+          id: string;
+          includes_defenders: boolean;
+          left_off_player_ids: string[];
+          name: string;
+          player_ids: string[];
+          run_answers: Json;
+          run_setup: Json | null;
+          scope: string;
+          seed_source_slug: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          actor_key?: string | null;
+          answer_count?: number;
+          created_at?: string;
+          format_config_id?: string | null;
+          guest_id: string;
+          id?: string;
+          includes_defenders?: boolean;
+          left_off_player_ids?: string[];
+          name?: string;
+          player_ids?: string[];
+          run_answers?: Json;
+          run_setup?: Json | null;
+          scope: string;
+          seed_source_slug?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          actor_key?: string | null;
+          answer_count?: number;
+          created_at?: string;
+          format_config_id?: string | null;
+          guest_id?: string;
+          id?: string;
+          includes_defenders?: boolean;
+          left_off_player_ids?: string[];
+          name?: string;
+          player_ids?: string[];
+          run_answers?: Json;
+          run_setup?: Json | null;
+          scope?: string;
+          seed_source_slug?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ranking_guest_boards_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       rankings: {
         Row: {
           confidence: string | null;
@@ -7098,14 +7323,20 @@ export type Database = {
       };
       user_ranking_boards: {
         Row: {
+          community_opt_out: boolean;
           created_at: string;
+          format_config_id: string | null;
           id: string;
+          includes_defenders: boolean;
+          left_off_player_ids: string[];
           name: string;
           profile_is_primary: boolean;
           profile_sort: number;
           profile_top_n: number | null;
           profile_visible: boolean;
           scope: string;
+          seed_source_slug: string | null;
+          tier_breaks: number[];
           tier_count: number;
           tier_labels: Json;
           tiers_enabled: boolean;
@@ -7113,14 +7344,20 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          community_opt_out?: boolean;
           created_at?: string;
+          format_config_id?: string | null;
           id?: string;
+          includes_defenders?: boolean;
+          left_off_player_ids?: string[];
           name: string;
           profile_is_primary?: boolean;
           profile_sort?: number;
           profile_top_n?: number | null;
           profile_visible?: boolean;
           scope?: string;
+          seed_source_slug?: string | null;
+          tier_breaks?: number[];
           tier_count?: number;
           tier_labels?: Json;
           tiers_enabled?: boolean;
@@ -7128,21 +7365,35 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          community_opt_out?: boolean;
           created_at?: string;
+          format_config_id?: string | null;
           id?: string;
+          includes_defenders?: boolean;
+          left_off_player_ids?: string[];
           name?: string;
           profile_is_primary?: boolean;
           profile_sort?: number;
           profile_top_n?: number | null;
           profile_visible?: boolean;
           scope?: string;
+          seed_source_slug?: string | null;
+          tier_breaks?: number[];
           tier_count?: number;
           tier_labels?: Json;
           tiers_enabled?: boolean;
           updated_at?: string;
           user_id?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "user_ranking_boards_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       vote_matchups: {
         Row: {
@@ -7769,6 +8020,10 @@ export type Database = {
         Args: { p_draft_id: string };
         Returns: undefined;
       };
+      replace_community_rankings: {
+        Args: { p_format: Json; p_format_config_id: string; p_rows: Json };
+        Returns: number;
+      };
       set_default_source: { Args: { target_slug: string }; Returns: undefined };
       show_limit: { Args: never; Returns: number };
       show_trgm: { Args: { "": string }; Returns: string[] };
@@ -7881,12 +8136,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7908,12 +8163,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7932,12 +8188,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7956,12 +8213,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -7974,11 +8232,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

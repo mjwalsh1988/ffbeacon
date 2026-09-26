@@ -635,6 +635,16 @@ function Tiers() {
         does the counting for you during a live draft, including calling out a run while it is
         happening.
       </p>
+      <p className="mt-3 leading-relaxed text-ink-muted">
+        And if you would rather draw the cliffs yourself, you can{" "}
+        <Link
+          href="/tools/custom-rankings"
+          className="font-semibold text-brand-cyan underline underline-offset-2 hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          build your own rankings
+        </Link>{" "}
+        by picking between two players at a time, then mark a tier break wherever you see one.
+      </p>
     </section>
   );
 }

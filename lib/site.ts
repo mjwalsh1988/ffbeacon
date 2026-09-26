@@ -97,6 +97,12 @@ export const TOOLS_NAV: NavChild[] = [
     href: "/tools/on-the-clock",
     description: "Live Sleeper draft helper",
   },
+  {
+    // The job in the label, the brand in the hint, the Trade Calculator split.
+    label: "Rankings Builder",
+    href: "/tools/custom-rankings",
+    description: "Beacon Ranker: rank players two at a time",
+  },
 ];
 
 /** Every game on the site, in display order. Single source of truth shared
@@ -179,6 +185,23 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     href: "/tools/on-the-clock",
     description: "Live Sleeper draft helper",
     keywords: ["draft", "sleeper", "board", "pick", "live"],
+  },
+  {
+    label: "Rankings Builder (Beacon Ranker)",
+    href: "/tools/custom-rankings",
+    description: "Build your own rankings two players at a time",
+    keywords: [
+      "custom rankings",
+      "rankings builder",
+      "tier list",
+      "cheat sheet",
+      "draft board",
+      "rank players",
+      "make your own rankings",
+      "my rankings",
+      "idp rankings",
+      "beacon ranker",
+    ],
   },
   {
     label: "Sleeper League Pulse",

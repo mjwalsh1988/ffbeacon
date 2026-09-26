@@ -140,6 +140,26 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/waiver-wire",
     badge: "Waiver Wire",
   },
+  "custom-rankings": {
+    eyebrow: "Custom fantasy football rankings",
+    headlineTop: "Build your own",
+    headlineBottom: "rankings, two at a time",
+    subhead:
+      "Pick between two players at a time and your board builds itself. Start from our rankings, draw tiers, and see where you disagree.",
+    facts: ["Free", "Tiers and IDP", "Share link"],
+    path: "/tools/custom-rankings",
+    badge: "Beacon Ranker",
+  },
+  "community-rankings": {
+    eyebrow: "Community fantasy football rankings",
+    headlineTop: "Everyone's boards,",
+    headlineBottom: "merged into one",
+    subhead:
+      "Every saved Beacon Ranker board in a format, combined head to head into one ranking. No single board is ever shown.",
+    facts: ["Free", "Every format", "Rebuilt nightly"],
+    path: "/rankings/community",
+    badge: "Community Rankings",
+  },
   "free-agent-finder": {
     eyebrow: "Free agent finder",
     headlineTop: "Is he free in",

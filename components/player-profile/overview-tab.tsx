@@ -14,7 +14,11 @@
  * Async server component.
  */
 
+import Link from "next/link";
 import { PageBody } from "@/components/app-shell/page-body";
+import { loadRankerSiteStats } from "@/lib/ranking-boards/community-state";
+import { loadCommunityRankForPlayer } from "@/lib/ranking-boards/community-page-data";
+import { communityRankLine } from "@/lib/ranking-boards/community-view";
 import { QuickNews } from "@/components/player-profile/quick-news";
 import { InjuryStatus } from "@/components/player-profile/injury-status";
 import { PlayerBioOverview } from "@/components/player-profile/player-bio-overview";
@@ -71,6 +75,34 @@ async function loadPositionRank(
   return data?.position_rank ?? null;
 }
 
+const PROFILE_LINK =
+  "inline-flex min-h-11 items-center font-semibold text-ink underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+
+/**
+ * The player's community rank in the profile's resolved format (Beacon Ranker
+ * plan 4.1). Null unless that format's community board has PUBLISHED and he is
+ * listed on it: a link that promises data stays hidden below the threshold.
+ * The published list is a ten-minute cached read shared site-wide, and the row
+ * is one primary-key lookup, both inside the overview's single wave.
+ */
+async function loadCommunityRank(
+  playerId: string,
+  formatSlug: string,
+  formatConfigId: string | null,
+): Promise<{ overallRank: number; boardsCount: number } | null> {
+  if (!formatConfigId) return null;
+  try {
+    const [stats, row] = await Promise.all([
+      loadRankerSiteStats(),
+      loadCommunityRankForPlayer(formatConfigId, playerId),
+    ]);
+    if (!stats.publishedFormatSlugs.includes(formatSlug)) return null;
+    return row;
+  } catch {
+    return null;
+  }
+}
+
 export async function OverviewTab({
   player,
   sleeperId,
@@ -97,7 +129,17 @@ export async function OverviewTab({
   const projectionSource = await resolveProfileProjectionSourceCached();
   const supabase = await createClient();
 
-  const [valueSeries, trends, latestValue, trades, article, depthChart, projections, positionRank] =
+  const [
+    valueSeries,
+    trends,
+    latestValue,
+    trades,
+    article,
+    depthChart,
+    projections,
+    positionRank,
+    communityRank,
+  ] =
     await Promise.all([
       loadValueSeriesCached(player.id, context.formatConfigId, context.valueSourceSlug, 30),
       loadTrendsCached(player.id, context.formatConfigId, context.valueSourceSlug),
@@ -107,6 +149,7 @@ export async function OverviewTab({
       loadDepthChartCached(player),
       loadWeeklyProjectionsCached(player.id, projectionSource),
       loadPositionRank(supabase, player.id, context.formatConfigId, context.rankingsSourceSlug),
+      loadCommunityRank(player.id, context.formatSlug, context.formatConfigId),
     ]);
 
   const scoringLabel =
@@ -138,8 +181,23 @@ export async function OverviewTab({
   return (
     <PageBody>
       {summary && (
-        <p className="mb-6 text-sm leading-relaxed text-ink-muted">{summary}</p>
+        <p className="mb-3 text-sm leading-relaxed text-ink-muted">{summary}</p>
       )}
+      {/* Beside the rank figure above: where Beacon Ranker users put him (only
+          once his format's community board has published), and the builder. */}
+      <p className="mb-6 flex flex-wrap items-center gap-x-4 text-sm">
+        {communityRank && (
+          <Link
+            href={`/rankings/community?format=${context.formatSlug}`}
+            className={PROFILE_LINK}
+          >
+            {communityRankLine(communityRank.overallRank, communityRank.boardsCount)}
+          </Link>
+        )}
+        <Link href="/tools/custom-rankings" className={PROFILE_LINK}>
+          Rank him yourself
+        </Link>
+      </p>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-6">
           <QuickNews article={article} playerName={playerName} />

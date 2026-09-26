@@ -12,8 +12,8 @@ export const metadata: Metadata = {
     "What FF Beacon collects, why, who we share it with, what happens when you donate, and how to delete it.",
 };
 
-const EFFECTIVE_DATE = "September 18, 2026";
-const EFFECTIVE_DATE_ISO = "2026-09-18";
+const EFFECTIVE_DATE = "September 26, 2026";
+const EFFECTIVE_DATE_ISO = "2026-09-26";
 const OPERATOR = SITE.author.legalName;
 const CONTACT = SITE.legalContactEmail;
 
@@ -153,6 +153,19 @@ export default function PrivacyPage() {
               to other members of the same league inside our product. Note that entering
               someone else&apos;s Sleeper username in a tool causes us to fetch their
               public league data too; only do that where it is appropriate.
+            </p>
+
+            <h3 className="mt-4 text-base font-semibold text-ink">
+              Ranking boards
+            </h3>
+            <p className="mt-2">
+              Ranking boards saved to an account with Beacon Ranker are combined each night into
+              community rankings for their format. Those rankings are an aggregate: the
+              community page shows the merged order and how many boards ranked each
+              player, and never shows an individual board, a name, or an account. A
+              board can be left out by turning off its &quot;Include in community
+              rankings&quot; switch. Boards built without an account are deleted within
+              48 hours of their last change.
             </p>
 
             <h3 className="mt-4 text-base font-semibold text-ink">

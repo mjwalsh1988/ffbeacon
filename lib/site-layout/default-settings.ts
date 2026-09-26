@@ -219,6 +219,7 @@ const IN_SEASON_TOOL_ORDER: ToolHref[] = [
   "/tools/faab",
   "/tools/manager-pulse",
   "/tools/on-the-clock",
+  "/tools/custom-rankings",
 ];
 
 export const DEFAULT_SITE_LAYOUT: SiteLayoutSettings = {
@@ -237,6 +238,7 @@ export const DEFAULT_SITE_LAYOUT: SiteLayoutSettings = {
       { href: "/tools/faab", width: 1, badge: null, highlight: null },
       { href: "/tools/manager-pulse", width: 1, badge: "new-tool", highlight: "cyan" },
       { href: "/tools/on-the-clock", width: 1, badge: null, highlight: null },
+      { href: "/tools/custom-rankings", width: 1, badge: "new-tool", highlight: "cyan" },
     ],
   },
 };

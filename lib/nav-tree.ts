@@ -47,6 +47,7 @@ const TOOL_ICONS: Record<string, NavIconName> = {
   "/tools/trade-calculator": "scale",
   "/tools/who-should-i-start": "swords",
   "/tools/faab": "calculator",
+  "/tools/custom-rankings": "listChecks",
 };
 
 const GAME_ICONS: Record<string, NavIconName> = {
@@ -382,6 +383,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         href: "/admin/would-you-rather",
         hint: "Trade voting game, pool, and the Discord poll",
         icon: "scale",
+      },
+      {
+        id: "/admin/beacon-ranker",
+        label: "Beacon Ranker",
+        href: "/admin/beacon-ranker",
+        hint: "Rankings builder limits, guest caps, and the community merge",
+        icon: "listChecks",
       },
       {
         id: "/admin/league-relay",

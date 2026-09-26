@@ -16457,3 +16457,163 @@ FU-12 | completed | CLAUDE.md backfill wording (owner approved 2026-09-25)
      | files: CLAUDE.md
      | notes: backfill:all no longer claims to run every backfill, and a new ABSOLUTE RULE: a backfill for a source that also has a nightly sync writes only the days the sync missed.
      | verified: yes
+
+# Beacon Ranker, the head-to-head rankings board builder (BR-T##). Plan: docs/ranking-boards/board-builder-plan.md
+
+Started 2026-09-26. Owner instruction: build the whole plan, then an independent review agent
+(implementation, security, accessibility, speed, SEO), fix what is justified. DO NOT COMMIT OR PUSH.
+Task numbers follow the plan's section 14 build order one to one (BR-T01 is plan step 1).
+
+Production check before build (2026-09-26): source_registry has ffbeacon is_active=true AND
+is_default=true, so the wizard default and the "vs FF Beacon" comparison both read ffbeacon rows.
+Boards in production: 5, with 1,418 player rows; 1 board has tiers on (49 tiered rows); largest board 584.
+
+BR-T01 | completed | Editor up/down moves announce; TrendChip up colour class defined
+     | files: tailwind.config.ts (signal.positive token), app/my-beacon/rankings/[boardId]/board-editor.tsx
+     | notes: `text-signal-positive` was used by 7 components and never defined, so every rising figure drew in the inherited colour. Added the token (same green as success) rather than renaming each use. Moves now announce the new rank and who was passed (and the new tier when a line was crossed).
+     | verified: pending review (BR-R)
+BR-T02 | completed | Migration 0304: scope widened (DL, LB, DB, defense); includes_defenders, format_config_id, seed_source_slug, community_opt_out, left_off_player_ids on boards
+     | files: supabase/migrations/0304_ranking_boards_builder_columns.sql, lib/database.types.ts
+     | notes: Applied via MCP. DEVIATION FROM PLAN: left-off players are an id array on the board (left_off_player_ids uuid[]), not player rows with a null rank, because every existing reader of user_ranking_board_players (player counts, public Top-N, editor loader) counts and orders those rows. CHECK: includes_defenders only on scope overall. Partial index for the community build (format_config_id, scope). No policy change.
+     | verified: pg_policies unchanged (6 policies on boards); types regenerated and formatted
+BR-T03 | completed | Import writes format_config_id and seed_source_slug
+     | files: app/my-beacon/rankings/actions.ts (replaceBoardFromImport provenance), NEW lib/ranking-boards/provenance.ts, app/my-beacon/rankings/[boardId]/import-from-rankings.tsx
+     | notes: Format and source are validated against the registry (active format; active rankings source that covers the format) before a board stores them. The import records the source that ACTUALLY answered (after any fallback). Import panel says the site-wide source is unchanged; on a defender board it explains that no source ranks defenders.
+     | verified: pending review (BR-R)
+BR-T04 | completed | Editor search pool ranked+idp for defender boards; new scopes in labels and the profile board list
+     | files: lib/ranking-boards.ts (BoardScope, BOARD_POSITIONS, scopePositions, scopeLabel/scopeDescription with includesDefenders), app/api/players/search/route.ts (positions= list), app/my-beacon/rankings/[boardId]/add-player-combobox.tsx, lib/player-search.pool.test.ts (assertion changed on purpose), create-board-form.tsx (defender scopes, IDP checkbox), page.tsx, profile-boards-manager.tsx, components/signal/signal-block.tsx, lib/signal-profile.ts
+     | notes: ELIGIBLE_POSITIONS stays the six offensive positions because lib/player-search.ts reads it as the site's default pool; boards use BOARD_POSITIONS. The editor asks for ranked+idp only when the board can hold a defender.
+     | verified: pending review (BR-R)
+BR-T05 | completed | Migration 0305: tier_breaks added and backfilled (tier, tier_count kept)
+     | files: supabase/migrations/0305_ranking_boards_tier_breaks.sql, lib/database.types.ts
+     | notes: Applied via MCP. The one tiered production board (eb74bbe9) stored rows out of tier order (1,1,4,...,2,...,3,...,4) while the UI showed them grouped, so the backfill first renumbers tiered boards into the order the reader SEES (tier asc, nulls last), then draws a break at each tier change. Result [2,6,27] reproduces tiers 1-4 exactly. Labels are NOT remapped here (deployed code still reads labels by stored tier number); that happens in the drop migration.
+     | verified: production check of the backfilled board; policies unchanged
+BR-T06 | completed | Every reader derives tiers from breaks
+     | files: lib/ranking-boards.ts (tier-break helpers, orderBoardForDisplay/isUntiered/MAX_TIERS removed), NEW lib/ranking-boards.test.ts, app/my-beacon/rankings/actions.ts (saveBoardPlayers takes ids + breaks; saveBoardMeta drops tierCount, adds communityOptOut and formatSlug), lib/signal-profile.ts (no per-row tier; tierBreaks on the public view; whole board paged past 1000), components/signal/board-view.tsx, [boardId]/page.tsx
+     | notes: DEVIATION FROM PLAN: the new code writes ONLY tier_breaks, not both representations. Vercel swaps deploys atomically, so old and new code never run together; writing the old column would only be needed for a mixed fleet. The consequence is on the drop step: see BR-T08. saveBoardPlayers now bumps the board's updated_at, because the community build counts the most recently changed board per (account, format, scope).
+     | verified: pending review (BR-R)
+BR-T07 | completed | Editor tier-break controls
+     | files: app/my-beacon/rankings/[boardId]/board-editor.tsx (rewritten), NEW tier-break-controls.tsx, add-player-combobox.tsx, position-filter-bar.tsx, import-from-rankings.tsx (split out of the old 1,729 line file), NEW components/ranking-boards/tier-break-line.tsx
+     | notes: One "Add tier break after rank" form above the board that names the two players the line would fall between before it is applied; per-row "add a tier line below" button; each line has move up one, move down one, "Move to rank" (states who would sit either side), a drag handle, and remove. Labels move with their tiers when lines are added or removed (shiftLabelsFor* helpers, tested). A line that falls off a shortened board is removed and announced. Tiers render as sections headed by the line (h3) with <ol start> so list numbering matches the rank.
+     | verified: pending review (BR-R)
+BR-T08 | blocked | Migration 0310: drop tier and tier_count (WRITTEN, NOT APPLIED)
+     | files: supabase/migrations/0310_drop_ranking_board_tier_columns.sql
+     | notes: Apply ONLY after the Beacon Ranker code is deployed; production still runs code that reads the columns. Before dropping it re-derives tier_breaks for any board the old code tiered after 0305 (tiers on, breaks empty, per-row tiers present) and remaps tier_labels to the break numbering. After applying, regenerate lib/database.types.ts. Nothing in the new code references either column (grep checked).
+BR-T09 | completed | ranking_builder_settings: migration 0306, defaults, validation, coverage test, /admin/beacon-ranker
+     | files: supabase/migrations/0306_ranking_builder_settings.sql, NEW lib/ranking-boards/default-settings.ts, validate.ts, settings.ts, NEW app/admin/beacon-ranker/page.tsx, actions.ts, beacon-ranker-settings-manager.tsx, settings-coverage.test.ts, lib/nav-tree.ts (admin entry)
+     | notes: Groups: builder (winsBeforePrompt 3, depths 100/24, keep going 25, max depth 600, defender second pass 36, checkpoint 25), guests (caps 48/12, retention 48 h), limits (seed loads 30/h, answers 120/min), community (50/12 floors, 5 boards per player, 25 per format, poolMargin 1, withinBoardShare 0.8, shrinkage 1, agreement window 3, sourceEnabled false). sourceEnabled is shown disabled AND refused by the validator (plan 9.4). Named sourceEnabled (camelCase) to match the rest of the document; the plan wrote source_enabled.
+     | verified: RLS: exactly one policy (service_role ALL), relrowsecurity true, anon refused (grants revoked). Coverage + validation tests pass.
+BR-T10 | completed | Pure comparison engine lib/ranking-boards/builder.ts
+     | files: NEW lib/ranking-boards/builder.ts, builder.test.ts (27 tests)
+     | notes: foldRun(setup, answers) is the single source of state. Answers: prefer, keep, skip, leave, place(rank), continue, extend(by), tiers, tier(yes), tiers_done. Covers: first question, insertion, climbing, three-win prompt (re-offered after each further run of wins; rank-1 winner placed without a prompt), place at rank (only above his spot), depth counts placed players (leave-off pulls the next seed), keep going, guest cap (cannot extend past it), defenders as a second pass, runs on an existing board from the top or rank N (a re-checked player can climb past N), the end-of-run tier pass (skips gaps that already carry a line), undo = pop, validateAnswer refuses a stale pair. boardForFlush keeps original players the run has not reached yet, so a checkpoint never drops them.
+     | verified: tests pass
+BR-T11 | completed | Migration 0307: ranking_builder_runs with RLS
+     | files: supabase/migrations/0307_ranking_builder_runs.sql, lib/database.types.ts
+     | notes: One run per board (unique board_id). answer_count is an optimistic lock for appends; checkpoint_count records the last board flush. Owner-only policies; insert/update also require the board to belong to the caller.
+     | verified: RLS tested in a rolled-back transaction as a real account: own-board insert allowed; another user's board refused; another user_id refused; another account sees 0 rows. anon grants revoked.
+BR-T12 | completed | Migration 0308: ranking_guest_boards, service-role only
+     | files: supabase/migrations/0308_ranking_guest_boards.sql, lib/database.types.ts
+     | notes: DEVIATION FROM PLAN: one table, not two. A guest has one board and at most one run, so the run's setup and log sit on the board row and every answer reads and writes one row. guest_id unique (one board per guest). actor_key is the server-derived salted IP hash.
+     | verified: RLS: only ranking_guest_boards_service_role_all; anon and authenticated grants revoked; an authenticated read was refused in the transaction test.
+BR-T13 | completed | Guest cleanup cron
+     | files: NEW app/api/cron/ranking-guest-cleanup/route.ts, NEW lib/ranking-boards/guest.ts (cookie + deleteExpiredGuestBoards), lib/cron-runs.ts (CronJobName + CRON_JOBS entry), vercel.json (20 * * * *)
+     | notes: verifyCronRequest + recordCronRun. Retention read from settings, so the page's promise and the job agree. Iterates guest rows by updated_at through one index.
+     | verified: pending review (BR-R)
+BR-T14 | completed | Seed list loader lib/ranking-boards/seed.ts
+     | files: NEW lib/ranking-boards/seed.ts
+     | notes: Same query as the import route (season-long rows, resolveSourceForFormat with the rankings data_type), usable by guests, cached an hour per (source, format). Metered by the caller (startRunAction claims ranker-seed per actor BEFORE the read).
+     | verified: pending review (BR-R)
+BR-T15 | completed | Defender seed loader
+     | files: lib/ranking-boards/seed.ts (loadDefenderSeed)
+     | notes: Pool = idpRelevantPlayerIdSet with a team. Projected rest-of-season points via loadAdjustedProjections (defendersOnly, idp123, currentWeek..18; the read resolves its own projection source), then last season's idp123 points from player_positional_finishes (scored from stat lines). The two groups are never interleaved; the list states its basis in words. Cached 6 h.
+     | verified: pending review (BR-R)
+BR-T16 | completed | Card data loader
+     | files: NEW lib/ranking-boards/card.ts, card-text.ts (client-safe), card-text.test.ts
+     | notes: Age from birth_date, team, the last three COMPLETED seasons' positional finishes (a 2026 finish after three weeks would read as a full season), in the format's scoring or idp123 for a defender. Rookie = years_experience 0. Loaded once per run for the whole seed so the page never waits between questions.
+     | verified: tests pass
+BR-T17 | completed | FF Beacon comparison loader with the format fallback
+     | files: NEW lib/ranking-boards/compare.ts (pure) + compare.test.ts, NEW lib/ranking-boards/beacon-comparison.ts, NEW components/ranking-boards/rank-gap-chip.tsx, NEW components/ranking-boards/disagree-figure.tsx
+     | notes: Always FF Beacon (the documented exception to the source sync rule), always today's rank. Position boards compare positional ranks; overall boards compare overall rank against the reader's rank among OFFENSIVE players (defenders on an IDP board would otherwise push everyone down). Half PPR / standard fall back to FF Beacon's nearest format and say which. Defenders: "Not ranked by FF Beacon". Cached an hour per format. The chip draws every figure once, with only the missing words sr-only.
+     | verified: tests pass
+BR-T18 | completed | Answer server action and run lifecycle
+     | files: NEW app/tools/custom-rankings/actions.ts (startRunAction, answerAction, undoAction, stopAction, finishAction, discardRunAction), NEW lib/ranking-boards/run-store.ts, NEW lib/ranking-boards/run-payload.ts, lib/ranking-boards/provenance.ts
+     | notes: Validate, then meter (ranker-seed per hour, ranker-answer per minute, per actor), then work. Every answer is checked against the server's fold, including the pair on screen; appends use the answer_count lock; on refusal the current log is returned so the page resyncs. Account board rows flush every checkpointEvery answers, on stop, on done and on finish (flush keeps not-yet-rechecked players, records left-off players, keeps tier lines at their ranks unless the tier pass drew new ones). Guest board order is written with every answer.
+     | verified: typecheck clean; pending review (BR-R)
+BR-T19 | completed | Wizard
+     | files: NEW app/tools/custom-rankings/wizard.tsx, types.ts
+     | notes: Step rail (Start, Players, Depth, Build) with aria-current and focus moved to each step heading. Source and format are board-local; Format hides formats the source lacks; a source that would change the format shows "(changes format)", an expanded aria-label and a role=tooltip wired by aria-describedby, per the source gating rule. Scope is a radiogroup of native radio tiles with PositionChip, defenders under a Defense divider, IDP checkbox beside Overall. Depth is a segmented radio group with More plus a number field; a guest sees the cap and why. Signed-in readers can run on a saved board (format locked to the board's own), from the top or from rank N.
+     | verified: pending review (BR-R)
+BR-T20 | completed | Comparison screen
+     | files: NEW app/tools/custom-rankings/runner.tsx, comparison-card.tsx, lib/ranking-boards/runner-text.ts (+ test), app/globals.css (ranker-enter / ranker-lift keyframes with reduced-motion blocks), components/manager-pulse/progress-bar.tsx (valueText prop)
+     | notes: Whole card is the button, named by the full sentence (name, position, team, age, finishes); button keyed by side so focus stays after an answer; polite live region states the result and the next pair. Keys 1 and 2 (ignored while typing or in a dialog). Answers fold locally at once and are sent in order through one promise chain; a refusal resyncs to the server's log. Toolbar: Undo, Skip, Leave him off, Put him at, Save and stop. Progress "Player N of M" bound to placed players.
+     | verified: pending review (BR-R)
+BR-T21 | completed | Board-so-far rail and disclosure; shared tier-break line
+     | files: NEW app/tools/custom-rankings/board-so-far.tsx, components/ranking-boards/tier-break-line.tsx
+     | notes: Rail on xl, a details disclosure below. Climbing player outlined purple and the opponent cyan, and each also says so in sr-only words. The same TierBreakLine draws breaks in the builder, the editor and the public board. The FF Beacon chip stays visible on mobile (rows wrap).
+     | verified: pending review (BR-R)
+BR-T22 | completed | Three-win prompt dialog
+     | files: NEW app/tools/custom-rankings/streak-prompt.tsx, place-at-rank.tsx
+     | notes: SlideUpDialog desktopPlacement center, heading names the streak, two large choices; Place opens the rank field whose description names who is at that rank now. Escape and close mean keep comparing, so the run is never left without an open question.
+     | verified: pending review (BR-R)
+BR-T23 | completed | Finished-run summary
+     | files: NEW app/tools/custom-rankings/finished-summary.tsx, components/ranking-boards/disagree-figure.tsx
+     | notes: StatReadout tiles (players, questions, tiers, share within the agreement window of FF Beacon), the Where you disagree most DivergingBars figure in ChartFigure with its table, CTAs Keep going, Draw tiers, Save and share (guest: Sign up to keep this board), and See how everyone else ranks them only for a published format.
+     | verified: pending review (BR-R)
+BR-T24 | completed | Tier pass
+     | files: finished-summary.tsx (TierPass), builder.ts
+     | notes: One question per gap, Yes draws a line, End the tier pass whenever; finishing saves the board with the lines (finishAction) and closes the run. Guests do not get the tier pass.
+     | verified: pending review (BR-R)
+BR-T25 | completed | Editor integration (Build by comparing)
+     | files: app/my-beacon/rankings/[boardId]/page.tsx
+     | notes: DEVIATION: "Build by comparing" opens the tool at /tools/custom-rankings?board=<id>, which preselects that board and resumes its run if one is open. The builder is its own component tree either way; mounting it inside the 700 line editor client bundle would have shipped the whole builder to every editor visit.
+     | verified: pending review (BR-R)
+BR-T26 | completed | Public tool page /tools/custom-rankings and registrations
+     | files: NEW app/tools/custom-rankings/page.tsx, ranker-app.tsx, written-sections.tsx, lib/ranking-boards/community-state.ts; lib/site.ts (TOOLS_NAV label Rankings Builder, SEARCHABLE_TOOLS), lib/tools-catalog.ts (ToolHref + entry, which feeds /tools and llms.txt), lib/site-layout/default-settings.ts (+ new-tool homepage card), lib/site-layout/parse.test.ts (dated line), lib/nav-tree.ts, lib/bookmarks/icon.ts, lib/breadcrumbs.ts, lib/sitemap/sections.ts, app/tools/page.tsx, app/page.tsx, app/api/og/page/[key]/route.tsx (custom-rankings and community-rankings cards)
+     | notes: Title "Custom Fantasy Football Rankings Builder | Beacon Ranker by FF Beacon" (absolute, so the template does not add a second suffix), H1 "Build your own fantasy football rankings", WebApplication JSON-LD, ToolExplainer with FAQ JSON-LD, masthead stats cached 10 minutes. The new tool is last in both tool orders, which is where a stored layout row that predates it puts it.
+     | verified: site-layout tests pass; pending review (BR-R)
+BR-T27 | completed | Guest caps enforced in the answer action
+     | notes: The cap lives in the server-written setup; the fold stops placing at the cap and refuses an extend past it, and answerAction folds before appending. A request cannot change it.
+     | verified: builder tests (guest cap cases)
+BR-T28 | completed | Guest cap prompt, next= pass-through, ?claim=1 hand-off
+     | files: NEW app/tools/custom-rankings/guest-cap-dialog.tsx, actions.ts (claimGuestBoardAction), ranker-app.tsx
+     | notes: The login form already threads a validated next through password, OAuth, magic link and sign-up confirmation, so no auth change was needed; every builder sign-in link carries next=/tools/custom-rankings?claim=1. The claim copies the guest board (and an unfinished run, cap lifted, tiers allowed) into the account, deletes the guest row and cookie; a cookie with nothing behind it is a no-op.
+     | verified: pending review (BR-R)
+BR-T29 | completed | vs FF Beacon on the editor, the public board, and the rewritten board OG route
+     | files: board-editor.tsx, components/signal/board-view.tsx, app/api/og/board/[handle]/[boardId]/route.tsx (rewritten by a sub-agent on lib/og/assets.ts)
+     | notes: Public board: format and agreement chips, tier lines as h2 headings, a chip per row, the disagreement figure, and "Build your own fantasy football rankings like this one". OG: scope and format, top five with photos and tier labels, agreement share. The public page stays cacheable: no cookie reads; a board without a format compares in the site default and says so.
+     | verified: pending review (BR-R)
+BR-T30 | completed | Internal links into the builder
+     | files: app/rankings/page.tsx (masthead action "Disagree with these? Build your own rankings"), components/signal/board-view.tsx (every public board), components/player-profile/overview-tab.tsx ("Rank him yourself"), app/my-beacon/rankings/page.tsx (intro and empty state), app/page.tsx (home card), app/guides/fantasy-football-draft-guide/page.tsx (one in-text link), TOOLS_NAV / SEARCHABLE_TOOLS / tools catalog (tools index, search, footer, llms.txt)
+     | verified: pending review (BR-R)
+BR-T31 | completed | Community pair builder and strength model (sub-agent)
+     | files: NEW lib/community-rankings/statements.ts, fit.ts, rank.ts, eligibility.ts + 4 test files (23 tests)
+     | notes: Equal weight per board, within/pool split, left-off as within, pool cut at depth x (1 + poolMargin), aggregated counts, MM Bradley-Terry with shrinkage against a virtual average player, union-find connectivity with separate fits per group (offense/defense), minBoardsPerPlayer filter, one board per account per (format, scope), deterministic.
+     | verified: tests pass
+BR-T32 | completed | Community tables and nightly build
+     | files: supabase/migrations/0309_community_rankings.sql (applied), NEW lib/community-rankings/build.ts, app/api/cron/community-rankings/route.ts, scripts/calculate-community-rankings.ts, package.json (calculate:community-rankings), lib/cron-runs.ts + vercel.json (45 10 * * *), lib/ranking-boards/seed.ts (defender read callable uncached for the script)
+     | notes: Iterates formats. Replaces each format's rows, keeps previous_rank, writes community_ranking_formats even for a format with no boards.
+     | verified: RLS: anon can SELECT, anon INSERT refused, service_role ALL. Not run against production.
+BR-T33 | completed | Board side panel: community opt-out, eligibility count, format prompt
+     | files: NEW app/my-beacon/rankings/[boardId]/community-panel.tsx, board-editor.tsx, page.tsx
+     | notes: A switch (role=switch) with a one-line hint, live "N more players and this board counts", and a one-time format select for boards without a format. Saves through saveBoardMeta (communityOptOut, formatSlug validated against active formats).
+     | verified: pending review (BR-R)
+BR-T34 | completed | Privacy policy line on community rankings
+     | files: app/privacy/page.tsx ("Ranking boards" paragraph; effective date September 26, 2026)
+     | notes: Boards saved to an account are combined as an aggregate; no board, name or account is shown; the per-board switch leaves one out; guest boards are deleted within 48 hours.
+     | verified: pending review (BR-R)
+BR-T35 | completed | Community page /rankings/community (sub-agent)
+     | files: NEW app/rankings/community/page.tsx, lib/ranking-boards/community-view.ts (+ test), lib/ranking-boards/community-page-data.ts, lib/rankings-format-redirect.ts (+ test: /rankings/community is excepted from the ?format= redirect to board pages)
+     | notes: Format and position filters are real links with aria-current; one table per group with a sentence when groups were fitted apart; movement in colour and words; strength bar decorative with the number as text; below threshold: "N of M boards needed so far", progress bar, "Build yours to help", no player rows, noindex. ItemList JSON-LD, share card. No loading.tsx, so noindex is set before anything streams.
+     | verified: tsc, lint, tests, next build pass (agent)
+BR-T36 | completed | Links into the community page and vs community
+     | files: app/rankings/page.tsx, components/player-profile/overview-tab.tsx ("Community rank: 14th, on 38 boards" inside the existing Promise.all), lib/sitemap/sections.ts, NEW lib/ranking-boards/community-comparison.ts, lib/ranking-boards/compare.ts (ranksDefenders), board-editor page and board-view (second chip column)
+     | notes: Every link and the vs community column appear only for published formats. The community ranks defenders in their own group, so a defender is compared by his rank among the board's defenders.
+     | verified: pending review (BR-R)
+BR-T37 | completed | CLAUDE.md section for Beacon Ranker
+     | files: CLAUDE.md (new section before Would You Rather)
+     | notes: States the answer-log rule, the vs FF Beacon exception to the source sync rule, board-local wizard choices, tier lines, the defender seed, guests, the community merge and the settings row. OWNER: this is new CLAUDE.md wording; say if any line should change.
+     | verified: n/a
+BR-R | completed | Independent review (implementation, security, accessibility, speed, SEO) and fixes
+     | files: runner.tsx, actions.ts, wizard.tsx, page.tsx, default-settings.ts, NEW supabase/migrations/0311_community_rankings_atomic_replace.sql (applied), NEW supabase/migrations/0312_ranking_builder_runs_server_writes.sql (applied), lib/community-rankings/build.ts + eligibility.ts, lib/ranking-boards/community-view.ts + community-page-data.ts, app/rankings/community/page.tsx, lib/sitemap/sections.ts, scripts/calculate-community-rankings.ts
+     | notes: One read-only reviewer; no blockers. FIXED: (1) runner call chain could stall for good after one thrown action: every chain writer now catches; (2) a failed finish re-armed itself in a loop: now a Try saving again button; (3) WCAG 2.1.4: number-key shortcuts now have a visible switch, remembered in localStorage; (4) community rebuild made atomic through replace_community_rankings (one transaction, service_role only); (5) one settings read per answer; (6) answersPerMinute default 120 to 300; (7) claim deletes the guest row first so two tabs cannot both claim; (8) unpublished formats keep no rows (no bypass of the threshold through the API); (9) publishing counts distinct PEOPLE (eligible_accounts), not boards; (10) browser can no longer insert or update runs (0312), the server writes after its own ownership check, and setup is capped at 256 KB; (11) guest lost-lock now resyncs; (12) undo is metered; (13) undo behind the last checkpoint flushes the board; (14) disabled sources say why; (16) page loads a named board's run in the same wave; (17) sitemap lists /rankings/community only once a format is published, plus ?format= for other published formats; (18) no canonical on a noindex community page; (19) wizard step list is no longer a nav landmark. NOT FIXED, stated: (15) no per-account board limit (pre-existing; seed loads are rate limited); a full answer-log rewrite per click was kept (a 600 player run's log is about 10 KB); possible two-tab overwrite between an editor save and a builder checkpoint on the same board (no lock, same as the editor alone today). The reviewer did not audit the editor rewrite, the OG route, the admin panel or card payload size line by line.
+     | verified: npm run typecheck clean; npm run lint 0 errors 0 warnings; vitest 449 files 6,457 tests pass; npm run build succeeds

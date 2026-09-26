@@ -313,7 +313,7 @@ function FeaturedRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{board.name}</p>
           <p className="truncate text-xs text-ink-subtle">
-            {scopeLabel(board.scope)} board, {board.playerCount} player
+            {scopeLabel(board.scope, board.includesDefenders)} board, {board.playerCount} player
             {board.playerCount === 1 ? "" : "s"}
           </p>
         </div>
@@ -417,7 +417,7 @@ function HiddenRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">{board.name}</p>
         <p className="truncate text-xs text-ink-subtle">
-          {scopeLabel(board.scope)} board, {board.playerCount} player
+          {scopeLabel(board.scope, board.includesDefenders)} board, {board.playerCount} player
           {board.playerCount === 1 ? "" : "s"}
         </p>
       </div>

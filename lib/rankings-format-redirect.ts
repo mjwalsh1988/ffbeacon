@@ -50,12 +50,20 @@ const FORMAT_SLUG_SHAPE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_FORMAT_SLUG_LENGTH = 64;
 /** /rankings or /rankings/<one segment>. Deeper paths are not rankings boards. */
 const RANKINGS_BOARD_PATH = /^\/rankings(?:\/[^/]+)?$/;
+/**
+ * Literal pages under /rankings that are not format boards. The community page
+ * (app/rankings/community) takes its format FROM `?format=`, one page serving
+ * every format, so redirecting it to /rankings/<slug> would make it unreachable
+ * for any format but the default.
+ */
+const NON_BOARD_RANKINGS_PATHS = new Set(["/rankings/community"]);
 
 export function rankingsFormatRedirect(
   request: NextRequest,
 ): NextResponse | null {
   const { pathname, searchParams } = request.nextUrl;
   if (!RANKINGS_BOARD_PATH.test(pathname)) return null;
+  if (NON_BOARD_RANKINGS_PATHS.has(pathname)) return null;
 
   const raw = searchParams.get("format");
   if (raw === null) return null;

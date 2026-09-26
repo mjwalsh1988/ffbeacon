@@ -66,6 +66,10 @@ const config: Config = {
         },
         signal: {
           success: "#10B981",
+          // "Up" on a trend, a rank gap or a value change. Seven components
+          // used this class before it existed, so every rising figure drew in
+          // the inherited text colour. Same green as success on purpose.
+          positive: "#10B981",
           warning: "#F59E0B",
           danger: "#EF4444",
           // The SOLID fill for a destructive button, and the only place it is

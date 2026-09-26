@@ -55,6 +55,7 @@
     "calculate:power-pulse": "tsx --env-file=.env.local scripts/calculate-league-power-pulse.ts",
     "calculate:positional-war": "tsx --env-file=.env.local scripts/calculate-positional-war.ts",
     "calculate:manager-ledger": "tsx --env-file=.env.local scripts/calculate-manager-ledger.ts",
+    "calculate:community-rankings": "tsx --conditions=react-server --env-file=.env.local scripts/calculate-community-rankings.ts",
     "measure:manager-pulse": "tsx --env-file=.env.local scripts/measure-manager-pulse.ts",
     "measure:bundle": "tsx scripts/measure-bundle.ts",
     "calculate:defense-splits": "tsx --env-file=.env.local scripts/calculate-defense-splits.ts",

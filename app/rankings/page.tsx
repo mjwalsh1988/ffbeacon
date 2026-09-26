@@ -10,6 +10,7 @@ import { formatPhrase, type RankingFormat } from "@/lib/rankings-formats";
 import { rankingsBoardQuery, wantsRankingsHub } from "@/lib/rankings-hub";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { loadRankerSiteStats } from "@/lib/ranking-boards/community-state";
 
 /**
  * /rankings, the hub.
@@ -81,12 +82,16 @@ export default async function RankingsPage({
   const params = await searchParams;
   const supabase = await createClient();
 
-  const [formatResolution, activeFormats] = await Promise.all([
+  const [formatResolution, activeFormats, rankerStats] = await Promise.all([
     // No URL argument: a ?format= never gets here (see above), and the question
     // is only whether the reader has a format saved.
     resolveFormatSlug(supabase, undefined),
     getActiveFormats(supabase),
+    // Cached ten minutes. Decides whether the community link shows at all: a
+    // link that promises rankings stays hidden until a format has published.
+    loadRankerSiteStats().catch(() => null),
   ]);
+  const communityPublished = (rankerStats?.publishedFormatSlugs.length ?? 0) > 0;
   const formats = activeFormats as unknown as RankingFormat[];
 
   const hasSavedFormat =
@@ -109,12 +114,32 @@ export default async function RankingsPage({
           eyebrow="Rankings"
           title="Fantasy football player rankings for every format."
           description="Pick your league's format to see every player ranked for its scoring, with the seven-day move beside each one. Every format has its own board, rebuilt nightly."
+          actions={
+            <Link
+              href="/tools/custom-rankings"
+              className="inline-flex min-h-11 items-center rounded-full border border-brand-purple/50 bg-brand-purple/10 px-4 text-sm font-semibold text-ink hover:bg-brand-purple/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Disagree with these? Build your own rankings
+            </Link>
+          }
         />
         <FormatDirectory
           formats={formats}
           currentSlug={savedFormat?.slug ?? null}
           linkQuery={boardQuery}
         />
+        {communityPublished ? (
+          <p className="mt-6 text-sm text-ink-muted">
+            Or see how Beacon Ranker users rank them:{" "}
+            <Link
+              href="/rankings/community"
+              className="font-semibold text-ink underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Community fantasy football rankings
+            </Link>
+            .
+          </p>
+        ) : null}
         <ChoosingAFormat />
       </PageBody>
     </main>

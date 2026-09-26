@@ -24,9 +24,12 @@ import { IDP_POSITIONS } from "@/lib/site";
  * positions (or a single position when `position` is one of QB/RB/WR/TE/K/DEF).
  *
  * `pool=ranked+idp` adds defenders who pass the IDP relevance gate (plan R-15).
- * Only the Free Agent Finder sends it: a defender can be a free agent, but My
- * Rankings is a board of offensive values and stays on the default pool. Any
- * other value is read as the default.
+ * The Free Agent Finder sends it, and so does a My Rankings board that holds
+ * defenders (a DL, LB, DB or all-defenders board, or an overall board with
+ * defenders switched on). Any other value is read as the default.
+ *
+ * `positions=DL,LB,DB` narrows to several positions at once (an all-defenders
+ * board); entries outside the pool's allowed set are dropped.
  */
 export async function GET(req: Request) {
   if (req.headers.get("x-requested-with") !== "ff-beacon") {
@@ -61,8 +64,16 @@ export async function GET(req: Request) {
       ? [...ELIGIBLE_POSITIONS, ...IDP_POSITIONS]
       : ELIGIBLE_POSITIONS;
   const positionParam = url.searchParams.get("position");
-  const position =
-    positionParam && allowedPositions.includes(positionParam) ? positionParam : null;
+  const listParam = (url.searchParams.get("positions") ?? "")
+    .split(",")
+    .slice(0, 12)
+    .filter((p) => allowedPositions.includes(p));
+  const positions: readonly string[] =
+    positionParam && allowedPositions.includes(positionParam)
+      ? [positionParam]
+      : listParam.length > 0
+        ? listParam
+        : allowedPositions;
 
   const limit = Math.min(
     Math.max(Number.parseInt(url.searchParams.get("limit") ?? "25", 10) || 25, 1),
@@ -74,7 +85,7 @@ export async function GET(req: Request) {
     rows = await searchFantasyPlayers(supabase, {
       query,
       limit,
-      positions: position ? [position] : allowedPositions,
+      positions,
       pool,
     });
   } catch (error) {

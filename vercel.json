@@ -80,6 +80,14 @@
     {
       "path": "/api/cron/league-relay",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/ranking-guest-cleanup",
+      "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/community-rankings",
+      "schedule": "45 10 * * *"
     }
   ]
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Workflow,
   Calculator,
+  ListChecks,
   Scale,
   Swords,
   Timer,
@@ -110,6 +111,7 @@ const TOOL_ICONS: Record<ToolHref, LucideIcon> = {
   "/tools/who-should-i-start": Swords,
   "/tools/trade-calculator": Scale,
   "/tools/faab": Calculator,
+  "/tools/custom-rankings": ListChecks,
 };
 
 const TOOLS: Tool[] = TOOL_CATALOG.map((tool) => ({

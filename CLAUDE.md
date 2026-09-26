@@ -945,6 +945,81 @@ Transactions:
 - Shared row component: `components/transaction-row.tsx`. Trades render the side-by-side analyzer with per-side totals and a verdict. Non-trades render adds / drops / picks / FAAB lists.
 - Trade analyzer lib: `lib/trade-analyzer.ts → analyzeTrade()`. Reads player values from `player_value_trends`; reads pick values from `draft_pick_values` keyed by the resolved pick source (always KTC today).
 
+## Beacon Ranker (custom rankings builder) and community rankings
+
+`/tools/custom-rankings`, nav label "Rankings Builder". A reader builds a
+ranking board by answering one question at a time: which of these two players
+would you rather have? Plan of record: `docs/ranking-boards/board-builder-plan.md`.
+The board it builds is an ordinary `user_ranking_boards` board, edited in My
+Beacon and shared at `/{handle}/rankings/{boardId}`.
+
+ABSOLUTE RULE: a run is an ANSWER LOG folded by ONE pure engine,
+`lib/ranking-boards/builder.ts foldRun`. The server folds the stored log before
+accepting every answer (`validateAnswer`: the pair on screen must be the pair
+the log says is open, a rank must be above the player's spot, a guest cannot
+pass the cap), and the page folds the same log to draw it. Never store or
+accept a state snapshot from the browser. The setup (seed ids, depth, cap) is
+written by the server at run start and never taken from a request afterwards.
+Appends are optimistic on `answer_count`, so two tabs cannot fork a run.
+
+ABSOLUTE RULE: "vs FF Beacon" is ALWAYS against FF Beacon, whatever the reader's
+chosen source and whatever the board was seeded from, and always against
+today's rank (`rankings` keeps no history). This is a DELIBERATE EXCEPTION to
+the Source and Format Sync rule, not a defect: the figure answers "how far are
+you from our rankings", and a column that changed subject with the header
+toggle would answer nothing. The format is the BOARD's own; a board with no
+saved format compares in the reader's format (the site default on a cached
+public page) and says so. Half PPR and standard fall back to FF Beacon's
+nearest format and name it. `lib/ranking-boards/beacon-comparison.ts`.
+
+ABSOLUTE RULE: the wizard's source and format are BOARD-LOCAL. They are written
+to the board (`format_config_id`, `seed_source_slug`) and never to the reader's
+cookie, `user_preferences` or the URL.
+
+ABSOLUTE RULE: a tier is a LINE after a rank (`user_ranking_boards.tier_breaks`),
+never a number on a player. A line stays at its rank when players move; a line
+at or past the last rank is removed and the reader is told. Tier labels are
+keyed by tier number and move with their tiers (`shiftLabelsFor*` in
+`lib/ranking-boards.ts`). Migration 0310 drops the old per-row `tier` and
+`tier_count`; it must be applied only after this code is deployed.
+
+ABSOLUTE RULE: a defender is never seeded from a value source (none prices
+one). His seed order is our projected rest-of-season points under idp123
+through `loadAdjustedProjections`, then last season's idp123 points from
+`player_positional_finishes`; the two are never interleaved, and the page says
+which figure ordered the list. On an overall board with defenders switched on
+they join as a SECOND PASS after the offensive run.
+
+Guests (signed out) can build and nothing else: no tiers, no sharing, no
+community contribution, one board, capped (48 multi-position, 12 one
+position). A guest board lives in `ranking_guest_boards` (service-role only,
+keyed by the httpOnly `ffbeacon.ranker_guest` cookie), is deleted
+`retentionHours` after its last change by `/api/cron/ranking-guest-cleanup`,
+and is carried into the account by `claimGuestBoardAction` when the tool page
+sees `?claim=1` after sign-in. Every sign-in link from the builder carries
+`next=/tools/custom-rankings?claim=1`.
+
+Community rankings: every saved board that counts (not opted out, has a
+format, at least 50 players or 12 at one position, one board per account per
+format and scope, the most recently changed) is merged nightly by
+`/api/cron/community-rankings` into `community_rankings`, one pairwise
+Bradley-Terry fit per format over AGGREGATED counts (`lib/community-rankings/`).
+Each board carries equal total weight; within-board statements and pool
+statements are weighted apart; a left-off player is a judgement, a player past
+the depth is only a pool statement. Groups nobody ranked against each other
+(offense and defense) are fitted and shown apart, never given an invented
+order. The page `/rankings/community` is `noindex` and shows no player rows
+until a format has `minBoardsToPublish` counted boards, and "vs community" and
+the profile's community rank appear only for published formats. No individual
+board, name or account is ever identifiable there. The community board is NOT a
+data source at launch (`sourceEnabled` is refused by the validator); plan 9.4
+lists what enabling it involves.
+
+Every threshold (the three-win prompt, depths, guest caps and lifetime,
+checkpoint interval, rate limits, community floors and merge weights) lives in
+`ranking_builder_settings`, admin-edited at `/admin/beacon-ranker`, with code
+fallbacks in `lib/ranking-boards/default-settings.ts`.
+
 ## Would You Rather (the trade voting game)
 
 `/games/would-you-rather`. A real trade out of a synced Sleeper league, stripped

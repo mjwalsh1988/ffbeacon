@@ -50,6 +50,7 @@ const PREFIX_ICONS: Record<string, NavIconName> = {
   "/players": "user",
   "/rankings": "listOrdered",
   "/tools": "wrench",
+  "/tools/custom-rankings": "listChecks",
   "/tools/faab": "calculator",
   "/tools/league-pulse": "workflow",
   "/tools/manager-pulse": "users",

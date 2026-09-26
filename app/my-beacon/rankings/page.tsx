@@ -25,6 +25,7 @@ type BoardSummary = {
   id: string;
   name: string;
   scope: BoardScope;
+  includesDefenders: boolean;
   tiers_enabled: boolean;
   playerCount: number;
   updated_at: string;
@@ -43,7 +44,7 @@ export default async function MyRankingsPage() {
   const { data } = await supabase
     .from("user_ranking_boards")
     .select(
-      "id, name, scope, tiers_enabled, updated_at, profile_visible, profile_is_primary, profile_sort, profile_top_n, user_ranking_board_players(count)",
+      "id, name, scope, includes_defenders, tiers_enabled, updated_at, profile_visible, profile_is_primary, profile_sort, profile_top_n, user_ranking_board_players(count)",
     )
     .eq("user_id", user!.id)
     .order("created_at", { ascending: true });
@@ -56,6 +57,7 @@ export default async function MyRankingsPage() {
       id: row.id,
       name: row.name,
       scope: isBoardScope(row.scope) ? row.scope : "overall",
+      includesDefenders: row.includes_defenders,
       tiers_enabled: row.tiers_enabled,
       playerCount: countRel?.[0]?.count ?? 0,
       updated_at: row.updated_at,
@@ -70,6 +72,7 @@ export default async function MyRankingsPage() {
     id: board.id,
     name: board.name,
     scope: board.scope,
+    includesDefenders: board.includesDefenders,
     playerCount: board.playerCount,
     profileVisible: board.profileVisible,
     profileIsPrimary: board.profileIsPrimary,
@@ -92,8 +95,15 @@ export default async function MyRankingsPage() {
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
               Build an overall board ranking every active player, or position
               specific boards, or both. Drag players around or use the move
-              buttons, and turn on tiers whenever you want them. These boards
-              are yours alone for now and will power your public profile later.
+              buttons, and draw tier lines whenever you want them. Or skip the
+              dragging and{" "}
+              <Link
+                href="/tools/custom-rankings"
+                className="font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                build your rankings by comparing players two at a time
+              </Link>
+              .
             </p>
           </div>
         </div>
@@ -128,7 +138,15 @@ export default async function MyRankingsPage() {
               </p>
               <p className="mt-1 text-sm leading-relaxed text-ink-muted">
                 Pick &quot;Overall&quot; to rank everyone, or choose a single
-                position to focus on one spot.
+                position to focus on one spot. The quickest way to fill one is
+                the{" "}
+                <Link
+                  href="/tools/custom-rankings"
+                  className="font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  custom rankings builder
+                </Link>
+                , which asks you about two players at a time.
               </p>
             </div>
           </div>
@@ -143,7 +161,7 @@ export default async function MyRankingsPage() {
                   <div className="min-w-0">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
-                        {scopeLabel(board.scope)}
+                        {scopeLabel(board.scope, board.includesDefenders)}
                       </span>
                       {board.profileIsPrimary ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-brand-purple/50 bg-brand-purple/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-purple">
@@ -160,7 +178,7 @@ export default async function MyRankingsPage() {
                       {board.name}
                     </h3>
                     <p className="mt-1 text-xs text-ink-subtle">
-                      {scopeDescription(board.scope)}
+                      {scopeDescription(board.scope, board.includesDefenders)}
                     </p>
                   </div>
                   <DeleteBoardButton boardId={board.id} boardName={board.name} />
@@ -179,7 +197,7 @@ export default async function MyRankingsPage() {
                   {board.tiers_enabled && (
                     <span className="inline-flex items-center gap-1.5 rounded-card border border-line/60 bg-base/60 px-2.5 py-1 text-ink-muted">
                       <Layers aria-hidden="true" className="h-3.5 w-3.5 text-brand-purple" />
-                      Tiers on
+                      Tiers shown
                     </span>
                   )}
                 </dl>

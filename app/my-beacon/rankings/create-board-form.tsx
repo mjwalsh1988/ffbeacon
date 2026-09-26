@@ -10,7 +10,17 @@ import {
   scopeLabel,
   type BoardScope,
 } from "@/lib/ranking-boards";
+import { positionNoun } from "@/lib/site";
 import { createBoard } from "./actions";
+
+/** The option text spells a position out ("Linebackers (LB)") because a
+ * screen reader reads an option's text and nothing else. */
+function scopeOptionLabel(value: BoardScope): string {
+  if (value === "overall") return "Overall (every offensive position)";
+  if (value === "defense") return "All defensive players";
+  const noun = positionNoun(value, "plural");
+  return `${noun[0].toUpperCase()}${noun.slice(1)} (${scopeLabel(value)})`;
+}
 
 /**
  * Create a new ranking board, then navigate straight into its editor. The
@@ -24,6 +34,8 @@ export function CreateBoardForm() {
   const scopeId = useId();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<BoardScope>("overall");
+  const [includesDefenders, setIncludesDefenders] = useState(false);
+  const idpId = useId();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -36,7 +48,7 @@ export function CreateBoardForm() {
     }
     setError(null);
     startTransition(async () => {
-      const result = await createBoard(cleaned, scope);
+      const result = await createBoard(cleaned, scope, scope === "overall" && includesDefenders);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -86,7 +98,7 @@ export function CreateBoardForm() {
           >
             {BOARD_SCOPES.map((value) => (
               <option key={value} value={value}>
-                {value === "overall" ? "Overall (all positions)" : scopeLabel(value)}
+                {scopeOptionLabel(value)}
               </option>
             ))}
           </select>
@@ -101,8 +113,23 @@ export function CreateBoardForm() {
         </button>
       </div>
       <p id={`${scopeId}-desc`} className="mt-2 text-xs text-ink-subtle">
-        {scopeDescription(scope)}
+        {scopeDescription(scope, scope === "overall" && includesDefenders)}
       </p>
+      {scope === "overall" && (
+        <label
+          htmlFor={idpId}
+          className="mt-2 flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ink"
+        >
+          <input
+            id={idpId}
+            type="checkbox"
+            checked={includesDefenders}
+            onChange={(event) => setIncludesDefenders(event.target.checked)}
+            className="h-5 w-5 shrink-0 rounded border-line bg-base text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          />
+          Include defensive players (IDP)
+        </label>
+      )}
       <div aria-live="polite" className="min-h-[1.25rem]">
         {error && (
           <p role="alert" className="mt-2 text-sm text-signal-danger">

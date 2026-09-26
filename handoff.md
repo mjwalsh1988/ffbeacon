@@ -1,5 +1,24 @@
 # Handoff
 
+## NEXT SESSION: START HERE. BEACON RANKER BUILT AND REVIEWED, NOT COMMITTED (2026-09-26)
+
+- Plan: docs/ranking-boards/board-builder-plan.md. Task list: the BR-T## section at
+  the end of progress.md (one task per plan build step). Status of each task is there.
+- Owner instruction: build all of it, then one independent review agent
+  (implementation, security, accessibility, speed, SEO), fix what is justified.
+  DO NOT COMMIT OR PUSH.
+- Done: every task BR-T01 to BR-T37 and the review round BR-R (details in
+  progress.md). Gate passes: typecheck, lint 0/0, 6,457 tests, build.
+- Production already changed: migrations 0304 to 0309, 0311, 0312 applied.
+- AFTER THE DEPLOY IS LIVE: apply 0310 (drops the old tier columns), then
+  regenerate lib/database.types.ts. Then run npm run calculate:community-rankings
+  once, or let the 10:45 UTC cron build it.
+- OWNER to check: the new CLAUDE.md section (BR-T37); deviations listed in
+  progress.md (left-off ids as an array, one guest table, Build by comparing
+  opens the tool on the board, new code writes only tier breaks).
+- DO NOT APPLY the tier-column drop migration (BR-T08) until the new code is
+  deployed: production still runs code that reads user_ranking_board_players.tier.
+
 ## NEXT SESSION: START HERE. IDP BUILD COMPLETE; EVERYTHING UNCOMMITTED (2026-09-25)
 
 - IDP-407 done with three reviewers; FU-01 to FU-12 in progress.md. The owner

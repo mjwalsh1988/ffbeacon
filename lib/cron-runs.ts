@@ -101,6 +101,8 @@ export type CronJobName =
   | "would-you-rather-discord"
   | "rebuild-draft-value"
   | "league-relay"
+  | "ranking-guest-cleanup"
+  | "community-rankings"
   | "cron-health";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
@@ -256,6 +258,20 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "*/15 * * * *",
     description:
       "Resyncs every league an admin marked as a community league, then writes up what changed and posts it to Discord: trades through Signal Check and the trade impact model, waiver claims, a Wednesday matchup preview and a Tuesday recap run. The cadence here is the RESYNC; what actually posts is decided by the message types and Eastern-time windows an admin picked at /admin/league-relay. Off by default, so until somebody turns it on this reads one settings row and returns.",
+  },
+  {
+    name: "ranking-guest-cleanup",
+    label: "Beacon Ranker guest board cleanup",
+    schedule: "20 * * * *",
+    description:
+      "Deletes Beacon Ranker boards built by signed-out readers once they have gone unchanged for the retention time set at /admin/beacon-ranker (48 hours by default), which is the deletion time the tool page promises. Iterates guest rows by age through one index, never leagues or accounts. A signed-in reader's boards are never touched.",
+  },
+  {
+    name: "community-rankings",
+    label: "Community rankings build",
+    schedule: "45 10 * * *",
+    description:
+      "Rebuilds the community rankings from every saved board that counts: one pairwise strength fit per format over aggregated head-to-head counts, written to community_rankings. Runs after the rankings recalc so each board's pool is read from today's seed rankings. Iterates formats, never leagues or users one by one. A format below the published threshold is still built and stored, so the page can say how many more boards it needs.",
   },
   {
     name: "cron-health",

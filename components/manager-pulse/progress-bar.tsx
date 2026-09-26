@@ -80,6 +80,7 @@ export function ProgressBar({
   className,
   ariaLabel = "Report progress",
   ariaLabelledBy,
+  valueText,
 }: {
   done: number;
   failed: number;
@@ -101,6 +102,10 @@ export function ProgressBar({
    *  "N of M leagues read" line beside it). Takes priority over `ariaLabel`
    *  so the name is not a second, differently worded copy of visible text. */
   ariaLabelledBy?: string;
+  /** Replaces the counted text ("31 of 44 leagues read") for a bar that is
+   *  not counting leagues, such as Beacon Ranker's "Player 37 of 100". The
+   *  fill is still bound to done over total. */
+  valueText?: string;
 }) {
   const state = progressState(done, failed, total, processing);
   const percent = state.kind === "determinate" ? Math.round(state.fraction * 100) : null;
@@ -115,7 +120,7 @@ export function ProgressBar({
       // tells assistive tech this is not a countable value yet; setting it to
       // 0 would say the opposite of what is true.
       aria-valuenow={state.kind === "determinate" ? percent! : undefined}
-      aria-valuetext={state.text}
+      aria-valuetext={valueText ?? state.text}
       aria-label={ariaLabelledBy ? undefined : ariaLabel}
       aria-labelledby={ariaLabelledBy}
       className={`relative h-2.5 w-full overflow-hidden rounded-full border border-line bg-surface ${className ?? ""}`}

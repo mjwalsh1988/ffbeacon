@@ -7,12 +7,15 @@ import type { Json } from "@/lib/database.types";
 import {
   BOARD_SCOPES,
   MAX_BOARD_NAME_LENGTH,
-  MAX_TIERS,
+  MAX_BOARD_PLAYERS,
   PROFILE_TOP_N_CHOICES,
+  breaksFromTiers,
   isBoardScope,
+  normalizeTierBreaks,
   type BoardScope,
   type ProfileBoard,
 } from "@/lib/ranking-boards";
+import { resolveBoardProvenance } from "@/lib/ranking-boards/provenance";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 type BoardsResult =
@@ -22,17 +25,9 @@ type BoardsResult =
 const BOARDS_TABLE = "user_ranking_boards";
 const BOARD_PLAYERS_TABLE = "user_ranking_board_players";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Sanity ceiling on how many rows one board-editor save or import can carry.
-// The largest real rankings pull is a few hundred players; this leaves room
-// without letting a forged payload force an unbounded write.
-const MAX_BOARD_PLAYERS = 2000;
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_RE.test(value);
-}
-
-function isValidTier(value: unknown): value is number | null {
-  return value === null || (Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_TIERS);
 }
 
 /**
@@ -67,7 +62,7 @@ async function loadProfileBoards(
   const { data } = await supabase
     .from(BOARDS_TABLE)
     .select(
-      "id, name, scope, profile_visible, profile_is_primary, profile_sort, profile_top_n, user_ranking_board_players(count)",
+      "id, name, scope, includes_defenders, profile_visible, profile_is_primary, profile_sort, profile_top_n, user_ranking_board_players(count)",
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
@@ -80,6 +75,7 @@ async function loadProfileBoards(
       id: row.id,
       name: row.name,
       scope: isBoardScope(row.scope) ? row.scope : "overall",
+      includesDefenders: row.includes_defenders,
       playerCount: countRel?.[0]?.count ?? 0,
       profileVisible: row.profile_visible,
       profileIsPrimary: row.profile_is_primary,
@@ -98,19 +94,19 @@ async function verifyBoardOwner(
   userId: string,
   boardId: string,
 ): Promise<
-  | { ok: true; tiersEnabled: boolean; tierCount: number }
+  | { ok: true; tiersEnabled: boolean; tierBreaks: number[] }
   | { ok: false; error: string }
 > {
   if (!isUuid(boardId)) return { ok: false, error: "Could not find that board." };
   const { data: board } = await supabase
     .from(BOARDS_TABLE)
-    .select("user_id, tiers_enabled, tier_count")
+    .select("user_id, tiers_enabled, tier_breaks")
     .eq("id", boardId)
     .maybeSingle();
   if (!board || board.user_id !== userId) {
     return { ok: false, error: "Could not find that board." };
   }
-  return { ok: true, tiersEnabled: board.tiers_enabled, tierCount: board.tier_count };
+  return { ok: true, tiersEnabled: board.tiers_enabled, tierBreaks: board.tier_breaks ?? [] };
 }
 
 /** Confirms the board exists and belongs to the caller. Returns the caller's
@@ -142,6 +138,7 @@ async function requireOwnedBoard(
 export async function createBoard(
   rawName: string,
   rawScope: string,
+  rawIncludesDefenders = false,
 ): Promise<{ ok: true; boardId: string } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
@@ -158,9 +155,13 @@ export async function createBoard(
     return { ok: false, error: "That is not a valid board scope." };
   }
 
+  // Defenders widen an overall board only; the database refuses the flag on
+  // any other scope, so it is dropped here rather than failing the insert.
+  const includesDefenders = scope === "overall" && rawIncludesDefenders === true;
+
   const { data, error } = await supabase
     .from(BOARDS_TABLE)
-    .insert({ user_id: user.id, name, scope })
+    .insert({ user_id: user.id, name, scope, includes_defenders: includesDefenders })
     .select("id")
     .single();
   if (error || !data) {
@@ -440,17 +441,26 @@ export async function revalidateBoardCache(boardId: string): Promise<void> {
 }
 
 /**
- * Persist the board editor's player list: delete rows removed since the
- * last save, then upsert the rest in display order (rank_position = index +
- * 1, matching what the reader sees). `players` must already be in the order
- * to persist; ownership is re-verified from scratch, never trusted from the
- * client, and every id and tier value is validated before it reaches the
- * database, the owner-only RLS policies are the backstop.
+ * Persist the board editor's player list and its tier breaks together, because
+ * a break means "a line after rank N" and is only meaningful against the list
+ * it was drawn on.
+ *
+ * Deletes rows removed since the last save, then upserts the rest in board
+ * order (rank_position = index + 1, matching what the reader sees). The breaks
+ * are normalised against the saved length, so a line that fell off the end of
+ * a shortened board is dropped rather than stored. Ownership is re-verified
+ * from scratch and every id is validated before it reaches the database; the
+ * owner-only RLS policies are the backstop.
+ *
+ * The board's updated_at moves on every save. The community build counts the
+ * MOST RECENTLY CHANGED board per (account, format, scope), so a reorder has
+ * to count as a change.
  */
 export async function saveBoardPlayers(
   boardId: string,
   removals: string[],
-  players: { playerId: string; tier: number | null }[],
+  playerIds: string[],
+  tierBreaks: number[],
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -461,38 +471,38 @@ export async function saveBoardPlayers(
   const owned = await verifyBoardOwner(supabase, user.id, boardId);
   if (!owned.ok) return owned;
 
-  if (!Array.isArray(removals) || !Array.isArray(players)) {
+  if (!Array.isArray(removals) || !Array.isArray(playerIds) || !Array.isArray(tierBreaks)) {
     return { ok: false, error: "Could not read your board changes." };
   }
-  if (players.length > MAX_BOARD_PLAYERS || removals.length > MAX_BOARD_PLAYERS) {
+  if (playerIds.length > MAX_BOARD_PLAYERS || removals.length > MAX_BOARD_PLAYERS) {
     return { ok: false, error: "That board has too many players to save." };
   }
-  const cleanRemovals = removals.filter(isUuid);
-  if (cleanRemovals.length !== removals.length) {
+  if (!removals.every(isUuid) || !playerIds.every(isUuid)) {
     return { ok: false, error: "Could not read your board changes." };
   }
-  for (const p of players) {
-    if (!isUuid(p?.playerId) || !isValidTier(p?.tier)) {
-      return { ok: false, error: "Could not read your board changes." };
-    }
+  if (new Set(playerIds).size !== playerIds.length) {
+    return { ok: false, error: "Could not read your board changes." };
   }
+  if (tierBreaks.length > 100) {
+    return { ok: false, error: "Could not read your tier breaks." };
+  }
+  const breaks = normalizeTierBreaks(tierBreaks, playerIds.length).breaks;
 
-  if (cleanRemovals.length > 0) {
+  if (removals.length > 0) {
     const { error } = await supabase
       .from(BOARD_PLAYERS_TABLE)
       .delete()
       .eq("board_id", boardId)
-      .in("player_id", cleanRemovals);
+      .in("player_id", removals);
     if (error) return { ok: false, error: "Could not save your changes. Please try again." };
   }
 
-  if (players.length > 0) {
-    const nowIso = new Date().toISOString();
-    const rows = players.map((p, index) => ({
+  const nowIso = new Date().toISOString();
+  if (playerIds.length > 0) {
+    const rows = playerIds.map((playerId, index) => ({
       board_id: boardId,
-      player_id: p.playerId,
+      player_id: playerId,
       rank_position: index + 1,
-      tier: owned.tiersEnabled ? p.tier : null,
       updated_at: nowIso,
     }));
     const { error } = await supabase
@@ -501,13 +511,20 @@ export async function saveBoardPlayers(
     if (error) return { ok: false, error: "Could not save your changes. Please try again." };
   }
 
+  const { error: boardError } = await supabase
+    .from(BOARDS_TABLE)
+    .update({ tier_breaks: breaks, updated_at: nowIso })
+    .eq("id", boardId);
+  if (boardError) return { ok: false, error: "Could not save your changes. Please try again." };
+
   await bustBoardCache(supabase, user.id, boardId);
   return { ok: true };
 }
 
 /**
- * Persist board metadata: name, whether tiers are on, the tier count, and
- * custom tier labels. Every field is optional (the editor debounces and
+ * Persist board metadata: name, whether tiers show, custom tier labels, the
+ * community opt-out, and (for a board made before boards remembered one) the
+ * format it is for. Every field is optional (the editor debounces and
  * coalesces several controls into one patch) and every field present is
  * validated against the same bounds the database enforces, so a bad value
  * fails here with a clear message instead of a raw constraint error.
@@ -517,8 +534,9 @@ export async function saveBoardMeta(
   patch: {
     name?: string;
     tiersEnabled?: boolean;
-    tierCount?: number;
     tierLabels?: Record<string, string>;
+    communityOptOut?: boolean;
+    formatSlug?: string;
   },
 ): Promise<ActionResult> {
   const supabase = await createClient();
@@ -533,8 +551,9 @@ export async function saveBoardMeta(
   const update: {
     name?: string;
     tiers_enabled?: boolean;
-    tier_count?: number;
     tier_labels?: Json;
+    community_opt_out?: boolean;
+    format_config_id?: string;
     updated_at?: string;
   } = {};
 
@@ -548,12 +567,13 @@ export async function saveBoardMeta(
   if (patch.tiersEnabled !== undefined) {
     update.tiers_enabled = Boolean(patch.tiersEnabled);
   }
-  if (patch.tierCount !== undefined) {
-    const tierCount = Number(patch.tierCount);
-    if (!Number.isInteger(tierCount) || tierCount < 0 || tierCount > MAX_TIERS) {
-      return { ok: false, error: "That is not a valid tier count." };
-    }
-    update.tier_count = tierCount;
+  if (patch.communityOptOut !== undefined) {
+    update.community_opt_out = Boolean(patch.communityOptOut);
+  }
+  if (patch.formatSlug !== undefined) {
+    const provenance = await resolveBoardProvenance(supabase, patch.formatSlug, null);
+    if (!provenance) return { ok: false, error: "That is not a format we rank." };
+    update.format_config_id = provenance.format.id;
   }
   if (patch.tierLabels !== undefined) {
     if (
@@ -565,7 +585,7 @@ export async function saveBoardMeta(
     }
     const cleanedLabels: Record<string, string> = {};
     for (const [key, value] of Object.entries(patch.tierLabels)) {
-      if (!/^[0-9]{1,3}$/.test(key) || typeof value !== "string") {
+      if (!/^[0-9]{1,2}$/.test(key) || typeof value !== "string") {
         return { ok: false, error: "Could not read your tier labels." };
       }
       const label = value.trim().slice(0, 40);
@@ -590,33 +610,31 @@ export type ImportedBoardPlayer = {
 };
 
 /**
- * Replace the whole board with an imported rankings list: cancels any
- * pending debounced save on the caller's side (the client does that before
- * calling this), deletes every existing row, then inserts the imported set
- * atomically. When the board has tiers on, the source's published tiers are
- * remapped to contiguous board tiers (1..N) and tier_count/tier_labels are
- * reset to match; the CALLER'S current tiers_enabled/tier_count come from the
- * database, never from the client, since they decide whether remapping
- * happens at all.
+ * Replace the whole board with an imported rankings list: deletes every
+ * existing row, then inserts the imported set. The source's published tiers
+ * become tier BREAKS (a line wherever the source's tier changes between two
+ * neighbours), and the tier labels reset, because a label named for the old
+ * tier 2 would now sit on whatever the source put there.
  *
- * Returns the final persisted order and each player's assigned tier, so the
- * client can rebuild its display list (name/position/etc, which this table
- * never stores) without a second round trip.
+ * The board also records where it came from (plan decision 5): the format the
+ * import was for and the source that actually answered, each checked against
+ * the registry. A board imported without the builder therefore carries a
+ * format and can count toward the community rankings.
+ *
+ * Returns the final order and breaks, so the client can rebuild its display
+ * list (name/position/etc, which this table never stores) without a second
+ * round trip.
  */
 export async function replaceBoardFromImport(
   boardId: string,
   imported: ImportedBoardPlayer[],
+  provenance: { formatSlug: string; sourceSlug: string | null },
 ): Promise<
   | {
       ok: true;
       order: string[];
-      tierByPlayer: Record<string, number | null>;
-      tierCount: number;
-      tierLabels: Record<string, string>;
-      /** True when the import actually carried tier data that got remapped
-       * (tiers were on AND at least one imported player had a tier). The
-       * client uses this to decide whether to overwrite its local tier
-       * count / labels, exactly like the announcement copy below. */
+      tierBreaks: number[];
+      /** True when the source carried tiers that became breaks. */
       importedTiers: boolean;
     }
   | { ok: false; error: string }
@@ -647,48 +665,18 @@ export async function replaceBoardFromImport(
     seen.add(p.playerId);
   }
 
-  // Remap source tiers to contiguous board tiers (1..N) when tiers are on.
-  const tiersEnabled = owned.tiersEnabled;
-  let tierCount = owned.tierCount;
-  const tierLabels: Record<string, string> = {};
-  let importedTiers = false;
-  const tierByPlayer = new Map<string, number | null>();
-  if (tiersEnabled) {
-    const distinct = Array.from(
-      new Set(imported.map((p) => p.tier).filter((t): t is number => t != null)),
-    )
-      .sort((a, b) => a - b)
-      .slice(0, MAX_TIERS);
-    if (distinct.length > 0) {
-      const remap = new Map<number, number>();
-      distinct.forEach((srcTier, i) => remap.set(srcTier, i + 1));
-      imported.forEach((p) =>
-        tierByPlayer.set(p.playerId, p.tier != null ? remap.get(p.tier) ?? null : null),
-      );
-      tierCount = distinct.length;
-      importedTiers = true;
-    } else {
-      imported.forEach((p) => tierByPlayer.set(p.playerId, null));
-    }
+  const resolved = await resolveBoardProvenance(
+    supabase,
+    provenance?.formatSlug,
+    provenance?.sourceSlug ?? null,
+  );
+  if (!resolved) {
+    return { ok: false, error: "Could not read the imported rankings." };
   }
 
-  // Same traversal order as lib/ranking-boards.ts orderBoardForDisplay: tier
-  // 1..tierCount, then everyone else, so the persisted rank_position always
-  // means the same thing the board editor and public Top-N reader expect.
-  const order: string[] = [];
-  if (tiersEnabled) {
-    for (let tier = 1; tier <= tierCount; tier += 1) {
-      imported.forEach((p) => {
-        if (tierByPlayer.get(p.playerId) === tier) order.push(p.playerId);
-      });
-    }
-    imported.forEach((p) => {
-      const t = tierByPlayer.get(p.playerId);
-      if (t == null || t > tierCount) order.push(p.playerId);
-    });
-  } else {
-    imported.forEach((p) => order.push(p.playerId));
-  }
+  const order = imported.map((p) => p.playerId);
+  const hasTiers = imported.some((p) => p.tier !== null);
+  const tierBreaks = hasTiers ? breaksFromTiers(imported.map((p) => p.tier)) : [];
 
   const { error: deleteError } = await supabase
     .from(BOARD_PLAYERS_TABLE)
@@ -698,23 +686,27 @@ export async function replaceBoardFromImport(
     return { ok: false, error: "Could not replace the board. Please try again." };
   }
 
-  if (importedTiers) {
-    const { error: metaError } = await supabase
-      .from(BOARDS_TABLE)
-      .update({ tier_count: tierCount, tier_labels: {}, updated_at: new Date().toISOString() })
-      .eq("id", boardId);
-    if (metaError) {
-      return { ok: false, error: "Could not replace the board. Please try again." };
-    }
+  const nowIso = new Date().toISOString();
+  const { error: metaError } = await supabase
+    .from(BOARDS_TABLE)
+    .update({
+      tier_breaks: tierBreaks,
+      tier_labels: {},
+      format_config_id: resolved.format.id,
+      seed_source_slug: resolved.sourceSlug,
+      left_off_player_ids: [],
+      updated_at: nowIso,
+    })
+    .eq("id", boardId);
+  if (metaError) {
+    return { ok: false, error: "Could not replace the board. Please try again." };
   }
 
   if (order.length > 0) {
-    const nowIso = new Date().toISOString();
     const rows = order.map((playerId, index) => ({
       board_id: boardId,
       player_id: playerId,
       rank_position: index + 1,
-      tier: tiersEnabled ? tierByPlayer.get(playerId) ?? null : null,
       updated_at: nowIso,
     }));
     const { error: insertError } = await supabase.from(BOARD_PLAYERS_TABLE).insert(rows);
@@ -724,14 +716,7 @@ export async function replaceBoardFromImport(
   }
 
   await bustBoardCache(supabase, user.id, boardId);
-  return {
-    ok: true,
-    order,
-    tierByPlayer: Object.fromEntries(tierByPlayer),
-    tierCount,
-    tierLabels,
-    importedTiers,
-  };
+  return { ok: true, order, tierBreaks, importedTiers: tierBreaks.length > 0 };
 }
 
 /**

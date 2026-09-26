@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { idpPlayerSlugs } from "./sections";
+import { communityRankingPaths, idpPlayerSlugs } from "./sections";
 import { bustMemo } from "@/lib/memo-ttl";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -61,5 +61,20 @@ describe("llms-full.txt player paragraph", () => {
     const src = readFileSync(join(process.cwd(), "lib/llms/llms-full-txt.ts"), "utf8");
     expect(src).toContain("has no trade value, because no value source prices defenders");
     expect(src).toContain("snap share");
+  });
+});
+
+describe("communityRankingPaths", () => {
+  it("lists nothing while no format has published, since the page is noindex", () => {
+    expect(communityRankingPaths(["a", "b"], [])).toEqual([]);
+  });
+  it("lists the bare path for the first published format and ?format= for the rest", () => {
+    expect(communityRankingPaths(["a", "b", "c"], ["c", "b"])).toEqual([
+      "/rankings/community",
+      "/rankings/community?format=c",
+    ]);
+  });
+  it("ignores a published slug that is no longer an active format", () => {
+    expect(communityRankingPaths(["a"], ["gone"])).toEqual([]);
   });
 });
