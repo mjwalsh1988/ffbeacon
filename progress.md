@@ -14977,7 +14977,16 @@ BD-T049 | completed | scripts/brief-desk/prompt.md
      | files: scripts/brief-desk/prompt.md
 BD-T049b | completed | scripts/brief-desk/draft.ps1 (local fallback)
      | files: scripts/brief-desk/draft.ps1
-BD-T050 | pending | Create the two cloud routines (owner)
+BD-T050 | completed | Create the cloud routine (one routine, cron 0 13 * * 2,3: Tuesday plus a Wednesday retry)
+     | files: scripts/brief-desk/prompt.md
+     | notes: 2026-09-26 week 2 never drafted because no routine existed (routine list was empty; no bundle GET logged after 2026-09-17). Created trig_014WGE51HeAqxN8My5V7Y9oh, no connectors attached. The token is an API credential on the Default cloud environment (host ffbeacon.com), attached by the agent proxy, so the run never sees it and the Trusted network level reaches the site. The routine's prompt sends no Authorization header; scripts/brief-desk/prompt.md keeps the env-var form for the local fallback.
+     | verified: yes (manual run cse_01L3TYbTZxFnE4XNZqkMzbhh: repo cloned, bundle GET 200, "not due" because week 2 is published)
+BD-T053 | completed | Week results in the bundle (teams[].week_result) and the game-results instruction
+     | files: lib/brief-desk/week-results.ts, lib/brief-desk/week-results.test.ts, lib/brief-desk/bundle.ts, lib/brief-desk/types.ts, lib/brief-desk/instructions-seed.ts, supabase/migrations/0313_brief_desk_game_results_instruction.sql
+     | verified: yes (formula matched all 16 week 2 ESPN finals; 0313 applied to prod)
+BD-T054 | completed | Drafts validator accepts waiver_targets players on action_list cards
+     | files: app/api/brief-desk/drafts/route.ts
+BD-T048w2 | completed | Week 2, 2026 edition written by hand and submitted (edition 239d499e-f116-4444-81cd-59f8af151013, in review)
 BD-T051 | pending | First routine-drafted edition reviewed and published (owner)
 BD-T052 | pending | Three editions live; AdSense re-review (owner)
 BD-T090 | completed | Five Opus reviews: implementation, security, accessibility, performance, SEO, and their fixes

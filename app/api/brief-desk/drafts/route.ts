@@ -179,7 +179,14 @@ async function validationContext(admin: Admin, bundle: Bundle, draft: Draft): Pr
     },
     relays: bundle.relays.map((r) => ({ id: r.id, relevance_tier: r.relevance_tier, headline: r.headline })),
     datasets,
-    playerIds: new Set(Object.keys(bundle.players)),
+    // The Relays' players plus the waiver targets. action_list is fed by the
+    // waiver_targets dataset, and its cards render from the players table by
+    // id, so refusing a card for the very player the dataset recommends (a
+    // riser nobody filed a report about) left the list unable to do its job.
+    playerIds: new Set([
+      ...Object.keys(bundle.players),
+      ...(bundle.datasets.waiver_targets?.rows ?? []).map((r) => String(r.player_id)),
+    ]),
     existingSlugs,
   };
 }

@@ -58,7 +58,8 @@ import {
 import type { BundleOverride } from "./override";
 import { loadBriefDeskSettings, type BriefDeskSettings } from "./settings";
 import { isInSeasonPhase, requiredSlugPrefix } from "./slug";
-import type { Bundle, BundleFormatValue, BundleNotDue, BundlePlayer, BundleRelay } from "./types";
+import type { Bundle, BundleFormatValue, BundleNotDue, BundlePlayer, BundleRelay, BundleTeam, BundleWeekResult } from "./types";
+import { loadWeekResults } from "./week-results";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 type Admin = SupabaseClient<Database>;
@@ -265,12 +266,17 @@ async function loadPlayers(admin: Admin, ids: string[]): Promise<Map<string, Dat
   return out;
 }
 
-async function loadTeams(admin: Admin, abbreviations: string[]): Promise<Record<string, { name: string; week_result: null }>> {
-  const out: Record<string, { name: string; week_result: null }> = {};
-  if (abbreviations.length === 0) return out;
-  const { data } = await admin.from("nfl_teams").select("abbreviation, name").in("abbreviation", abbreviations);
-  // week_result is null: team results are not loaded for the bundle.
-  for (const t of data ?? []) out[t.abbreviation] = { name: t.name, week_result: null };
+/**
+ * The Relays' teams plus every team that played in the edition's week, each
+ * with its final score when one can be derived (./week-results.ts). A team on
+ * bye, or any period without a week, carries week_result null.
+ */
+async function loadTeams(admin: Admin, abbreviations: string[], results: Map<string, BundleWeekResult>): Promise<Record<string, BundleTeam>> {
+  const out: Record<string, BundleTeam> = {};
+  const wanted = [...new Set([...abbreviations, ...results.keys()])];
+  if (wanted.length === 0) return out;
+  const { data } = await admin.from("nfl_teams").select("abbreviation, name").in("abbreviation", wanted);
+  for (const t of data ?? []) out[t.abbreviation] = { name: t.name, week_result: results.get(t.abbreviation) ?? null };
   return out;
 }
 
@@ -578,6 +584,7 @@ async function assemble(
   const movers = (id: "value_movers_up" | "value_movers_down") =>
     (datasets[id]?.rows ?? []).slice(0, 10).map((r) => ({ player_id: String(r.player_id), name: String(r.name), change_7d: Number(r.change_7d ?? 0) }));
 
+  const weekResults = hasWeek ? await loadWeekResults(admin, seasonNumber, seasonType, period.week!) : new Map<string, BundleWeekResult>();
   const [{ data: previousRows }, teams] = await Promise.all([
     admin
       .from("articles")
@@ -586,7 +593,7 @@ async function assemble(
       .eq("status", "published")
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(20),
-    loadTeams(admin, [...new Set(relays.flatMap((r) => r.teams))]),
+    loadTeams(admin, [...new Set(relays.flatMap((r) => r.teams))], weekResults),
   ]);
 
   const formats = await getActiveFormats(admin);

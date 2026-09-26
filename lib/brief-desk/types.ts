@@ -80,6 +80,25 @@ export interface BundleDataset {
   computed_at: string;
 }
 
+/**
+ * One team's game in the edition's week, or null when the period has no week
+ * (off-season, pre-season) or the team did not play (a bye). Derived from the
+ * two team-defense stat lines in player_stats (./week-results.ts), so it is
+ * as final as the box scores beside it.
+ */
+export interface BundleWeekResult {
+  opponent: string;
+  points_for: number;
+  points_against: number;
+  outcome: "W" | "L" | "T";
+  game_date: string | null;
+}
+
+export interface BundleTeam {
+  name: string;
+  week_result: BundleWeekResult | null;
+}
+
 export interface Bundle {
   due: true;
   edition: {
@@ -105,7 +124,7 @@ export interface Bundle {
   instructions: string;
   relays: BundleRelay[];
   players: Record<string, BundlePlayer>;
-  teams: Record<string, { name: string; week_result: null }>;
+  teams: Record<string, BundleTeam>;
   league_wide: {
     top_scorers_by_position: Record<string, Array<{ player_id: string; name: string; pts_ppr: number }>>;
     value_movers: { up: Array<{ player_id: string; name: string; change_7d: number }>; down: Array<{ player_id: string; name: string; change_7d: number }> };
