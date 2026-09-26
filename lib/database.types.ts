@@ -7283,7 +7283,6 @@ export type Database = {
           id: string;
           player_id: string;
           rank_position: number;
-          tier: number | null;
           updated_at: string;
         };
         Insert: {
@@ -7292,7 +7291,6 @@ export type Database = {
           id?: string;
           player_id: string;
           rank_position: number;
-          tier?: number | null;
           updated_at?: string;
         };
         Update: {
@@ -7301,7 +7299,6 @@ export type Database = {
           id?: string;
           player_id?: string;
           rank_position?: number;
-          tier?: number | null;
           updated_at?: string;
         };
         Relationships: [
@@ -7337,7 +7334,6 @@ export type Database = {
           scope: string;
           seed_source_slug: string | null;
           tier_breaks: number[];
-          tier_count: number;
           tier_labels: Json;
           tiers_enabled: boolean;
           updated_at: string;
@@ -7358,7 +7354,6 @@ export type Database = {
           scope?: string;
           seed_source_slug?: string | null;
           tier_breaks?: number[];
-          tier_count?: number;
           tier_labels?: Json;
           tiers_enabled?: boolean;
           updated_at?: string;
@@ -7379,7 +7374,6 @@ export type Database = {
           scope?: string;
           seed_source_slug?: string | null;
           tier_breaks?: number[];
-          tier_count?: number;
           tier_labels?: Json;
           tiers_enabled?: boolean;
           updated_at?: string;

@@ -1,6 +1,6 @@
 # Handoff
 
-## NEXT SESSION: START HERE. BEACON RANKER BUILT AND REVIEWED, NOT COMMITTED (2026-09-26)
+## NEXT SESSION: START HERE. BEACON RANKER SHIPPED (e9fe6a0, 2026-09-26)
 
 - Plan: docs/ranking-boards/board-builder-plan.md. Task list: the BR-T## section at
   the end of progress.md (one task per plan build step). Status of each task is there.
@@ -10,9 +10,8 @@
 - Done: every task BR-T01 to BR-T37 and the review round BR-R (details in
   progress.md). Gate passes: typecheck, lint 0/0, 6,457 tests, build.
 - Production already changed: migrations 0304 to 0309, 0311, 0312 applied.
-- AFTER THE DEPLOY IS LIVE: apply 0310 (drops the old tier columns), then
-  regenerate lib/database.types.ts. Then run npm run calculate:community-rankings
-  once, or let the 10:45 UTC cron build it.
+- Post-deploy steps DONE: 0310 applied, types regenerated (uncommitted),
+  community build run once (0 counted boards: existing boards have no format).
 - OWNER to check: the new CLAUDE.md section (BR-T37); deviations listed in
   progress.md (left-off ids as an array, one guest table, Build by comparing
   opens the tool on the board, new code writes only tier breaks).
