@@ -1,10 +1,12 @@
 /**
  * Where the NFL season sits, read from stored data rather than Sleeper.
  *
- * NO SLEEPER CALL. Resolving "what week is it" through Sleeper's state endpoint
- * would put an uncached external fetch on a public page's critical path. We
- * already store everything needed to answer it: the newest projected season, and
- * the newest week anybody actually played. Both are indexed lookups.
+ * NO SLEEPER CALL ON THE NORMAL PATH. Resolving "what week is it" through
+ * Sleeper's state endpoint would put an external fetch on a public page's
+ * critical path. We already store everything needed to answer it: the newest
+ * projected season, the newest season anybody played, and the kickoff time of
+ * every game on the slate. All are indexed lookups. Sleeper (memoised for 60
+ * seconds in lib/sleeper.ts) is read only when the kickoff calendar is empty.
  *
  * Moved out of lib/breakdown/load-extras.ts so lib/start-sit/load.ts can read
  * the clock without importing the whole Breakdown extras module. load-extras.ts
@@ -16,18 +18,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 import type { Database } from "@/lib/database.types";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
+import {
+  REGULAR_SEASON_WEEKS,
+  liveWeekFromKickoffs,
+  loadLastKickoffByWeek,
+} from "@/lib/nfl-week";
+import { getNflState } from "@/lib/sleeper";
 
 type AnySupabase =
   | SupabaseClient<Database>
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
-/** Sleeper publishes an 18-week regular season. */
-const MAX_WEEK = 18;
-
 /** Where the season sits, derived from our own tables. */
 export type SeasonClock = {
   season: number | null;
-  /** The first week we have not seen a completed game for. 1 in the preseason. */
+  /**
+   * The live week: week N until 11:59 PM Eastern on the day of its last
+   * kickoff (the Monday night game), then N + 1. 1 in the preseason, 19 once
+   * the regular season is over.
+   */
   currentWeek: number;
   /** The newest season that has graded games, for the reliability read. */
   gradedSeason: number | null;
@@ -37,12 +46,17 @@ export type SeasonClock = {
  * Where we are in the NFL calendar, read from stored data rather than Sleeper.
  *
  * `season` is the newest season we hold regular-season projections for.
- * `currentWeek` is one past the newest week anybody has a completed game in,
- * clamped into the regular season. In the preseason nothing has been played, so
- * it resolves to week 1 and the whole slate is "remaining", which is exactly the
- * behaviour the profile's projection outlook already has.
+ *
+ * `currentWeek` comes from the kickoff calendar (lib/nfl-week.ts). It used to
+ * be one past the newest week anybody had a completed game in, which is right
+ * only for the Monday game: Thursday night's box scores made every page on
+ * this clock describe NEXT week from Thursday to Tuesday. A played game is not
+ * the end of a week; the last kickoff's day ending is.
  */
-async function resolveSeasonClockUncached(supabase: AnySupabase): Promise<SeasonClock> {
+async function resolveSeasonClockUncached(
+  supabase: AnySupabase,
+  nowMs: number = Date.now(),
+): Promise<SeasonClock> {
   const db = supabase as SupabaseClient<Database>;
 
   // SLEEPER_SOURCE, deliberately and permanently. This asks which season we
@@ -77,30 +91,35 @@ async function resolveSeasonClockUncached(supabase: AnySupabase): Promise<Season
 
   if (season == null) return { season: null, currentWeek: 1, gradedSeason };
 
-  // Only weeks inside the projected season count toward "what week is it".
-  let currentWeek = 1;
-  if (gradedSeason === season) {
-    const { data: playedWeek } = await db
-      .from("player_stats")
-      .select("week")
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .gt("gp", 0)
-      .order("week", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (playedWeek) {
-      currentWeek = Math.min(MAX_WEEK + 1, Number(playedWeek.week) + 1);
-    }
-  }
+  const calendarWeek = liveWeekFromKickoffs(await loadLastKickoffByWeek(db, season), nowMs);
+  if (calendarWeek !== null) return { season, currentWeek: calendarWeek, gradedSeason };
 
-  return { season, currentWeek, gradedSeason };
+  return { season, currentWeek: await sleeperWeekFallback(season), gradedSeason };
+}
+
+/**
+ * Only when we hold no kickoff times for the season. Sleeper's week follows
+ * the same Monday-night boundary. Never the played-games rule: that is the
+ * rule that flipped the site on Thursday nights.
+ */
+async function sleeperWeekFallback(season: number): Promise<number> {
+  const state = await getNflState();
+  if (!state) return 1;
+  const stateSeason = Number(state.season);
+  if (Number.isFinite(stateSeason) && stateSeason !== season) {
+    return stateSeason > season ? REGULAR_SEASON_WEEKS + 1 : 1;
+  }
+  if (state.season_type === "regular") {
+    return Math.max(1, Math.min(REGULAR_SEASON_WEEKS, Number(state.week) || 1));
+  }
+  if (state.season_type === "post") return REGULAR_SEASON_WEEKS + 1;
+  return 1;
 }
 
 /**
  * Request-scoped: the page metadata, the page body, the start/sit loader and
  * the breakdown extras all ask for the clock in one render, and each call is
- * up to three sequential reads, so they share one result per request (React
+ * a handful of sequential reads, so they share one result per request (React
  * cache keys on the client instance, which createAdminClient already caches).
  */
 export const resolveSeasonClock = cache(resolveSeasonClockUncached);

@@ -150,7 +150,7 @@ export type StartSitBoard = {
   season: number | null;
   /** The week this board evaluates, already resolved (see resolveBoardWeek). */
   week: number;
-  /** The live week, one past the newest completed game. */
+  /** The live week: this week until 11:59 PM Eastern on its Monday night. */
   currentWeek: number;
   /** currentWeek..18 inclusive, for the week select. Empty once the season is over. */
   remainingWeeks: number[];

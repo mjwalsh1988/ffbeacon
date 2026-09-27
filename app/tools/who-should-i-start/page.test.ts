@@ -97,47 +97,43 @@ describe("buildStartSitCanonical", () => {
 /* ------------------------------------------------------------------ */
 
 /**
- * Minimal chainable Supabase mock covering exactly the three reads
- * resolveSeasonClock makes: the newest projected season
- * (player_weekly_projections), the newest graded season, and (when that
- * graded season matches the projected one) the newest played week, both off
- * player_stats. Keyed by table and select() argument the way
- * lib/on-the-clock/board-loader.test.ts keys its own canned results, since
- * player_stats is queried twice with different select() columns.
+ * Minimal chainable Supabase mock covering the reads resolveSeasonClock makes:
+ * the newest projected season (player_weekly_projections), the newest graded
+ * season (player_stats) and the kickoff calendar (nfl_game_odds). The played
+ * week is deliberately NOT an input any more: a played game does not end a
+ * week, and the fixture below has week 3 half played on purpose.
  */
 function mockClockSupabase(opts: {
   projectedSeason: number | null;
   gradedSeason: number | null;
-  /** The newest week with a completed (gp > 0) game in the graded season. */
-  playedWeek: number | null;
+  kickoffs: Array<{ week: number; kickoff_at: string }>;
 }) {
   function builder(table: string) {
-    const state: { selectArg?: string } = {};
-    const result = () => {
-      if (table === "player_weekly_projections") {
-        return {
-          data: opts.projectedSeason == null ? null : { season: opts.projectedSeason },
-          error: null,
-        };
-      }
-      if (table === "player_stats") {
-        if (state.selectArg === "week") {
-          return { data: opts.playedWeek == null ? null : { week: opts.playedWeek }, error: null };
-        }
-        return { data: opts.gradedSeason == null ? null : { season: opts.gradedSeason }, error: null };
-      }
-      return { data: null, error: null };
-    };
     const b: Record<string, unknown> = {
-      select(arg: string) {
-        state.selectArg = arg;
-        return b;
-      },
+      select: () => b,
       eq: () => b,
       gt: () => b,
+      not: () => b,
       order: () => b,
       limit: () => b,
-      maybeSingle: () => Promise.resolve(result()),
+      maybeSingle: () => {
+        if (table === "player_weekly_projections") {
+          return Promise.resolve({
+            data: opts.projectedSeason == null ? null : { season: opts.projectedSeason },
+            error: null,
+          });
+        }
+        if (table === "player_stats") {
+          return Promise.resolve({
+            data: opts.gradedSeason == null ? null : { season: opts.gradedSeason },
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      },
+      // The kickoff read is awaited as a list rather than through maybeSingle.
+      then: (resolve: (v: unknown) => unknown) =>
+        resolve({ data: table === "nfl_game_odds" ? opts.kickoffs : null, error: null }),
     };
     return b;
   }
@@ -146,60 +142,63 @@ function mockClockSupabase(opts: {
   return { from: (table: string) => builder(table) } as any;
 }
 
+/** The 2026 slate around week 3, as nfl_game_odds holds it (UTC). */
+const KICKOFFS_2026 = [
+  { week: 1, kickoff_at: "2026-09-15T00:15:00Z" },
+  { week: 2, kickoff_at: "2026-09-18T00:15:00Z" },
+  { week: 2, kickoff_at: "2026-09-22T00:15:00Z" },
+  // Week 3: Thursday Sep 24, Sunday Sep 27, Monday Sep 28 at 8:15 PM Eastern.
+  { week: 3, kickoff_at: "2026-09-25T00:15:00Z" },
+  { week: 3, kickoff_at: "2026-09-27T17:00:00Z" },
+  { week: 3, kickoff_at: "2026-09-29T00:15:00Z" },
+  { week: 4, kickoff_at: "2026-10-02T00:15:00Z" },
+  { week: 4, kickoff_at: "2026-10-06T00:15:00Z" },
+];
+
 describe("templated week matches resolveSeasonClock at a rollover boundary", () => {
-  /**
-   * The "Tuesday rollover": Monday Night Football's box score lands in
-   * player_stats sometime Monday night or Tuesday morning, and the live week
-   * advances the moment that row exists, not on a calendar schedule. This
-   * fixture holds every other input fixed (season 2026, graded season 2026)
-   * and flips only whether week 3's game has been recorded, so the two
-   * clocks below are the same season one played game apart.
-   */
-  it("stays on the earlier week the moment before the boundary", async () => {
-    const supabase = mockClockSupabase({
-      projectedSeason: 2026,
-      gradedSeason: 2026,
-      playedWeek: 2, // week 2 is the newest played week; week 3 has not happened yet.
-    });
-    const clock = await resolveSeasonClock(supabase);
+  const base = { projectedSeason: 2026, gradedSeason: 2026, kickoffs: KICKOFFS_2026 };
+
+  it("stays on week 3 after the Thursday night game has been played", async () => {
+    // Friday Sep 25, noon Eastern. Week 3's Thursday box scores exist.
+    const clock = await resolveSeasonClock(mockClockSupabase(base), Date.parse("2026-09-25T16:00:00Z"));
     expect(clock.currentWeek).toBe(3);
     expect(buildStartSitDescription(clock.currentWeek)).toContain("Week 3");
   });
 
-  it("rolls the templated week forward the moment the boundary is crossed", async () => {
-    const supabase = mockClockSupabase({
-      projectedSeason: 2026,
-      gradedSeason: 2026,
-      playedWeek: 3, // week 3's game just landed in player_stats.
-    });
-    const clock = await resolveSeasonClock(supabase);
+  it("stays on week 3 through Monday 11:59 PM Eastern", async () => {
+    const clock = await resolveSeasonClock(mockClockSupabase(base), Date.parse("2026-09-29T03:59:00Z"));
+    expect(clock.currentWeek).toBe(3);
+  });
+
+  it("rolls the templated week forward at midnight Eastern after the Monday game", async () => {
+    const clock = await resolveSeasonClock(mockClockSupabase(base), Date.parse("2026-09-29T04:00:00Z"));
     expect(clock.currentWeek).toBe(4);
     expect(buildStartSitDescription(clock.currentWeek)).toContain("Week 4");
     expect(buildStartSitDescription(clock.currentWeek)).not.toContain("Week 3");
   });
 
-  it("clamps at week 18 rather than describing a 19th regular-season week", async () => {
-    const supabase = mockClockSupabase({
-      projectedSeason: 2026,
-      gradedSeason: 2026,
-      playedWeek: 18,
-    });
-    const clock = await resolveSeasonClock(supabase);
+  it("reads 19 once the last week on the calendar is over", async () => {
+    const clock = await resolveSeasonClock(
+      mockClockSupabase({
+        ...base,
+        kickoffs: Array.from({ length: 18 }, (_, i) => ({
+          week: i + 1,
+          kickoff_at: new Date(Date.parse("2026-09-15T00:15:00Z") + i * 7 * 86400000).toISOString(),
+        })),
+      }),
+      Date.parse("2027-01-12T12:00:00Z"),
+    );
     expect(clock.currentWeek).toBe(19);
     // buildStartSitDescription is templated on whatever week it is given;
-    // the clamp itself belongs to resolveSeasonClock, verified above. The
-    // page only ever calls the description builder with a week that came
-    // out of the clock, so the two never disagree in production.
+    // the page only ever calls it with a week that came out of the clock.
     expect(buildStartSitDescription(18).length).toBeLessThanOrEqual(155);
   });
 
   it("stays on week 1 in the preseason, before anything has been played", async () => {
-    const supabase = mockClockSupabase({
-      projectedSeason: 2026,
-      gradedSeason: null,
-      playedWeek: null,
-    });
-    const clock = await resolveSeasonClock(supabase);
+    const clock = await resolveSeasonClock(
+      mockClockSupabase({ ...base, gradedSeason: null }),
+      Date.parse("2026-08-20T12:00:00Z"),
+    );
     expect(clock.currentWeek).toBe(1);
     expect(buildStartSitDescription(clock.currentWeek)).toContain("Week 1");
   });
