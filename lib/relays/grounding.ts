@@ -22,6 +22,10 @@
  *             post said "PHI" and the team matched).
  *   facts     Every fact value must share at least one content word, or one
  *             matched number, with the post.
+ *   teams     A city followed directly by a nickname must be a real NFL team,
+ *             or a pair the post wrote itself. Both words passing the name
+ *             check on their own is not enough: "Buffalo Chargers" was built
+ *             from a post that said "Chargers" and "in Buffalo".
  *
  * It is deliberately strict in one direction only. It cannot catch a fact the
  * model left out, and it does not try; a missing fact is a shorter card, which
@@ -107,6 +111,58 @@ const NFL_TEAM_WORDS = new Set([
   "philadelphia", "philly", "pittsburgh", "francisco", "seattle", "tampa", "tennessee",
   "washington",
 ]);
+
+/**
+ * The nicknames a city word may sit directly in front of. The name check reads
+ * one word at a time, so a relay that joins two real words from the post into a
+ * team that does not exist passes it: "in Buffalo" and "Chargers" in the post
+ * licensed "Buffalo Chargers" in a fact, and it reached Discord. A city word
+ * followed straight by a nickname is therefore checked as a PAIR, and the pair
+ * must be a real NFL team or appear, joined, in the post itself.
+ *
+ * Keyed by the word nearest the nickname, since that is the one adjacent to it:
+ * "angeles" for Los Angeles, "bay" for Green Bay and Tampa Bay, "city" for
+ * Kansas City. A city word with no entry is not checked, so a former home
+ * ("Oakland Raiders") is left to the other checks.
+ */
+const CITY_NICKNAMES: Record<string, readonly string[]> = {
+  arizona: ["cardinals"],
+  atlanta: ["falcons"],
+  baltimore: ["ravens"],
+  buffalo: ["bills"],
+  carolina: ["panthers"],
+  chicago: ["bears"],
+  cincinnati: ["bengals"],
+  cleveland: ["browns"],
+  dallas: ["cowboys"],
+  denver: ["broncos"],
+  detroit: ["lions"],
+  bay: ["packers", "buccaneers", "bucs"],
+  houston: ["texans"],
+  indianapolis: ["colts"],
+  jacksonville: ["jaguars", "jags"],
+  city: ["chiefs"],
+  vegas: ["raiders"],
+  angeles: ["chargers", "rams"],
+  la: ["chargers", "rams"],
+  miami: ["dolphins"],
+  minnesota: ["vikings"],
+  england: ["patriots", "pats"],
+  orleans: ["saints"],
+  york: ["giants", "jets"],
+  ny: ["giants", "jets"],
+  philadelphia: ["eagles"],
+  philly: ["eagles"],
+  pittsburgh: ["steelers"],
+  francisco: ["49ers", "niners"],
+  seattle: ["seahawks"],
+  tampa: ["buccaneers", "bucs"],
+  tennessee: ["titans"],
+  washington: ["commanders"],
+};
+
+/** Every nickname, for spotting the second word of a pair. */
+const NFL_NICKNAMES = new Set(Object.values(CITY_NICKNAMES).flat());
 
 /** Words too common to count as content when checking a fact value. */
 const STOPWORDS = new Set([
@@ -350,13 +406,43 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
     }
   };
 
+  // The post's own words in order, so a pair the reporter wrote ("Pittsburgh
+  // Panthers" about a college player) is recognised as theirs.
+  const postWords = ` ${wordTokens(haystackText).join(" ")} `;
+
+  // A city word directly followed by a nickname must be a real team, or a pair
+  // the post itself wrote. See CITY_NICKNAMES for why the word checks miss it.
+  const checkTeamPairs = (text: string, where: GroundingFailure["where"]) => {
+    const rawWords = text.split(/\s+/).filter(Boolean);
+    for (let i = 1; i < rawWords.length; i++) {
+      // Punctuation between the two words ("in Buffalo, Chargers") breaks the pair.
+      if (/[^A-Za-z0-9]$/.test(rawWords[i - 1])) continue;
+      const city = stripPossessive(rawWords[i - 1].replace(/^[^A-Za-z0-9]+/, "").toLowerCase());
+      const nickname = stripPossessive(
+        rawWords[i].replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "").toLowerCase(),
+      );
+      if (!NFL_NICKNAMES.has(nickname)) continue;
+      const allowed = CITY_NICKNAMES[city];
+      if (!allowed || allowed.includes(nickname)) continue;
+      if (postWords.includes(` ${city} ${nickname} `)) continue;
+      const token = `${rawWords[i - 1]} ${rawWords[i]}`.replace(/[^A-Za-z0-9]+$/, "");
+      failures.push({ check: "name", token, where });
+    }
+  };
+
   checkNumbers(relay.headline, "headline");
   checkNames(relay.headline, "headline");
-  if (relay.timeline) checkNumbers(relay.timeline, "timeline");
+  checkTeamPairs(relay.headline, "headline");
+  if (relay.timeline) {
+    checkNumbers(relay.timeline, "timeline");
+    checkTeamPairs(relay.timeline, "timeline");
+  }
 
   for (const fact of relay.facts) {
     checkNumbers(fact.value, "fact");
     checkNames(fact.value, "fact");
+    checkTeamPairs(fact.value, "fact");
+    checkTeamPairs(fact.label, "fact");
     // The label renders in the card's <dt> and in the Discord text as
     // "Label: value", so a team name in it is checked like one in the value.
     // Nothing else in a label is (see NFL_TEAM_WORDS).

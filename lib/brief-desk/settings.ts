@@ -33,7 +33,7 @@ export interface BriefDeskSettings {
   minRelays: number;
   /** The editorial brief handed to the desk run inside the bundle. */
   briefInstructions: string;
-  /** The RELAY section appended to the classify prompt. */
+  /** The RELAY section of the classify prompt: the only copy the model reads. */
   relayExtractPrompt: string;
   relayHeadlineMax: number;
   /** Post an approved Brief to Discord with an everyone mention and the link. */

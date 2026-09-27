@@ -209,6 +209,61 @@ describe("checkRelayGrounding", () => {
     expect(out.failures.some((f) => f.check === "fact")).toBe(true);
   });
 
+  describe("a city and a nickname joined into a team", () => {
+    // The post behind the relay that reached Discord as "Buffalo Chargers".
+    const post = {
+      text: "Chargers TE Patrick Herbert, elevated off the practice squad Saturday, will make his NFL debut today in Buffalo, also marking the first time that he and his older brother Justin Herbert play together in an NFL game. The brothers played together at Oregon in 2019.",
+      playerNames: ["Patrick Herbert", "Justin Herbert"],
+      teamNames: ["Los Angeles Chargers", "LAC", "Chargers", "Buffalo Bills", "BUF", "Buffalo"],
+    };
+
+    it("fails a team that does not exist, even when both words are in the post", () => {
+      const out = checkRelayGrounding(post, {
+        headline: "Chargers TE Patrick Herbert will make his NFL debut today in Buffalo.",
+        facts: [{ label: "Also", value: "Brother Justin Herbert plays for Buffalo Chargers" }],
+        timeline: null,
+      });
+      expect(out.ok).toBe(false);
+      expect(out.failures).toEqual([{ check: "name", token: "Buffalo Chargers", where: "fact" }]);
+    });
+
+    it("fails the swap in the headline, the timeline and a label too", () => {
+      const out = checkRelayGrounding(post, {
+        headline: "Buffalo Chargers TE Patrick Herbert makes his NFL debut.",
+        facts: [{ label: "Buffalo Chargers", value: "elevated off the practice squad" }],
+        timeline: "debut today with the Los Angeles Bills",
+      });
+      expect(out.failures.map((f) => [f.token, f.where])).toEqual([
+        ["Buffalo Chargers", "headline"],
+        ["Angeles Bills", "timeline"],
+        ["Buffalo Chargers", "fact"],
+      ]);
+    });
+
+    it("passes real teams, and a city and team kept apart by punctuation", () => {
+      const out = checkRelayGrounding(post, {
+        headline: "Los Angeles Chargers TE Patrick Herbert makes his NFL debut against the Buffalo Bills.",
+        facts: [{ label: "Event", value: "NFL debut today in Buffalo, Chargers TE" }],
+        timeline: null,
+      });
+      expect(out.failures).toEqual([]);
+    });
+
+    it("passes a pair the reporter wrote, such as a college team", () => {
+      const college = {
+        text: "Rookie Israel Abanikanda starred for the Pittsburgh Panthers before the draft.",
+        playerNames: ["Israel Abanikanda"],
+        teamNames: [],
+      };
+      const out = checkRelayGrounding(college, {
+        headline: "Rookie Israel Abanikanda starred for the Pittsburgh Panthers.",
+        facts: [],
+        timeline: null,
+      });
+      expect(out.failures).toEqual([]);
+    });
+  });
+
   it("does not fail on sentence-initial function words or possessives", () => {
     const out = checkRelayGrounding(POST, {
       headline: "The Eagles' star back Saquon Barkley lands on IR.",

@@ -6,6 +6,13 @@
  * lib/relays/extract.ts. Re-run it after editing either seed and diff the
  * output against the migration; do not edit the migration's prompt text by hand.
  *
+ * HISTORICAL for the last statement. Migration 0315 took the RELAY section back
+ * OUT of bb_categorize_prompt, and the classify call now reads that section
+ * only from bd_relay_extract_prompt (lib/relays/extract.ts withRelaySection).
+ * Never apply the categorize append below to a live database again: it would
+ * put back the stale second copy 0315 removed, and the model would read the
+ * rules twice.
+ *
  *   npx tsx scripts/gen-brief-desk-settings-sql.ts > out.sql
  */
 

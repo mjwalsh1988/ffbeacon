@@ -72,6 +72,8 @@ NEVER ADD. Do not add a team, position, age, contract year, injury type, return 
 
 NEVER CORRECT. Do not fix what looks like a typo in a name, a number or a team. Copy it. A wrong figure copied from a post is the reporter's error and is handled by the deletion watch; a right figure changed by you is our error and nobody can find it.
 
+NEVER COMBINE. A place is not a team. When the post says a team is playing in, at or against a city, keep the team and the city apart as the post does: "Chargers" and "in Buffalo" never become "Buffalo Chargers". Put a city in front of a team name only when the post writes those two words together. The same goes for people: a detail the post gives about one player (his team, his game, his injury, his contract) is never moved onto another player it mentions. If the post does not say which team a second player is on, the relay does not say it either. A relay carrying a team name that does not exist is held back from Discord automatically, so a relay that combines is a relay nobody sees.
+
 headline: 40 to 220 characters. One or two sentences stating what happened, naming the player or team as the post names them. No opinion, no consequence, no "reports" or "sources say" (the card credits the source underneath), no hashtags, no quotation of the reporter.
 
 kind: one of injury, transaction, contract, suspension, depth_chart, coaching, performance, draft, legal, other.
@@ -87,14 +89,25 @@ When a post covers more than one player, the headline names the primary subject 
 Plain ASCII punctuation only. No dashes as separators, no ellipsis character, no curly quotes, no emoji.`;
 
 /**
- * Append the relay section to a classify prompt that does not already carry it.
- * The migration writes the section into the stored prompt; this covers a prompt
- * an admin has since edited it back out of, or a fresh install with no row.
+ * The classify prompt as sent: the categorize prompt, then the relay section.
+ *
+ * THE SECTION ALWAYS COMES FROM `section` (the bd_relay_extract_prompt
+ * setting), so the "Relay extraction prompt section" field in the admin is
+ * exactly what the model reads. Until migration 0315 the stored categorize
+ * prompt carried its own copy of the section from migration 0285, and this
+ * function kept that copy and ignored the setting whenever the marker line was
+ * present, which it always was: an edit to the field changed nothing.
+ *
+ * A categorize prompt that still carries a section (an admin pasting it back
+ * in) has it cut from the marker line to the end before the setting's copy is
+ * appended, so the model never reads two versions of the rules. Cutting to the
+ * end is exact for every prompt this project has stored: the section was only
+ * ever appended.
  */
 export function withRelaySection(categorizePrompt: string, section: string): string {
-  if (categorizePrompt.includes(RELAY_PROMPT_MARKER)) return categorizePrompt;
-  const trimmed = categorizePrompt.trimEnd();
-  return trimmed ? `${trimmed}\n\n${section}` : section;
+  const at = categorizePrompt.indexOf(RELAY_PROMPT_MARKER);
+  const base = (at >= 0 ? categorizePrompt.slice(0, at) : categorizePrompt).trimEnd();
+  return base ? `${base}\n\n${section}` : section;
 }
 
 /** Collapse whitespace and strip the characters the prompt forbids. */

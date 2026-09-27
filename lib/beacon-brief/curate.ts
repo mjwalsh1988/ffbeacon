@@ -98,10 +98,9 @@ const CATEGORIZE_SCHEMA = {
 } as const;
 
 /**
- * The classify system prompt: the stored categorize prompt with the RELAY
- * section appended when it is not already inside it. Migration 0285 appended
- * the section to the stored prompt, so this is the belt to that migration's
- * braces: an admin who edits the section out still gets the code's copy.
+ * The classify system prompt: the stored categorize prompt followed by the
+ * RELAY section from the bd_relay_extract_prompt setting, which is the only
+ * copy of that section the model reads (see withRelaySection).
  */
 async function classifySystemPrompt(
   admin: Admin,
