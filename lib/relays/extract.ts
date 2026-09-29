@@ -121,11 +121,59 @@ function cleanText(value: string): string {
     .trim();
 }
 
+/** Words that cannot end a clamped phrase: "since the" says less than nothing. */
+const DANGLING_WORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "at", "by", "for",
+  "with", "from", "as", "since", "than", "that", "his", "her", "their", "its",
+]);
+
+/**
+ * Shorten a string to `max` characters at a word boundary.
+ *
+ * A plain slice cut mid-word, and the half word it left behind is a token the
+ * post does not contain, so the grounding check failed a Relay for a fragment
+ * this function made. Between 2026-09-18 and 2026-09-29 that was most of the
+ * moderation queue: "Tom Brady (20", "J.J. McCarthy (Vik", "the Bronco",
+ * "since the 197". Here a partial last word is dropped whole, then an
+ * unclosed parenthesis, then any trailing comma or connective word, so what
+ * is left is a phrase the post actually wrote.
+ */
+export function clampAtWord(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let out = text.slice(0, max);
+  // The cut landed inside a word: drop that word.
+  if (!/\s/.test(text[max] ?? " ")) out = out.replace(/\s*\S*$/, "");
+  // An unclosed parenthesis goes only when it opened in the second half: one
+  // near the start holds most of the phrase, and dropping it would leave a
+  // stub (a headline under the table's 20-character minimum fails the insert).
+  const open = out.lastIndexOf("(");
+  if (open >= out.length / 2 && out.indexOf(")", open) < 0) out = out.slice(0, open);
+  for (;;) {
+    const trimmed = out.replace(/[\s,;:/&(-]+$/, "");
+    const last = trimmed.match(/(\S+)$/)?.[1]?.toLowerCase();
+    if (last && DANGLING_WORDS.has(last) && trimmed.length > last.length) {
+      out = trimmed.slice(0, -last.length);
+      continue;
+    }
+    out = trimmed;
+    break;
+  }
+  // A single word longer than the limit has no boundary to cut at.
+  return out || text.slice(0, max);
+}
+
+/** The headline at a word boundary, never below the minimum the table enforces. */
+function clampedHeadline(headline: string): string {
+  const out = clampAtWord(headline, RELAY_HEADLINE_MAX);
+  return out.length >= RELAY_HEADLINE_MIN ? out : headline.slice(0, RELAY_HEADLINE_MAX);
+}
+
 /**
  * Turn the model's `relay` object into a RelayExtraction, or null when it is
  * missing or unusable. Lengths are clamped rather than rejected: a headline two
  * characters over the prompt's limit is still the post's headline, and the
  * grounding check, not the length, decides whether it is safe to publish.
+ * Every clamp is at a word boundary (clampAtWord).
  */
 export function normalizeRelayExtraction(raw: unknown): RelayExtraction | null {
   if (!raw || typeof raw !== "object") return null;
@@ -146,8 +194,8 @@ export function normalizeRelayExtraction(raw: unknown): RelayExtraction | null {
       const label = (entry as { label?: unknown }).label;
       const value = (entry as { value?: unknown }).value;
       if (typeof label !== "string" || typeof value !== "string") continue;
-      const cleanLabel = cleanText(label).slice(0, RELAY_FACT_LABEL_MAX);
-      const cleanValue = cleanText(value).slice(0, RELAY_FACT_VALUE_MAX);
+      const cleanLabel = clampAtWord(cleanText(label), RELAY_FACT_LABEL_MAX);
+      const cleanValue = clampAtWord(cleanText(value), RELAY_FACT_VALUE_MAX);
       if (!cleanLabel || !cleanValue) continue;
       facts.push({ label: cleanLabel, value: cleanValue });
       if (facts.length >= RELAY_MAX_FACTS) break;
@@ -155,7 +203,7 @@ export function normalizeRelayExtraction(raw: unknown): RelayExtraction | null {
   }
 
   return {
-    headline: headline.slice(0, RELAY_HEADLINE_MAX),
+    headline: clampedHeadline(headline),
     kind,
     facts,
     timeline,

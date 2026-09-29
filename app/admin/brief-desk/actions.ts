@@ -193,14 +193,14 @@ export async function saveEditionReviewTicks(
 const RELAYS = `${BD}/relays`;
 
 export async function hideRelay(relayId: string, reason: string): Promise<ActionResult> {
-  await requireAdmin(RELAYS);
+  const { userId } = await requireAdmin(RELAYS);
   const id = parse(ID, relayId);
   if (!id.ok) return fail(id.error);
   const text = parse(REASON, reason);
   if (!text.ok) return fail(text.error);
   const admin = createAdminClient();
   if (!text.data.trim()) return fail("A reason is required to hide a Relay.");
-  const res = await setRelayStatus(admin, id.data, "hidden", text.data);
+  const res = await setRelayStatus(admin, id.data, "hidden", text.data, { resolvedBy: userId });
   if (!res.ok) return fail(res.error ?? "hide failed");
   revalidatePath(RELAYS);
   revalidatePath("/brief");
@@ -208,11 +208,11 @@ export async function hideRelay(relayId: string, reason: string): Promise<Action
 }
 
 export async function unhideRelay(relayId: string): Promise<ActionResult> {
-  await requireAdmin(RELAYS);
+  const { userId } = await requireAdmin(RELAYS);
   const id = parse(ID, relayId);
   if (!id.ok) return fail(id.error);
   const admin = createAdminClient();
-  const res = await setRelayStatus(admin, id.data, "published", null);
+  const res = await setRelayStatus(admin, id.data, "published", null, { resolvedBy: userId });
   if (!res.ok) return fail(res.error ?? "unhide failed");
   revalidatePath(RELAYS);
   revalidatePath("/brief");
@@ -225,11 +225,11 @@ export async function unhideRelay(relayId: string): Promise<ActionResult> {
  * says so, so the override is visible in the manager afterwards.
  */
 export async function publishRelayAnyway(relayId: string): Promise<ActionResult> {
-  await requireAdmin(RELAYS);
+  const { userId } = await requireAdmin(RELAYS);
   const id = parse(ID, relayId);
   if (!id.ok) return fail(id.error);
   const admin = createAdminClient();
-  const res = await setRelayStatus(admin, id.data, "published", "Published by the owner over a grounding failure", { force: true });
+  const res = await setRelayStatus(admin, id.data, "published", "Published by the owner over a grounding failure", { force: true, resolvedBy: userId });
   if (!res.ok) return fail(res.error ?? "publish failed");
   revalidatePath(RELAYS);
   revalidatePath("/brief");
@@ -237,14 +237,14 @@ export async function publishRelayAnyway(relayId: string): Promise<ActionResult>
 }
 
 export async function retractRelay(relayId: string, reason: string): Promise<ActionResult> {
-  await requireAdmin(RELAYS);
+  const { userId } = await requireAdmin(RELAYS);
   const id = parse(ID, relayId);
   if (!id.ok) return fail(id.error);
   const text = parse(REASON, reason);
   if (!text.ok) return fail(text.error);
   const admin = createAdminClient();
   if (!text.data.trim()) return fail("A reason is required to retract a Relay.");
-  const res = await setRelayStatus(admin, id.data, "retracted", text.data);
+  const res = await setRelayStatus(admin, id.data, "retracted", text.data, { resolvedBy: userId });
   if (!res.ok) return fail(res.error ?? "retract failed");
   revalidatePath(RELAYS);
   revalidatePath("/brief");
@@ -261,13 +261,13 @@ export type EditRelayResult =
  * returns the failing tokens so the page can show them.
  */
 export async function editRelay(relayId: string, edit: RelayTextEdit): Promise<EditRelayResult> {
-  await requireAdmin(RELAYS);
+  const { userId } = await requireAdmin(RELAYS);
   const id = parse(ID, relayId);
   if (!id.ok) return { ok: false, error: id.error, failures: [] };
   const body = parse(RELAY_TEXT_EDIT, edit);
   if (!body.ok) return { ok: false, error: body.error, failures: [] };
   const admin = createAdminClient();
-  const res = await updateRelayText(admin, id.data, body.data, { publishIfGrounded: true });
+  const res = await updateRelayText(admin, id.data, body.data, { publishIfGrounded: true, resolvedBy: userId });
   if (!res.ok) return { ok: false, error: res.error ?? "edit failed", failures: res.failures };
   revalidatePath(RELAYS);
   revalidatePath("/brief");

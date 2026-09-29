@@ -288,6 +288,24 @@ const POSITION_WORDS: Record<string, string> = {
   "defensive end": "de",
   "defensive tackle": "dt",
   "injured reserve": "ir",
+  touchdown: "td",
+  touchdowns: "tds",
+};
+
+/**
+ * Broadcast and roster shorthand that means one thing in football copy, keyed
+ * by the short form. Read in BOTH directions: "TNF" in the post licenses
+ * "Thursday Night Football" in the relay, and the spelled-out name licenses
+ * the short form. A relay that expands the post's "TNF" is the same fact
+ * written out, not an addition; the owner published one such relay over the
+ * check on 2026-09-26.
+ */
+const SHORTHAND: Record<string, string> = {
+  tnf: "thursday night football",
+  snf: "sunday night football",
+  mnf: "monday night football",
+  pup: "physically unable to perform",
+  nfi: "non-football injury",
 };
 
 /**
@@ -305,8 +323,21 @@ function buildHaystack(text: string): Set<string> {
   for (const [word, abbr] of Object.entries(POSITION_WORDS)) {
     if (lower.includes(word)) set.add(abbr);
   }
+  for (const [short, long] of Object.entries(SHORTHAND)) {
+    if (set.has(short)) for (const w of long.split(/[\s-]+/)) set.add(w);
+    if (lower.includes(long)) set.add(short);
+  }
+  // A football abbreviation and its plural are the same word: "TD" licenses
+  // "TDs". A fixed list, never every short word: pluralising any two-letter
+  // word let "jet sweep" license "Jets" and "PAT" license "Pats".
+  for (const abbr of PLURAL_ABBREVIATIONS) {
+    if (set.has(abbr)) set.add(`${abbr}s`);
+    if (set.has(`${abbr}s`)) set.add(abbr);
+  }
   return set;
 }
+
+const PLURAL_ABBREVIATIONS = ["td", "int", "qb", "rb", "wr", "te", "lb", "cb", "dt", "de", "ol", "dl"];
 
 /**
  * A crude stem so "Activated" at the start of a headline matches "activate"
@@ -354,6 +385,8 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
     for (const t of wordTokens(name)) haystack.add(t);
   }
   const haystackBare = new Set([...haystack].map((h) => h.replace(/[^a-z0-9]/g, "")));
+  const postStems = new Set([...postHaystack].flatMap(stems));
+  const resolvedTeamWords = new Set(post.teamNames.flatMap((name) => wordTokens(name)));
   const postNumbers = postNumberSet(haystackText);
 
   const failures: GroundingFailure[] = [];
@@ -395,13 +428,27 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
       // "Ja'Marr" and "JaMarr", "St." and "St": one more try without punctuation.
       const bare = key.replace(/[^a-z0-9]/g, "");
       if (bare && haystackBare.has(bare)) continue;
+      // "Rams-Giants" is two teams the post named, joined the way a matchup is
+      // written. Each part must pass on its own; the pair adds no claim.
+      if (key.includes("-")) {
+        const parts = key.split("-").filter(Boolean);
+        if (parts.length > 1 && parts.every((p) => haystack.has(p) || haystackBare.has(p.replace(/[^a-z0-9]/g, "")))) continue;
+      }
       // A number written as a word ("Four") is a number, and the number check
       // already decided it.
       if (WORD_NUMBERS[key] !== undefined && postNumbers.has(WORD_NUMBERS[key])) continue;
       // The first word of a sentence is capitalised whether or not it is a
       // name. Let it through when a stem of it is in the post ("Activated"
       // against "activate"); a real invented name will not stem to anything.
-      if (startsSentence && stems(key).some((st) => haystack.has(st) || haystackBare.has(st))) continue;
+      // Never for a team word: "Pats" stems to "pat", which a post about a
+      // missed PAT contains, and a team is exactly what must not be invented.
+      if (
+        startsSentence &&
+        !NFL_TEAM_WORDS.has(key) &&
+        stems(key).some((st) => haystack.has(st) || haystackBare.has(st))
+      ) {
+        continue;
+      }
       failures.push({ check: "name", token, where });
     }
   };
@@ -413,7 +460,9 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
   // A city word directly followed by a nickname must be a real team, or a pair
   // the post itself wrote. See CITY_NICKNAMES for why the word checks miss it.
   const checkTeamPairs = (text: string, where: GroundingFailure["where"]) => {
-    const rawWords = text.split(/\s+/).filter(Boolean);
+    // Hyphens split too, so "Buffalo-Chargers" is read as the pair it is: the
+    // name check lets a hyphenated token through when both halves pass alone.
+    const rawWords = text.split(/[\s-]+/).filter(Boolean);
     for (let i = 1; i < rawWords.length; i++) {
       // Punctuation between the two words ("in Buffalo, Chargers") breaks the pair.
       if (/[^A-Za-z0-9]$/.test(rawWords[i - 1])) continue;
@@ -461,10 +510,22 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
     // Plan 4.6 bullet 3 is unconditional: a fact value with content words must
     // share one with the post. There is no escape for a value whose numbers all
     // matched, because the words around a matched number are exactly where an
-    // invented detail hides.
-    if (!contentWords.some((w) => postHaystack.has(w))) {
-      failures.push({ check: "fact", token: fact.value, where: "fact" });
+    // invented detail hides. The match reads stems on both sides, so "not
+    // placed on injured reserve" shares "place" with "decided not to place".
+    if (contentWords.some((w) => stems(w).some((st) => postHaystack.has(st) || postStems.has(st)))) continue;
+    // A fact labelled plainly "Team" whose value is nothing but a team the
+    // matcher resolved ("Team: Commanders" on a post that said "HC Dan Quinn"
+    // about a Commanders linebacker) states the match, which the name check
+    // already allows in the headline. Only that label: "Former team:
+    // Commanders" on a post about a signing with the Chiefs is a claim about
+    // the past that the post never made, and it still fails.
+    if (
+      fact.label.trim().toLowerCase() === "team" &&
+      contentWords.every((w) => resolvedTeamWords.has(w))
+    ) {
+      continue;
     }
+    failures.push({ check: "fact", token: fact.value, where: "fact" });
   }
 
   return { ok: failures.length === 0, failures };

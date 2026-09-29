@@ -324,7 +324,7 @@ export async function approveDeletion(
     // Brief already cites it. setRelayStatus also queues the card patch.
     const relay = await loadRelayForIngestion(admin, mod.ingestion_id);
     if (relay) {
-      await setRelayStatus(admin, relay.id, "retracted", "source post deleted");
+      await setRelayStatus(admin, relay.id, "retracted", "source post deleted", { resolvedBy });
     } else {
       // A post from before Relays: patch the legacy card to a retracted state.
       await admin.from("beacon_brief_queue").insert({

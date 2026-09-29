@@ -273,3 +273,136 @@ describe("checkRelayGrounding", () => {
     expect(out.failures).toEqual([]);
   });
 });
+
+// Posts the check held for manual review between 2026-09-25 and 2026-09-28,
+// each read by the owner and published as faithful. None of them should need
+// a person.
+describe("checkRelayGrounding, false alarms from the September queue", () => {
+  it("lets a relay spell out the post's TNF", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "Michael Penix Jr.\n18/25 - 256 yards - 1 TD - 1 INT\n\nBijan Robinson\n29 carries - 194 yards - 2 TD\n\nThe @AtlantaFalcons' stars showed up on TNF",
+        playerNames: ["Michael Penix", "Bijan Robinson"],
+        teamNames: ["Atlanta Falcons", "ATL"],
+      },
+      {
+        headline: "Michael Penix Jr. and Bijan Robinson lead Atlanta Falcons on Thursday Night Football, Robinson with 2 TDs.",
+        facts: [],
+        timeline: null,
+      },
+    );
+    expect(out.failures).toEqual([]);
+  });
+
+  it("reads a fact's words through their endings", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "49ers have decided not to place DE Nick Bosa on injured reserve, per league source.",
+        playerNames: ["Nick Bosa"],
+        teamNames: ["San Francisco 49ers", "SF"],
+      },
+      {
+        headline: "49ers decline to place DE Nick Bosa on injured reserve.",
+        facts: [{ label: "Status", value: "not placed on injured reserve" }],
+        timeline: null,
+      },
+    );
+    expect(out.failures).toEqual([]);
+  });
+
+  it("accepts a fact that is only the matched team", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "HC Dan Quinn confirmed that LB Leo Chenal underwent neck surgery this morning",
+        playerNames: ["Leo Chenal"],
+        teamNames: ["Washington Commanders", "WAS"],
+      },
+      {
+        headline: "LB Leo Chenal underwent neck surgery this morning, HC Dan Quinn confirmed.",
+        facts: [{ label: "Team", value: "Commanders" }],
+        timeline: null,
+      },
+    );
+    expect(out.failures).toEqual([]);
+  });
+
+  it("still fails a fact that adds words to a matched name", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "HC Dan Quinn confirmed that LB Leo Chenal underwent neck surgery this morning",
+        playerNames: ["Leo Chenal"],
+        teamNames: ["Washington Commanders", "WAS"],
+      },
+      {
+        headline: "LB Leo Chenal underwent neck surgery this morning.",
+        facts: [{ label: "Team", value: "Commanders captain" }],
+        timeline: null,
+      },
+    );
+    expect(out.failures.map((f) => f.check)).toContain("fact");
+  });
+
+  it("reads a hyphenated matchup as the two teams the post named", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "Rams at Giants on Sunday: Puka Nacua is expected to play.",
+        playerNames: ["Puka Nacua"],
+        teamNames: ["Los Angeles Rams", "LAR", "New York Giants", "NYG"],
+      },
+      { headline: "Puka Nacua expected to play in Rams-Giants on Sunday.", facts: [], timeline: null },
+    );
+    expect(out.failures).toEqual([]);
+  });
+
+  it("still fails a hyphenated pair with an invented half", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "Rams at Giants on Sunday: Puka Nacua is expected to play.",
+        playerNames: ["Puka Nacua"],
+        teamNames: ["Los Angeles Rams", "LAR"],
+      },
+      { headline: "Puka Nacua expected to play in Rams-Jets on Sunday.", facts: [], timeline: null },
+    );
+    expect(out.failures.map((f) => f.token)).toContain("Rams-Jets");
+  });
+});
+
+// Counterexamples from the security review of the loosenings above. Each one
+// is an invented team that must still fail.
+describe("checkRelayGrounding, the loosenings stay narrow", () => {
+  it("does not let a two-letter word license a plural team", () => {
+    const out = checkRelayGrounding(
+      { text: "He took a jet sweep 20 yards and missed a PAT.", playerNames: [], teamNames: [] },
+      { headline: "He took a jet sweep 20 yards against the Jets.", facts: [{ label: "Opponent", value: "Pats" }], timeline: null },
+    );
+    expect(out.failures.map((f) => f.token)).toEqual(expect.arrayContaining(["Jets", "Pats"]));
+  });
+
+  it("fails a matched team under any label but Team", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "Leo Chenal has signed with the Chiefs, per source.",
+        playerNames: ["Leo Chenal"],
+        teamNames: ["Washington Commanders", "WAS", "Kansas City Chiefs", "KC"],
+      },
+      {
+        headline: "Leo Chenal has signed with the Chiefs.",
+        facts: [{ label: "Former team", value: "Commanders" }],
+        timeline: null,
+      },
+    );
+    expect(out.failures.map((f) => f.check)).toContain("fact");
+  });
+
+  it("checks a hyphenated city and nickname as a pair", () => {
+    const out = checkRelayGrounding(
+      {
+        text: "Bills host the Chargers on Sunday.",
+        playerNames: [],
+        teamNames: ["Buffalo Bills", "BUF", "Los Angeles Chargers", "LAC"],
+      },
+      { headline: "The Buffalo-Chargers game is on Sunday.", facts: [], timeline: null },
+    );
+    expect(out.ok).toBe(false);
+  });
+});

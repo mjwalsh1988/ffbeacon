@@ -185,6 +185,43 @@ async function openGroundingModeration(
   }
 }
 
+/**
+ * Close the review row a hidden Relay opened, because the owner has now
+ * decided it somewhere else.
+ *
+ * A Relay that fails grounding opens a row in beacon_brief_moderation, and
+ * until 2026-09-29 only a grounded EDIT closed it. Publish anyway, unhide,
+ * hide with a reason and retract all left it pending, so every Relay the owner
+ * had already dealt with in the Relays manager sat in the Moderation queue as
+ * well, waiting for a second click on Skip. Every decision on a Relay now
+ * closes its row: publishing marks it approved, keeping it hidden or
+ * retracting it marks it rejected, the same two outcomes Skip and Retry write.
+ *
+ * Idempotent. Only pending rows move, so a second call is a no-op.
+ */
+export async function settleRelayReview(
+  admin: Admin,
+  ingestionId: string,
+  outcome: "approved" | "rejected",
+  resolvedBy?: string | null,
+): Promise<void> {
+  const { error } = await admin
+    .from("beacon_brief_moderation")
+    .update({ status: outcome, resolved_at: new Date().toISOString(), resolved_by: resolvedBy ?? null })
+    .eq("ingestion_id", ingestionId)
+    .eq("status", "pending")
+    .eq("type", "failed_task")
+    .filter("detail->>job_type", "eq", "relay_grounding");
+  if (error) {
+    await logBeaconBrief(admin, {
+      stage: "error",
+      level: "error",
+      ingestionId,
+      message: `relay review row could not be closed after the owner decided it: ${error.message}`,
+    });
+  }
+}
+
 export interface RelayAssessment {
   names: { playerNames: string[]; teamNames: string[]; primaryPlayerId: string | null };
   extraction: RelayExtraction;
@@ -450,7 +487,7 @@ export async function updateRelayText(
   admin: Admin,
   relayId: string,
   edit: RelayTextEdit,
-  opts: { publishIfGrounded: boolean; discord?: boolean },
+  opts: { publishIfGrounded: boolean; discord?: boolean; resolvedBy?: string | null },
 ): Promise<{ ok: boolean; status: RelayStatus; failures: GroundingFailure[]; error?: string }> {
   const discord = opts.discord !== false;
   const { data: relay } = await admin.from("relays").select("*").eq("id", relayId).maybeSingle();
@@ -506,15 +543,29 @@ export async function updateRelayText(
     .eq("id", relayId);
   if (error) return { ok: false, status: relay.status as RelayStatus, failures: grounding.failures, error: error.message };
 
-  if (grounding.ok && nextStatus === "published") {
-    // A grounding moderation row for this relay is now settled.
-    await admin
+  // An edit that fails the check hides the Relay, and the review queue is
+  // driven by moderation rows, so a Relay hidden here without one (a published
+  // Relay whose source post was edited on X, or one the owner edited after
+  // publishing) would drop out of sight. Open a row unless one is already
+  // pending for this post.
+  if (!grounding.ok) {
+    const { count } = await admin
       .from("beacon_brief_moderation")
-      .update({ status: "approved", resolved_at: new Date().toISOString() })
+      .select("id", { count: "exact", head: true })
       .eq("ingestion_id", relay.ingestion_id)
       .eq("status", "pending")
       .eq("type", "failed_task")
       .filter("detail->>job_type", "eq", "relay_grounding");
+    if (!count) {
+      const reason = `grounding failed after an edit: ${grounding.failures
+        .map((f) => `${f.token} (${f.check}, ${f.where})`)
+        .join("; ")}.`;
+      await openGroundingModeration(admin, relay.ingestion_id, relayId, reason, grounding.failures);
+    }
+  }
+
+  if (grounding.ok && nextStatus === "published") {
+    await settleRelayReview(admin, relay.ingestion_id, "approved", opts.resolvedBy);
     if (!discord) {
       // Nothing to enqueue, by the caller's instruction.
     } else if (ingestion.discord_message_id) {
@@ -571,6 +622,8 @@ export async function setRelayStatus(
      * visible in the manager afterwards.
      */
     force?: boolean;
+    /** The admin who made the decision, recorded on the closed review row. */
+    resolvedBy?: string | null;
   } = {},
 ): Promise<{ ok: boolean; error?: string; failures?: GroundingFailure[] }> {
   const { data: relay } = await admin
@@ -602,6 +655,9 @@ export async function setRelayStatus(
     .update({ status, status_reason: reason?.trim() || null, updated_at: new Date().toISOString() })
     .eq("id", relayId);
   if (error) return { ok: false, error: error.message };
+
+  // Whatever the owner decided here, the review row is answered.
+  await settleRelayReview(admin, relay.ingestion_id, status === "published" ? "approved" : "rejected", options.resolvedBy);
 
   if (status === "retracted") {
     const payload: QueueJobPayload = {
