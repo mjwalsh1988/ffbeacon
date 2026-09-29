@@ -328,26 +328,31 @@ async function PlayerPageBody({
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
-        defender
-          ? // No rankings board lists defenders (R-18) and /players is not a
-            // route, so the middle crumb names the section without a URL.
-            { "@type": "ListItem", position: 2, name: "Players" }
-          : {
-          // The rankings hub, canonically. This used to point at
-          // /rankings?position=QB, which is not a page: the hub either
-          // redirects a reader with a saved format or renders the format
-          // directory, and /rankings is what its own canonical tag names.
-          // A breadcrumb item naming a URL that redirects is a breadcrumb
-          // item naming the wrong page.
-          "@type": "ListItem",
-          position: 2,
-          name: "Rankings",
-          item: `${SITE.url}/rankings`,
-        },
-        { "@type": "ListItem", position: 3, name: fullName, item: canonical },
-      ],
+      // No rankings board lists defenders (R-18) and /players is not a route,
+      // so a defender's trail has no middle crumb at all. Google requires an
+      // item URL on every ListItem but the last, so a middle crumb named
+      // without one fails the Breadcrumbs report ("Missing field item").
+      itemListElement: defender
+        ? [
+            { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
+            { "@type": "ListItem", position: 2, name: fullName, item: canonical },
+          ]
+        : [
+            { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
+            {
+              // The rankings hub, canonically. This used to point at
+              // /rankings?position=QB, which is not a page: the hub either
+              // redirects a reader with a saved format or renders the format
+              // directory, and /rankings is what its own canonical tag names.
+              // A breadcrumb item naming a URL that redirects is a breadcrumb
+              // item naming the wrong page.
+              "@type": "ListItem",
+              position: 2,
+              name: "Rankings",
+              item: `${SITE.url}/rankings`,
+            },
+            { "@type": "ListItem", position: 3, name: fullName, item: canonical },
+          ],
     },
   ];
 

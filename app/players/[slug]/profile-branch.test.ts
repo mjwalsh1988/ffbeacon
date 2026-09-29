@@ -41,7 +41,12 @@ describe("player page, defender branch", () => {
     expect(defenderDescription).not.toMatch(/trade value/i);
   });
 
-  it("names the middle breadcrumb without a URL for a defender", () => {
-    expect(page).toContain('{ "@type": "ListItem", position: 2, name: "Players" }');
+  it("gives a defender a two-crumb trail where every ListItem carries an item URL", () => {
+    // Google fails a BreadcrumbList whose non-final ListItem has no item. The
+    // defender trail used to name a URL-less "Players" crumb in the middle.
+    expect(page).not.toContain('name: "Players" }');
+    expect(page).toContain(
+      '{ "@type": "ListItem", position: 2, name: fullName, item: canonical }',
+    );
   });
 });
