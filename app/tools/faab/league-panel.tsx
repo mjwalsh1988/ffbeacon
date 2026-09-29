@@ -294,17 +294,26 @@ export function LeaguePanel({
     // league they have already moved on from must not overwrite the new one.
     let current = true;
 
+    // EVERY pick goes through the sync, not only a league we have never held.
+    // Gating it on `synced` meant a league read once was priced off those
+    // rosters forever, so a player claimed on Sleeper yesterday was still
+    // offered as a free agent today. The server answers a league synced inside
+    // the last hour from our own tables without asking Sleeper, which is the
+    // same 60-minute rule League Pulse runs on.
     const picked = leaguesRef.current.find(
       (l) => l.sleeperLeagueId === committedLeagueId,
     );
-    const needsSync = Boolean(
+    // Only a league that has never been read shows the "Reading this league
+    // from Sleeper" line up front. A refresh of one we hold is usually a
+    // cache hit and finishes in one query.
+    const firstRead = Boolean(
       picked && (!picked.synced || picked.rosterId === null),
     );
     const userId = sleeperUserIdRef.current;
 
     startLoadingAgents(async () => {
-      if (needsSync && userId) {
-        setSyncingLeague(true);
+      if (userId) {
+        setSyncingLeague(firstRead);
         const synced = await syncConnectedLeague({
           sleeperLeagueId: committedLeagueId,
           sleeperUserId: userId,
@@ -312,27 +321,34 @@ export function LeaguePanel({
         if (!current) return;
         setSyncingLeague(false);
         if (!synced.ok) {
-          setFreeAgentError(synced.error);
-          return;
-        }
-        setLeagues((prev) =>
-          prev.map((l) =>
-            l.sleeperLeagueId === committedLeagueId
-              ? { ...l, ...synced.patch }
-              : l,
-          ),
-        );
-        if (!synced.patch.synced) {
-          setFreeAgentError(
-            "Sleeper gave us no rosters for that league, so there is nothing to price a bid against yet.",
+          // A league we have never read has nothing to fall back on. One we
+          // already hold keeps working off the stored rosters rather than
+          // locking the reader out over a five-second cooldown; picking it
+          // again retries the refresh.
+          if (firstRead) {
+            setFreeAgentError(synced.error);
+            return;
+          }
+        } else {
+          setLeagues((prev) =>
+            prev.map((l) =>
+              l.sleeperLeagueId === committedLeagueId
+                ? { ...l, ...synced.patch }
+                : l,
+            ),
           );
-          return;
-        }
-        if (synced.patch.rosterId === null) {
-          setFreeAgentError(
-            `We synced that league but could not find a team owned by ${actingUsernameRef.current ?? "you"} in it.`,
-          );
-          return;
+          if (!synced.patch.synced) {
+            setFreeAgentError(
+              "Sleeper gave us no rosters for that league, so there is nothing to price a bid against yet.",
+            );
+            return;
+          }
+          if (synced.patch.rosterId === null) {
+            setFreeAgentError(
+              `We synced that league but could not find a team owned by ${actingUsernameRef.current ?? "you"} in it.`,
+            );
+            return;
+          }
         }
       }
 

@@ -29,7 +29,9 @@ import type { SearchablePlayer } from "@/lib/ranking-boards";
  * are underneath so the reader can see the question WAS asked of them, which is
  * the difference between "he is taken there" and "we did not look".
  *
- * SEARCHES SYNCED LEAGUES ONLY, AND SYNCS NOTHING. Availability is decided by
+ * SEARCHES SYNCED LEAGUES ONLY. The search refreshes stored leagues past the
+ * 60-minute cache first (searchFreeAgent), but never pulls in a league we hold
+ * nothing for. Availability is decided by
  * the absence of a player from a league's stored rosters, so a league we hold no
  * rosters for cannot be answered at all: with nothing to be absent from,
  * everyone would read as free. Those leagues are counted and named as

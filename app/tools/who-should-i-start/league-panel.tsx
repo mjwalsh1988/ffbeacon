@@ -114,6 +114,11 @@ export function LeaguePanel({
   const [picked, setPicked] = useState<string>("");
   /** The league currently being pulled from Sleeper, so only its row spins. */
   const [syncingLeagueId, setSyncingLeagueId] = useState<string | null>(null);
+  /**
+   * Whether that league is one we already hold. Its refresh is usually a cache
+   * hit that finishes in one query, so it is not announced as a Sleeper read.
+   */
+  const [syncingHeld, setSyncingHeld] = useState(false);
   /** The lookup failed. In saved mode this is what opens the form. */
   const [connectError, setConnectError] = useState<string | null>(null);
   /**
@@ -240,16 +245,22 @@ export function LeaguePanel({
   async function applyLeague(league: BreakdownLeague) {
     setPickError(null);
 
-    if (league.rosterId != null) {
-      navigateTo(league, league.rosterId);
-      return;
-    }
+    // A league we already hold still goes through the sync. Skipping it meant a
+    // league read once was compared off those rosters forever; the server
+    // answers one synced inside the last hour without asking Sleeper, the same
+    // 60-minute rule League Pulse runs on.
+    const heldRosterId = league.rosterId;
 
     if (!sleeperUserId) {
+      if (heldRosterId != null) {
+        navigateTo(league, heldRosterId);
+        return;
+      }
       setPickError("Find your leagues again, then pick this one.");
       return;
     }
 
+    setSyncingHeld(heldRosterId != null);
     setSyncingLeagueId(league.sleeperLeagueId);
     try {
       const result = await syncBreakdownLeague({
@@ -257,6 +268,13 @@ export function LeaguePanel({
         sleeperUserId,
       });
       if (!result.ok) {
+        // A league we hold keeps working off the stored rosters rather than
+        // failing over a five-second cooldown. Only a league never read has
+        // nothing to fall back on.
+        if (heldRosterId != null) {
+          navigateTo(league, heldRosterId);
+          return;
+        }
         setPickError(result.error);
         return;
       }
@@ -354,7 +372,11 @@ export function LeaguePanel({
       // Only a league we read and found no team in is a dead end. One nobody
       // has read yet is not: picking it reads it.
       disabledReason: noTeam ? "We could not find your team in it" : null,
-      busyLabel: syncing ? "Reading it from Sleeper now" : null,
+      busyLabel: syncing
+        ? syncingHeld
+          ? "Checking it for roster changes"
+          : "Reading it from Sleeper now"
+        : null,
       categoryKey: league.categoryKey,
     };
   });
@@ -491,8 +513,9 @@ export function LeaguePanel({
     let status: IdentityCardStatus = "idle";
     let statusMessage: string | null = null;
     if (syncingLeagueId !== null) {
-      statusMessage =
-        "Reading that league from Sleeper. This takes a few seconds.";
+      statusMessage = syncingHeld
+        ? "Checking that league for roster changes."
+        : "Reading that league from Sleeper. This takes a few seconds.";
     } else if (connecting) {
       status = "loading";
       statusMessage = "Loading your leagues.";
@@ -582,7 +605,9 @@ export function LeaguePanel({
               {connecting ? "Looking up your leagues." : ""}
               {leagues && !connecting ? `Found ${leagues.length} leagues.` : ""}
               {syncingLeagueId
-                ? " Reading that league from Sleeper. This takes a few seconds."
+                ? syncingHeld
+                  ? " Checking that league for roster changes."
+                  : " Reading that league from Sleeper. This takes a few seconds."
                 : ""}
             </p>
 

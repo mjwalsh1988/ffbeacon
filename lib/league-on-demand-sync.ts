@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import {
+  isLeaguePulseFresh,
+  pulseLeagueCore,
+  pulseLeagueDerived,
+} from "@/lib/league-pulse";
 
 /**
  * Sync one league on demand, from wherever the reader happens to be.
@@ -55,11 +59,118 @@ export type LeagueSyncOutcome =
   | { ok: true; cached: boolean }
   | { ok: false; reason: LeagueSyncFailure; error: string; retryInSeconds: number };
 
+/**
+ * Bring the leagues a many-league tool is about to read back inside the
+ * 60-minute cache, before it reads them.
+ *
+ * The cross-league tools (every-league FAAB bids, the portfolio Trade Finder,
+ * the Free Agent Finder) answered straight from stored rosters, so a league
+ * synced once was read as it stood that day for as long as nobody opened it.
+ * This is the same freshness rule League Pulse runs on, applied up front.
+ *
+ * Only leagues we ALREADY HOLD are refreshed. A league never synced stays the
+ * caller's "we hold nothing for this league" case, as before: pulling a whole
+ * portfolio of new leagues from Sleeper is the Sync all button's job, not a
+ * side effect of one search.
+ *
+ * Deliberately not behind the per-visitor claim in syncLeagueOnDemand, whose
+ * five-second cooldown would let one league in a batch through and refuse the
+ * rest. Each caller holds its own per-minute limit, every Sleeper call still
+ * draws on the site-wide budget in lib/sleeper-budget.ts, and a league refreshed
+ * here is fresh for an hour, so it cannot be charged twice inside that window.
+ *
+ * `max` takes the STALEST leagues first, so repeated runs work through a large
+ * portfolio rather than refreshing the same few each time. Never throws: a
+ * failed refresh leaves the stored rows in place, which is what the caller
+ * would have read anyway.
+ */
+export async function refreshStaleLeagues(
+  admin: ServiceClient,
+  sleeperLeagueIds: string[],
+  options: {
+    /** Also run the transaction and derived pass. Off when only rosters are read. */
+    derived: boolean;
+    max: number;
+    concurrency: number;
+  },
+): Promise<{ refreshed: number; failed: number }> {
+  const ids = [...new Set(sleeperLeagueIds)];
+  if (ids.length === 0 || options.max <= 0) return { refreshed: 0, failed: 0 };
+
+  const { data: rows, error } = await admin
+    .from("leagues")
+    .select("sleeper_league_id, last_pulsed_at, pulse_status")
+    .in("sleeper_league_id", ids);
+  if (error) {
+    console.warn("[league-sync] stale check failed", error);
+    return { refreshed: 0, failed: 0 };
+  }
+
+  const now = Date.now();
+  const stale = (rows ?? [])
+    .filter((r) => !isLeaguePulseFresh(r, now))
+    .sort(
+      (a, b) =>
+        (a.last_pulsed_at ? new Date(a.last_pulsed_at).getTime() : 0) -
+        (b.last_pulsed_at ? new Date(b.last_pulsed_at).getTime() : 0),
+    )
+    .slice(0, options.max)
+    .map((r) => r.sleeper_league_id);
+
+  let refreshed = 0;
+  let failed = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < stale.length) {
+      const sleeperLeagueId = stale[next];
+      next += 1;
+      try {
+        const core = await pulseLeagueCore(admin, sleeperLeagueId);
+        if (!core.ok) {
+          failed += 1;
+          continue;
+        }
+        if (options.derived) {
+          await pulseLeagueDerived(admin, core.leagueRowId, {
+            resynced: !core.cached,
+          });
+        }
+        refreshed += 1;
+      } catch (err) {
+        failed += 1;
+        console.error(
+          `[league-sync] refresh failed for ${sleeperLeagueId}:`,
+          (err as Error).message,
+        );
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.max(1, Math.min(options.concurrency, stale.length)) },
+      worker,
+    ),
+  );
+  return { refreshed, failed };
+}
+
 export async function syncLeagueOnDemand(
   admin: ServiceClient,
   sleeperLeagueId: string,
   actorKey: string,
 ): Promise<LeagueSyncOutcome> {
+  // A league synced inside the last hour is answered without the claim. The
+  // pulse below would make no Sleeper call for it anyway, and charging the slot
+  // would put a five-second cooldown between two picks of fresh leagues. This
+  // is what lets the tools call this on EVERY pick rather than only the first,
+  // which is how a league synced once used to be priced off day-old rosters.
+  const { data: stored } = await admin
+    .from("leagues")
+    .select("last_pulsed_at, pulse_status")
+    .eq("sleeper_league_id", sleeperLeagueId)
+    .maybeSingle();
+  if (isLeaguePulseFresh(stored)) return { ok: true, cached: true };
+
   const { data: claim, error: claimErr } = await admin.rpc(
     "try_claim_league_sync" as never,
     {

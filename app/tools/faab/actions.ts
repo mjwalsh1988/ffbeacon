@@ -52,7 +52,10 @@ import {
   calculateAcrossLeagues,
   MAX_PRICED_LEAGUES,
 } from "@/lib/faab/multi-league";
-import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
+import {
+  refreshStaleLeagues,
+  syncLeagueOnDemand,
+} from "@/lib/league-on-demand-sync";
 import { loadPlayerOutlook, type PlayerOutlook } from "@/lib/faab/outlook";
 import { loadPriorCellsCached } from "@/lib/faab/priors-read";
 import { pickCell, type PriorCell } from "@/lib/faab/priors-math";
@@ -830,6 +833,14 @@ export async function runAllLeagueBids(input: {
   }
 
   const admin = createAdminClient();
+  // Same 60-minute rule as the single-league pick: any league we hold that was
+  // last synced over an hour ago is refreshed before it is priced. Only the
+  // leagues this run will actually price, so the cap bounds the Sleeper work.
+  await refreshStaleLeagues(admin, sleeperLeagueIds.slice(0, MAX_PRICED_LEAGUES), {
+    derived: true,
+    max: MAX_PRICED_LEAGUES,
+    concurrency: 3,
+  });
   const settings = await loadFaabSettings(admin);
 
   try {

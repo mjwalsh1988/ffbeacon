@@ -1,6 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { refreshStaleLeagues } from "@/lib/league-on-demand-sync";
 import {
   findFreeAgentLeagues,
   MAX_SEARCHED_LEAGUES,
@@ -26,9 +27,20 @@ import {
  *   nothing they could not read from /leagues/<id>. The auth gate below is
  *   about keeping this a member surface, not about protecting the rows.
  *
- * TRIGGERS NO SYNC. It reads stored rosters and nothing else. A league nobody
- * has pulsed comes back counted as unanswered, never as "he is available".
+ * REFRESHES, NEVER IMPORTS. A stored league last synced over an hour ago is
+ * resynced before its rosters are read, the same 60-minute rule League Pulse
+ * runs on, so "he is free there" is not an answer from last week. A league
+ * nobody has pulsed is still not pulled in: it comes back counted as
+ * unanswered, never as "he is available".
  */
+
+/**
+ * How many stale leagues one search refreshes. A portfolio can run to
+ * MAX_SEARCHED_LEAGUES, and four Sleeper calls each for all of them would turn a
+ * search into a minute-long wait. The stalest go first, so a few searches work
+ * through a large portfolio; the rest are read as stored meanwhile.
+ */
+const MAX_REFRESHED_PER_SEARCH = 12;
 
 /** Sleeper player ids are numeric strings; team defenses are alphabetic codes. */
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
@@ -68,6 +80,13 @@ export async function searchFreeAgent(input: {
   if (sleeperLeagueIds.length === 0) {
     return { ok: false, error: "No leagues to search" };
   }
+
+  // Rosters are the only thing read, so the core half is enough.
+  await refreshStaleLeagues(createAdminClient(), sleeperLeagueIds, {
+    derived: false,
+    max: MAX_REFRESHED_PER_SEARCH,
+    concurrency: 4,
+  });
 
   const report = await findFreeAgentLeagues(supabase, {
     sleeperPlayerId,

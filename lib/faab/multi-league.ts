@@ -12,7 +12,9 @@
  * league-mode calculation for each league where he is actually gettable, and
  * reports the rest honestly rather than pretending we checked them.
  *
- * READ ONLY, like the single-league path. Nothing here writes or syncs.
+ * READ ONLY. Nothing here writes or syncs; the action that calls this
+ * (runAllLeagueBids) refreshes any held league past the 60-minute cache first,
+ * through lib/league-on-demand-sync.ts refreshStaleLeagues.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";

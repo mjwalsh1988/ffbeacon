@@ -89,7 +89,7 @@ const FAQ: FaqAccordionItem[] = [
   {
     question: "Does it trigger a sync of my leagues?",
     answer:
-      "No, and that is deliberate. It reads rosters already stored and nothing else. A league nobody has opened on FF Beacon yet is reported as unanswered rather than as a yes, because with no rosters to be absent from, every player in the world would read as free. Those leagues are counted and named separately so you can see the question was asked of them.",
+      "Only for leagues we already hold. Any of those last read from Sleeper more than an hour ago is refreshed before the search, up to 12 per search with the oldest first, so a player claimed this morning shows as taken. A league nobody has opened on FF Beacon yet is not pulled in. It is reported as unanswered rather than as a yes, because with no rosters to be absent from, every player in the world would read as free. Those leagues are counted and named separately so you can see the question was asked of them.",
   },
   {
     question: "Do I need an account?",

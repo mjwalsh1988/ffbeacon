@@ -41,6 +41,7 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
+import { refreshStaleLeagues } from "@/lib/league-on-demand-sync";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { loadTendencyContext } from "@/lib/trade-finder-tendency-context";
 import {
@@ -473,6 +474,15 @@ export async function findPortfolioTrade(input: {
     // Passing this client is also what tells findCrossLeagueTrade it is
     // allowed to try: see lib/trade-finder-tendency-context.ts.
     admin,
+    // The walk reads rosters, team cards and Power Pulse for the leagues in
+    // this press's window, so any of them past the 60-minute cache is synced
+    // first, derived pass included. The window (four leagues) bounds the work.
+    refreshWindow: (ids) =>
+      refreshStaleLeagues(admin, ids, {
+        derived: true,
+        max: ids.length,
+        concurrency: ids.length,
+      }),
     sourceSlug: resolvedSource.slug,
     strategy: readTradeStrategy(input.strategy) ?? undefined,
     cursor,

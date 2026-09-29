@@ -16,9 +16,10 @@ import { TradeFinder } from "@/components/trade-finder";
  * press costing fourteen leagues of work. The panel says how many are still to
  * come rather than leaving that to be guessed at.
  *
- * SYNCS NOTHING. It reads leagues that are already stored. One that has never
- * been opened cannot be searched and is counted as unread rather than silently
- * skipped, which is the same contract Free Agent Finder holds.
+ * SEARCHES STORED LEAGUES ONLY. A stored league past the 60-minute cache is
+ * refreshed before it is read (findPortfolioTrade), but one that has never been
+ * opened is not pulled in: it cannot be searched and is counted as unread rather
+ * than silently skipped, which is the same contract Free Agent Finder holds.
  */
 export function TradeFinderPanel({
   open,

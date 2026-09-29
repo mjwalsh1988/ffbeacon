@@ -144,6 +144,12 @@ export async function findCrossLeagueTrade(
      * handed the client that can only exist after that check has passed.
      */
     admin?: SupabaseClient<Database>;
+    /**
+     * Called with this press's window before any league in it is read, so the
+     * caller can bring stale leagues back inside the 60-minute cache. Absent in
+     * tests, which then read exactly what they seeded.
+     */
+    refreshWindow?: (sleeperLeagueIds: string[]) => Promise<unknown>;
   },
 ): Promise<CrossLeagueResult> {
   const ids = params.sleeperLeagueIds.slice(0, MAX_CROSS_LEAGUES);
@@ -172,6 +178,8 @@ export async function findCrossLeagueTrade(
 
   const window = ids.slice(start, start + LEAGUE_WINDOW);
   const index = start + window.length;
+
+  if (params.refreshWindow) await params.refreshWindow(window);
 
   // The window is loaded in parallel. Sequentially it would be the sum of every
   // league's read time, which on a portfolio of the size this is built for is

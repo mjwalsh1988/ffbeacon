@@ -37,6 +37,24 @@ import type { Database, Json } from "@/lib/database.types";
 
 export const LEAGUE_PULSE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
+/**
+ * Whether a stored league is inside the 60-minute cache, so a pulse would not
+ * go back to Sleeper. The one copy of the rule: pulseLeagueCore uses it for the
+ * cache hit, and lib/league-on-demand-sync.ts uses it to answer a fresh league
+ * without spending the reader's sync slot.
+ */
+export function isLeaguePulseFresh(
+  row: { last_pulsed_at: string | null; pulse_status: string | null } | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  return Boolean(
+    row &&
+      row.last_pulsed_at &&
+      row.pulse_status === "complete" &&
+      now - new Date(row.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS,
+  );
+}
+
 // Power rankings depend on player values that sync once nightly, so there is no
 // benefit to recomputing them more than once a day per league. We recompute on
 // the first league load after this window elapses (or when there are no cache
@@ -273,13 +291,7 @@ export async function pulseLeagueCore(
       .eq("sleeper_league_id", sleeperLeagueId)
       .maybeSingle();
 
-    if (
-      !force &&
-      existing &&
-      existing.last_pulsed_at &&
-      existing.pulse_status === "complete" &&
-      Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
-    ) {
+    if (!force && existing && isLeaguePulseFresh(existing)) {
       // Cache hit: league, roster, and member rows are fresh enough that we do
       // not re-hit Sleeper at all. On this branch the whole function is meant
       // to be one round trip, so the two counts run only when asked for.
