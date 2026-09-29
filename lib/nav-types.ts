@@ -38,6 +38,10 @@ type NavNodeBase = {
   /** Label for the row that links to `href` itself, above the children. Nothing
    *  is rendered when the section has no `href`. */
   indexLabel?: string;
+  /** Other path prefixes this row is current under, for a section whose pages
+   *  live under more than one URL prefix (the Beacon Desk's curation pages
+   *  kept /admin/beacon-brief when the two admin areas merged). */
+  alsoActiveUnder?: string[];
   children?: NavNode[];
 };
 
@@ -105,13 +109,15 @@ export function findActiveTrail(
     // A row that switches a view in place has no href and no pathname to match.
     // Its route says which row is current through `active` on the registration.
     if (!node.href) return;
-    const href = (node.href as string).split("?")[0];
-    const matches =
-      href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
-    if (!matches || href.length < bestLength) return;
-    bestLength = href.length;
-    sectionId = parentId ?? node.id;
-    childId = parentId ? node.id : null;
+    const prefixes = [(node.href as string).split("?")[0], ...(node.alsoActiveUnder ?? [])];
+    for (const href of prefixes) {
+      const matches =
+        href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+      if (!matches || href.length < bestLength) continue;
+      bestLength = href.length;
+      sectionId = parentId ?? node.id;
+      childId = parentId ? node.id : null;
+    }
   };
 
   for (const section of tree) {

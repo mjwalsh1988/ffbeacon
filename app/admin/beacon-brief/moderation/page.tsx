@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { BeaconBriefPageShell } from "@/components/admin/beacon-brief-page-shell";
@@ -8,6 +9,7 @@ import {
   type ModerationItem,
   type TeamOption,
 } from "@/components/admin/beacon-brief/moderation-manager";
+import { countRelayReviewQueue } from "@/lib/relays/review-queue";
 
 export const metadata: Metadata = { title: "Moderation" };
 export const dynamic = "force-dynamic";
@@ -61,32 +63,23 @@ function toIngestedPost(ing: EmbeddedIngestion): IngestedPost | null {
 export default async function BeaconBriefModerationPage() {
   await requireAdmin("/admin/beacon-brief/moderation");
   const admin = createAdminClient();
-  const [{ data }, { data: teamRows }] = await Promise.all([
+  // A Relay that failed grounding is reviewed on the Relays page, next to its
+  // edit form, and every decision there closes its row. Listing it here too is
+  // what made the owner decide each one twice, so this page counts them and
+  // links across instead.
+  const [{ data }, { data: teamRows }, relayReviewCount] = await Promise.all([
     admin
       .from("beacon_brief_moderation")
       .select(
         "id, created_at, type, raw_name, candidates, article_id, detail, articles(title, slug), news_ingestions(text, author_handle, external_url, media, quoted, retweeted)",
       )
       .eq("status", "pending")
+      .or("type.neq.failed_task,detail->>job_type.is.null,detail->>job_type.neq.relay_grounding")
       .order("created_at", { ascending: false })
       .limit(500),
     admin.from("nfl_teams").select("id, abbreviation, name").order("name"),
+    countRelayReviewQueue(admin),
   ]);
-
-  // A relay_grounding row names its hidden Relay by id; the manager link
-  // searches by headline, so look those up in one read.
-  const relayIds = (data ?? [])
-    .map((m) => (m.detail as { job_type?: string; relay_id?: string } | null))
-    .filter((d) => d?.job_type === "relay_grounding" && typeof d.relay_id === "string")
-    .map((d) => d!.relay_id as string);
-  const relayHeadlineById = new Map<string, string>();
-  if (relayIds.length > 0) {
-    const { data: relayRows } = await admin
-      .from("relays")
-      .select("id, headline")
-      .in("id", relayIds.slice(0, 300));
-    for (const r of relayRows ?? []) relayHeadlineById.set(r.id, r.headline);
-  }
 
   // A Brief review row names its article; the review page is keyed by the
   // brief_editions id, so look those up in one read.
@@ -135,7 +128,6 @@ export default async function BeaconBriefModerationPage() {
         job_type?: string;
         error?: string;
         attempts?: number;
-        relay_id?: string;
       } | null;
       return {
         type: "failed_task",
@@ -147,10 +139,6 @@ export default async function BeaconBriefModerationPage() {
         articleTitle,
         articleSlug,
         post,
-        relayHeadline:
-          typeof detail?.relay_id === "string"
-            ? (relayHeadlineById.get(detail.relay_id) ?? null)
-            : null,
       };
     }
 
@@ -184,9 +172,19 @@ export default async function BeaconBriefModerationPage() {
   return (
     <BeaconBriefPageShell
       title="Moderation"
-      description="Four kinds of review land here, and nothing is auto-applied. Deleted source posts wait for you to retract or keep the Relay. Player and team names the curator could not confidently match wait for you to pick the right one (or dismiss) so news shows on the correct profile. Tasks that failed after every retry wait for you to retry them or skip them. A Brief edition waiting for review is listed here with a link, and is approved or rejected on the Brief desk page, not here."
+      description="Deleted source posts wait for you to retract or keep the Relay. Player and team names the curator could not confidently match wait for you to pick the right one (or dismiss) so news shows on the correct profile. Discord and deletion tasks that failed after every retry wait for you to retry or skip them. A Brief edition waiting for review is listed with a link to its page. Relays that failed the grounding check are reviewed on the Relays page."
     >
-      <ModerationManager items={items} teams={teams} />
+      <div className="space-y-4">
+        <p className="text-sm text-ink-muted">
+          {relayReviewCount === 0
+            ? "No Relays are waiting for grounding review. "
+            : `${relayReviewCount} ${relayReviewCount === 1 ? "Relay is" : "Relays are"} waiting for grounding review. `}
+          <Link href="/admin/brief-desk/relays" className="inline-flex min-h-[44px] items-center font-semibold text-brand-cyan underline">
+            Open the Relays review
+          </Link>
+        </p>
+        <ModerationManager items={items} teams={teams} />
+      </div>
     </BeaconBriefPageShell>
   );
 }

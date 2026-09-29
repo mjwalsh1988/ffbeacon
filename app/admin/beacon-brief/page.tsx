@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { BeaconBriefPageShell } from "@/components/admin/beacon-brief-page-shell";
 import { formatEastern } from "@/lib/datetime";
 
-export const metadata: Metadata = { title: "The Beacon Brief" };
+export const metadata: Metadata = { title: "Pipeline health" };
 export const dynamic = "force-dynamic";
 
 function StatCard({
@@ -128,8 +128,8 @@ export default async function BeaconBriefOverviewPage() {
 
   return (
     <BeaconBriefPageShell
-      title="Overview"
-      description="The Beacon Brief at a glance: source and article counts, queue health, and recent activity. Curation runs every 5 minutes; the worker drains the queue every minute."
+      title="Pipeline health"
+      description="The curation pipeline that feeds the desk: source and article counts, queue health, the X API, and recent activity. Curation runs every 5 minutes; the worker drains the queue every minute."
     >
       <div className="space-y-8">
         <section aria-labelledby="bb-stats">

@@ -301,18 +301,15 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "sliders",
       },
       {
-        id: "/admin/beacon-brief",
-        label: "The Beacon Brief",
-        href: "/admin/beacon-brief",
-        hint: "News curation, moderation, and logs",
-        icon: "newspaper",
-      },
-      {
+        // One entry for the whole desk. The curation pages keep their
+        // /admin/beacon-brief URLs (alert emails link to them), and
+        // alsoActiveUnder keeps this row current while one is open.
         id: "/admin/brief-desk",
-        label: "Brief desk",
+        label: "Beacon Desk",
         href: "/admin/brief-desk",
-        hint: "Editions, relays, and the desk settings",
+        hint: "Relays, editions, moderation, sources, and logs",
         icon: "newspaper",
+        alsoActiveUnder: ["/admin/beacon-brief"],
       },
       {
         id: "/admin/signal-check",

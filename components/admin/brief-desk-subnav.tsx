@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BRIEF_DESK_SUBPAGES } from "@/lib/brief-desk-admin-nav";
 
-/** Secondary nav within the Brief desk, so a reader can jump between sibling
- *  sub-pages without returning to the overview. aria-current marks the active
- *  page for assistive tech. The Editions chip stays active on a review page,
- *  and aria-current is read off the same flag as the colour, so the chip that
- *  looks current announces as current too. */
+/** Secondary nav across the whole Beacon Desk, so a reader can jump between
+ *  sibling sub-pages without returning to the overview. aria-current marks the
+ *  active page for assistive tech. The Editions chip stays active on a review
+ *  page, and aria-current is read off the same flag as the colour, so the chip
+ *  that looks current announces as current too. */
 export function BriefDeskSubNav() {
   const pathname = usePathname();
   const chip = (active: boolean) =>
@@ -19,7 +19,7 @@ export function BriefDeskSubNav() {
     }`;
 
   return (
-    <nav aria-label="Brief desk sections" className="flex flex-wrap gap-2">
+    <nav aria-label="Beacon Desk sections" className="flex flex-wrap gap-2">
       <Link
         href="/admin/brief-desk"
         aria-current={pathname === "/admin/brief-desk" ? "page" : undefined}
@@ -28,7 +28,7 @@ export function BriefDeskSubNav() {
         Overview
       </Link>
       {BRIEF_DESK_SUBPAGES.map((p) => {
-        const active = pathname === p.href || pathname.startsWith(`${p.href}/`);
+        const active = p.exact ? pathname === p.href : pathname === p.href || pathname.startsWith(`${p.href}/`);
         return (
           <Link
             key={p.href}

@@ -32,10 +32,24 @@ export interface RelayAdminRow {
   timeline: string | null;
   briefId: string | null;
   updatedAt: string;
+  /**
+   * Present when the Relay is waiting for the owner's review: it failed the
+   * grounding check and nobody has decided it yet. Carries what the owner needs
+   * to decide without leaving the page: the post, and the words that failed.
+   */
+  review?: RelayReview;
+}
+
+export interface RelayReview {
+  heldAt: string;
+  postText: string;
+  /** The quoted or retweeted post, which the check also reads. */
+  quotedText: string | null;
+  failures: GroundingFailure[];
 }
 
 type Status = { msg: string; error: boolean } | null;
-type Panel = "hide" | "retract" | "edit" | null;
+type Panel = "hide" | "keep" | "retract" | "edit" | null;
 
 const btnClass =
   "min-h-[44px] rounded-card border border-line bg-base px-3 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50";
@@ -86,7 +100,7 @@ function ReasonPanel({
   relayId: string;
   panelId: string;
   action: (id: string, reason: string) => Promise<{ ok: boolean; error?: string }>;
-  verb: "Hide" | "Retract";
+  verb: "Hide" | "Keep hidden" | "Retract";
   onDone: (res: { ok: boolean; error?: string }, okMsg: string) => void;
   onCancel: () => void;
 }) {
@@ -107,14 +121,21 @@ function ReasonPanel({
       onSubmit={(e) => {
         e.preventDefault();
         if (!reason.trim()) {
-          setError(`A reason is required to ${verb.toLowerCase()} a Relay.`);
+          setError(verb === "Keep hidden" ? "A reason is required to keep a Relay hidden." : `A reason is required to ${verb.toLowerCase()} a Relay.`);
           ref.current?.focus();
           return;
         }
         setError(null);
         startTransition(async () => {
           const res = await action(relayId, reason);
-          onDone(res, verb === "Hide" ? "Hidden." : "Retracted. The Discord card is being patched.");
+          onDone(
+            res,
+            verb === "Retract"
+              ? "Retracted. The Discord card is being patched."
+              : verb === "Keep hidden"
+                ? "Kept hidden. It has left the review list."
+                : "Hidden.",
+          );
         });
       }}
     >
@@ -148,7 +169,7 @@ function ReasonPanel({
       ) : null}
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={`${btnClass} hover:border-signal-danger`} disabled={pending}>
-          {verb === "Retract" ? "Confirm retract" : "Confirm hide"}
+          {verb === "Retract" ? "Confirm retract" : verb === "Keep hidden" ? "Confirm keep hidden" : "Confirm hide"}
         </button>
         <button type="button" className={btnClass} disabled={pending} onClick={onCancel}>
           Cancel
@@ -279,6 +300,52 @@ function EditPanel({
   );
 }
 
+/**
+ * The source post and the check's verdict, shown on a Relay waiting for review
+ * so the owner can compare the two on this page. Before 2026-09-29 the post
+ * was only on the Moderation page and the edit form only here, so reviewing
+ * one Relay meant two pages and, afterwards, a second click on Skip.
+ */
+function ReviewContext({ review }: { review: RelayReview }) {
+  return (
+    <div className="mt-3 space-y-2 rounded-card border border-signal-warning/60 bg-signal-warning/10 p-3">
+      <p className="text-sm font-medium text-ink">
+        Held for review {formatEastern(review.heldAt)}.
+        {review.failures.length > 0
+          ? ` The grounding check could not find ${review.failures.length === 1 ? "this word" : "these words"} in the source post:`
+          : ""}
+      </p>
+      {review.failures.length > 0 ? (
+        <ul role="list" className="list-disc space-y-0.5 pl-5 text-sm text-ink">
+          {review.failures.map((f, i) => (
+            <li key={i}>
+              &quot;{f.token}&quot; ({f.check} check, in the {f.where})
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-ink-muted">
+          No failing words were recorded. The extraction fell back to the suggested title, which was never checked.
+        </p>
+      )}
+      <figure>
+        <figcaption className="text-xs font-medium text-ink-subtle">Source post</figcaption>
+        {review.postText.trim() ? (
+          <blockquote className="mt-1 whitespace-pre-wrap border-l-2 border-line pl-3 text-sm text-ink">{review.postText}</blockquote>
+        ) : (
+          <p className="mt-1 text-sm text-ink-muted">The source post text was not stored. Use the source link below.</p>
+        )}
+      </figure>
+      {review.quotedText ? (
+        <figure>
+          <figcaption className="text-xs font-medium text-ink-subtle">Quoted or reposted</figcaption>
+          <blockquote className="mt-1 whitespace-pre-wrap border-l-2 border-line pl-3 text-sm text-ink">{review.quotedText}</blockquote>
+        </figure>
+      ) : null}
+    </div>
+  );
+}
+
 function RelayRow({
   relay,
   pending,
@@ -325,7 +392,7 @@ function RelayRow({
         <span className="rounded-full border border-line px-2 py-0.5 text-ink-muted">{kindLabel}</span>
         <span className="text-ink-subtle">{weekLabel(relay.week, relay.season)}</span>
       </div>
-      <p className="mt-2 font-medium text-ink">{relay.headline}</p>
+      <p id={`${rowId}-headline`} className="mt-2 font-medium text-ink">{relay.headline}</p>
       {relay.statusReason ? (
         <p className="mt-1 text-xs text-ink-muted">Status reason: {relay.statusReason}</p>
       ) : null}
@@ -363,6 +430,8 @@ function RelayRow({
         ) : null}
       </p>
 
+      {relay.review ? <ReviewContext review={relay.review} /> : null}
+
       <FailureList failures={panel === "edit" ? [] : lastFailures} />
 
       {retracted ? (
@@ -372,6 +441,7 @@ function RelayRow({
           {relay.status === "published" ? (
             <button
               type="button"
+              aria-describedby={`${rowId}-headline`}
               className={btnClass}
               disabled={pending}
               aria-expanded={panel === "hide"}
@@ -383,6 +453,7 @@ function RelayRow({
           ) : (
             <button
               type="button"
+              aria-describedby={`${rowId}-headline`}
               className={btnClass}
               disabled={pending || unhiding}
               onClick={() =>
@@ -402,6 +473,7 @@ function RelayRow({
             // overruling the check on.
             <button
               type="button"
+              aria-describedby={`${rowId}-headline`}
               className={btnClass}
               disabled={pending || unhiding}
               onClick={() =>
@@ -415,8 +487,24 @@ function RelayRow({
               <span className="sr-only">, skipping the grounding check because you have read the post</span>
             </button>
           )}
+          {relay.review && (
+            // Closes the review without publishing: the owner has read it and
+            // it stays off the feed and off Discord.
+            <button
+              type="button"
+              aria-describedby={`${rowId}-headline`}
+              className={btnClass}
+              disabled={pending}
+              aria-expanded={panel === "keep"}
+              aria-controls={panel === "keep" ? panelId : undefined}
+              onClick={(e) => togglePanel("keep", e.currentTarget)}
+            >
+              Keep hidden
+            </button>
+          )}
           <button
             type="button"
+              aria-describedby={`${rowId}-headline`}
             className={`${btnClass} hover:border-signal-danger`}
             disabled={pending}
             aria-expanded={panel === "retract"}
@@ -427,6 +515,7 @@ function RelayRow({
           </button>
           <button
             type="button"
+              aria-describedby={`${rowId}-headline`}
             className={btnClass}
             disabled={pending}
             aria-expanded={panel === "edit"}
@@ -443,6 +532,19 @@ function RelayRow({
           relayId={relay.id}
           panelId={panelId}
           verb="Hide"
+          action={hideRelay}
+          onDone={(res, okMsg) => {
+            announce(res, okMsg);
+            if (res.ok) setPanel(null);
+          }}
+          onCancel={cancelPanel}
+        />
+      ) : null}
+      {panel === "keep" ? (
+        <ReasonPanel
+          relayId={relay.id}
+          panelId={panelId}
+          verb="Keep hidden"
           action={hideRelay}
           onDone={(res, okMsg) => {
             announce(res, okMsg);
@@ -480,7 +582,20 @@ function RelayRow({
   );
 }
 
-export function RelaysManager({ relays }: { relays: RelayAdminRow[] }) {
+/**
+ * `emptyText` is rendered INSIDE the manager, beside its status region, so a
+ * decision that empties the list does not unmount the region that is about to
+ * announce it. `resultLabel` names that region, since a page can hold two.
+ */
+export function RelaysManager({
+  relays,
+  emptyText,
+  resultLabel,
+}: {
+  relays: RelayAdminRow[];
+  emptyText?: string;
+  resultLabel?: string;
+}) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>(null);
   const resultRef = useRef<HTMLParagraphElement>(null);
@@ -498,11 +613,14 @@ export function RelaysManager({ relays }: { relays: RelayAdminRow[] }) {
         tabIndex={-1}
         role="status"
         aria-live="polite"
+        aria-label={resultLabel}
         className={`min-h-[1.25rem] text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan ${status?.error ? "text-signal-danger" : "text-ink-muted"}`}
       >
         {status ? status.msg : ""}
       </p>
-      {relays.length === 0 ? null : (
+      {relays.length === 0 ? (
+        emptyText ? <p className="text-sm text-ink-muted">{emptyText}</p> : null
+      ) : (
         <ul role="list" className="space-y-3">
           {relays.map((r) => (
             <RelayRow key={r.id} relay={r} pending={false} announce={announce} />

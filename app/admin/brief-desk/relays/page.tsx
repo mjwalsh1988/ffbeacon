@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { BriefDeskPageShell } from "@/components/admin/brief-desk-page-shell";
 import { RelaysManager, type RelayAdminRow } from "@/components/admin/brief-desk/relays-manager";
+import { loadRelayReviewQueue } from "@/lib/relays/review-queue";
 import { RELAY_KINDS, RELAY_KIND_LABELS, RELAY_STATUSES, parseRelayFacts } from "@/lib/relays/types";
 import type { Database } from "@/lib/database.types";
 
@@ -60,9 +61,10 @@ export default async function BriefDeskRelaysPage({ searchParams }: { searchPara
   const teamId = params.team && /^[0-9a-f-]{36}$/i.test(params.team) ? params.team : "";
   const pageNum = Math.max(1, Math.floor(Number(params.page)) || 1);
 
-  const [{ data: teamRows }, weeks] = await Promise.all([
+  const [{ data: teamRows }, weeks, reviewRows] = await Promise.all([
     admin.from("nfl_teams").select("id, abbreviation, name").order("abbreviation", { ascending: true }),
     loadAllWeeks(admin),
+    loadRelayReviewQueue(admin),
   ]);
   const teams = (teamRows ?? []) as { id: string; abbreviation: string; name: string }[];
 
@@ -114,9 +116,24 @@ export default async function BriefDeskRelaysPage({ searchParams }: { searchPara
   return (
     <BriefDeskPageShell
       title="Relays"
-      description="Every Relay, any status, newest first by the source post. Search the headline, filter by status, kind, week or team. Hide one with a reason, unhide it, retract it when the report was withdrawn, or edit its words: an edit re-runs the grounding check and publishes on a pass."
+      description="Relays waiting for your review come first, each beside its source post. Below them, every Relay, any status, newest first by the source post. Whatever you do to a Relay here (edit and publish, publish anyway, keep hidden, retract) also closes its review, so nothing waits for a second click anywhere else."
     >
       <div className="space-y-6">
+        <section aria-labelledby="relay-review" className="space-y-3">
+          <h2 id="relay-review" className="text-lg font-semibold tracking-tight text-ink">
+            Waiting for your review ({reviewRows.length})
+          </h2>
+          <RelaysManager
+            relays={reviewRows}
+            resultLabel="Review result"
+            emptyText="No Relays are waiting. Every Relay that failed the grounding check has been decided."
+          />
+        </section>
+
+        <section aria-labelledby="relay-all" className="space-y-6">
+        <h2 id="relay-all" className="text-lg font-semibold tracking-tight text-ink">
+          All Relays
+        </h2>
         <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Search and filter Relays">
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-ink">Headline contains</span>
@@ -181,7 +198,7 @@ export default async function BriefDeskRelaysPage({ searchParams }: { searchPara
           {total === 0 ? "No Relays match." : `${total} ${total === 1 ? "Relay" : "Relays"} match. Page ${pageNum} of ${pageCount}.`}
         </p>
 
-        <RelaysManager relays={rows} />
+        <RelaysManager relays={rows} resultLabel="All Relays result" />
 
         {pageCount > 1 ? (
           <nav aria-label="Relay pages" className="flex flex-wrap gap-3">
@@ -197,6 +214,7 @@ export default async function BriefDeskRelaysPage({ searchParams }: { searchPara
             ) : null}
           </nav>
         ) : null}
+        </section>
       </div>
     </BriefDeskPageShell>
   );

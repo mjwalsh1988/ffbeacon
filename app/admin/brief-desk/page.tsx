@@ -6,8 +6,9 @@ import { BriefDeskPageShell } from "@/components/admin/brief-desk-page-shell";
 import { BRIEF_DESK_SUBPAGES } from "@/lib/brief-desk-admin-nav";
 import { loadDeskActivity } from "@/lib/brief-desk/desk-activity";
 import { formatEastern } from "@/lib/datetime";
+import { countRelayReviewQueue } from "@/lib/relays/review-queue";
 
-export const metadata: Metadata = { title: "Brief desk" };
+export const metadata: Metadata = { title: "Beacon Desk" };
 export const dynamic = "force-dynamic";
 
 function StatCard({
@@ -49,7 +50,7 @@ export default async function BriefDeskOverviewPage() {
   const relayCount = (status: string) =>
     admin.from("relays").select("*", { count: "exact", head: true }).eq("status", status);
 
-  const [inReview, published, rejected, relaysPublished, relaysHidden, relaysRetracted, activity] =
+  const [inReview, published, rejected, relaysPublished, relaysHidden, relaysRetracted, relaysWaiting, activity] =
     await Promise.all([
       briefCount("in_review"),
       briefCount("published"),
@@ -57,6 +58,7 @@ export default async function BriefDeskOverviewPage() {
       relayCount("published"),
       relayCount("hidden"),
       relayCount("retracted"),
+      countRelayReviewQueue(admin),
       loadDeskActivity(admin),
     ]);
 
@@ -66,7 +68,7 @@ export default async function BriefDeskOverviewPage() {
   return (
     <BriefDeskPageShell
       title="Overview"
-      description="The Brief desk at a glance: editions waiting on you, what is live, the Relay counts, and when the desk last asked for a bundle and last sent a draft."
+      description="The Beacon Desk at a glance: editions and Relays waiting on you, what is live, and when the desk last asked for a bundle and last sent a draft. The curation pipeline that feeds it is under Pipeline health."
     >
       <div className="space-y-8">
         <section aria-labelledby="bd-editions">
@@ -89,14 +91,15 @@ export default async function BriefDeskOverviewPage() {
           <h2 id="bd-relays" className="text-lg font-semibold tracking-tight text-ink">
             Relays
           </h2>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <StatCard label="Published" value={relaysPublished.count ?? 0} hint="on the feed" />
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard
-              label="Hidden"
-              value={relaysHidden.count ?? 0}
+              label="Waiting for review"
+              value={relaysWaiting}
               tone="danger"
-              hint="failed grounding or hidden by you"
+              hint="failed grounding, on the Relays page"
             />
+            <StatCard label="Published" value={relaysPublished.count ?? 0} hint="on the feed" />
+            <StatCard label="Hidden" value={relaysHidden.count ?? 0} hint="kept off the feed" />
             <StatCard label="Retracted" value={relaysRetracted.count ?? 0} hint="source post removed" />
           </div>
         </section>
@@ -121,7 +124,7 @@ export default async function BriefDeskOverviewPage() {
           <h2 id="bd-pages" className="text-lg font-semibold tracking-tight text-ink">
             Sections
           </h2>
-          <ul role="list" className="mt-3 grid gap-3 sm:grid-cols-3">
+          <ul role="list" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {BRIEF_DESK_SUBPAGES.map((p) => (
               <li key={p.href}>
                 <Link

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { BriefDeskSubNav } from "@/components/admin/brief-desk-subnav";
 
-/** Consistent header + sub-nav wrapper for every Brief desk admin page.
+/** Consistent header + sub-nav wrapper for every Beacon Desk admin page,
+ *  the curation pages under /admin/beacon-brief included.
  *  Each page owns a single H1 for screen-reader navigation. */
 export function BriefDeskPageShell({
   title,
@@ -16,7 +17,7 @@ export function BriefDeskPageShell({
     <div className="space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-brand-cyan">
-          Brief desk
+          Beacon Desk
         </p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl">
           {title}
