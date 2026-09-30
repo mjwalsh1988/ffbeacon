@@ -2786,6 +2786,7 @@ export type Database = {
           payload: Json | null;
           posted_at: string | null;
           season: number | null;
+          send_started_at: string | null;
           status: string;
           webhook_id: string | null;
           week: number | null;
@@ -2802,6 +2803,7 @@ export type Database = {
           payload?: Json | null;
           posted_at?: string | null;
           season?: number | null;
+          send_started_at?: string | null;
           status?: string;
           webhook_id?: string | null;
           week?: number | null;
@@ -2818,6 +2820,7 @@ export type Database = {
           payload?: Json | null;
           posted_at?: string | null;
           season?: number | null;
+          send_started_at?: string | null;
           status?: string;
           webhook_id?: string | null;
           week?: number | null;
@@ -3114,9 +3117,11 @@ export type Database = {
           pulse_error: string | null;
           pulse_status: string;
           roster_positions: Json;
+          rosters_changed_at: string | null;
           scoring_settings: Json;
           season: number;
           sleeper_league_id: string;
+          sleeper_missing_since: string | null;
           sport: string;
           status: string | null;
           total_rosters: number | null;
@@ -3146,9 +3151,11 @@ export type Database = {
           pulse_error?: string | null;
           pulse_status?: string;
           roster_positions?: Json;
+          rosters_changed_at?: string | null;
           scoring_settings?: Json;
           season: number;
           sleeper_league_id: string;
+          sleeper_missing_since?: string | null;
           sport?: string;
           status?: string | null;
           total_rosters?: number | null;
@@ -3178,9 +3185,11 @@ export type Database = {
           pulse_error?: string | null;
           pulse_status?: string;
           roster_positions?: Json;
+          rosters_changed_at?: string | null;
           scoring_settings?: Json;
           season?: number;
           sleeper_league_id?: string;
+          sleeper_missing_since?: string | null;
           sport?: string;
           status?: string | null;
           total_rosters?: number | null;
@@ -3298,6 +3307,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      manager_pulse_run_errors: {
+        Row: {
+          created_at: string;
+          message: string;
+          run_id: string;
+          stack: string | null;
+          stage: string;
+        };
+        Insert: {
+          created_at?: string;
+          message: string;
+          run_id: string;
+          stack?: string | null;
+          stage?: string;
+        };
+        Update: {
+          created_at?: string;
+          message?: string;
+          run_id?: string;
+          stack?: string | null;
+          stage?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "manager_pulse_run_errors_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: true;
+            referencedRelation: "manager_pulse_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       manager_pulse_run_leagues: {
         Row: {
           created_at: string;
@@ -3367,6 +3408,7 @@ export type Database = {
           leagues_charged: number;
           leagues_done: number;
           leagues_failed: number;
+          leagues_skipped: number;
           leagues_total: number;
           live_checkpoint_at: string | null;
           live_checkpoint_done: number;
@@ -3387,6 +3429,7 @@ export type Database = {
           leagues_charged?: number;
           leagues_done?: number;
           leagues_failed?: number;
+          leagues_skipped?: number;
           leagues_total?: number;
           live_checkpoint_at?: string | null;
           live_checkpoint_done?: number;
@@ -3407,6 +3450,7 @@ export type Database = {
           leagues_charged?: number;
           leagues_done?: number;
           leagues_failed?: number;
+          leagues_skipped?: number;
           leagues_total?: number;
           live_checkpoint_at?: string | null;
           live_checkpoint_done?: number;
@@ -7867,6 +7911,16 @@ export type Database = {
           team: string;
         }[];
       };
+      cast_would_you_rather_guest_vote: {
+        Args: {
+          p_actor_key: string;
+          p_guest_id: string;
+          p_limit: number;
+          p_side: string;
+          p_trade_id: string;
+        };
+        Returns: Json;
+      };
       claim_league_sync_jobs: {
         Args: { p_limit: number };
         Returns: {
@@ -8130,12 +8184,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -8157,13 +8211,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -8182,13 +8235,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -8207,13 +8259,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -8226,11 +8277,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
