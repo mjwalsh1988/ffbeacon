@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runNflOddsSync } from "@/lib/sync-nfl-odds";
@@ -42,7 +44,12 @@ export async function GET(req: Request) {
   const supabase = createAdminClient();
   try {
     const result = await recordCronRun(supabase, "sync-nfl-odds", async () => {
-      return runNflOddsSync(supabase);
+      const sync = await runNflOddsSync(supabase);
+      // lib/season-schedule.ts caches each season's kickoff times under this
+      // tag for an hour and says the odds sync busts it. Nothing did, so a
+      // freshly synced kickoff reached the player profile up to an hour late.
+      if (!sync.skipped) revalidateTag(CACHE_TAGS.playerProjections);
+      return sync;
     });
     return NextResponse.json(result);
   } catch (err) {

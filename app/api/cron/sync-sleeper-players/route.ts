@@ -23,6 +23,14 @@ export const maxDuration = 300;
  * they run. Landing it last would mean a full day of downstream work built on
  * yesterday's designations.
  *
+ * On Sundays, Mondays and Thursdays in season it also runs before each kickoff
+ * window and after the night games (PLAYERS_GAME_DAY_SCHEDULES in
+ * lib/cron-runs.ts, with the Eastern times), always ten minutes ahead of the
+ * projections sync. Repeats are safe and bounded: one Sleeper request for the
+ * player dump, and an upsert keyed on the player's slug, so a second run in a
+ * day rewrites the same rows with newer designations and adds none. It runs in
+ * about 14 seconds (2026-09-23 to 09-29).
+ *
  * Auth: `Authorization: Bearer <CRON_SECRET>` only. Calls the same
  * runSleeperPlayersSync() the CLI uses and returns its JSON summary.
  */
@@ -39,7 +47,7 @@ export async function GET(req: Request) {
       // Fresh player rows -> bust the depth chart cache.
       if (!sync.skipped) revalidateTag(CACHE_TAGS.playerDepth);
       return sync;
-    });
+    }, { timeoutMs: 285_000 });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

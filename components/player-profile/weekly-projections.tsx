@@ -56,6 +56,7 @@ export function WeeklyProjections({
   accuracyPoints = [],
   beatRate = null,
   statAccuracy = [],
+  gradedWeeks,
 }: {
   cards: ProjectionWeekCard[];
   position: string;
@@ -82,6 +83,13 @@ export function WeeklyProjections({
   beatRate?: BeatRate | null;
   /** Current-season per-stat accuracy (targets, yards, TDs, ...) for played weeks. */
   statAccuracy?: StatAccuracy[];
+  /**
+   * Played weeks this season that THIS engine projected, so the beat rate and
+   * per-stat accuracy grade the engine named in the heading. Zero once the
+   * season has started means the engine has nothing to be graded on yet, and
+   * the card says so in words instead of showing an empty rate.
+   */
+  gradedWeeks?: number;
 }) {
   const [openWeek, setOpenWeek] = useState<number | null>(null);
   const selected = cards.find((c) => c.week === openWeek) ?? null;
@@ -160,6 +168,12 @@ export function WeeklyProjections({
                 <ProjectionActualChart points={accuracyPoints} scoringLabel={scoringLabel} season={season} />
               </div>
               <AccuracyStatCards points={accuracyPoints} mode="projection" beatRate={beatRate} />
+              {seasonStarted && gradedWeeks === 0 ? (
+                <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                  {sourceLabel} has not yet projected a week this player has played this
+                  season, so there is no {sourceLabel} beat rate or per-stat accuracy yet.
+                </p>
+              ) : null}
               <StatAccuracyBreakdown
                 stats={statAccuracy}
                 heading="Per-stat accuracy"

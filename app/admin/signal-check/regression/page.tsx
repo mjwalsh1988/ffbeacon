@@ -1,8 +1,10 @@
+import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SignalCheckSubnav } from "@/components/admin/signal-check-subnav";
 import { RegressionManager, type RegressionCaseView, type RulesetChoice } from "./regression-manager";
 
+export const metadata: Metadata = { title: "Signal Check regression" };
 export const dynamic = "force-dynamic";
 
 export default async function SignalCheckRegressionPage() {

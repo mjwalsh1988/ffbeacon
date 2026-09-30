@@ -7,6 +7,8 @@ import {
   VALID_PREFERENCE_SLUG as VALID_SLUG,
 } from "@/lib/preferences";
 import { AUTH_EVENT_COOKIE, isGoogleAnalyticsEnabled } from "@/lib/analytics";
+import { loginErrorCodeFor } from "@/lib/auth/login-errors";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 /**
  * An account created within this window of the callback is reported as a
@@ -41,20 +43,14 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
+    // A code from a fixed set, never the provider's message: /login renders
+    // only the sentence it has for a known code (lib/auth/login-errors.ts).
+    return NextResponse.redirect(`${origin}/login?error=${loginErrorCodeFor(error)}`);
   }
 
-  // Both slashes, for the reason app/login/login-form.tsx states: a leading
-  // "/" followed by a backslash enters the URL authority state the same way
-  // "//" does. This one is already safe because the result is concatenated
-  // onto `origin`, but the two checks should not disagree about what a
-  // same-origin path is.
-  const redirectPath =
-    candidate.startsWith("/") &&
-    candidate[1] !== "/" &&
-    candidate[1] !== "\\"
-      ? candidate
-      : "/";
+  // The same validation /login applies, from the one shared helper, so the
+  // two can never disagree about what a same-origin path is.
+  const redirectPath = safeRedirectPath(candidate, "/");
   const response = NextResponse.redirect(`${origin}${redirectPath}`);
 
   // Consume the one-shot return cookie so it doesn't influence later

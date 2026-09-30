@@ -46,6 +46,7 @@ import {
 import { clampStartCount } from "@/lib/start-sit/rank";
 import { buildStartSitHref } from "./picker-url";
 import { trackEvent } from "@/lib/analytics";
+import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
 const MIN_QUERY_LENGTH = 2;
@@ -374,7 +375,8 @@ function AddPlayerCombobox({
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // No option is active until the reader presses Down (lib/keyboard-navigation).
+  const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
 
   const trimmed = query.trim();
   const longEnough = trimmed.length >= MIN_QUERY_LENGTH;
@@ -396,7 +398,7 @@ function AddPlayerCombobox({
         const data = (await res.json()) as { results?: SearchResult[] };
         if (!cancelled) {
           setResults(data.results ?? []);
-          setActiveIdx(0);
+          setActiveIdx(NO_ACTIVE_OPTION);
         }
       } catch {
         if (!cancelled) setResults([]);
@@ -438,16 +440,13 @@ function AddPlayerCombobox({
   );
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      const key = event.key;
       setOpen(true);
-      setActiveIdx((i) => Math.min(results.length - 1, i + 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
+      setActiveIdx((i) => nextComboboxIndex(i, key, results.length));
     } else if (event.key === "Enter") {
-      if (open && results[activeIdx] && !excludeSlugs.includes(results[activeIdx].slug)) {
+      if (open && activeIdx >= 0 && results[activeIdx] && !excludeSlugs.includes(results[activeIdx].slug)) {
         event.preventDefault();
         commit(results[activeIdx]);
       }
@@ -455,11 +454,15 @@ function AddPlayerCombobox({
       if (open) {
         event.preventDefault();
         setOpen(false);
+        setActiveIdx(NO_ACTIVE_OPTION);
       }
     }
   };
 
-  const showList = open && longEnough && !atMax;
+  const showPanel = open && longEnough && !atMax;
+  // The listbox exists only when it has options. "Searching" and "No players
+  // match" are status text, carried by the live line below, not options.
+  const showList = showPanel && !loading && results.length > 0;
   const statusText = atMax
     ? ""
     : !longEnough
@@ -487,9 +490,9 @@ function AddPlayerCombobox({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showList}
-          aria-controls={listboxId}
+          aria-controls={showList ? listboxId : undefined}
           aria-activedescendant={
-            showList && results[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
+            showList && activeIdx >= 0 && results[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
           }
           aria-describedby={atMax ? maxReasonId : statusId}
           disabled={atMax}
@@ -519,6 +522,20 @@ function AddPlayerCombobox({
         </p>
       )}
 
+      {showPanel && !showList && (
+        // Sighted twin of the live status line above; plain text, no listbox.
+        <div className="absolute left-0 right-0 z-30 mt-1 flex items-center gap-2 rounded-card border border-line bg-surface-elevated px-3 py-3 text-sm text-ink-subtle shadow-2xl shadow-black/50">
+          {loading ? (
+            <>
+              <Loader2 aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" />
+              Searching...
+            </>
+          ) : (
+            <>No players match &quot;{trimmed}&quot;.</>
+          )}
+        </div>
+      )}
+
       {showList && (
         <ul
           id={listboxId}
@@ -526,17 +543,7 @@ function AddPlayerCombobox({
           aria-label="Player suggestions"
           className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface-elevated shadow-2xl shadow-black/50"
         >
-          {loading ? (
-            <li role="presentation" className="flex items-center gap-2 px-3 py-3 text-sm text-ink-subtle">
-              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-              Searching...
-            </li>
-          ) : results.length === 0 ? (
-            <li role="presentation" className="px-3 py-3 text-sm text-ink-subtle">
-              No players match &quot;{trimmed}&quot;.
-            </li>
-          ) : (
-            results.map((r, i) => {
+          {results.map((r, i) => {
               const isActive = i === activeIdx;
               const isPicked = excludeSlugs.includes(r.slug);
               return (
@@ -575,8 +582,7 @@ function AddPlayerCombobox({
                   )}
                 </li>
               );
-            })
-          )}
+            })}
         </ul>
       )}
     </div>

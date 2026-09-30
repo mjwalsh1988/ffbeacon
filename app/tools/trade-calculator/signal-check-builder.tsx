@@ -510,14 +510,14 @@ function ResultLoading() {
         Weighing both sides with FF Beacon Values...
       </p>
       <div aria-hidden="true" className="mt-5 space-y-4">
-        <div className="h-8 w-2/3 animate-pulse rounded-card bg-line/60" />
+        <div className="h-8 w-2/3 animate-pulse motion-reduce:animate-none rounded-card bg-line/60" />
         <div className="space-y-2.5">
-          <div className="h-3.5 w-full animate-pulse rounded-full bg-line/60" />
-          <div className="h-3.5 w-5/6 animate-pulse rounded-full bg-line/50" />
+          <div className="h-3.5 w-full animate-pulse motion-reduce:animate-none rounded-full bg-line/60" />
+          <div className="h-3.5 w-5/6 animate-pulse motion-reduce:animate-none rounded-full bg-line/50" />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="h-24 animate-pulse rounded-card bg-line/40" />
-          <div className="h-24 animate-pulse rounded-card bg-line/40" />
+          <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card bg-line/40" />
+          <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card bg-line/40" />
         </div>
       </div>
     </div>

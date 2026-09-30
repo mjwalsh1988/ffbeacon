@@ -21,10 +21,8 @@ import {
   coerceBlocks,
   serializeLayoutConfig,
 } from "@/lib/signal/blocks";
-import {
-  parseSleeperLeagueSettings,
-  mergeSleeperLeagueSettings,
-} from "@/lib/sleeper-league-settings";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { writeSleeperLeagueSettings } from "@/lib/sleeper-league-settings-write";
 import {
   LINK_LABEL_MAX,
   LINK_URL_MAX,
@@ -524,24 +522,10 @@ export async function saveSignalLeagues(
     .filter((id) => (seen.has(id) ? false : (seen.add(id), true)))
     .slice(0, 12);
 
-  const { data: prefs } = await supabase
-    .from("user_preferences")
-    .select("sleeper_league_settings")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const current = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
-  const merged = mergeSleeperLeagueSettings(current, {
+  const written = await writeSleeperLeagueSettings(user.id, {
     signal_league_ids: cleaned,
   });
-
-  const { error } = await supabase
-    .from("user_preferences")
-    .upsert(
-      { user_id: user.id, sleeper_league_settings: merged },
-      { onConflict: "user_id" },
-    );
-  if (error) {
+  if (!written.ok) {
     return { ok: false, error: "Could not save your featured leagues. Please try again." };
   }
 

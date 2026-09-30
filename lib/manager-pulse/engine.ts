@@ -171,6 +171,7 @@ function countSeasonsWithoutDraftObservations(input: ManagerPulseInput): number 
 function computeLimits(input: ManagerPulseInput): ManagerReportLimits {
   return {
     leagueSeasonsSkipped: input.leagueSeasonsSkipped,
+    leagueSeasonsFailed: input.leagueSeasonsFailed ?? 0,
     leagueSeasonsWithoutLedger: countLeagueSeasonsWithoutLedger(input),
     seasonsWithoutDraftObservations: countSeasonsWithoutDraftObservations(input),
   };

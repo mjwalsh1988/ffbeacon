@@ -6,6 +6,9 @@ import {
   findFailingJobs,
   FREQUENT_FAILURE_STREAK,
   isStaleRunning,
+  STALE_RUNNING_MS,
+  groupAbandoned,
+  abandonedRunError,
   HIGH_FREQUENCY_RETENTION_DAYS,
   STANDARD_RETENTION_DAYS,
   PRUNE_BATCH,
@@ -126,10 +129,13 @@ describe("findMissedJobs", () => {
 
 describe("isStaleRunning", () => {
   it("leaves a job that is still plausibly working alone", () => {
-    expect(isStaleRunning(hoursAgo(AUG, 1), AUG)).toBe(false);
+    // Five minutes: every route's maxDuration is 300 seconds or less.
+    expect(isStaleRunning(hoursAgo(AUG, 5 / 60), AUG)).toBe(false);
   });
 
-  it("flags a run that never reported a finish", () => {
+  it("flags a run past any maxDuration plus margin", () => {
+    expect(STALE_RUNNING_MS).toBeGreaterThan(300_000);
+    expect(isStaleRunning(hoursAgo(AUG, 0.5), AUG)).toBe(true);
     expect(isStaleRunning(hoursAgo(AUG, 30), AUG)).toBe(true);
   });
 
@@ -190,5 +196,31 @@ describe("findFailingJobs", () => {
   it("skips ignored jobs and jobs with no runs", () => {
     expect(findFailingJobs([DAILY], new Map([["sync-ktc", [run("error")]]]), new Set(["sync-ktc"]))).toEqual([]);
     expect(findFailingJobs([DAILY], new Map())).toEqual([]);
+  });
+});
+
+describe("groupAbandoned", () => {
+  it("counts each job's dead runs and keeps the newest start", () => {
+    const grouped = groupAbandoned([
+      { job_name: "beacon-brief-worker", started_at: "2026-09-26T22:13:09Z" },
+      { job_name: "beacon-brief-worker", started_at: "2026-09-29T12:46:09Z" },
+      { job_name: "league-relay", started_at: "2026-09-29T12:45:22Z" },
+    ]);
+    expect(grouped).toEqual([
+      { name: "beacon-brief-worker", startedAt: "2026-09-29T12:46:09Z", count: 2 },
+      { name: "league-relay", startedAt: "2026-09-29T12:45:22Z", count: 1 },
+    ]);
+  });
+
+  it("returns nothing for nothing", () => {
+    expect(groupAbandoned([])).toEqual([]);
+  });
+});
+
+describe("abandonedRunError", () => {
+  it("says how long the row sat and why", () => {
+    const text = abandonedRunError(hoursAgo(AUG, 1), AUG);
+    expect(text).toContain("60 minutes");
+    expect(text).toMatch(/killed/);
   });
 });

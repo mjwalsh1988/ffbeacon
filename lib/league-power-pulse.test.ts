@@ -455,6 +455,53 @@ describe("powerPulseIsStale backoff early return", () => {
   });
 });
 
+describe("powerPulseIsStale after a roster change", () => {
+  const okRow = {
+    last_pulsed_at: null,
+    power_pulse_status: "ok",
+    power_pulse_detail: null,
+    power_pulse_attempted_at: null,
+  };
+  const freshCache = () => ({
+    generated_at: new Date(Date.now() - 60_000).toISOString(),
+    through_week: 5,
+    model_version: "v1",
+  });
+
+  it("is stale inside the TTL when the rosters changed after the cached row", async () => {
+    const { client } = makeFakeClient({ leaguesRow: okRow, cacheRow: freshCache() });
+    const getCurrentWeek = vi.fn().mockResolvedValue(5);
+
+    const stale = await powerPulseIsStale(
+      client,
+      LEAGUE_ROW_ID,
+      2026,
+      15,
+      getCurrentWeek,
+      async () => "v1",
+      new Date().toISOString(),
+    );
+    expect(stale).toBe(true);
+    // Decided before the week lookup, so a changed league costs no Sleeper ping.
+    expect(getCurrentWeek).not.toHaveBeenCalled();
+  });
+
+  it("is fresh when the roster change predates the cached row, exactly as before", async () => {
+    const { client } = makeFakeClient({ leaguesRow: okRow, cacheRow: freshCache() });
+
+    const stale = await powerPulseIsStale(
+      client,
+      LEAGUE_ROW_ID,
+      2026,
+      15,
+      vi.fn().mockResolvedValue(5),
+      async () => "v1",
+      new Date(Date.now() - 3_600_000).toISOString(),
+    );
+    expect(stale).toBe(false);
+  });
+});
+
 /* ---------------------------------------------------------------------- */
 /* E8-2: a backed-off league performs no Sleeper request and no roster load */
 /* ---------------------------------------------------------------------- */

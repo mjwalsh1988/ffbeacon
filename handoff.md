@@ -23,8 +23,8 @@
 - IDP-407 done with three reviewers; FU-01 to FU-12 in progress.md. The owner
   recorded the screen-reader pass as done. Only IDP item left: Search Console
   on 2026-10-23 and 2026-11-20.
-- NOTHING IS COMMITTED OR PUSHED (owner instruction). Until it is deployed the
-  Vercel KTC cron keeps failing nightly; stopgap `npm run sync:ktc`.
+- NOTHING IS COMMITTED OR PUSHED (owner instruction). The KTC fix is live: the
+  Vercel sync-ktc cron has succeeded every night since 2026-09-26.
 - Production already changed (not waiting on a deploy): migration 0303, four
   player positions, the Frank Gore and Kyle Williams KTC id repair, the KTC
   backfill. The code that expects migration 0303 ships with the commit.
@@ -37,9 +37,8 @@
 - KTC: the nightly sync broke on 2026-09-08 when KTC moved its player list
   into <script id="ktc-players">. Fixed in lib/ktc-page.ts, and production
   data is whole again: backfill for 2026-09-08 to 2026-09-24, today's sync,
-  rankings and trends rebuilt. BUT THE VERCEL CRON STILL RUNS THE OLD CODE and
-  will fail every night until this ships. Stopgap: `npm run sync:ktc` from
-  this machine.
+  rankings and trends rebuilt. RESOLVED: the Vercel cron has succeeded every
+  night since 2026-09-26 and the gap was backfilled, so no stopgap is needed.
 - Also built: matchup view names the week's own starters (no "Unknown player"
   from a stale roster, verified 0 on production); FAAB urgency signal back
   and wired; every old position-noun map folded into lib/site.ts; Who Should I
@@ -52,8 +51,9 @@
   projects, zero "Unknown player" on the Lineups board, IndexNow accepted for
   the guide and 1,558 defender slugs. Details and the three matchup-page
   "Unknown player" rows (stale rosters, not IDP) in IDP-406 in progress.md.
-- URGENT, NOT IDP: sync-ktc has failed every night since 2026-09-08 (0 rows,
-  "every KTC target returned empty"). KTC values are 18 days stale.
+- RESOLVED, NOT IDP: sync-ktc failed every night from 2026-09-08 to
+  2026-09-25 (0 rows, "every KTC target returned empty"). It has succeeded
+  every night since 2026-09-26 and the gap was backfilled.
 - STILL OPEN: the owner's browser and screen-reader pass over the switch-on
   screens; Search Console on 2026-10-23 and 2026-11-20; IDP-407 close-out.
 

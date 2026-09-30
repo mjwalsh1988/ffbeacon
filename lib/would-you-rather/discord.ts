@@ -770,10 +770,16 @@ export async function ingestClosedPolls(
         b: answerIdB,
       });
 
+      // THE CLAIM ALWAYS LANDS AS UNRESOLVED. voters_resolved is flipped to true
+      // only once the voter rows are actually written (below). Claiming it as
+      // resolved up front meant a failed upsert left a poll whose totals the
+      // recompute skips (it is resolved) and whose rows do not exist: every
+      // vote on it vanished from the tally. Unresolved is the safe resting
+      // state, because the recompute then counts the poll's own totals instead.
       const claimed = await closeOutPoll(admin, poll.id, totalA, totalB, now, {
         note: voters.ok ? null : voters.reason,
         reachedDiscord: true,
-        votersResolved: voters.ok,
+        votersResolved: false,
         raw: fetched.poll.raw,
       });
       if (!claimed) continue; // Another worker got there first.
@@ -783,9 +789,26 @@ export async function ingestClosedPolls(
         // claim writes them. Duplicates are ignored rather than treated as an
         // error, which is the whole point: a person who already has a row for
         // this trade keeps the one they have.
-        const added = await recordDiscordVoters(admin, poll.trade_id, poll.id, voters);
-        outcome.identified += 1;
-        outcome.votesAdded += added;
+        const recorded = await recordDiscordVoters(admin, poll.trade_id, poll.id, voters);
+        const resolved = recorded.ok ? await markPollVotersResolved(admin, poll.id) : false;
+        if (recorded.ok && resolved) {
+          outcome.identified += 1;
+          outcome.votesAdded += recorded.added;
+        } else {
+          // The rows did not land, or the poll could not be marked as read by
+          // voter. Either way this poll falls back to its aggregate totals, so
+          // any rows it DID write are removed first (a poll counts through one
+          // half of the recompute, never both), and the trade is flagged, per
+          // CLAUDE.md: we no longer know who voted on it.
+          const reason = recorded.ok
+            ? "The voters were written but the poll could not be marked as read by voter."
+            : recorded.reason;
+          await removePollVoterRows(admin, poll.id);
+          await notePollFallback(admin, poll.id, reason);
+          outcome.errors.push(reason);
+          await markIdentityGap(admin, poll.trade_id);
+          outcome.votesAdded += totalA + totalB;
+        }
       } else {
         outcome.errors.push(voters.reason);
         await markIdentityGap(admin, poll.trade_id);
@@ -896,14 +919,14 @@ async function recordDiscordVoters(
   tradeId: string,
   pollId: string,
   voters: { a: string[]; b: string[] },
-): Promise<number> {
+): Promise<{ ok: true; added: number } | { ok: false; reason: string }> {
   const { rows, dropped } = discordVoteRows(voters);
   if (dropped.length > 0) {
     console.warn(
       `[would-you-rather] ${dropped.length} Discord voters appear under both answers; dropping them`,
     );
   }
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return { ok: true, added: 0 };
 
   const { data, error } = await admin
     .from("would_you_rather_discord_votes")
@@ -919,9 +942,51 @@ async function recordDiscordVoters(
     .select("id");
   if (error) {
     console.warn("[would-you-rather] could not record Discord voters", error.message);
-    return 0;
+    return { ok: false, reason: "The Discord voters could not be recorded." };
   }
-  return data?.length ?? 0;
+  return { ok: true, added: data?.length ?? 0 };
+}
+
+/**
+ * Flip a claimed poll to read-by-voter, once its rows exist. Guarded on the
+ * poll still being unresolved. Returns whether the flip landed.
+ */
+async function markPollVotersResolved(admin: Client, pollId: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from("would_you_rather_discord_polls")
+    .update({ voters_resolved: true })
+    .eq("id", pollId)
+    .eq("voters_resolved", false)
+    .select("id");
+  if (error) {
+    console.warn("[would-you-rather] could not mark a poll as read by voter", error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * Remove the voter rows this poll wrote, when it is falling back to its
+ * totals. Only rows carrying THIS poll's id go: a person whose row came from an
+ * earlier poll on the same trade kept that row (the upsert ignores
+ * duplicates), and that earlier poll is the one it counts through.
+ */
+async function removePollVoterRows(admin: Client, pollId: string): Promise<void> {
+  const { error } = await admin.from("would_you_rather_discord_votes").delete().eq("poll_id", pollId);
+  if (error) {
+    console.warn("[would-you-rather] could not remove a fallen-back poll's voter rows", error.message);
+  }
+}
+
+/** Record on the poll row why it fell back to its totals. */
+async function notePollFallback(admin: Client, pollId: string, reason: string): Promise<void> {
+  const { error } = await admin
+    .from("would_you_rather_discord_polls")
+    .update({ error: reason.slice(0, 500) })
+    .eq("id", pollId);
+  if (error) {
+    console.warn("[would-you-rather] could not note a poll fallback", error.message);
+  }
 }
 
 /**
@@ -1097,6 +1162,21 @@ export function discordTally(
     b += row.ingested_votes_b ?? 0;
   }
   return { a, b };
+}
+
+/**
+ * Every Discord vote across the pool: the sum of each trade's recomputed
+ * Discord totals. Those totals already count one person once per trade (see
+ * recomputeDiscordTally), so summing them adds no double count of its own.
+ */
+export function sumDiscordVotes(
+  rows: Array<{ discord_votes_a: number | null; discord_votes_b: number | null }>,
+): number {
+  let total = 0;
+  for (const row of rows) {
+    total += Math.max(0, row.discord_votes_a ?? 0) + Math.max(0, row.discord_votes_b ?? 0);
+  }
+  return total;
 }
 
 export type { LoadedRound };

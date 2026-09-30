@@ -9,6 +9,7 @@ import { AlertTriangle, Clock, SearchX, Users } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { isValidSleeperHandle } from "@/lib/manager-pulse/discover";
 import type { LeagueLens, ManagerReport } from "@/lib/manager-pulse/types";
+import { describeReportCoverage } from "@/lib/manager-pulse/coverage";
 import { formatEastern } from "@/lib/datetime";
 import { SITE } from "@/lib/site";
 import { ManagerShell, LensSwitch, defaultLens } from "@/components/manager-shell";
@@ -211,6 +212,21 @@ async function ManagerReportBoundary({
   // result.status === "ready"
   const report = result.report;
   const requestedLens = isLens(lensParam) ? lensParam : defaultLens(report.counts);
+  // Said above the fold, in words, whenever the run missed anything. The rail
+  // lists the same gaps further down; this is the line nobody has to scroll to.
+  const coverage = describeReportCoverage(report.limits, report.counts.leagueSeasons);
+  const staleNote = result.stale ? (
+    <p role="status" className="text-xs text-ink-subtle">
+      Showing the report generated {formatEastern(result.generatedAt)}. A fresh
+      capture will be possible once your hourly budget refills.
+    </p>
+  ) : null;
+  const coverageNote = coverage.sentence ? (
+    <p className="rounded-card border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-ink">
+      <span className="font-semibold">Partial report. </span>
+      {coverage.sentence}
+    </p>
+  ) : null;
 
   return (
     <ManagerShell handle={handle}>
@@ -236,11 +252,11 @@ async function ManagerReportBoundary({
             </Suspense>
           }
           note={
-            result.stale ? (
-              <p role="status" className="text-xs text-ink-subtle">
-                Showing the report generated {formatEastern(result.generatedAt)}. A fresh
-                capture will be possible once your hourly budget refills.
-              </p>
+            staleNote || coverageNote ? (
+              <div className="space-y-2">
+                {coverageNote}
+                {staleNote}
+              </div>
             ) : null
           }
         />

@@ -90,6 +90,7 @@ const PURE_MODULE_NAMES = [
   "progress-estimate.ts",
   "freshness.ts",
   "handle.ts",
+  "coverage.ts",
 ];
 
 /**

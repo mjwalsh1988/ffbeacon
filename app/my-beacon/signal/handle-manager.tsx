@@ -149,17 +149,16 @@ export function HandleManager({ currentHandle }: { currentHandle: string | null 
         {availability.message}
       </p>
 
-      {/* Submit result (assertive) */}
-      <div aria-live="assertive" className="min-h-[1.25rem]">
+      {/* Submit result. ONE live region, and no role="status" or role="alert"
+          inside it: each of those is a live region of its own, and nesting
+          them inside this one had the result read twice. Assertive because it
+          answers the button the reader just pressed. */}
+      <div aria-live="assertive" aria-atomic="true" className="min-h-[1.25rem]">
         {result.kind === "saved" && (
-          <p role="status" className="text-sm text-signal-success">
-            {result.message}
-          </p>
+          <p className="text-sm text-signal-success">{result.message}</p>
         )}
         {result.kind === "error" && (
-          <p role="alert" className="text-sm text-signal-danger">
-            {result.message}
-          </p>
+          <p className="text-sm text-signal-danger">{result.message}</p>
         )}
       </div>
     </form>

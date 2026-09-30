@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { foldRun, type RunSetup } from "./builder";
-import { announcement, nextQuestionText, resultLine } from "./runner-text";
+import { announcement, nextQuestionText, resultLine, tierLinesRemovedText } from "./runner-text";
 
 const cards = {
   a: { name: "Bijan Robinson", position: "RB" },
@@ -71,6 +71,23 @@ describe("runner text", () => {
     const s = foldRun(setup, [...done, { a: "tiers" }]).state;
     expect(nextQuestionText(s, cards)).toBe(
       "Is there a real drop-off between Bijan Robinson (1st) and Jahmyr Gibbs (2nd)?",
+    );
+  });
+});
+
+describe("tierLinesRemovedText", () => {
+  it("is null when nothing was removed", () => {
+    expect(tierLinesRemovedText([])).toBeNull();
+    expect(tierLinesRemovedText(undefined)).toBeNull();
+  });
+  it("names one removed line", () => {
+    expect(tierLinesRemovedText([30])).toBe(
+      "The tier line after rank 30 was removed because the board is now shorter.",
+    );
+  });
+  it("names several, sorted and de-duplicated", () => {
+    expect(tierLinesRemovedText([40, 30, 40])).toBe(
+      "The tier lines after ranks 30 and 40 were removed because the board is now shorter.",
     );
   });
 });

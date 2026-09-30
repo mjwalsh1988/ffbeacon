@@ -9,6 +9,15 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
+ * Record the run as failed at four minutes, before the platform limit. The
+ * 412-second curation run on 2026-09-29 (one source, nothing ingested) spent
+ * its time waiting on database calls during that morning's stall and restart,
+ * which no in-code deadline could interrupt because the Supabase client has no
+ * request timeout. See the worker route for the full account.
+ */
+const RUN_BUDGET_MS = 240_000;
+
+/**
  * GET /api/cron/beacon-brief
  *
  * Vercel Cron entry point for the Beacon Brief curation pass (every 5 minutes,
@@ -25,9 +34,9 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient();
   try {
-    const result = await recordCronRun(supabase, "beacon-brief-curate", () =>
-      runCuration(supabase),
-    );
+    const result = await recordCronRun(supabase, "beacon-brief-curate", () => runCuration(supabase), {
+      timeoutMs: RUN_BUDGET_MS,
+    });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

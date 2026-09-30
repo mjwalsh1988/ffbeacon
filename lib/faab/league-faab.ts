@@ -62,6 +62,7 @@ import {
 } from "./marginal";
 import { loadPositionalWarView } from "@/lib/league-positional-war-data";
 import { loadLeagueFreeAgents } from "./free-agents";
+import { resolveSourceForFormatId } from "./value-source";
 import { resolveFinalWeek } from "@/lib/chopped/league";
 import {
   computeChopped,
@@ -475,13 +476,25 @@ export async function calculateLeagueFaab(
         .filter((id): id is string => Boolean(id)),
     ),
   );
+  // The reader's source when it covers this league's derived format, otherwise
+  // the standard fall-through. Resolved once so the cut guard, the player's own
+  // value and the elite-value scale below all read the same board.
+  const valueSource =
+    settings.dropGuard.enabled || settings.dynastyValue.enabled
+      ? await resolveSourceForFormatId(
+          supabase,
+          "player_value_history",
+          valueContext.formatConfigId,
+          input.sourceSlug ?? null,
+        )
+      : null;
   const playerValues =
     settings.dropGuard.enabled || settings.dynastyValue.enabled
       ? await loadPlayerValues(
           supabase,
           valueContext.formatConfigId,
           mineWithCandidate,
-          input.sourceSlug ?? null,
+          valueSource,
         )
       : new Map<string, number>();
 
@@ -869,11 +882,21 @@ export async function calculateLeagueFaab(
   let substituteCount = 0;
   if (chopped && valueContext.formatConfigId) {
     try {
-      const freeAgents = await loadLeagueFreeAgents(supabase, {
-        leagueRowId: input.leagueRowId,
-        formatConfigId: valueContext.formatConfigId,
-        source: input.sourceSlug ?? "ktc",
-      });
+      // The reader's source when it covers this league's format, otherwise the
+      // same fall-through every other surface uses. Never a hardcoded board.
+      const substituteSource = await resolveSourceForFormatId(
+        supabase,
+        "rankings",
+        valueContext.formatConfigId,
+        input.sourceSlug ?? null,
+      );
+      const freeAgents = substituteSource
+        ? await loadLeagueFreeAgents(supabase, {
+            leagueRowId: input.leagueRowId,
+            formatConfigId: valueContext.formatConfigId,
+            source: substituteSource,
+          })
+        : null;
       const samePosition = (freeAgents?.players ?? [])
         .filter((p) => p.position === candidate.position)
         .filter((p) => p.sleeper_id && p.sleeper_id !== input.candidateSleeperId)
@@ -1069,7 +1092,7 @@ export async function calculateLeagueFaab(
           supabase,
           valueContext.formatConfigId,
           eliteRank,
-          input.sourceSlug ?? null,
+          valueSource,
         );
   // Null rather than zero when we hold no value for him: "we do not know how
   // scarce he is" is not the same statement as "he is not scarce", and the

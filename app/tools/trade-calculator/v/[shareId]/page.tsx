@@ -11,6 +11,7 @@ import { AssetAvatar } from "../../asset-avatar";
 import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-masthead";
+import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,9 @@ export default async function SignalCheckSharePage({
 
   return (
     <main id="main">
+      {/* The last crumb names the verdict, the same words as the h1, rather
+          than the share id. */}
+      <SetBreadcrumbLabel value={payload.verdictLabel} />
       <PageBody>
         <PageMasthead
           eyebrow={`${payload.featureLabel}, ${payload.resultLabel}`}

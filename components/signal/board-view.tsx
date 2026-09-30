@@ -35,6 +35,7 @@ import { itemListJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { TierBreakLine } from "@/components/ranking-boards/tier-break-line";
 import { RankGapChip } from "@/components/ranking-boards/rank-gap-chip";
 import { DisagreeFigure } from "@/components/ranking-boards/disagree-figure";
+import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 
 export async function buildBoardMetadata(
   rawHandle: string,
@@ -135,6 +136,8 @@ export async function BoardView({
 
   return (
     <main id="main" className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      {/* The last crumb is the board's name, not its id. */}
+      <SetBreadcrumbLabel value={board.name} />
       {itemList && (
         <script
           type="application/ld+json"

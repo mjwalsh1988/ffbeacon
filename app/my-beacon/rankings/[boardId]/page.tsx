@@ -19,6 +19,7 @@ import { isSinglePositionScope } from "@/lib/ranking-boards";
 import { loadRankingBuilderSettings } from "@/lib/ranking-boards/settings";
 import { createAdminClient } from "@/lib/supabase/server";
 import { BoardEditor } from "./board-editor";
+import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 
 export const metadata: Metadata = {
   title: "Edit board",
@@ -118,6 +119,9 @@ export default async function BoardEditorPage({
 
   return (
     <div className="space-y-8">
+      {/* The last crumb is the board's name as saved, not its id. A rename in
+          the editor shows up on the next load. */}
+      <SetBreadcrumbLabel value={board.name} />
       <div>
         <Link
           href="/my-beacon/rankings"

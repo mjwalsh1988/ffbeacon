@@ -635,7 +635,13 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
       caveats.push("No weekly projections are published yet, so there are no lineup figures.");
     }
     if (impact.gaps.simulation) {
-      caveats.push("No regular-season games are left, so the odds are not modelled.");
+      caveats.push(
+        impact.gaps.simulationCause === "engine-switch"
+          ? "This league's projections are being rebuilt on a new projection source, so the odds are not modelled yet."
+          : impact.gaps.simulationCause === "not-built"
+            ? "Projections for every team are not built yet, so the odds are not modelled yet."
+            : "No regular-season games are left, so the odds are not modelled.",
+      );
     }
     caveats.push(...impact.caveats);
   }

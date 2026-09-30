@@ -224,6 +224,7 @@ const IN_SEASON_TOOL_ORDER: ToolHref[] = [
   "/tools/manager-pulse",
   "/tools/on-the-clock",
   "/tools/custom-rankings",
+  "/tools/free-agent-finder",
 ];
 
 export const DEFAULT_SITE_LAYOUT: SiteLayoutSettings = {
@@ -243,6 +244,7 @@ export const DEFAULT_SITE_LAYOUT: SiteLayoutSettings = {
       { href: "/tools/manager-pulse", width: 1, badge: "new-tool", highlight: "cyan" },
       { href: "/tools/on-the-clock", width: 1, badge: null, highlight: null },
       { href: "/tools/custom-rankings", width: 1, badge: "new-tool", highlight: "cyan" },
+      { href: "/tools/free-agent-finder", width: 1, badge: null, highlight: null },
     ],
   },
 };

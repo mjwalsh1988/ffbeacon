@@ -203,8 +203,16 @@ export type TradeReasonKind =
 export type ImpactGaps = {
   /** No weekly projections loaded, so lineup impact is unavailable. */
   lineup: boolean;
-  /** No remaining regular-season games, so odds are unavailable. */
+  /** The season simulation did not run, so odds are unavailable. */
   simulation: boolean;
+  /**
+   * Why it did not run, when known. "season-over": no unplayed regular-season
+   * games. "engine-switch": the other teams' cached projections were built on
+   * a different projection engine than the one in force now, which happens for
+   * a short while after the switch flips. "not-built": some team has no cached
+   * projection yet. Absent reads as "season-over", the original meaning.
+   */
+  simulationCause?: "season-over" | "engine-switch" | "not-built";
   /** Redraft, or no pick values published for this source. */
   picks: boolean;
 };

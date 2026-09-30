@@ -19,6 +19,19 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
+ * Record the run as failed 20 seconds before Vercel would kill it, so a night
+ * that runs long leaves an error row (and an email) rather than a row stuck on
+ * "running". The run takes 150 to 180 seconds today (2026-09-27 to 09-29), of
+ * which calculate-trends is 140 to 166: roughly a thousand sequential 1,000-row
+ * pages of player_value_history. That read is the one place a real saving
+ * lives: splitting the captured_at window into four ranges read concurrently
+ * (loadAllHistory already re-sorts by id, so the output is order-independent)
+ * would cut that read to about a quarter. It is a change to
+ * lib/calculate-trends.ts, not to this route, and has not been made yet.
+ */
+const RUN_BUDGET_MS = 280_000;
+
+/**
  * GET /api/cron/recalculate-derived
  *
  * Vercel Cron entry point for the global derived recalculation that follows
@@ -264,8 +277,26 @@ export async function GET(req: Request) {
         console.error("[cron/recalculate-derived] Positional WAR curve prune failed", pruneErr);
       }
 
+      // A rebuild that reported failure is a failed step, not a success: the
+      // run is recorded as an error and the owner is emailed. The prunes stay
+      // out of this list; a missed prune is housekeeping that the next night
+      // repeats in full.
+      const failedSteps: string[] = [];
+      if (!rankings.ok) failedSteps.push("rankings: rebuild reported failure");
+      if (!trends.ok) failedSteps.push("trends: rebuild reported failure");
+      for (const [name, outcome] of [
+        ["rosterExposure", rosterExposure],
+        ["rosterRates", rosterRates],
+        ["faabPriors", faabPriors],
+      ] as const) {
+        if ((outcome as { reason?: unknown } | null)?.reason === "error") {
+          failedSteps.push(`${name}: rebuild failed (see the function log)`);
+        }
+      }
+
       return {
         ok: true as const,
+        failedSteps,
         rankings,
         trends,
         rosterExposure,
@@ -277,8 +308,8 @@ export async function GET(req: Request) {
         positionalWarCurveRowsDeleted,
         durationMs: Date.now() - started,
       };
-    });
-    return NextResponse.json(result);
+    }, { timeoutMs: RUN_BUDGET_MS });
+    return NextResponse.json(result, { status: result.failedSteps.length > 0 ? 500 : 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[cron/recalculate-derived] failed", message);

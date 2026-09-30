@@ -94,7 +94,8 @@ const PAGE = 1000;
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 /**
- * The three large reads are split into four id ranges read at the same time.
+ * The two large reads (projections, then actuals) are each split into four id
+ * ranges read at the same time.
  * Each page costs about half a second on player_stats, nearly all of it heap
  * reads (EXPLAIN, 2026-09-24: 450 to 475 ms and 900-odd buffer reads per 1,000
  * rows), so four streams overlap that wait instead of queueing it.
@@ -880,20 +881,92 @@ async function loadSettings(supabase: ServiceClient) {
   return DEFAULT_POWER_PULSE_SETTINGS;
 }
 
+/** Positions whose projection rows are graded on idp123 from the stat line. */
+const DEFENDER_POSITIONS = new Set(["DL", "LB", "DB"]);
+
+/** One projection row, tagged by which of the two graded sets it belongs to. */
+type TaggedProjection = { kind: "offense" | "defender"; row: ProjectionRow };
+
+/**
+ * Split one scanned page into the offense set and the defender set, exactly
+ * as the two separate reads selected them: offense is every row with a PPR
+ * figure (a row with none grades on no offensive base), defender is every row
+ * whose player is DL, LB or DB, whatever its PPR column holds. A row meeting
+ * both lands in both, as it did before. Pure, exported for the test.
+ */
+export function tagProjectionRows(
+  rows: ReadonlyArray<{
+    player_id: string | null;
+    season: number | string;
+    week: number | string;
+    source: string;
+    projected_pts_ppr: unknown;
+    projected_pts_half_ppr: unknown;
+    projected_pts_std: unknown;
+    stat_line: unknown;
+    players: { position?: string | null } | null;
+  }>,
+): TaggedProjection[] {
+  const out: TaggedProjection[] = [];
+  for (const row of rows) {
+    if (!row.player_id) continue;
+    const base = {
+      playerId: row.player_id,
+      season: Number(row.season),
+      week: Number(row.week),
+      source: row.source,
+    };
+    if (numOrNull(row.projected_pts_ppr) !== null) {
+      out.push({
+        kind: "offense",
+        row: {
+          ...base,
+          ppr: numOrNull(row.projected_pts_ppr),
+          halfPpr: numOrNull(row.projected_pts_half_ppr),
+          std: numOrNull(row.projected_pts_std),
+          idp123: null,
+        },
+      });
+    }
+    if (DEFENDER_POSITIONS.has(row.players?.position ?? "")) {
+      out.push({
+        kind: "defender",
+        row: { ...base, ppr: null, halfPpr: null, std: null, idp123: projectedIdp123(row.stat_line) },
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Rows per page for the projection and actual scans. Half the old 1,000,
+ * because a page's cost is nearly all random heap reads and the statement
+ * timeout judges the single worst page.
+ */
+const SCAN_PAGE = 500;
+
 async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]> {
-  const offenseRange = async (lower: string, upper: string | null): Promise<ProjectionRow[]> => {
-    const out: ProjectionRow[] = [];
+  // ONE scan where there used to be two. The offense read filtered on
+  // projected_pts_ppr through the primary key, and 85 percent of the table has
+  // no PPR figure (defenders, unprojected weeks), so each 1,000 rows it
+  // returned cost about 6,700 heap visits: 2.6 seconds per page cold (EXPLAIN,
+  // 2026-09-29). The defender read walked the same index again for the other
+  // rows. Eight such streams at once, beside the other stats calcs, crossed the
+  // 8-second statement timeout on 2026-09-22, 09-28 and 09-29. A single
+  // unfiltered scan returns every row it visits, and tagProjectionRows splits
+  // it into the same two sets the two reads produced, in the same order.
+  const scanRange = async (lower: string, upper: string | null): Promise<TaggedProjection[]> => {
+    const out: TaggedProjection[] = [];
     for (let lastId = ""; ; ) {
-      const { data, error } = await withRetry(
+      const data = await withRetry(
         async () => {
           let q = supabase
             .from("player_weekly_projections")
-            .select("id, player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
+            .select(
+              "id, player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, stat_line, players(position)",
+            )
             .eq("season_type", "regular")
             .not("player_id", "is", null)
-            // A row with no PPR figure grades on no offensive base (accumulate skips
-            // it): defenders, read with their stat line below, and unprojected weeks.
-            .not("projected_pts_ppr", "is", null)
             // Ordered, because Postgres promises nothing about row order without one
             // and .range() pages over whatever order it happens to give. On a table
             // the projection sync rewrites daily that handed back 8,771 rows twice
@@ -902,83 +975,34 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]
             .order("id", { ascending: true })
             .gt("id", lastId || lower);
           if (upper) q = q.lte("id", upper);
-          return await q.limit(PAGE);
+          const { data: page, error } = await q.limit(SCAN_PAGE);
+          // Thrown INSIDE the retry, so a statement timeout is retried. The
+          // client returns errors rather than throwing them, and the old code
+          // checked the error only after withRetry had returned, so a timeout
+          // was never retried once.
+          if (error) throw new Error(`accuracy projection load failed: ${error.message}`);
+          return page ?? [];
         },
         { label: `accuracy projections after ${lastId || lower}` },
       );
-      if (error) throw new Error(`accuracy projection load failed: ${error.message}`);
-      if (!data || data.length === 0) break;
+      if (data.length === 0) break;
       lastId = data[data.length - 1].id;
-      for (const row of data) {
-        if (!row.player_id) continue;
-        out.push({
-          playerId: row.player_id,
-          season: Number(row.season),
-          week: Number(row.week),
-          source: row.source,
-          ppr: numOrNull(row.projected_pts_ppr),
-          halfPpr: numOrNull(row.projected_pts_half_ppr),
-          std: numOrNull(row.projected_pts_std),
-          idp123: null,
-        });
-      }
-      if (data.length < PAGE) break;
-    }
-    return out;
-  };
-
-  // Defenders, in a second read joined to their position. Their rows above
-  // carry null in every offensive column and grade on nothing; the same rows
-  // here carry the projected stat line, scored under idp123. Every source, like
-  // the read above, because the grader runs once per source.
-  const defenderRange = async (lower: string, upper: string | null): Promise<ProjectionRow[]> => {
-    const out: ProjectionRow[] = [];
-    for (let lastId = ""; ; ) {
-      const { data, error } = await withRetry(
-        async () => {
-          let q = supabase
-            .from("player_weekly_projections")
-            .select("id, player_id, season, week, source, stat_line, players!inner(position)")
-            .eq("season_type", "regular")
-            .not("player_id", "is", null)
-            .in("players.position", ["DL", "LB", "DB"])
-            .order("id", { ascending: true })
-            .gt("id", lastId || lower);
-          if (upper) q = q.lte("id", upper);
-          return await q.limit(PAGE);
-        },
-        { label: `accuracy defender projections after ${lastId || lower}` },
+      out.push(
+        ...tagProjectionRows(
+          data as unknown as Parameters<typeof tagProjectionRows>[0],
+        ),
       );
-      if (error) throw new Error(`accuracy defender projection load failed: ${error.message}`);
-      if (!data || data.length === 0) break;
-      lastId = data[data.length - 1].id;
-      for (const row of data) {
-        if (!row.player_id) continue;
-        out.push({
-          playerId: row.player_id,
-          season: Number(row.season),
-          week: Number(row.week),
-          source: row.source,
-          ppr: null,
-          halfPpr: null,
-          std: null,
-          idp123: projectedIdp123(row.stat_line),
-        });
-      }
-      if (data.length < PAGE) break;
+      if (data.length < SCAN_PAGE) break;
     }
     return out;
   };
 
-  // Both reads run at once and are joined offense first, defenders second: the
-  // order the two sequential loops produced. The defender read's rejection is
-  // held until the offense read has settled, so a failure in both still reports
-  // the offense error first, as before.
-  const offense = readByIdRanges(offenseRange);
-  const defenders = readByIdRanges(defenderRange);
-  defenders.catch(() => {});
-  const out = await offense;
-  for (const row of await defenders) out.push(row);
+  // Offense first, defenders second: the order the two reads produced, each in
+  // ascending id order across the ranges.
+  const tagged = await readByIdRanges(scanRange);
+  const out: ProjectionRow[] = [];
+  for (const t of tagged) if (t.kind === "offense") out.push(t.row);
+  for (const t of tagged) if (t.kind === "defender") out.push(t.row);
   return out;
 }
 
@@ -999,7 +1023,7 @@ async function loadActuals(
   return readByIdRanges(async (lower, upper) => {
     const out: ActualRow[] = [];
     for (let lastId = ""; ; ) {
-      const { data, error } = await withRetry(
+      const data = await withRetry(
         async () => {
           let q = supabase
             .from("player_stats")
@@ -1009,12 +1033,17 @@ async function loadActuals(
           // Defender weeks only: served by the partial index on def_snp.
           if (opts.defendersOnly) q = q.not("def_snp", "is", null);
           if (upper) q = q.lte("id", upper);
-          return await q.order("id", { ascending: true }).gt("id", lastId || lower).limit(PAGE);
+          const { data: page, error } = await q
+            .order("id", { ascending: true })
+            .gt("id", lastId || lower)
+            .limit(SCAN_PAGE);
+          // Thrown inside the retry so a statement timeout is actually retried.
+          if (error) throw new Error(`accuracy actual load failed: ${error.message}`);
+          return page ?? [];
         },
         { label: `accuracy actuals after ${lastId || lower}` },
       );
-      if (error) throw new Error(`accuracy actual load failed: ${error.message}`);
-      if (!data || data.length === 0) break;
+      if (data.length === 0) break;
       lastId = data[data.length - 1].id;
       for (const row of data) {
         if (!row.player_id) continue;
@@ -1029,7 +1058,7 @@ async function loadActuals(
           idp123: actualIdp123(row as unknown as Record<string, unknown>),
         });
       }
-      if (data.length < PAGE) break;
+      if (data.length < SCAN_PAGE) break;
     }
     return out;
   });

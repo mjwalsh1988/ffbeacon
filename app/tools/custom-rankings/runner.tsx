@@ -30,7 +30,7 @@ import {
   validateAnswer,
   type Answer,
 } from "@/lib/ranking-boards/builder";
-import { announcement, resultLine } from "@/lib/ranking-boards/runner-text";
+import { announcement, resultLine, tierLinesRemovedText } from "@/lib/ranking-boards/runner-text";
 import type { RunPayload } from "@/lib/ranking-boards/run-payload";
 import type { CardPlayer } from "@/lib/ranking-boards/card-text";
 import { normalizeTierBreaks } from "@/lib/ranking-boards";
@@ -78,6 +78,15 @@ export function Runner({
   const [finishing, setFinishing] = useState(false);
   const [finished, setFinished] = useState(false);
   const [stopped, setStopped] = useState(false);
+  // Tier lines a save removed because the board ended before them. Shown and
+  // announced, never dropped silently (the same rule My Beacon's editor keeps).
+  const [tierNotice, setTierNotice] = useState<string | null>(null);
+  const noteRemovedTiers = useCallback((removed: readonly number[] | undefined) => {
+    const text = tierLinesRemovedText(removed);
+    if (!text) return;
+    setTierNotice(text);
+    setMessage(text);
+  }, []);
   const chain = useRef<Promise<void>>(Promise.resolve());
   const headingId = useId();
   const boardHeadingId = useId();
@@ -95,20 +104,27 @@ export function Runner({
 
   /** Send one server call after the ones before it, resyncing on refusal. */
   const enqueue = useCallback(
-    (call: () => Promise<{ ok: true; count?: number } | { ok: false; error: string; answers?: Answer[] }>) => {
+    (
+      call: () => Promise<
+        | { ok: true; count?: number; removedTierBreaks?: number[] }
+        | { ok: false; error: string; answers?: Answer[] }
+      >,
+    ) => {
       chain.current = chain.current.then(async () => {
         try {
           const r = await call();
           if (!r.ok) {
             setError(r.error);
             if (r.answers) setAnswers(r.answers);
+          } else {
+            noteRemovedTiers(r.removedTierBreaks);
           }
         } catch {
           setError("Could not reach the server. Your last answer may not be saved.");
         }
       });
     },
-    [],
+    [noteRemovedTiers],
   );
 
   const submit = useCallback(
@@ -208,7 +224,9 @@ export function Runner({
         const r = await finishAction(ref);
         if (r.ok) {
           setFinished(true);
-          setMessage("Your board is saved.");
+          const removedText = tierLinesRemovedText(r.removedTierBreaks);
+          if (removedText) setTierNotice(removedText);
+          setMessage(removedText ? `Your board is saved. ${removedText}` : "Your board is saved.");
         } else {
           setError(r.error);
           setFinishFailed(true);
@@ -230,11 +248,12 @@ export function Runner({
       const r = await stopAction(ref);
       if (r.ok) {
         setStopped(true);
-        setMessage(
-          isGuest
-            ? "Saved on this browser. Come back to this page to continue."
-            : "Saved. Come back to this page any time to continue at the next question.",
-        );
+        const removedText = tierLinesRemovedText(r.removedTierBreaks);
+        if (removedText) setTierNotice(removedText);
+        const saved = isGuest
+          ? "Saved on this browser. Come back to this page to continue."
+          : "Saved. Come back to this page any time to continue at the next question.";
+        setMessage(removedText ? `${saved} ${removedText}` : saved);
       } else {
         setError(r.error);
       }
@@ -274,6 +293,9 @@ export function Runner({
         <p aria-live="polite" className="sr-only">
           {message}
         </p>
+        {/* Visible copy of a removed tier line. Not a live region itself: the
+            sentence is already spoken through the one above. */}
+        {tierNotice && <p className="text-sm text-signal-warning">{tierNotice}</p>}
 
         <div className="space-y-2">
           <p id={progressTextId} className="text-sm font-medium text-ink">

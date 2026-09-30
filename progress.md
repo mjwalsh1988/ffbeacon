@@ -6412,7 +6412,7 @@ T644 | completed | OG card for a matchup
      | information it does not carry.
      | verified: yes (tsc clean, next build clean)
 
-T666 | in_progress | Document the schedule feature and the impact model
+T666 | completed | Document the schedule feature and the impact model
      | files: CLAUDE.md
      | depends on: T644, T665
      | CLAUDE.md updated ahead of the review pass, because the ABSOLUTE RULEs it
@@ -7639,7 +7639,7 @@ T-WAR-23 | completed | Migration 0213: Signal Guide global term "Positional WAR"
      |   following 0167, so re-running never clobbers copy an admin has since edited.
      | verified: yes (row present, is_global true, is_published true, 2180 characters)
 
-T-WAR-24 | in_progress | CLAUDE.md: the Positional WAR naming rule + the on-demand/no-cron/source-independent rules
+T-WAR-24 | completed | CLAUDE.md: the Positional WAR naming rule + the on-demand/no-cron/source-independent rules
      | files: CLAUDE.md, docs/data-sources/data-sources.md
      | depends on: none
      | notes: CLAUDE.md done. Added the route to the League Pulse naming rules, a sync
@@ -14968,7 +14968,7 @@ BD-T047 | completed | llms files updated: Relays and Briefs described as content
 
 Phase 6, the first edition and the run
 
-BD-T048 | in_progress | The week 1, 2026 edition written by hand and submitted through the desk doors; awaiting the owner's review and approval
+BD-T048 | completed | The week 1, 2026 edition written by hand and submitted through the desk doors; awaiting the owner's review and approval
      | files: docs/beacon-brief/examples/week-1-2026-brief.json (the accepted payload)
      | notes: 2026-09-17. Bundle built for 2026 week 1 (109 Relays, period Sep 8 to Sep 15 9 AM ET) through buildBundle; four web checks recorded in research_log (ESPN and NFL injury reports, ESPN transactions, the week 1 scoreboard); draft POSTed to /api/brief-desk/drafts from the owner's admin session and accepted (201) as edition 349c303c-1950-48df-840c-dc4394f53e41, status in_review. Validator warnings: uncited tier 3 Relays (the roster-depth and defensive-line reports) and the title over 60 characters. Two rejections on the way in, both honest: meta_description over 165 characters, and 4,449 words against the 4,000 cap (trimmed to 3,99x). The owner wants published_at back-dated to 2026-09-15 after approval; approveEdition stamps now(), so that is one SQL update afterwards. Approve with Post to Discord OFF per plan 14.3.
 BD-T048b | completed | docs/beacon-brief/examples/week-1-2026-brief.json (the bundle serves it as example from the next build)
@@ -16373,7 +16373,7 @@ LU-BUG-01 | completed | Lineups: the slot-button what-if vanished for the whole 
      | notes: CAUSE. The board only offered the what-if while status.showsAdvice was true, and that turns false the moment a week has live points (lib/league-lineups/status.ts). Week 3's Thursday game (ATL at GB) kicked off 2026-09-25 00:15 UTC, so from then until the week settles every slot label stopped being a button: the whole weekend, when managers actually set lineups. Nothing else was wrong: the eligibility and bench filters were intact. FIX: the what-if now runs during a live week too, and offers only moves Sleeper would allow: a bench player or a current starter whose game has kicked off (nfl_game_odds.kickoff_at, already on each player's game environment) is locked and left out, and a player with no kickoff on record during a live week is treated as locked rather than guessed. The clock is the server render time (nowIso), so the first paint agrees with the HTML. Before the games nothing is locked, so an upcoming week behaves exactly as before; a settled week still has no what-if; the optimiser panel is unchanged. During a live week the dialog says only players whose games have not kicked off are listed. Gate: lint clean, typecheck green, 433 files / 6,275 tests, build 57 of 57.
      | verified: yes
 
-IDP-406 | in_progress | Post-launch checks: DAY ONE DONE 2026-09-25; Search Console checks due 2026-10-23 (28 days) and 2026-11-20 (56 days)
+IDP-406 | completed | Post-launch checks: DAY ONE DONE 2026-09-25; Search Console checks due 2026-10-23 (28 days) and 2026-11-20 (56 days)
      | files: docs/idp/idp-406-day1-invariant-report.txt (NEW), this file, handoff.md
      | depends on: IDP-405
      | notes: Day 1: zero "No projection" IDP slots for players Sleeper projects, zero "Unknown player" rows, rerun npm run verify:idp-invariant. Search Console at 28 and 56 days (indexed, impressions on three or more primaries, average position under 30). IndexNow for the guide and the gated defender slugs (NEXT_PUBLIC_SITE_URL must be overridden from this machine; see the FAAB section of handoff.md).

@@ -93,8 +93,16 @@ type Props = {
   gate: HandleGateState;
   /** The URL-first viewer, for the two gate states that carry none. */
   urlViewer: SleeperViewer | null;
-  /** Format and ranking source the free-agent list is read against. */
+  /**
+   * The header's format. The free-agent list and the bid both read on the
+   * LEAGUE's own derived format; this stands in only for a league whose
+   * scoring matched none of ours.
+   */
   formatSlug: string;
+  /**
+   * The reader's chosen source, before any per-format fall-through. The server
+   * resolves it against each league's own format.
+   */
   sourceSlug: string | null;
 };
 
@@ -288,7 +296,7 @@ export function LeaguePanel({
     setPlayer(null);
     setQuery("");
     setSyncingLeague(false);
-    if (!committedLeagueId || !sourceSlug) return;
+    if (!committedLeagueId) return;
 
     // Guards the reader who changes their mind mid-sync: a slow answer for a
     // league they have already moved on from must not overwrite the new one.
@@ -511,6 +519,7 @@ export function LeaguePanel({
         candidateSleeperId: player.sleeper_id as string,
         needLevel,
         fallbackBudget,
+        sourceSlug,
       });
       if (!result.ok) {
         setBidError(result.error);
@@ -529,7 +538,7 @@ export function LeaguePanel({
       });
       setReport(result.report);
     });
-  }, [player, selected, needLevel, fallbackBudget]);
+  }, [player, selected, needLevel, fallbackBudget, sourceSlug]);
 
   const priceAll = useCallback(() => {
     if (!player?.sleeper_id || !sleeperUserId) return;
@@ -541,6 +550,7 @@ export function LeaguePanel({
         candidateSleeperId: player.sleeper_id as string,
         needLevel,
         fallbackBudget,
+        sourceSlug,
       });
       if (!result.ok) {
         setAllError(result.error);
@@ -551,7 +561,7 @@ export function LeaguePanel({
       setAllRows(result.rows);
       setAllNotChecked(result.notChecked);
     });
-  }, [player, sleeperUserId, priceable, needLevel, fallbackBudget]);
+  }, [player, sleeperUserId, priceable, needLevel, fallbackBudget, sourceSlug]);
 
   const busy = connecting || pricing || checkingAll || loadingAgents;
 

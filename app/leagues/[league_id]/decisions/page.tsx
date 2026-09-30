@@ -525,7 +525,7 @@ function LedgerSkeleton() {
       className="rounded-modal border border-line bg-surface/50 p-6"
     >
       <p className="text-sm text-ink-muted">Grading this league</p>
-      <div aria-hidden="true" className="mt-4 h-72 animate-pulse rounded-card bg-base/60" />
+      <div aria-hidden="true" className="mt-4 h-72 animate-pulse motion-reduce:animate-none rounded-card bg-base/60" />
     </div>
   );
 }

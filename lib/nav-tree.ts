@@ -47,6 +47,7 @@ const TOOL_ICONS: Record<string, NavIconName> = {
   "/tools/trade-calculator": "scale",
   "/tools/who-should-i-start": "swords",
   "/tools/faab": "calculator",
+  "/tools/free-agent-finder": "target",
   "/tools/custom-rankings": "listChecks",
 };
 

@@ -5,6 +5,7 @@ import { SITE } from "@/lib/site";
 import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { pageShareMetadata } from "@/lib/page-og";
 import { PageBody } from "@/components/app-shell/page-body";
+import { FormatFallbackBanner } from "@/components/format-fallback-banner";
 import { PageColumns } from "@/components/app-shell/page-columns";
 import {
   PageMasthead,
@@ -416,6 +417,7 @@ export default async function WaiverWirePage({
           }
         />
 
+        <FormatFallbackBanner fallback={context.formatFallback} className="mt-6" />
         {context.fallbackBanner && (
           <p
             role="status"

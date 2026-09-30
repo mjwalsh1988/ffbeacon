@@ -12,23 +12,23 @@
  * id rather than by a display name that may differ from the username), and the
  * avatar (so the identity card has a face without a network call).
  *
- * WHY THE SESSION CLIENT AND NOT THE ADMIN ONE
- *   The owner-only RLS policy on `user_preferences` is what stops one reader
- *   writing another's row. This action should sit INSIDE that boundary rather
- *   than around it, so a bug here cannot become a cross-account write. The
- *   admin client appears once, for the rate-limit RPC, which is service-role
- *   only by design.
+ * WHO IS WRITTEN, AND WITH WHICH CLIENT
+ *   The user is established from the reader's OWN session (`auth.getUser()`
+ *   on the cookie client) and nothing in the request can name another one.
+ *   The write itself goes through `lib/sleeper-league-settings-write.ts` with
+ *   the service role, because migration 0323 takes the column's INSERT and
+ *   UPDATE grants away from `authenticated`. That grant is what let an owner
+ *   PATCH an unverified Sleeper id into this jsonb and skip everything below;
+ *   with it gone, this action is the only way a handle gets in.
  */
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { getSleeperUser } from "@/lib/sleeper";
-import {
-  mergeSleeperLeagueSettings,
-  parseSleeperLeagueSettings,
-} from "@/lib/sleeper-league-settings";
+import { writeSleeperLeagueSettings } from "@/lib/sleeper-league-settings-write";
 import {
   INVALID_HANDLE_MESSAGE,
   normalizeSleeperHandle,
@@ -161,37 +161,16 @@ export async function saveSleeperHandle(input: {
     verifiedAt: new Date().toISOString(),
   };
 
-  try {
-    // Read-merge-write so the sibling keys in this jsonb (featured_league_id,
-    // shown_league_ids, signal_league_ids) survive.
-    const { data: existing } = await supabase
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", authUser.id)
-      .maybeSingle();
-
-    const next = mergeSleeperLeagueSettings(
-      parseSleeperLeagueSettings(existing?.sleeper_league_settings),
-      {
-        username: handle.username,
-        sleeper_user_id: handle.sleeperUserId,
-        sleeper_display_name: handle.displayName,
-        sleeper_avatar: handle.avatar,
-        handle_verified_at: handle.verifiedAt,
-      },
-    );
-
-    const { error } = await supabase.from("user_preferences").upsert(
-      {
-        user_id: authUser.id,
-        sleeper_league_settings: next,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
-    if (error) throw new Error(error.message);
-  } catch (err) {
-    console.error("[sleeper-handle] save failed", err);
+  // Read-merge-write inside the writer, so the sibling keys in this jsonb
+  // (featured_league_id, shown_league_ids, signal_league_ids) survive.
+  const saved = await writeSleeperLeagueSettings(authUser.id, {
+    username: handle.username,
+    sleeper_user_id: handle.sleeperUserId,
+    sleeper_display_name: handle.displayName,
+    sleeper_avatar: handle.avatar,
+    handle_verified_at: handle.verifiedAt,
+  });
+  if (!saved.ok) {
     return {
       ok: false,
       reason: "failed",
@@ -221,35 +200,14 @@ export async function clearSleeperHandle(): Promise<{
     return { ok: false, error: "Slow down a moment and try that again." };
   }
 
-  try {
-    const { data: existing } = await supabase
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", authUser.id)
-      .maybeSingle();
-
-    const next = mergeSleeperLeagueSettings(
-      parseSleeperLeagueSettings(existing?.sleeper_league_settings),
-      {
-        username: null,
-        sleeper_user_id: null,
-        sleeper_display_name: null,
-        sleeper_avatar: null,
-        handle_verified_at: null,
-      },
-    );
-
-    const { error } = await supabase.from("user_preferences").upsert(
-      {
-        user_id: authUser.id,
-        sleeper_league_settings: next,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
-    if (error) throw new Error(error.message);
-  } catch (err) {
-    console.error("[sleeper-handle] clear failed", err);
+  const cleared = await writeSleeperLeagueSettings(authUser.id, {
+    username: null,
+    sleeper_user_id: null,
+    sleeper_display_name: null,
+    sleeper_avatar: null,
+    handle_verified_at: null,
+  });
+  if (!cleared.ok) {
     return { ok: false, error: "We could not clear that just now." };
   }
 

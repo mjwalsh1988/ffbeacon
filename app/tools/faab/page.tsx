@@ -6,9 +6,12 @@ import { ArrowRight } from "lucide-react";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   resolveSourceForFormat,
+  getActiveFormats,
   getAvailableSources,
   describeSource,
+  reconcileFormatWithSource,
 } from "@/lib/source";
+import { FormatFallbackBanner } from "@/components/format-fallback-banner";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
@@ -104,22 +107,17 @@ export default async function FaabPage({
     resolveFormatSlug(supabase, params.format),
     resolveSourceSlug(supabase, params.source),
   ]);
-  const formatSlug = formatResolution.slug;
   const requestedSourceSlug = sourceResolution.slug;
 
   // These are independent of each other, so they go together rather than in a
-  // waterfall: the format lookup, the source registry, who the league panel is
+  // waterfall: the source registry and formats, who the league panel is
   // acting for, the reader's Discord membership, and the market cells behind
   // the "what leagues actually pay" section. The market read is cached daily
   // and shared with the FAQ, which quotes it.
-  const [{ data: format }, registry, handleGate, urlViewer, isMember, marketFacts] =
+  const [registry, allFormats, handleGate, urlViewer, isMember, marketFacts] =
     await Promise.all([
-    supabase
-      .from("format_configs")
-      .select("id, slug, display_name")
-      .eq("slug", formatSlug)
-      .maybeSingle(),
     getAvailableSources(supabase),
+    getActiveFormats(supabase),
     resolveHandleGate(supabase, params.username),
     // The gate answers "guest" for a signed-out reader without ever consulting
     // the URL, so on its own a shared `?username=` link would do nothing for
@@ -130,12 +128,21 @@ export default async function FaabPage({
     loadMarketFacts(settings.priors.minCellSamples),
   ]);
 
+  // Keep the reader's source and move the FORMAT when that source does not
+  // cover it, with a banner. A read-time correction only: nothing is written
+  // to the cookie or the saved preference.
+  const reconciled = reconcileFormatWithSource(
+    registry,
+    allFormats,
+    requestedSourceSlug,
+    formatResolution.slug,
+  );
+  const formatSlug = reconciled.formatSlug;
+  const format = allFormats.find((f) => f.slug === formatSlug) ?? null;
+
   let players: FaabPlayer[] = [];
   let fallbackBanner: { requested: string | null; actual: string } | null = null;
   let rankingsSourceName: string | null = null;
-  // The slug, not the display name: the league panel passes it back to the
-  // server to look up who is actually available in the selected league.
-  let rankingsSourceSlug: string | null = null;
   let valueSourceName: string | null = null;
   let valueSourceIsBeacon = false;
   if (format) {
@@ -153,7 +160,6 @@ export default async function FaabPage({
     );
     if (rankingsResolution.source) {
       rankingsSourceName = describeSource(registry, rankingsResolution.source);
-      rankingsSourceSlug = rankingsResolution.source;
     }
     if (valueHistoryResolution.source) {
       valueSourceName = describeSource(registry, valueHistoryResolution.source);
@@ -216,6 +222,7 @@ export default async function FaabPage({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(webApplicationLd) }}
       />
       <PageBody width="tool">
+        <FormatFallbackBanner fallback={reconciled.fallback} />
         {fallbackBanner && (
           <p
             role="status"
@@ -266,7 +273,7 @@ export default async function FaabPage({
           settings={settings}
           seasons={seasonOptions()}
           formatSlug={format?.slug ?? formatSlug}
-          rankingsSourceSlug={rankingsSourceSlug}
+          readerSourceSlug={requestedSourceSlug}
           handleGate={handleGate}
           urlViewer={urlViewer}
           seed={manualSeed}

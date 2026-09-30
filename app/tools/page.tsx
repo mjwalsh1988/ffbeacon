@@ -6,6 +6,7 @@ import {
   Calculator,
   ListChecks,
   Scale,
+  Search,
   Swords,
   Timer,
   UserSearch,
@@ -111,6 +112,7 @@ const TOOL_ICONS: Record<ToolHref, LucideIcon> = {
   "/tools/who-should-i-start": Swords,
   "/tools/trade-calculator": Scale,
   "/tools/faab": Calculator,
+  "/tools/free-agent-finder": Search,
   "/tools/custom-rankings": ListChecks,
 };
 

@@ -68,6 +68,11 @@ export function createCachedReadClient() {
  * and its own GoTrueClient. It carries no cookies, so there is no per-caller
  * state to keep apart. Outside a request (a script, a cron body) `cache()`
  * degrades to a plain call, which is the behaviour those callers already had.
+ *
+ * App code should import this from lib/supabase/admin.ts, which re-exports it
+ * behind `import "server-only"`. This file cannot carry that guard itself: the
+ * npm scripts run under plain tsx and reach it through shared lib modules, and
+ * the guard throws there. See lib/supabase/admin.ts for the full reasoning.
  */
 export const createAdminClient = cache(function createAdminClient() {
   return createServerClient<Database>(

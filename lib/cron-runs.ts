@@ -10,12 +10,17 @@
  * Logging is best-effort: a failure to write the ledger NEVER breaks the actual
  * cron work or masks its error. The real result (or thrown error) always
  * propagates to the route handler unchanged.
+ *
+ * A run recorded as `error` (a throw, a `failedSteps` list, or a blown time
+ * budget) also emails the owner straight away through lib/cron-alerts.ts, at
+ * most once per job per cooldown. The daily cron-health digest still runs.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import { SITE_TIME_ZONE } from "./datetime";
 import { isHeartbeatMinute } from "./cron-health";
+import { ALERT_MARKER_KEY, maybeAlertCronFailure } from "./cron-alerts";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -103,6 +108,7 @@ export type CronJobName =
   | "league-relay"
   | "ranking-guest-cleanup"
   | "community-rankings"
+  | "league-maintenance"
   | "cron-health";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
@@ -120,19 +126,80 @@ export type CronRunStatus = "running" | "success" | "error" | "skipped";
  *
  * An empty `schedule` means the route exists and is callable but is not wired
  * into vercel.json yet. Nothing is in that state right now.
+ *
+ * `schedule` is the job's one DAILY (or sub-hourly) run, the one cron-health
+ * measures a gap against and the admin panels describe. `extraSchedules` are
+ * the additional vercel.json entries for the same path, today only the game-day
+ * refreshes of the player and projection syncs. They restrict the day of week,
+ * so cron-health deliberately does not model them (a missed game-day run is
+ * covered by the daily one landing within its window). lib/cron-schedule-sync
+ * .test.ts fails when this registry and vercel.json disagree in either
+ * direction.
  */
-export const CRON_JOBS: ReadonlyArray<{
+export type CronJobEntry = {
   name: CronJobName;
   label: string;
   schedule: string;
+  extraSchedules?: readonly string[];
   description: string;
-}> = [
+};
+
+/**
+ * Game-day refreshes for the injury and projection syncs.
+ *
+ * The owner's rule: once a day on Tuesday, Wednesday, Friday and Saturday; on
+ * Sunday, Monday and Thursday a few runs before kickoff and a couple after. The
+ * daily 06:00 UTC player run is 2:00 AM EDT / 1:00 AM EST, which is already after
+ * every night game, so on Monday, Tuesday and Friday it doubles as the
+ * post-game run and those days get no extra entry beyond Monday's.
+ *
+ * Every time is chosen to land after inactives (about 90 minutes before
+ * kickoff) and before kickoff in BOTH offsets, because Vercel schedules in UTC
+ * and daylight saving moves Eastern by an hour. The player sync runs ten
+ * minutes ahead of the projection sync each time, so a projection is never
+ * built on an older injury designation than the one just stored.
+ *
+ *   UTC    players  projections  EDT (UTC-4)        EST (UTC-5)        covers
+ *   13:05  13:15    Sun          9:05 / 9:15 AM     8:05 / 8:15 AM     London 9:30 AM
+ *   16:35  16:45    Sun Mon Thu  12:35 / 12:45 PM   11:35 / 11:45 AM   1:00 PM games
+ *   19:45  19:55    Sun Mon Thu  3:45 / 3:55 PM     2:45 / 2:55 PM     4:05 and 4:25 PM
+ *   23:45  23:55    Sun Mon Thu  7:45 / 7:55 PM     6:45 / 6:55 PM     8:15 and 8:20 PM
+ *   05:15  05:25    Mon          1:15 / 1:25 AM     12:15 / 12:25 AM   after Sunday night
+ *
+ * Month-restricted to September through February, so the off-season spends
+ * nothing on them. Sunday's 23:45 run also lands after the late afternoon
+ * games end, so Sunday gets two post-game passes (23:45 and Monday 05:15)
+ * before the Monday 06:00 daily run.
+ */
+export const GAME_DAY_MONTHS = "1,2,9,10,11,12";
+export const PLAYERS_GAME_DAY_SCHEDULES: readonly string[] = [
+  `5 13 * ${GAME_DAY_MONTHS} 0`,
+  `35 16 * ${GAME_DAY_MONTHS} 0,1,4`,
+  `45 19 * ${GAME_DAY_MONTHS} 0,1,4`,
+  `45 23 * ${GAME_DAY_MONTHS} 0,1,4`,
+  `15 5 * ${GAME_DAY_MONTHS} 1`,
+];
+export const PROJECTIONS_GAME_DAY_SCHEDULES: readonly string[] = [
+  `15 13 * ${GAME_DAY_MONTHS} 0`,
+  `45 16 * ${GAME_DAY_MONTHS} 0,1,4`,
+  `55 19 * ${GAME_DAY_MONTHS} 0,1,4`,
+  `55 23 * ${GAME_DAY_MONTHS} 0,1,4`,
+  `25 5 * ${GAME_DAY_MONTHS} 1`,
+];
+
+/** Every schedule a job fires on: its daily run first, then any extras. */
+export function allSchedules(job: Pick<CronJobEntry, "schedule" | "extraSchedules">): string[] {
+  return [job.schedule, ...(job.extraSchedules ?? [])].filter((s) => s.trim().length > 0);
+}
+
+export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
   {
     name: "sync-sleeper-players",
     label: "Player dimension sync",
     schedule: "0 6 * * *",
+    extraSchedules: PLAYERS_GAME_DAY_SCHEDULES,
     description:
-      "Refreshes every fantasy-relevant NFL player from Sleeper: names, teams, positions, and the injury designations (IR, PUP, Questionable, ...) that decide whether a player is projected at all. Runs FIRST each night, because the value syncs, the weekly projections sync and every derived recalc read those designations. This job existed but was never scheduled until 2026-08-25; the table sat unchanged from 2026-05-18, projecting injured players as healthy and healthy players as out.",
+      "Refreshes every fantasy-relevant NFL player from Sleeper: names, teams, positions, and the injury designations (IR, PUP, Questionable, ...) that decide whether a player is projected at all. Runs FIRST each night, because the value syncs, the weekly projections sync and every derived recalc read those designations. On Sundays, Mondays and Thursdays in season it also runs before each kickoff window and after the night games, ten minutes ahead of the projections sync each time, so an injury posted with the inactives reaches the site before the game. This job existed but was never scheduled until 2026-08-25; the table sat unchanged from 2026-05-18, projecting injured players as healthy and healthy players as out.",
   },
   {
     name: "sync-ktc",
@@ -150,7 +217,7 @@ export const CRON_JOBS: ReadonlyArray<{
   {
     name: "sync-dynastyprocess",
     label: "DynastyProcess value sync",
-    schedule: "0 9 * * *",
+    schedule: "15 9 * * *",
     description:
       "Pulls DynastyProcess FantasyPros-derived dynasty values into player_value_history.",
   },
@@ -207,13 +274,14 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "sync-weekly-projections",
     label: "Weekly projections sync",
     schedule: "0 12 * * *",
+    extraSchedules: PROJECTIONS_GAME_DAY_SCHEDULES,
     description:
-      "Refreshes Sleeper per-week projected points for the current season's upcoming weeks into player_weekly_projections (overwrite in place). Skips cleanly when nothing is published yet.",
+      "Refreshes Sleeper per-week projected points for the current season's upcoming weeks into player_weekly_projections (overwrite in place). Skips cleanly when nothing is published yet. The 12:00 UTC run covers every remaining week; the game-day runs on Sundays, Mondays and Thursdays in season (ten minutes after each player sync) refresh only the live week and the next one, which is all an inactive or an in-game injury can move.",
   },
   {
     name: "sync-nfl-odds",
     label: "Game odds sync",
-    schedule: "0 13 * * *",
+    schedule: "15 13 * * *",
     description:
       "Refreshes ESPN's published game total and spread for the current week plus the next two into nfl_game_odds (overwrite in place), the game-environment signal the projection engine's volume and script adjustments read. Lines move through the week, so a once-daily pull is the right cadence for a table whose only consumer is a weekly projection. Skips cleanly when ESPN has nothing published yet for every targeted week; a week whose fetch failed outright is never mistaken for a week with no games.",
   },
@@ -274,6 +342,13 @@ export const CRON_JOBS: ReadonlyArray<{
       "Rebuilds the community rankings from every saved board that counts: one pairwise strength fit per format over aggregated head-to-head counts, written to community_rankings. Runs after the rankings recalc so each board's pool is read from today's seed rankings. Iterates formats, never leagues or users one by one. A format below the published threshold is still built and stored, so the page can say how many more boards it needs.",
   },
   {
+    name: "league-maintenance",
+    label: "League maintenance",
+    schedule: "*/30 * * * *",
+    description:
+      "League Pulse housekeeping, every 30 minutes, at /api/cron/league-maintenance.",
+  },
+  {
     name: "cron-health",
     label: "Schedule health check",
     schedule: "0 16 * * *",
@@ -291,6 +366,74 @@ function isSkippedResult(result: unknown): boolean {
 }
 
 /**
+ * The sub-steps a run reports as failed, from `result.failedSteps`.
+ *
+ * A handler that runs several independent steps (sync-sleeper-stats and its
+ * four derived calcs, sync-sleeper-market and its rookie ADP step) keeps going
+ * when one step fails, because the others are worth saving. It must still not
+ * be recorded as a success: that is how two nightly calcs timed out for days
+ * with the ledger reading green. Such a handler returns
+ * `failedSteps: ["defenseSplits: <error>", ...]`, and a non-empty list records
+ * the run as `error` (the status cron-health and the admin panel already treat
+ * as a failure) while the result itself is kept in full. Pure.
+ */
+export function failedStepsOf(result: unknown): string[] {
+  if (typeof result !== "object" || result === null) return [];
+  const steps = (result as { failedSteps?: unknown }).failedSteps;
+  if (!Array.isArray(steps)) return [];
+  return steps.filter((s): s is string => typeof s === "string" && s.length > 0);
+}
+
+/** The registry label for a job, for alert subjects. */
+function labelFor(jobName: CronJobName): string {
+  return CRON_JOBS.find((j) => j.name === jobName)?.label ?? jobName;
+}
+
+/** Thrown by recordCronRun when `timeoutMs` elapses before the handler settles. */
+export class CronTimeBudgetError extends Error {
+  constructor(jobName: string, timeoutMs: number) {
+    super(
+      `${jobName} did not finish within its ${Math.round(timeoutMs / 1000)}s time budget and was recorded as failed before the platform limit could kill it. The work may still complete in the background; the next run starts clean.`,
+    );
+    this.name = "CronTimeBudgetError";
+  }
+}
+
+/**
+ * Race `work` against a timer. On timeout the returned promise rejects with
+ * CronTimeBudgetError; `work` itself is not cancelled (nothing in a Supabase
+ * or fetch call chain here takes a signal), but the ledger gets a terminal
+ * row while the function is still alive to write it.
+ */
+export function withTimeBudget<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  jobName: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new CronTimeBudgetError(jobName, timeoutMs)), timeoutMs);
+  });
+  // A late rejection from `work` after the timer won must not surface as unhandled.
+  work.catch(() => {});
+  return Promise.race([work, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/** How long a ledger write may take before we give up on it and return anyway. */
+const LEDGER_WRITE_BUDGET_MS = 10_000;
+
+/** A ledger write that cannot hold the response hostage when the database hangs. */
+async function boundedLedgerWrite(write: () => PromiseLike<unknown>, what: string): Promise<void> {
+  try {
+    await withTimeBudget(Promise.resolve(write()), LEDGER_WRITE_BUDGET_MS, what);
+  } catch (err) {
+    console.warn(`[cron-runs] ${what}:`, errMsg(err));
+  }
+}
+
+/**
  * Run `fn` and record the invocation in cron_runs. Returns whatever `fn`
  * returns; rethrows whatever `fn` throws (after recording the failure).
  *
@@ -305,14 +448,39 @@ function isSkippedResult(result: unknown): boolean {
  * immediate "running" row, updated to a terminal status when `fn` settles,
  * every single time.
  */
+export type RecordCronRunOptions<T> = {
+  quietWhen?: (result: T) => boolean;
+  /**
+   * Record the run as failed if `fn` has not settled after this long. Set it
+   * below the route's maxDuration: a function the platform kills never reaches
+   * the finalize, and its row says "running" until the health pass closes it.
+   */
+  timeoutMs?: number;
+};
+
 export async function recordCronRun<T>(
   admin: SupabaseClient<Database>,
   jobName: CronJobName,
   fn: () => Promise<T>,
-  options?: { quietWhen?: (result: T) => boolean },
+  options?: RecordCronRunOptions<T>,
 ): Promise<T> {
-  if (!options?.quietWhen) return recordCronRunAlways(admin, jobName, fn);
-  return recordCronRunQuiet(admin, jobName, fn, options.quietWhen);
+  const timeoutMs = options?.timeoutMs;
+  const run =
+    timeoutMs && timeoutMs > 0 ? () => withTimeBudget(fn(), timeoutMs, jobName) : fn;
+  if (!options?.quietWhen) return recordCronRunAlways(admin, jobName, run);
+  return recordCronRunQuiet(admin, jobName, run, options.quietWhen);
+}
+
+/**
+ * Merge the alert marker into what the row stores. First, so truncation can
+ * never be the thing that drops it. Pure apart from the object spread.
+ */
+function withAlertMarker(result: Json | null, alertedAt: string | null): Json | null {
+  if (!alertedAt) return result;
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return { [ALERT_MARKER_KEY]: alertedAt, ...(result as Record<string, Json>) };
+  }
+  return { [ALERT_MARKER_KEY]: alertedAt, result };
 }
 
 /** The original, unconditional recording: a "running" row up front, a terminal update after. */
@@ -325,32 +493,38 @@ async function recordCronRunAlways<T>(
   const startedAt = new Date(started).toISOString();
   let runId: string | null = null;
 
-  try {
+  await boundedLedgerWrite(async () => {
     const { data } = await admin
       .from("cron_runs")
       .insert({ job_name: jobName, status: "running", started_at: startedAt })
       .select("id")
       .single();
     runId = data?.id ?? null;
-  } catch (err) {
-    console.warn(
-      `[cron-runs] could not record start for ${jobName}:`,
-      errMsg(err),
-    );
-  }
+  }, `could not record start for ${jobName}`);
 
   const finalize = async (
     status: CronRunStatus,
     fields: { result?: Json | null; error?: string | null },
   ): Promise<void> => {
+    // Alert first, so the marker lands in the same write as the terminal status.
+    let alertedAt: string | null = null;
+    if (status === "error") {
+      alertedAt = await maybeAlertCronFailure(admin, {
+        jobName,
+        label: labelFor(jobName),
+        startedAt,
+        error: fields.error ?? "No error recorded.",
+        partial: fields.result !== undefined && fields.result !== null,
+      });
+    }
     const payload = {
       status,
       finished_at: new Date().toISOString(),
       duration_ms: Date.now() - started,
-      result: truncateResult(fields.result ?? null),
+      result: withAlertMarker(truncateResult(fields.result ?? null), alertedAt),
       error: fields.error ?? null,
     };
-    try {
+    await boundedLedgerWrite(async () => {
       if (runId) {
         await admin.from("cron_runs").update(payload).eq("id", runId);
       } else {
@@ -359,19 +533,22 @@ async function recordCronRunAlways<T>(
           .from("cron_runs")
           .insert({ job_name: jobName, started_at: startedAt, ...payload });
       }
-    } catch (err) {
-      console.warn(
-        `[cron-runs] could not record finish for ${jobName}:`,
-        errMsg(err),
-      );
-    }
+    }, `could not record finish for ${jobName}`);
   };
 
   try {
     const result = await fn();
-    await finalize(isSkippedResult(result) ? "skipped" : "success", {
-      result: result as unknown as Json,
-    });
+    const failed = failedStepsOf(result);
+    if (failed.length > 0) {
+      await finalize("error", {
+        result: result as unknown as Json,
+        error: `Failed steps: ${failed.join("; ")}`,
+      });
+    } else {
+      await finalize(isSkippedResult(result) ? "skipped" : "success", {
+        result: result as unknown as Json,
+      });
+    }
     return result;
   } catch (err) {
     await finalize("error", { error: errMsg(err) });
@@ -403,47 +580,64 @@ async function recordCronRunQuiet<T>(
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
 
+  const recordFailure = async (error: string, stored: Json | null): Promise<void> => {
+    const alertedAt = await maybeAlertCronFailure(admin, {
+      jobName,
+      label: labelFor(jobName),
+      startedAt,
+      error,
+      partial: stored !== null,
+    });
+    await boundedLedgerWrite(
+      async () =>
+        await admin.from("cron_runs").insert({
+          job_name: jobName,
+          status: "error",
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+          duration_ms: Date.now() - started,
+          result: withAlertMarker(stored, alertedAt),
+          error,
+        }),
+      `could not record failure for ${jobName}`,
+    );
+  };
+
   let result: T;
   try {
     result = await fn();
   } catch (err) {
     // A failure is never quiet: it always gets a row.
-    try {
-      await admin.from("cron_runs").insert({
-        job_name: jobName,
-        status: "error",
-        started_at: startedAt,
-        finished_at: new Date().toISOString(),
-        duration_ms: Date.now() - started,
-        result: null,
-        error: errMsg(err),
-      });
-    } catch (writeErr) {
-      console.warn(
-        `[cron-runs] could not record failure for ${jobName}:`,
-        errMsg(writeErr),
-      );
-    }
+    await recordFailure(errMsg(err), null);
     throw err;
+  }
+
+  const failed = failedStepsOf(result);
+  if (failed.length > 0) {
+    await recordFailure(
+      `Failed steps: ${failed.join("; ")}`,
+      truncateResult(result as unknown as Json),
+    );
+    return result;
   }
 
   if (quietWhen(result) && !isHeartbeatMinute(started)) {
     return result;
   }
 
-  try {
-    await admin.from("cron_runs").insert({
-      job_name: jobName,
-      status: isSkippedResult(result) ? "skipped" : "success",
-      started_at: startedAt,
-      finished_at: new Date().toISOString(),
-      duration_ms: Date.now() - started,
-      result: truncateResult(result as unknown as Json),
-      error: null,
-    });
-  } catch (err) {
-    console.warn(`[cron-runs] could not record run for ${jobName}:`, errMsg(err));
-  }
+  await boundedLedgerWrite(
+    async () =>
+      await admin.from("cron_runs").insert({
+        job_name: jobName,
+        status: isSkippedResult(result) ? "skipped" : "success",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        duration_ms: Date.now() - started,
+        result: truncateResult(result as unknown as Json),
+        error: null,
+      }),
+    `could not record run for ${jobName}`,
+  );
   return result;
 }
 

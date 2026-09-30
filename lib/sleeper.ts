@@ -55,16 +55,54 @@ async function safeFetch<T>(
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxBytes = MAX_RESPONSE_BYTES,
 ): Promise<T | null> {
+  const outcome = await fetchOutcome<T>(url, timeoutMs, maxBytes);
+  return outcome.answered ? outcome.body : null;
+}
+
+/**
+ * What one Sleeper request came back with, with the two kinds of null kept
+ * apart. `answered: false` is a request that did not come back usefully
+ * (timeout, 429, 5xx, any other non-2xx, an oversized or unparseable body, no
+ * budget token). `answered: true` with `body: null` is Sleeper replying with
+ * the literal JSON `null`, either as a 200 or as the 404 it sends for a league
+ * id that does not exist.
+ *
+ * safeFetch flattens both into null, which is right for nearly every caller.
+ * lookupSleeperLeague is the one that must not, because "Sleeper says this
+ * league is gone" is the only evidence allowed to delete a league's data.
+ */
+type FetchOutcome<T> = { answered: true; body: T | null } | { answered: false };
+
+type FetchInit = { method: "POST"; body: string; contentType: string };
+
+async function fetchOutcome<T>(
+  url: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  maxBytes = MAX_RESPONSE_BYTES,
+  init?: FetchInit,
+): Promise<FetchOutcome<T>> {
+  const failed: FetchOutcome<T> = { answered: false };
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       await acquireSleeperToken();
-      const response = await fetch(url, {
-        headers,
-        cache: "no-store",
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        url,
+        init
+          ? {
+              method: init.method,
+              headers: { ...headers, "content-type": init.contentType },
+              cache: "no-store",
+              signal: controller.signal,
+              body: init.body,
+            }
+          : {
+              headers,
+              cache: "no-store",
+              signal: controller.signal,
+            },
+      );
       if (RETRYABLE.has(response.status)) {
         const insideJob = isSleeperJobContext();
         if (attempt === 0 && insideJob) {
@@ -77,26 +115,35 @@ async function safeFetch<T>(
           const wait = retryAfterMs(response);
           pauseSleeperBudget(Math.max(wait, 10_000));
         }
-        return null;
+        return failed;
       }
-      if (!response.ok) return null;
+      // Sleeper reports an unknown league as HTTP 404 with the literal JSON
+      // body `null` (measured 2026-09-29 against a deleted league). That is an
+      // answer, not a failure. Any other 404 body (an HTML error page from an
+      // edge, an empty body) stays a failure, because it is not Sleeper
+      // speaking about the id.
+      if (response.status === 404) {
+        const text = await readCapped(response, 1024).catch(() => null);
+        return text !== null && text.trim() === "null" ? { answered: true, body: null } : failed;
+      }
+      if (!response.ok) return failed;
 
       // Fast reject when the server declares an over-limit body up front.
       const declared = Number(response.headers.get("content-length"));
-      if (Number.isFinite(declared) && declared > maxBytes) return null;
+      if (Number.isFinite(declared) && declared > maxBytes) return failed;
 
       // Enforce the cap while reading, since Content-Length may be absent or wrong
       // (chunked / gzipped responses). Abort past the cap rather than buffer unbounded.
       const text = await readCapped(response, maxBytes);
-      if (text === null) return null;
-      return JSON.parse(text) as T;
+      if (text === null) return failed;
+      return { answered: true, body: JSON.parse(text) as T | null };
     } catch {
-      return null;
+      return failed;
     } finally {
       clearTimeout(timer);
     }
   }
-  return null;
+  return failed;
 }
 
 /** Read a response body enforcing a hard byte cap. Returns null if the cap is exceeded.
@@ -246,12 +293,73 @@ export async function getSleeperLeague(leagueId: string): Promise<SleeperLeague 
   return safeFetch<SleeperLeague>(`${BASE}/league/${leagueId}`);
 }
 
+/**
+ * The three answers a league lookup can have, kept apart.
+ *
+ * - `found`: Sleeper returned the league.
+ * - `not_found`: Sleeper ANSWERED with the literal body `null` (a 404 today, a
+ *   200 in the past), which is how it reports a league id that does not
+ *   exist. This is the only answer that is evidence a league was deleted.
+ * - `failed`: the request did not come back (timeout, 429, 5xx, no budget
+ *   token), or came back with something that is neither a league nor null.
+ *   Says nothing about the league at all.
+ */
+export type SleeperLeagueLookup =
+  | { status: "found"; league: SleeperLeague }
+  | { status: "not_found" }
+  | { status: "failed" };
+
+export async function lookupSleeperLeague(
+  leagueId: string,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<SleeperLeagueLookup> {
+  const outcome = await fetchOutcome<SleeperLeague>(
+    `${BASE}/league/${encodeURIComponent(leagueId)}`,
+    timeoutMs,
+  );
+  if (!outcome.answered) return { status: "failed" };
+  if (outcome.body === null) return { status: "not_found" };
+  const body = outcome.body as unknown;
+  if (
+    body &&
+    typeof body === "object" &&
+    typeof (body as { league_id?: unknown }).league_id === "string"
+  ) {
+    return { status: "found", league: body as SleeperLeague };
+  }
+  return { status: "failed" };
+}
+
 export async function getSleeperRosters(leagueId: string): Promise<SleeperRoster[]> {
-  return (await safeFetch<SleeperRoster[]>(`${BASE}/league/${leagueId}/rosters`)) ?? [];
+  return (await getSleeperRostersOrNull(leagueId)) ?? [];
+}
+
+/**
+ * Null when the REQUEST failed; [] when Sleeper answered with no rosters.
+ * A body that is not an array (Sleeper answers `null` for a league it does not
+ * know) is treated as a failure too: it is not a list of rosters, empty or not.
+ */
+export async function getSleeperRostersOrNull(leagueId: string): Promise<SleeperRoster[] | null> {
+  return arrayOrNull(
+    await safeFetch<SleeperRoster[]>(`${BASE}/league/${encodeURIComponent(leagueId)}/rosters`),
+  );
 }
 
 export async function getSleeperLeagueUsers(leagueId: string): Promise<SleeperLeagueUser[]> {
-  return (await safeFetch<SleeperLeagueUser[]>(`${BASE}/league/${leagueId}/users`)) ?? [];
+  return (await getSleeperLeagueUsersOrNull(leagueId)) ?? [];
+}
+
+/** Null when the REQUEST failed; [] when Sleeper answered with no members. */
+export async function getSleeperLeagueUsersOrNull(
+  leagueId: string,
+): Promise<SleeperLeagueUser[] | null> {
+  return arrayOrNull(
+    await safeFetch<SleeperLeagueUser[]>(`${BASE}/league/${encodeURIComponent(leagueId)}/users`),
+  );
+}
+
+function arrayOrNull<T>(value: T[] | null): T[] | null {
+  return Array.isArray(value) ? value : null;
 }
 
 export async function getSleeperWeekTransactions(
@@ -369,7 +477,23 @@ export async function getAllSleeperTransactions(
 }
 
 export async function getSleeperTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
-  return (await safeFetch<SleeperTradedPick[]>(`${BASE}/league/${leagueId}/traded_picks`)) ?? [];
+  return (await getSleeperTradedPicksOrNull(leagueId)) ?? [];
+}
+
+/**
+ * Null when the REQUEST failed; [] when Sleeper answered and no pick has been
+ * traded. The difference decides whether every roster's pick list may be
+ * rebuilt: rebuilding from a failed call hands every traded pick back to its
+ * original owner.
+ */
+export async function getSleeperTradedPicksOrNull(
+  leagueId: string,
+): Promise<SleeperTradedPick[] | null> {
+  return arrayOrNull(
+    await safeFetch<SleeperTradedPick[]>(
+      `${BASE}/league/${encodeURIComponent(leagueId)}/traded_picks`,
+    ),
+  );
 }
 
 /**
@@ -417,7 +541,16 @@ export async function getSleeperMatchups(
 }
 
 export async function getSleeperLeagueDrafts(leagueId: string): Promise<SleeperDraft[]> {
-  return (await safeFetch<SleeperDraft[]>(`${BASE}/league/${leagueId}/drafts`)) ?? [];
+  return (await getSleeperLeagueDraftsOrNull(leagueId)) ?? [];
+}
+
+/** Null when the REQUEST failed; [] when Sleeper answered and the league has no drafts. */
+export async function getSleeperLeagueDraftsOrNull(
+  leagueId: string,
+): Promise<SleeperDraft[] | null> {
+  return arrayOrNull(
+    await safeFetch<SleeperDraft[]>(`${BASE}/league/${encodeURIComponent(leagueId)}/drafts`),
+  );
 }
 
 export async function getSleeperDraft(draftId: string): Promise<SleeperDraft | null> {
@@ -569,37 +702,27 @@ const DRAFT_ID_PATTERN = /^[0-9]{1,32}$/;
 export async function getSleeperDraftAutopickers(draftId: string): Promise<string[] | null> {
   if (!DRAFT_ID_PATTERN.test(draftId)) return null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-  try {
-    const response = await fetch(SLEEPER_GRAPHQL_HOST, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-      body: JSON.stringify({
-        query: `{ draft_autopickers(sport: "nfl", draft_id: "${draftId}") }`,
-      }),
-    });
-    if (!response.ok) return null;
+  // Through the same budgeted fetch as every REST call, so this request takes
+  // a token from lib/sleeper-budget.ts and honours a paused budget. It used to
+  // call fetch directly and was the one Sleeper request the budget never saw.
+  const outcome = await fetchOutcome<{
+    data?: { draft_autopickers?: unknown } | null;
+    errors?: unknown[];
+  }>(SLEEPER_GRAPHQL_HOST, DEFAULT_TIMEOUT_MS, MAX_RESPONSE_BYTES, {
+    method: "POST",
+    contentType: "application/json",
+    body: JSON.stringify({
+      query: `{ draft_autopickers(sport: "nfl", draft_id: "${draftId}") }`,
+    }),
+  });
+  if (!outcome.answered || !outcome.body || typeof outcome.body !== "object") return null;
 
-    const text = await readCapped(response, MAX_RESPONSE_BYTES);
-    if (text === null) return null;
+  const parsed = outcome.body;
+  if (Array.isArray(parsed.errors) && parsed.errors.length > 0) return null;
 
-    const parsed = JSON.parse(text) as {
-      data?: { draft_autopickers?: unknown } | null;
-      errors?: unknown[];
-    };
-    if (Array.isArray(parsed.errors) && parsed.errors.length > 0) return null;
-
-    const ids = parsed.data?.draft_autopickers;
-    if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return null;
-    return ids;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const ids = parsed.data?.draft_autopickers;
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return null;
+  return ids;
 }
 
 export type SleeperNflState = {
@@ -747,18 +870,30 @@ export type SleeperStatEntry = {
  * also capture the opponent and game id (see lib/sleeper-stats-map.ts).
  *
  * The .com host requires a User-Agent header (403s without one); safeFetch
- * already sends one. Response is an ARRAY of per-player rows. Returns [] on any
- * failure, matching this lib's empty-on-failure convention.
+ * already sends one. Response is an ARRAY of per-player rows.
+ *
+ * Returns [] on any failure. Kept for the one-time history backfill script;
+ * the nightly sync uses getWeeklyStatsOrNull, because a week whose request
+ * failed is not a week with no stats and must not be reported as one.
  */
 export async function getWeeklyStats(
   seasonType: SleeperSeasonType,
   season: number,
   week: number,
 ): Promise<SleeperStatEntry[]> {
+  return (await getWeeklyStatsOrNull(seasonType, season, week)) ?? [];
+}
+
+/** Null when the REQUEST failed; [] when Sleeper answered with no stat rows. */
+export async function getWeeklyStatsOrNull(
+  seasonType: SleeperSeasonType,
+  season: number,
+  week: number,
+): Promise<SleeperStatEntry[] | null> {
   const raw = await safeFetch<Array<Record<string, unknown>>>(
     `https://api.sleeper.com/stats/nfl/${season}/${week}?season_type=${seasonType}`,
   );
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) return null;
   const out: SleeperStatEntry[] = [];
   for (const row of raw) {
     if (!row || typeof row !== "object") continue;

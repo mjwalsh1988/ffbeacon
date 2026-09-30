@@ -33,7 +33,7 @@ import { getSleeperLeaguesOrNull, getSleeperUser } from "@/lib/sleeper";
 import { claimManagerLookupSlot } from "./rate-limit";
 import { wakeLeagueSyncWorker } from "@/lib/league-sync-wake";
 import { DEFAULT_MANAGER_PULSE_SETTINGS } from "./default-settings";
-import { findOpenRun, readCaptureProgress, startManagerCapture } from "./capture";
+import { countLeaguesToQueue, findOpenRun, readCaptureProgress, startManagerCapture } from "./capture";
 import type { ManagerPulseSettings } from "./types";
 
 const mockGetSleeperUser = vi.mocked(getSleeperUser);
@@ -994,5 +994,19 @@ describe("findOpenRun", () => {
 
     const found = await findOpenRun(admin, SUBJECT);
     expect(found).not.toBeNull();
+  });
+});
+
+describe("countLeaguesToQueue", () => {
+  it("charges only league-seasons that need capture and are not already in flight", () => {
+    const leagueSeasons = [
+      { sleeperLeagueId: "fresh" },
+      { sleeperLeagueId: "linked" },
+      { sleeperLeagueId: "new-1" },
+      { sleeperLeagueId: "new-2" },
+    ];
+    const needs = (id: string) => id !== "fresh";
+    expect(countLeaguesToQueue(leagueSeasons, needs, new Set(["linked"]))).toBe(2);
+    expect(countLeaguesToQueue(leagueSeasons, needs, new Set())).toBe(3);
   });
 });

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { DEFAULT_FORMAT_SLUG } from "@/lib/site";
 import { saveFormatPreference } from "@/app/actions/preferences";
-import { shortFormatName } from "@/lib/format-display";
+import { FormatNameText } from "@/components/format-name-text";
 
 export type FormatOption = {
   id: string;
@@ -139,37 +139,48 @@ export function FormatToggle({
     }
   };
 
-  // Keep the full name for accessible labels + the screen-reader
-  // announcement; collapse "Superflex" → "SF" for the visible UI only.
+  // The full name drives the screen-reader announcement. The visible text
+  // collapses "Superflex" to "SF", and FormatNameText keeps that abbreviation
+  // in the accessible name with the full word sr-only beside it (WCAG 2.5.3).
   const currentLabel =
     visibleOptions.find((option) => option.slug === effectiveSlug)?.display_name ??
     options.find((option) => option.slug === effectiveSlug)?.display_name ??
     "Redraft PPR";
-  const currentLabelShort = shortFormatName(currentLabel);
 
   const inline = placement === "inline";
   // Inline is the touch layout: full width, and 44px tall so the trigger and
-  // every option clear the minimum tap target.
+  // every option clear the minimum tap target. The header trigger stays 36px
+  // to look like its neighbours, and an invisible ::before strip 4px above and
+  // below makes the part a finger can hit 44px tall.
   const triggerClass = inline
-    ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-50"
-    : "inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-50";
+    ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent aria-disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    : "relative inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] hover:border-line-accent aria-disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
   const menuClass = inline
     ? "mt-2 w-full overflow-hidden rounded-card border border-line bg-surface-elevated"
     : "absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl";
+  // The focused option gets a 2px cyan outline drawn INSIDE the row (the menu
+  // clips anything outside it). A background shift alone measured 1.07:1
+  // against its neighbours, which is not a focus indicator anyone can see.
   const itemClass = inline
-    ? "flex min-h-11 w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none"
-    : "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none";
+    ? "flex min-h-11 w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-brand-cyan"
+    : "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-brand-cyan";
 
   if (visibleOptions.length === 1) {
+    // Real text rather than an aria-label on a span: a label on an element
+    // with no role is dropped by most screen readers, and the children were
+    // hidden, so this read as nothing at all.
     return (
       <span
         className={`items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink ${
           inline ? "flex min-h-11 w-full" : "inline-flex h-9"
         }`}
-        aria-label={`Scoring format: ${currentLabel}`}
       >
-        <span aria-hidden="true" className="text-ink-muted">Format:</span>
-        <span aria-hidden="true">{currentLabelShort}</span>
+        <span className="text-ink-muted">
+          <span className="sr-only">Scoring </span>Format:
+        </span>{" "}
+        <span>
+          <FormatNameText displayName={currentLabel} />
+        </span>
       </span>
     );
   }
@@ -181,14 +192,23 @@ export function FormatToggle({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Scoring format: ${currentLabel}`}
-        onClick={() => setOpen((prev) => !prev)}
-        disabled={pending}
+        // aria-disabled rather than disabled: selecting an option returns
+        // focus here while the navigation is pending, and a disabled button
+        // cannot take focus, so the reader was dropped on the page body.
+        aria-disabled={pending || undefined}
+        onClick={() => {
+          if (pending) return;
+          setOpen((prev) => !prev);
+        }}
         className={triggerClass}
       >
-        <span aria-hidden="true" className={inline ? "flex items-center gap-1.5" : "contents"}>
-          <span className="text-ink-muted">Format:</span>
-          <span>{currentLabelShort}</span>
+        <span className={inline ? "flex items-center gap-1.5" : "contents"}>
+          <span className="text-ink-muted">
+            <span className="sr-only">Scoring </span>Format:
+          </span>{" "}
+          <span>
+            <FormatNameText displayName={currentLabel} />
+          </span>
         </span>
         <span aria-hidden="true" className="text-ink-subtle">▾</span>
       </button>
@@ -216,16 +236,16 @@ export function FormatToggle({
                     itemRefs.current[index] = el;
                   }}
                   type="button"
-                  role="menuitem"
+                  // menuitemradio + aria-checked: the checkmark is decorative,
+                  // so the selected state has to be announced by the role.
+                  role="menuitemradio"
+                  aria-checked={isSelected}
                   tabIndex={index === activeIndex ? 0 : -1}
                   onClick={() => selectFormat(option.slug)}
-                  // aria-label carries the unabbreviated name so screen
-                  // readers hear "Dynasty PPR Superflex" instead of "SF".
-                  aria-label={option.display_name}
                   className={`${itemClass} ${isSelected ? "text-ink" : "text-ink-muted"}`}
                 >
-                  <span aria-hidden="true">
-                    {shortFormatName(option.display_name)}
+                  <span>
+                    <FormatNameText displayName={option.display_name} />
                   </span>
                   {isSelected && (
                     <span className="text-brand-purple" aria-hidden="true">

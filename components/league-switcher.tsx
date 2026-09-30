@@ -61,7 +61,10 @@ export type SwitcherLeague = {
  * decorative beacon hairline), and an absolutely positioned panel inside that
  * header gets clipped to the header's ~93px height: the label and filter box
  * showed, and the entire league list was cut off. Portaling makes the panel
- * immune to any ancestor's overflow, now or later.
+ * immune to any ancestor's overflow, now or later. Because a portal leaves
+ * the panel at the end of <body>, the keydown handler stitches the Tab order
+ * back: Tab off the last league continues from the trigger, Shift+Tab off the
+ * first control returns to it, and either one closes the panel.
  */
 export function LeagueSwitcher({
   leagues,
@@ -165,6 +168,32 @@ export function LeagueSwitcher({
         e.stopPropagation();
         setOpen(false);
         triggerRef.current?.focus();
+        return;
+      }
+      // The panel is portaled to the end of <body>, so the browser's own Tab
+      // order would run from the last league straight off the page footer.
+      // Stitch it back to where it sits visually: Shift+Tab off the first
+      // control returns to the trigger, and Tab off the last one closes the
+      // panel and continues from the trigger, so the next stop is whatever
+      // follows the trigger on the page.
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      } else if (!e.shiftKey && active === last) {
+        // Move focus to the trigger WITHOUT preventing the default: the
+        // browser then performs the Tab from the trigger, landing on the
+        // next control after it in document order.
+        triggerRef.current?.focus();
+        setOpen(false);
       }
     };
     document.addEventListener("mousedown", onDocClick);
@@ -238,9 +267,11 @@ export function LeagueSwitcher({
         <button
           ref={triggerRef}
           type="button"
-          aria-haspopup="true"
+          // A disclosure, not a menu: the panel holds a filter box and plain
+          // links, so aria-haspopup (which promises menu semantics) is wrong.
+          // aria-controls is set only while the panel exists to point at.
           aria-expanded={open}
-          aria-controls={panelId}
+          aria-controls={open && anchor ? panelId : undefined}
           onClick={() => setOpen((p) => !p)}
           className={`${triggerClasses} transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan`}
         >
@@ -309,7 +340,7 @@ export function LeagueSwitcher({
                     <Link
                       href={hrefFor(l)}
                       onClick={() => setOpen(false)}
-                      className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface focus:bg-surface focus:outline-none"
+                      className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface focus:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
                     >
                       <LeagueLogo avatarId={l.avatar} name={l.name} size={32} />
                       <span className="min-w-0 flex-1">

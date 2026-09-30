@@ -20,6 +20,7 @@ import {
   type FreeAgentReport,
 } from "@/lib/free-agent-finder";
 import type { SearchablePlayer } from "@/lib/ranking-boards";
+import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
 
 /**
  * Is this player available in any of my leagues?
@@ -235,7 +236,8 @@ function PlayerCombobox({
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<SearchablePlayer[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // No option is active until the reader presses Down (lib/keyboard-navigation).
+  const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const trimmed = query.trim();
@@ -264,7 +266,7 @@ function PlayerCombobox({
         const data = (await res.json()) as { players?: SearchablePlayer[] };
         if (!cancelled) {
           setResults(data.players ?? []);
-          setActiveIdx(0);
+          setActiveIdx(NO_ACTIVE_OPTION);
         }
       } catch {
         if (!cancelled) setResults([]);
@@ -299,16 +301,13 @@ function PlayerCombobox({
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      const key = event.key;
       setOpen(true);
-      setActiveIdx((i) => Math.min(results.length - 1, i + 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
+      setActiveIdx((i) => nextComboboxIndex(i, key, results.length));
     } else if (event.key === "Enter") {
-      if (open && results[activeIdx]) {
+      if (open && activeIdx >= 0 && results[activeIdx]) {
         event.preventDefault();
         commit(results[activeIdx]);
       }
@@ -319,16 +318,22 @@ function PlayerCombobox({
         event.stopPropagation();
         event.preventDefault();
         setOpen(false);
+        setActiveIdx(NO_ACTIVE_OPTION);
       }
     }
   }
 
-  const showList = open && longEnough;
+  const showPanel = open && longEnough;
+  // The listbox exists only when it has options. "Searching" and "No matches"
+  // are status text, and inside a listbox they read as options.
+  const showList = showPanel && !loading && results.length > 0;
   const statusText = !longEnough
     ? ""
     : loading
       ? "Searching"
-      : `${results.length} ${results.length === 1 ? "player" : "players"}`;
+      : results.length === 0
+        ? `No matches for ${trimmed}`
+        : `${results.length} ${results.length === 1 ? "player" : "players"}`;
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -346,9 +351,9 @@ function PlayerCombobox({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showList}
-          aria-controls={listboxId}
+          aria-controls={showList ? listboxId : undefined}
           aria-activedescendant={
-            showList && results[activeIdx]
+            showList && activeIdx >= 0 && results[activeIdx]
               ? `${listboxId}-opt-${activeIdx}`
               : undefined
           }
@@ -374,6 +379,13 @@ function PlayerCombobox({
         {statusText}
       </p>
 
+      {showPanel && !showList && (
+        // Sighted twin of the live status line above; plain text, no listbox.
+        <div className="absolute left-0 right-0 z-30 mt-1 rounded-card border border-line bg-surface px-3 py-3 text-sm text-ink-subtle shadow-2xl shadow-black/50">
+          {loading ? "Searching..." : <>No matches for &quot;{trimmed}&quot;.</>}
+        </div>
+      )}
+
       {showList && (
         <ul
           id={listboxId}
@@ -381,14 +393,7 @@ function PlayerCombobox({
           aria-label="Player search results"
           className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface shadow-2xl shadow-black/50"
         >
-          {loading ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">Searching...</li>
-          ) : results.length === 0 ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">
-              No matches for &quot;{trimmed}&quot;.
-            </li>
-          ) : (
-            results.map((p, i) => {
+          {results.map((p, i) => {
               const isActive = i === activeIdx;
               return (
                 <li
@@ -415,8 +420,7 @@ function PlayerCombobox({
                   </span>
                 </li>
               );
-            })
-          )}
+            })}
         </ul>
       )}
     </div>

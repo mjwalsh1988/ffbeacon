@@ -2,7 +2,12 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { readSourceSlug, getAvailableSources, pickDefaultSource } from "@/lib/source";
+import {
+  readSourceSlug,
+  getActiveFormats,
+  getAvailableSources,
+  pickDefaultSource,
+} from "@/lib/source";
 import { DEFAULT_FORMAT_SLUG } from "@/lib/site";
 
 // Shared, request-scoped fetch of (user, user_preferences). Both resolvers
@@ -88,31 +93,38 @@ export async function resolveSourceSlug(
   return { slug: def, origin: "default", transient: false };
 }
 
+// Every step of the chain is checked against the ACTIVE format_configs rows.
+// A slug-shaped value is not a format: `?format=foo` used to be accepted as
+// written, printed back to the reader and queried, which rendered empty values
+// with no explanation. An unknown or retired slug at any step falls through to
+// the next one (URL, then DB, then cookie, then the default).
 export async function resolveFormatSlug(
   supabase: SupabaseClient<Database>,
   searchParamFormat: string | string[] | undefined,
 ): Promise<ResolvedPreference> {
+  const formats = await getActiveFormats(supabase);
+  const activeSlugs = new Set(formats.map((f) => f.slug));
+  // With no active formats read (a failed reference read) there is nothing to
+  // validate against, so the shape check alone applies, as before.
+  const isKnown = (slug: string) => activeSlugs.size === 0 || activeSlugs.has(slug);
+
   const candidate = Array.isArray(searchParamFormat)
     ? searchParamFormat[0]
     : searchParamFormat;
-  if (candidate && VALID_SLUG.test(candidate)) {
+  if (candidate && VALID_SLUG.test(candidate) && isKnown(candidate)) {
     return { slug: candidate, origin: "url", transient: true };
   }
 
   const { defaultFormatConfigId } = await getUserPreferences(supabase);
   if (defaultFormatConfigId) {
-    const { data: format } = await supabase
-      .from("format_configs")
-      .select("slug")
-      .eq("id", defaultFormatConfigId)
-      .maybeSingle();
-    if (format?.slug) {
-      return { slug: format.slug, origin: "db", transient: false };
-    }
+    const fromList = formats.find((f) => f.id === defaultFormatConfigId)?.slug;
+    if (fromList) return { slug: fromList, origin: "db", transient: false };
   }
 
   const fromCookie = await readCookieSlug(FORMAT_COOKIE);
-  if (fromCookie) return { slug: fromCookie, origin: "cookie", transient: false };
+  if (fromCookie && isKnown(fromCookie)) {
+    return { slug: fromCookie, origin: "cookie", transient: false };
+  }
 
   return { slug: DEFAULT_FORMAT_SLUG, origin: "default", transient: false };
 }

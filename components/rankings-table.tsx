@@ -6,6 +6,7 @@ import { ArrowUp, ArrowDown } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { BeaconValue } from "@/components/beacon-value-icon";
+import { useRadioGroup } from "@/lib/use-radio-group";
 
 export type RankingsRow = {
   overall_rank: number;
@@ -221,6 +222,18 @@ export function RankingsTable({
     }
   };
 
+  const sortRadios = useRadioGroup({
+    count: mobileSortOptions.length,
+    checkedIndex: mobileSortOptions.findIndex((o) => o.key === sortKey),
+    // An arrow key lands on a chip and picks it with that chip's natural
+    // direction; it never flips the chip it is already on.
+    onSelect: (i) => {
+      const opt = mobileSortOptions[i];
+      if (opt.key === sortKey) return;
+      handleMobileSort(opt.key, opt.defaultDir);
+    },
+  });
+
   return (
     <>
       {/* Mobile-only sort chip row. Each chip flips both the sort AND the
@@ -235,24 +248,33 @@ export function RankingsTable({
           aria-label="Sort rankings by"
           className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
         >
-          {mobileSortOptions.map((opt) => {
+          {mobileSortOptions.map((opt, index) => {
             const isActive = opt.key === sortKey;
+            // The visible chip text leads the name so a voice command naming
+            // what is on screen matches (WCAG 2.5.3); the long label follows
+            // only where the chip abbreviates it.
+            const spoken = opt.short === opt.label ? opt.label : `${opt.short} (${opt.label})`;
             return (
               <button
                 key={`${opt.key}-${opt.label}`}
+                ref={sortRadios.refFor(index)}
                 type="button"
                 role="radio"
                 aria-checked={isActive}
+                // One Tab stop for the whole row; arrows move between chips
+                // and pick the one they land on (lib/use-radio-group.ts).
+                tabIndex={sortRadios.tabIndexFor(index)}
+                onKeyDown={(event) => sortRadios.onKeyDown(event, index)}
                 onClick={() => handleMobileSort(opt.key, opt.defaultDir)}
-                className={`inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                className={`inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
                   isActive
                     ? "border-brand-purple bg-brand-purple/15 text-ink"
                     : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
                 }`}
                 aria-label={
                   isActive
-                    ? `Sort by ${opt.label}, currently ${sortDir === "asc" ? "ascending" : "descending"}. Tap to flip direction.`
-                    : `Sort by ${opt.label}. Tap to activate.`
+                    ? `${spoken}, sorted ${sortDir === "asc" ? "ascending" : "descending"}. Activate again to flip direction.`
+                    : `Sort by ${spoken}`
                 }
               >
                 <span>{opt.short}</span>

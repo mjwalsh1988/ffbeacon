@@ -86,6 +86,57 @@ function resolveSeasonWindowSize(seasons: number | undefined, settings: ManagerP
   return Math.min(seasonWindowMax, Math.max(seasonWindowMin, requested));
 }
 
+/** How many ids one `.in()` filter carries. Keeps every request line well under PostgREST's limit. */
+const ID_CHUNK = 200;
+
+/**
+ * The league-seasons this run will NEWLY queue, which is what the budget is
+ * charged for: ones that need a capture and that nobody is already capturing
+ * with a footprint job. Pure, so the rule is testable without a database.
+ */
+export function countLeaguesToQueue(
+  leagueSeasons: { sleeperLeagueId: string }[],
+  needsCapture: (sleeperLeagueId: string) => boolean,
+  inFlight: ReadonlySet<string>,
+): number {
+  let count = 0;
+  for (const ls of leagueSeasons) {
+    if (needsCapture(ls.sleeperLeagueId) && !inFlight.has(ls.sleeperLeagueId)) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Which of these leagues already have a footprint job pending or processing,
+ * for ANY reader. The same rule `enqueue_manager_pulse_capture` links on, so a
+ * league in this set is one the run will join rather than queue.
+ *
+ * On a failed read the set is empty, which charges the reader the full count:
+ * the conservative side, and what happened before this existed.
+ */
+async function leaguesWithInFlightFootprintJob(
+  admin: SupabaseClient<Database>,
+  sleeperLeagueIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  const ids = [...new Set(sleeperLeagueIds)];
+  try {
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      const { data, error } = await admin
+        .from("league_sync_jobs")
+        .select("sleeper_league_id")
+        .eq("job_kind", "footprint")
+        .in("status", ["pending", "processing"])
+        .in("sleeper_league_id", ids.slice(i, i + ID_CHUNK));
+      if (error) return new Set();
+      for (const row of data ?? []) out.add(row.sleeper_league_id);
+    }
+  } catch {
+    return new Set();
+  }
+  return out;
+}
+
 /**
  * Start (or resume, via the fresh-league short-circuit) a capture for one
  * Sleeper handle. Never throws: every failure mode is a member of
@@ -158,7 +209,11 @@ export async function startManagerCapture(params: {
   const seasonFrom = seasonTo - windowSize + 1;
 
   // 4. Discover the league-seasons.
-  const { leagueSeasons, failedSeasons } = await discoverLeagueSeasons({
+  const {
+    leagueSeasons,
+    failedSeasons,
+    skipped: skippedAtDiscovery,
+  } = await discoverLeagueSeasons({
     sleeperUserId: resolved.sleeperUserId,
     seasonFrom,
     seasonTo,
@@ -216,10 +271,18 @@ export async function startManagerCapture(params: {
   const needsCapture = (sleeperLeagueId: string): boolean =>
     managerPulseNeedsCapture(stateByLeague.get(sleeperLeagueId), settings, nowMs, seasonTo);
 
-  const leaguesRequested = leagueSeasons.reduce(
-    (count, ls) => count + (needsCapture(ls.sleeperLeagueId) ? 1 : 0),
-    0,
+  // THE BUDGET IS CHARGED FOR NEW WORK ONLY. A league somebody is already
+  // capturing with a footprint job is one `enqueue_manager_pulse_capture` will
+  // LINK to rather than queue, and a linked league costs nothing (it is not in
+  // `leagues_charged`). Counting it here anyway refused a reader for joining a
+  // capture that was already paid for, which is exactly the case the "a
+  // manager someone else is already capturing costs you nothing" promise on the
+  // throttled page covers.
+  const inFlight = await leaguesWithInFlightFootprintJob(
+    admin,
+    sleeperLeagueIds.filter((id) => needsCapture(id)),
   );
+  const leaguesRequested = countLeaguesToQueue(leagueSeasons, needsCapture, inFlight);
 
   // 6. Claim the run.
   // No `as never`. The generated types carry both RPC signatures (migrations
@@ -271,6 +334,23 @@ export async function startManagerCapture(params: {
     return progress.status === "computing" || progress.status === "complete"
       ? { status: "warm", runId, progress }
       : { status: "started", runId, progress };
+  }
+
+  // The league-seasons discovery found and the per-lookup cap dropped. Written
+  // BEFORE the enqueue, because a run that needs nothing queued moves straight
+  // to 'computing' inside the enqueue and the drainer can finalize it at once;
+  // written after, the report could be built without the count. Non-fatal:
+  // a missing figure costs one sentence of coverage, not the lookup.
+  if (skippedAtDiscovery > 0) {
+    try {
+      // Untyped: the column arrives with migration 0325, ahead of regenerated types.
+      await (admin as unknown as SupabaseClient)
+        .from("manager_pulse_runs")
+        .update({ leagues_skipped: skippedAtDiscovery })
+        .eq("id", runId);
+    } catch {
+      // See above.
+    }
   }
 
   // 7. Enqueue what the run needs.
@@ -379,13 +459,19 @@ async function reconcileFinishedJobs(
     const jobIds = [...new Set(open.map((row) => row.job_id).filter((id): id is string => !!id))];
     if (jobIds.length === 0) return;
 
-    const { data: jobs, error: jobsError } = await admin
-      .from("league_sync_jobs")
-      .select("id, status")
-      .in("id", jobIds);
-    if (jobsError || !jobs) return;
-
-    const statusByJob = new Map(jobs.map((job) => [job.id, job.status]));
+    // CHUNKED. A large history links up to maxLeaguesPerRun jobs (500 at the
+    // admin ceiling), and one `.in()` of that many UUIDs runs past PostgREST's
+    // request-line limit, comes back 414, and this whole reconcile silently
+    // does nothing on every poll, which is the stall it exists to prevent.
+    const statusByJob = new Map<string, string>();
+    for (let i = 0; i < jobIds.length; i += ID_CHUNK) {
+      const { data: jobs, error: jobsError } = await admin
+        .from("league_sync_jobs")
+        .select("id, status")
+        .in("id", jobIds.slice(i, i + ID_CHUNK));
+      if (jobsError || !jobs) return;
+      for (const job of jobs) statusByJob.set(job.id, job.status);
+    }
     const doneIds: string[] = [];
     const failedIds: string[] = [];
     for (const row of open) {
@@ -395,13 +481,13 @@ async function reconcileFinishedJobs(
     }
 
     const now = new Date().toISOString();
-    if (doneIds.length > 0) {
+    for (let i = 0; i < doneIds.length; i += ID_CHUNK) {
       await admin
         .from("manager_pulse_run_leagues")
         .update({ status: "done", detail: null, updated_at: now })
-        .in("id", doneIds);
+        .in("id", doneIds.slice(i, i + ID_CHUNK));
     }
-    if (failedIds.length > 0) {
+    for (let i = 0; i < failedIds.length; i += ID_CHUNK) {
       await admin
         .from("manager_pulse_run_leagues")
         .update({
@@ -409,7 +495,7 @@ async function reconcileFinishedJobs(
           detail: "This league could not be read from Sleeper.",
           updated_at: now,
         })
-        .in("id", failedIds);
+        .in("id", failedIds.slice(i, i + ID_CHUNK));
     }
 
     if (doneIds.length + failedIds.length === open.length) {

@@ -42,8 +42,11 @@ import type { WarUniverse, WarUniversePlayer } from "./load";
  * ids and not by the window that produced them.
  */
 const cacheState = vi.hoisted(() => ({
-  mode: "passthrough" as "passthrough" | "missing",
+  // `memo` behaves like a real data cache: the first call per key stores its
+  // result and every later call returns it, which is how a slice goes stale.
+  mode: "passthrough" as "passthrough" | "missing" | "memo",
   keys: [] as string[][],
+  store: new Map<string, unknown>(),
 }));
 
 // vi.mock calls are hoisted by Vitest above every import in this file, so it
@@ -56,6 +59,11 @@ vi.mock("next/cache", () => ({
       if (cacheState.mode === "missing") {
         throw new Error("Invariant: incrementalCache missing in unstable_cache");
       }
+      if (cacheState.mode === "memo") {
+        const key = keyParts.join("|");
+        if (!cacheState.store.has(key)) cacheState.store.set(key, await fn(...args));
+        return JSON.parse(JSON.stringify(cacheState.store.get(key)));
+      }
       return fn(...args);
     },
 }));
@@ -63,6 +71,7 @@ vi.mock("next/cache", () => ({
 beforeEach(() => {
   cacheState.mode = "passthrough";
   cacheState.keys = [];
+  cacheState.store = new Map();
 });
 
 let activeClient: SupabaseClient<Database>;
@@ -1009,6 +1018,92 @@ describe("the completeness guards", () => {
       nfl_defense_vs_position: table([]),
     });
     const universe = await loadWarUniverse({
+      season: 2026,
+      fromWeek: 5,
+      toWeek: 5,
+      scoringBase: "pts_ppr",
+      source: "sleeper",
+    });
+    expect(universe.projections.length).toBe(1);
+  });
+
+  it("replaces a slice cached before its week filled in, instead of refusing the window", async () => {
+    // The production failure ("read 14156 of 28312"): every slice was complete
+    // when it was stored, and the table has grown since without the tag being
+    // busted. The window count proves a slice short; a direct read fixes it.
+    cacheState.mode = "memo";
+    const rows: Row[] = [projectionRow("a1", "p1", 5, 15, "2026-08-26T14:00:00.000Z")];
+    activeClient = fakeClient({
+      player_weekly_projections: table(rows),
+      players: table([playerRow("p1", "RB", "1001"), playerRow("p2", "WR", "1002")]),
+      player_projection_accuracy: table([]),
+      nfl_defense_vs_position: table([]),
+    });
+    const window = { season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr" as const, source: "sleeper" };
+
+    // Week 6 is cached at zero rows, week 5 at one.
+    const first = await loadWarUniverse(window);
+    expect(first.projections.length).toBe(1);
+
+    // Week 6 is published, and week 5 gains a row, with no tag bust.
+    rows.push(projectionRow("a2", "p2", 5, 11, "2026-08-27T14:00:00.000Z"));
+    rows.push(projectionRow("b1", "p1", 6, 14, "2026-08-27T14:00:00.000Z"));
+
+    const second = await loadWarUniverse(window);
+    expect(second.projections.length).toBe(3);
+    expect(second.players.has("p2")).toBe(true);
+  });
+
+  it("retries a week whose walk and count disagree once, as they do mid-sync", async () => {
+    let weekCounts = 0;
+    const rows = [projectionRow("1", "p1", 5, 15, "2026-08-26T14:00:00.000Z")];
+    activeClient = fakeClient({
+      player_weekly_projections: () =>
+        makeBuilder((calls) => {
+          const filtered = applyFilters(rows, calls);
+          const isWeekQuery = calls.some((c) => c.method === "eq" && c.args[0] === "week");
+          if (isCountQuery(calls)) {
+            // The first per-week count lands while a sync has a row in flight.
+            if (isWeekQuery) weekCounts += 1;
+            const extra = isWeekQuery && weekCounts === 1 ? 1 : 0;
+            return { data: [], error: null, count: filtered.length + extra };
+          }
+          return { data: applyOrderAndLimit(filtered, calls), error: null, count: null };
+        }),
+      players: table([playerRow("p1", "RB", "1001")]),
+      player_projection_accuracy: table([]),
+      nfl_defense_vs_position: table([]),
+    });
+    const universe = await loadWarUniverseUncached({
+      season: 2026,
+      fromWeek: 5,
+      toWeek: 5,
+      scoringBase: "pts_ppr",
+      source: "sleeper",
+    });
+    expect(universe.projections.length).toBe(1);
+    expect(weekCounts).toBe(2);
+  });
+
+  it("retries a page that failed, rather than failing the whole universe", async () => {
+    let pageReads = 0;
+    const rows = [projectionRow("1", "p1", 5, 15, "2026-08-26T14:00:00.000Z")];
+    activeClient = fakeClient({
+      player_weekly_projections: () =>
+        makeBuilder((calls) => {
+          const filtered = applyFilters(rows, calls);
+          if (isCountQuery(calls)) return { data: [], error: null, count: filtered.length };
+          pageReads += 1;
+          if (pageReads === 1) {
+            return { data: null, error: { message: "canceling statement due to statement timeout" }, count: null };
+          }
+          return { data: applyOrderAndLimit(filtered, calls), error: null, count: null };
+        }),
+      players: table([playerRow("p1", "RB", "1001")]),
+      player_projection_accuracy: table([]),
+      nfl_defense_vs_position: table([]),
+    });
+    const universe = await loadWarUniverseUncached({
       season: 2026,
       fromWeek: 5,
       toWeek: 5,

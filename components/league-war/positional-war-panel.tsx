@@ -279,7 +279,6 @@ export async function PositionalWarPanel({
     shallowPositions: view.shallowPositions,
     modelVersion: view.modelVersion,
     generatedAt: view.generatedAt,
-    isStale: view.isStale,
     projectionSourceLabel,
   });
 

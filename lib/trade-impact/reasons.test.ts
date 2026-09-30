@@ -909,3 +909,13 @@ describe("the defender caveat (plan IDP-311)", () => {
     expect(buildTradeReasons(baseInput()).some((r) => r.kind === "defender-caveat")).toBe(false);
   });
 });
+
+describe("simulationGapSentence", () => {
+  it("never says the season is over when the cache was built on another engine", async () => {
+    const { simulationGapSentence } = await import("./reasons");
+    expect(simulationGapSentence("engine-switch")).not.toMatch(/no remaining games/);
+    expect(simulationGapSentence("not-built")).not.toMatch(/no remaining games/);
+    expect(simulationGapSentence("season-over")).toMatch(/no remaining games/);
+    expect(simulationGapSentence(undefined)).toMatch(/no remaining games/);
+  });
+});

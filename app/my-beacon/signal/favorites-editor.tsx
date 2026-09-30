@@ -13,6 +13,7 @@ import { Save, X } from "lucide-react";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { saveFavorites, searchPlayers } from "./actions";
 import { type PlayerSearchResult } from "./customization";
+import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
 
 /**
  * Favorites editor for a Signal: favorite NFL team (labeled select) and
@@ -185,7 +186,8 @@ function PlayerTypeahead({
   const [results, setResults] = useState<PlayerSearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // No option is active until the reader presses Down (lib/keyboard-navigation).
+  const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
 
   // Debounced fetch. A monotonically increasing request id guards against
   // out-of-order responses overwriting a newer query's results.
@@ -203,7 +205,7 @@ function PlayerTypeahead({
       const found = await searchPlayers(trimmed);
       if (id !== requestSeq.current) return;
       setResults(found);
-      setActiveIdx(0);
+      setActiveIdx(NO_ACTIVE_OPTION);
       setLoading(false);
     }, 250);
   }, []);
@@ -245,16 +247,13 @@ function PlayerTypeahead({
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      const key = event.key;
       setOpen(true);
-      setActiveIdx((i) => Math.min(results.length - 1, i + 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
+      setActiveIdx((i) => nextComboboxIndex(i, key, results.length));
     } else if (event.key === "Enter") {
-      if (open && results[activeIdx]) {
+      if (open && activeIdx >= 0 && results[activeIdx]) {
         event.preventDefault();
         commit(results[activeIdx]);
       }
@@ -262,14 +261,15 @@ function PlayerTypeahead({
       if (open) {
         event.preventDefault();
         setOpen(false);
+        setActiveIdx(NO_ACTIVE_OPTION);
       }
     } else if (event.key === "Home") {
-      if (open) {
+      if (open && results.length > 0) {
         event.preventDefault();
         setActiveIdx(0);
       }
     } else if (event.key === "End") {
-      if (open) {
+      if (open && results.length > 0) {
         event.preventDefault();
         setActiveIdx(results.length - 1);
       }
@@ -279,8 +279,14 @@ function PlayerTypeahead({
   const statusText = loading
     ? "Searching..."
     : query.trim().length >= 2
-      ? `${results.length} player${results.length === 1 ? "" : "s"} found.`
+      ? results.length === 0
+        ? "No players match that name."
+        : `${results.length} player${results.length === 1 ? "" : "s"} found.`
       : "";
+  const showPanel = open && (query.trim().length >= 2 || results.length > 0);
+  // The listbox exists only when it has options. "Searching" and "No players
+  // match" are status text, carried by the live line, not options.
+  const showList = showPanel && !loading && results.length > 0;
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -319,10 +325,10 @@ function PlayerTypeahead({
               type="text"
               role="combobox"
               aria-autocomplete="list"
-              aria-expanded={open}
-              aria-controls={listboxId}
+              aria-expanded={showList}
+              aria-controls={showList ? listboxId : undefined}
               aria-activedescendant={
-                open && results[activeIdx]
+                showList && activeIdx >= 0 && results[activeIdx]
                   ? `${listboxId}-opt-${activeIdx}`
                   : undefined
               }
@@ -347,29 +353,21 @@ function PlayerTypeahead({
             Search any NFL player. Leave empty for no favorite player.
           </p>
 
-          {open && (query.trim().length >= 2 || results.length > 0) && (
+          {showPanel && !showList && (
+            // Sighted twin of the live status line; plain text, no listbox.
+            <div className="absolute left-0 right-0 z-30 mt-1 rounded-card border border-line bg-surface-elevated px-3 py-3 text-sm text-ink-subtle shadow-2xl shadow-black/50">
+              {loading ? "Searching..." : "No players match that name."}
+            </div>
+          )}
+
+          {showList && (
             <ul
               id={listboxId}
               role="listbox"
               aria-label="Player results"
               className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface-elevated shadow-2xl shadow-black/50"
             >
-              {loading ? (
-                <li
-                  role="presentation"
-                  className="px-3 py-3 text-sm text-ink-subtle"
-                >
-                  Searching...
-                </li>
-              ) : results.length === 0 ? (
-                <li
-                  role="presentation"
-                  className="px-3 py-3 text-sm text-ink-subtle"
-                >
-                  No players match that name.
-                </li>
-              ) : (
-                results.map((p, i) => {
+              {results.map((p, i) => {
                   const isActive = i === activeIdx;
                   return (
                     <li
@@ -395,8 +393,7 @@ function PlayerTypeahead({
                       </span>
                     </li>
                   );
-                })
-              )}
+                })}
             </ul>
           )}
         </>

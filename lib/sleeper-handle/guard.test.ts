@@ -82,6 +82,9 @@ const ALLOWLIST: Record<string, string> = {
   "app/actions/sleeper-handle.ts":
     "The one writer of the identity keys. Read-merge-write so the league keys survive.",
 
+  "lib/sleeper-league-settings-write.ts":
+    "The service-role writer every action goes through since migration 0323 revoked the column grant. Parses only to merge; takes the patch from its caller and names no identity key itself.",
+
   "app/my-beacon/actions.ts":
     "Writes featured_league_id and shown_league_ids. Never touches the identity.",
 

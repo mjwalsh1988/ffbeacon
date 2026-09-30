@@ -569,7 +569,11 @@ const getScheduleData = cache(
     playoffWeekStart: number,
     resynced: boolean,
   ): Promise<ScheduleBoard> => {
-    await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+    // includePositionalWar: false. The schedule renders no curve.
+    await pulseLeagueDerived(createAdminClient(), leagueRowId, {
+      resynced,
+      includePositionalWar: false,
+    });
     const supabase = await createClient();
     const currentWeek = await resolveScheduleWeek(season, playoffWeekStart);
     return loadScheduleBoard(supabase, {
@@ -668,15 +672,16 @@ function SosPanel({
                         Not available
                       </span>
                     ) : (
-                      <>
-                        <span aria-hidden="true">
-                          {fmtPoints(row.remainingPoints)}
-                        </span>
+                      // One visible text node, with only the missing words
+                      // sr-only inside the same element. A number drawn twice
+                      // (aria-hidden for the eye, an sr-only twin for the ear)
+                      // goes silent when a reader points at it.
+                      <span>
+                        {fmtPoints(row.remainingPoints)}
                         <span className="sr-only">
-                          {fmtPoints(row.remainingPoints)} opponent points per
-                          remaining week
+                          {" "}opponent points per remaining week
                         </span>
-                      </>
+                      </span>
                     )}
                   </td>
                   <td className="py-2 text-right font-mono text-xs tabular-nums text-ink-muted">
@@ -685,15 +690,12 @@ function SosPanel({
                         No games
                       </span>
                     ) : (
-                      <>
-                        <span aria-hidden="true">
-                          {ordinal(row.playedRank)}
-                        </span>
+                      <span>
+                        {ordinal(row.playedRank)}
                         <span className="sr-only">
-                          {ordinal(row.playedRank)} hardest schedule played so
-                          far
+                          {" "}hardest schedule played so far
                         </span>
-                      </>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -984,7 +986,7 @@ function ScheduleBodySkeleton() {
       <p className="text-sm text-ink-muted">Loading the schedule</p>
       <div aria-hidden="true" className="mt-4 space-y-2">
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-14 animate-pulse rounded-card bg-base/60" />
+          <div key={i} className="h-14 animate-pulse rounded-card bg-base/60 motion-reduce:animate-none" />
         ))}
       </div>
     </div>

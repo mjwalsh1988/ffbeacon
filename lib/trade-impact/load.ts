@@ -102,6 +102,13 @@ export type TradeImpactWorld = {
    * or short entries are what drives `gaps.simulation`.
    */
   cachedWeekly: Map<number, WeeklyDistribution>;
+  /**
+   * True when Power Pulse cache rows were left out of `cachedWeekly` because a
+   * different projection source built them than the one the involved teams are
+   * projected on. The simulation is then unavailable for that reason, not for
+   * lack of games, and a surface explaining the gap can say so.
+   */
+  cachedWeeklySourceMismatch: boolean;
 };
 
 export type LoadTradeImpactResult =
@@ -120,27 +127,65 @@ function finiteOrNull(value: unknown): number | null {
 }
 
 /**
- * Read every roster's weekly scoring distribution out of the Power Pulse cache.
+ * Which projection source built a Power Pulse cache row, read off its
+ * `model_version`.
  *
- * One query, no joins. A roster whose row is absent simply is not in the map,
- * and the caller decides what an incomplete league means rather than this
- * function inventing a distribution for the gap.
+ * lib/league-power-pulse.ts powerPulseCacheModelVersion writes that column as
+ * `${modelVersion}:${projectionSource}`, so the source is whatever follows the
+ * LAST colon. A row written before the source was folded in has no colon and
+ * returns null: nothing on it says which engine produced it, so it is treated as
+ * unknown rather than assumed to be Sleeper.
  */
-export async function loadCachedWeekly(
+export function cachedWeeklySource(modelVersion: string | null | undefined): string | null {
+  if (typeof modelVersion !== "string") return null;
+  const at = modelVersion.lastIndexOf(":");
+  if (at < 0 || at === modelVersion.length - 1) return null;
+  return modelVersion.slice(at + 1);
+}
+
+/**
+ * Read every roster's weekly scoring distribution out of the Power Pulse cache,
+ * plus how many rows were declined because a different projection engine built
+ * them.
+ *
+ * One query, no joins beyond the roster id. A roster whose row is absent simply
+ * is not in the map, and the caller decides what an incomplete league means
+ * rather than this function inventing a distribution for the gap.
+ *
+ * WHY THE SOURCE CHECK. A trade evaluation projects the two involved teams on
+ * the projection source resolved NOW and reads everyone else from this cache.
+ * The cache can lag a flip of that source by up to its 12-hour TTL (the next
+ * league view rescores it; nothing else does). Mixing the two would simulate a
+ * season in which two teams are scored by one engine and ten by another, and
+ * the difference between the engines would be reported as the trade. So with
+ * `expectedSource` given, a row built by any other source (or by an unknown
+ * one) is left out, the league reads as not fully covered, and the simulation
+ * is reported unavailable instead of computed against a mixed league.
+ */
+export async function readCachedWeekly(
   supabase: AnyClient,
   leagueRowId: string,
   season: number,
-): Promise<Map<number, WeeklyDistribution>> {
+  expectedSource?: string,
+): Promise<{ weekly: Map<number, WeeklyDistribution>; mismatchedSource: number }> {
   const out = new Map<number, WeeklyDistribution>();
+  let mismatchedSource = 0;
 
   const { data, error } = await supabase
     .from("league_power_pulse_cache")
-    .select("roster_id, weekly, rosters!inner(sleeper_roster_id)")
+    .select("roster_id, weekly, model_version, rosters!inner(sleeper_roster_id)")
     .eq("league_id", leagueRowId)
     .eq("season", season);
-  if (error || !data) return out;
+  if (error || !data) return { weekly: out, mismatchedSource };
 
   for (const row of data) {
+    if (
+      expectedSource !== undefined &&
+      cachedWeeklySource((row as { model_version?: string | null }).model_version) !== expectedSource
+    ) {
+      mismatchedSource += 1;
+      continue;
+    }
     const joined = (row as { rosters?: { sleeper_roster_id?: unknown } }).rosters;
     const rosterId = finiteOrNull(joined?.sleeper_roster_id);
     if (rosterId === null) continue;
@@ -157,7 +202,21 @@ export async function loadCachedWeekly(
     if (dist.size > 0) out.set(Math.trunc(rosterId), dist);
   }
 
-  return out;
+  return { weekly: out, mismatchedSource };
+}
+
+/**
+ * The weekly distributions alone, for callers that do not report a mismatch.
+ * Pass `expectedSource` whenever the caller projects anything itself, for the
+ * reason on readCachedWeekly.
+ */
+export async function loadCachedWeekly(
+  supabase: AnyClient,
+  leagueRowId: string,
+  season: number,
+  expectedSource?: string,
+): Promise<Map<number, WeeklyDistribution>> {
+  return (await readCachedWeekly(supabase, leagueRowId, season, expectedSource)).weekly;
 }
 
 /**
@@ -256,13 +315,21 @@ export async function loadTradeImpactWorld(
     settings: settings.beaconProjections,
   });
 
-  const [projectionRows, accuracy, defense, schedule, cachedWeekly] = await Promise.all([
+  const [projectionRows, accuracy, defense, schedule, cached] = await Promise.all([
     loadProjections(admin, playerIds, league.season, currentWeek, undefined, projectionSource),
     loadAccuracy(admin, playerIds, scoringKeysArg(idpReads), projectionSource),
     loadDefenseSplits(admin, scoringKeysArg(idpReads), defenseSeasons),
     loadSchedule(admin, finder.leagueRowId, league.season),
-    loadCachedWeekly(admin, finder.leagueRowId, league.season),
+    // Only rows built on the SAME source the two involved teams are projected
+    // on. See readCachedWeekly.
+    readCachedWeekly(admin, finder.leagueRowId, league.season, projectionSource),
   ]);
+  const cachedWeekly = cached.weekly;
+  if (cached.mismatchedSource > 0) {
+    console.warn(
+      `[trade-impact] league ${finder.leagueRowId}: ${cached.mismatchedSource} Power Pulse cache row(s) were built on a projection source other than ${projectionSource}; the season simulation is withheld until the league rescores`,
+    );
+  }
 
   // Keyed for O(1) lookup by the engine, which asks per player per week and
   // would otherwise scan a few thousand rows for each of them.
@@ -293,6 +360,7 @@ export async function loadTradeImpactWorld(
       remainingWeeks,
       currentWeek,
       cachedWeekly,
+      cachedWeeklySourceMismatch: cached.mismatchedSource > 0,
     },
   };
 }

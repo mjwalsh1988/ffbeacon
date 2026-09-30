@@ -602,7 +602,7 @@ describe("submitGuess", () => {
 
   it("a wrong guess under the strike cap deducts score, stays active, and appears in badReads", async () => {
     const round = makeRoundRow({ score_available: 1000, wrong_guess_count: 0 });
-    const { supabase } = makeMockSupabase({
+    const { supabase, callLog } = makeMockSupabase({
       signal_scout_rounds: [
         { data: round, error: null }, // fetchOwnedRound
         { data: { ...round, score_available: 900, wrong_guess_count: 1 }, error: null }, // guardedActiveUpdate
@@ -627,6 +627,11 @@ describe("submitGuess", () => {
     expect(dto.score).toBe(900);
     expect(dto.wrongGuesses).toBe(1);
     expect(dto.burned).toBe(false);
+    // The guard carries the counters it read, not only the score, so a second
+    // concurrent wrong guess at a score floor misses instead of also landing.
+    const roundEqs = callLog.filter((c) => c.table === "signal_scout_rounds" && c.method === "eq");
+    expect(roundEqs.some((c) => c.args[0] === "wrong_guess_count" && c.args[1] === 0)).toBe(true);
+    expect(roundEqs.some((c) => c.args[0] === "hints_used")).toBe(true);
     expect(dto.badReads).toEqual([{ playerId: "p-2", name: "John Doe", position: "WR", team: "DAL" }]);
   });
 

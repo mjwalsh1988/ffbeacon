@@ -23,7 +23,7 @@ const SHIPPED_ORDER_2026_09_14 = [
 
 /** 2026-09-26: Beacon Ranker (/tools/custom-rankings) joins last, which is
  * where normalizeOrder puts it in a stored row that predates it. */
-const SHIPPED_ORDER = [...SHIPPED_ORDER_2026_09_14, "/tools/custom-rankings"];
+const SHIPPED_ORDER = [...SHIPPED_ORDER_2026_09_14, "/tools/custom-rankings", "/tools/free-agent-finder"];
 
 /** The layout the site carried on 2026-09-14, frozen. What migration 0282 seeds. */
 const LAYOUT_2026_09_14 = {
@@ -68,6 +68,10 @@ const LAYOUT_2026_09_14 = {
  *   2026-09-26: Beacon Ranker (/tools/custom-rankings), last in both tool
  *   orders and as a one-column "New tool" homepage card. A stored row that
  *   predates it gets exactly this from normalizeOrder and mergeCards.
+ *
+ *   2026-09-29: the Free Agent Finder (/tools/free-agent-finder), which had a
+ *   page but no menu or catalog entry. Last in both tool orders and a plain
+ *   one-column homepage card, which is again what a stored row gets.
  */
 const LAYOUT_TODAY = {
   ...LAYOUT_2026_09_14,
@@ -76,6 +80,7 @@ const LAYOUT_TODAY = {
     cards: [
       ...LAYOUT_2026_09_14.homepage.cards,
       { href: "/tools/custom-rankings", width: 1, badge: "new-tool", highlight: "cyan" },
+      { href: "/tools/free-agent-finder", width: 1, badge: null, highlight: null },
     ],
   },
   menu: {

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
+  joinSharedDerivedPass,
   LEAGUE_POWER_RANKINGS_TTL_MS,
   orphanRowIds,
   powerRankingsAreStale,
@@ -135,5 +136,84 @@ describe("powerRankingsAreStale", () => {
   it("freezes a finished league however old its rows are", async () => {
     const ancient = new Date("2025-12-30T12:00:00Z").toISOString();
     expect(await powerRankingsAreStale(client(ancient), "league-1", true)).toBe(false);
+  });
+
+  it("recomputes an in-season league inside the TTL when the rosters changed after its rows", async () => {
+    const before = new Date(Date.now() - 60_000).toISOString();
+    const after = new Date().toISOString();
+    expect(await powerRankingsAreStale(client(before), "league-1", false, after)).toBe(true);
+  });
+
+  it("leaves a league alone when the roster change predates its rows", async () => {
+    const changed = new Date(Date.now() - 60_000).toISOString();
+    expect(await powerRankingsAreStale(client(fresh), "league-1", false, changed)).toBe(false);
+  });
+
+  it("keeps a finished league frozen even after a roster change", async () => {
+    const ancient = new Date("2025-12-30T12:00:00Z").toISOString();
+    expect(await powerRankingsAreStale(client(ancient), "league-1", true, fresh)).toBe(false);
+  });
+});
+
+/**
+ * Concurrent derived passes for one league share one run of the shared half,
+ * whatever optional flags each caller passes: the hover warm-up and the page it
+ * warms used to start two.
+ */
+describe("joinSharedDerivedPass", () => {
+  function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it("a second caller wanting the same or less joins the pass in flight", async () => {
+    const gate = deferred();
+    const run = vi.fn(() => gate.promise);
+    const a = joinSharedDerivedPass("league-a", { syncs: true, force: false }, run);
+    const b = joinSharedDerivedPass("league-a", { syncs: false, force: false }, run);
+    gate.resolve();
+    await Promise.all([a, b]);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("a caller owed a transaction pull waits out a pass that skips it, then runs its own", async () => {
+    const gate = deferred();
+    const calls: Array<{ syncs: boolean; force: boolean }> = [];
+    const run = vi.fn(async (wants: { syncs: boolean; force: boolean }) => {
+      calls.push(wants);
+      if (calls.length === 1) await gate.promise;
+    });
+    const a = joinSharedDerivedPass("league-b", { syncs: false, force: false }, run);
+    const b = joinSharedDerivedPass("league-b", { syncs: true, force: false }, run);
+    // Not beside it: the second run has not started while the first is open.
+    await Promise.resolve();
+    expect(run).toHaveBeenCalledTimes(1);
+    gate.resolve();
+    await Promise.all([a, b]);
+    expect(calls).toEqual([
+      { syncs: false, force: false },
+      { syncs: true, force: false },
+    ]);
+  });
+
+  it("different leagues never share", async () => {
+    const run = vi.fn(() => Promise.resolve());
+    await Promise.all([
+      joinSharedDerivedPass("league-c", { syncs: false, force: false }, run),
+      joinSharedDerivedPass("league-d", { syncs: false, force: false }, run),
+    ]);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("a pass that failed does not stop the next caller", async () => {
+    const run = vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(undefined);
+    await expect(
+      joinSharedDerivedPass("league-e", { syncs: false, force: false }, run),
+    ).rejects.toThrow("boom");
+    await joinSharedDerivedPass("league-e", { syncs: false, force: false }, run);
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });

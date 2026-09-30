@@ -74,6 +74,9 @@ export const powerPulseSettingsSchema = z
     injury: z.object({
       enabled: z.boolean(),
       multipliers: z.record(z.string(), z.number().min(0).max(1)),
+      // Weeks an injured reserve player is held out, current week included.
+      // Optional so a document saved before the field existed still validates.
+      reserveHoldWeeks: z.number().int().min(0).max(18).optional(),
     }),
 
     opponent: z.object({

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Plus, Info } from "lucide-react";
+import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
 
@@ -70,7 +71,8 @@ export function AssetAutocomplete({
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // No option is active until the reader presses Down (lib/keyboard-navigation).
+  const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const trimmed = query.trim();
@@ -98,7 +100,7 @@ export function AssetAutocomplete({
         const data = (await res.json()) as { results?: SearchResult[] };
         if (!cancelled) {
           setResults(data.results ?? []);
-          setActiveIdx(0);
+          setActiveIdx(NO_ACTIVE_OPTION);
         }
       } catch {
         if (!cancelled) setResults([]);
@@ -131,16 +133,13 @@ export function AssetAutocomplete({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
+      const key = e.key;
       setOpen(true);
-      setActiveIdx((i) => Math.min(results.length - 1, i + 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
+      setActiveIdx((i) => nextComboboxIndex(i, key, results.length));
     } else if (e.key === "Enter") {
-      if (open && results[activeIdx]) {
+      if (open && activeIdx >= 0 && results[activeIdx]) {
         e.preventDefault();
         commit(results[activeIdx]);
       }
@@ -148,16 +147,22 @@ export function AssetAutocomplete({
       if (open) {
         e.preventDefault();
         setOpen(false);
+        setActiveIdx(NO_ACTIVE_OPTION);
       }
     }
   }
 
-  const showList = open && longEnough;
+  const showPanel = open && longEnough;
+  // The listbox exists only when it has options to hold. "Searching" and "No
+  // matches" are not options, and inside a listbox they read as one.
+  const showList = showPanel && !loading && results.length > 0;
   const statusText = !longEnough
     ? ""
     : loading
       ? "Searching"
-      : `${results.length} ${results.length === 1 ? "result" : "results"}`;
+      : results.length === 0
+        ? `No matches for ${trimmed}`
+        : `${results.length} ${results.length === 1 ? "result" : "results"}`;
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -170,8 +175,10 @@ export function AssetAutocomplete({
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={showList}
-        aria-controls={listboxId}
-        aria-activedescendant={showList && results[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined}
+        aria-controls={showList ? listboxId : undefined}
+        aria-activedescendant={
+          showList && activeIdx >= 0 && results[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
+        }
         aria-describedby={`${helpId} ${statusId}`}
         autoComplete="off"
         spellCheck={false}
@@ -206,6 +213,14 @@ export function AssetAutocomplete({
         </div>
       )}
 
+      {showPanel && !showList && (
+        // The sighted twin of the live status line above. Plain text, outside
+        // any listbox; the status line is what a screen reader hears.
+        <div className="absolute left-0 right-0 z-30 mt-1 rounded-card border border-line bg-surface px-3 py-3 text-sm text-ink-subtle shadow-2xl shadow-black/50">
+          {loading ? "Searching..." : <>No matches for &quot;{trimmed}&quot;.</>}
+        </div>
+      )}
+
       {showList && (
         <ul
           id={listboxId}
@@ -213,14 +228,7 @@ export function AssetAutocomplete({
           aria-label={`Asset search results for ${sideLabel}`}
           className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface shadow-2xl shadow-black/50"
         >
-          {loading ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">Searching...</li>
-          ) : results.length === 0 ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">
-              No matches for &quot;{trimmed}&quot;.
-            </li>
-          ) : (
-            results.map((r, i) => {
+          {results.map((r, i) => {
               const isActive = i === activeIdx;
               return (
                 <li
@@ -244,8 +252,7 @@ export function AssetAutocomplete({
                   <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-brand-cyan" />
                 </li>
               );
-            })
-          )}
+            })}
         </ul>
       )}
     </div>

@@ -42,7 +42,10 @@ import { formatTeamLabel } from "@/lib/team-label";
 import { type ScoringSettings } from "@/lib/league-scoring";
 import { loadAdjustedProjections } from "@/lib/projections/read";
 import { computeAgeDecimal } from "@/lib/player-age";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { unstable_cache } from "next/cache";
+import { createCachedReadClient } from "@/lib/supabase/server";
+import { loadLatestPickSnapshot } from "@/lib/draft-pick-snapshot";
+import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 import type { FinderPick, FinderPlayer, FinderTeam } from "@/lib/trade-finder/types";
 import {
   matchViewerRoster,
@@ -187,32 +190,32 @@ async function loadPoolMax(
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/** Pick prices for one (format, source), keyed season|round|position. */
-async function loadPickValues(
-  supabase: AnySupabase,
-  formatConfigId: string,
-  source: string,
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  // id breaks captured_at ties (a whole capture shares one timestamp), so
-  // pages cannot overlap. A failed page throws rather than pricing picks off
-  // a partial history.
-  const rows = await fetchAllRows("trade finder pick values", (from, to) =>
-    (supabase as SupabaseClient<Database>)
-      .from("draft_pick_values")
-      .select("season, round, pick_position, value, captured_at")
-      .eq("format_config_id", formatConfigId)
-      .eq("source", source)
-      .order("captured_at", { ascending: false })
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
-  for (const row of rows) {
-    const key = `${row.season}|${row.round}|${row.pick_position}`;
-    // Ordered newest first, so the first row for a key is the current price.
-    if (!out.has(key)) out.set(key, Number(row.value));
-  }
-  return out;
+/**
+ * Pick prices for one (format, source), keyed season|round|position.
+ *
+ * The newest capture, read whole (lib/draft-pick-snapshot.ts), instead of
+ * every capture ever taken on every render. Public data, identical for every
+ * reader, so it is cached across requests under the player-values tag, which
+ * the nightly derived job busts after both pick-writing syncs have run (KTC at
+ * 07:00 UTC and FF Beacon at 09:30, the derived job at 10:00). The hour
+ * `revalidate` is the backstop when that job does not run.
+ *
+ * The cache holds a plain record rather than a Map, because unstable_cache
+ * stores JSON. A failed read throws inside the cache function and is not
+ * cached.
+ */
+async function loadPickValues(formatConfigId: string, source: string): Promise<Map<string, number>> {
+  const record = await unstable_cache(
+    async (): Promise<Record<string, number>> => {
+      const { rows } = await loadLatestPickSnapshot(createCachedReadClient(), formatConfigId, source);
+      const out: Record<string, number> = {};
+      for (const row of rows) out[`${row.season}|${row.round}|${row.pick_position}`] = row.value;
+      return out;
+    },
+    ["trade-finder:pick-values", formatConfigId, source],
+    { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerValues] },
+  )();
+  return new Map(Object.entries(record));
 }
 
 
@@ -306,11 +309,7 @@ export async function loadTradeFinderLeague(
       .select("sleeper_roster_id, owner_user_id, co_owners, reserve_ids, taxi_ids")
       .eq("league_id", league.id),
     isDynasty
-      ? loadPickValues(
-          supabase,
-          context.formatConfigId,
-          context.pickSource?.slug ?? context.sourceSlug,
-        )
+      ? loadPickValues(context.formatConfigId, context.pickSource?.slug ?? context.sourceSlug)
       : Promise.resolve(new Map<string, number>()),
     loadPoolMax(supabase, context.formatConfigId, context.sourceSlug),
     isDynasty

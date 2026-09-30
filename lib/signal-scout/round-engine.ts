@@ -181,8 +181,9 @@ export async function findActiveRoundId(supabase: Client, identity: RoundIdentit
 
 /**
  * The guarded anchor write for a non-completing round mutation (a hint
- * purchase, or a wrong guess that does not fail the round). Guards on both
- * status="active" and the caller's priorScore; returns null when the guard
+ * purchase, or a wrong guess that does not fail the round). Guards on
+ * status="active", the caller's priorScore, and the wrong-guess and hint
+ * counters it read; returns null when the guard
  * misses, which callers surface as round_not_active without any secondary
  * write.
  */
@@ -193,6 +194,14 @@ async function guardedActiveUpdate(supabase: Client, round: RoundRow, patch: Rou
     .eq("id", round.id)
     .eq("status", "active")
     .eq("score_available", round.score_available)
+    // The counters are part of the guard, not only the score. Once the score
+    // has hit its floor a wrong guess no longer moves it, so two concurrent
+    // wrong guesses read the same score, both matched a guard on the score
+    // alone, and both landed: two strikes recorded as one, or a strike limit
+    // overrun. Every mutation moves one of these, so a second writer that read
+    // the same row now misses its guard.
+    .eq("wrong_guess_count", round.wrong_guess_count)
+    .eq("hints_used", round.hints_used)
     .select()
     .maybeSingle();
   if (error) throw error;
@@ -224,6 +233,9 @@ async function completeRoundTransition(
     .eq("id", round.id)
     .eq("status", "active")
     .eq("score_available", round.score_available)
+    // Same counter guard as guardedActiveUpdate, for the same reason.
+    .eq("wrong_guess_count", round.wrong_guess_count)
+    .eq("hints_used", round.hints_used)
     .select()
     .maybeSingle();
   if (error) throw error;

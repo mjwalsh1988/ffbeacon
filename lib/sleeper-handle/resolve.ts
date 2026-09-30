@@ -8,10 +8,10 @@ import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import type { Database } from "@/lib/database.types";
 import { getSleeperUser } from "@/lib/sleeper";
 import {
-  mergeSleeperLeagueSettings,
   parseSleeperLeagueSettings,
   type SleeperLeagueSettings,
 } from "@/lib/sleeper-league-settings";
+import { writeSleeperLeagueSettings } from "@/lib/sleeper-league-settings-write";
 import { normalizeSleeperHandle } from "./validate";
 import type {
   HandleGateState,
@@ -157,13 +157,12 @@ async function claimBackfillSlot(): Promise<boolean> {
  * The saved handle, with its Sleeper user id filled in if it was missing.
  *
  * METERED, and the reason is specific. This runs inside a PAGE RENDER on all
- * ten league deep views, and it is keyed on a value the reader can write:
- * `authenticated` holds a column grant on `sleeper_league_settings` because it
- * has to own its own preferences, so a reader can PATCH `sleeper_user_id` back
- * to null through PostgREST whenever they like. A failed resolution writes
- * nothing, so without a meter, alternating a PATCH with a page load spends one
- * Sleeper call per render from the shared process-wide bucket in
- * lib/sleeper-budget.ts, and other readers' interactive calls start timing out.
+ * ten league deep views. Before migration 0323 a reader could PATCH
+ * `sleeper_user_id` back to null through PostgREST, and the meter stays as a
+ * second line of defence. A failed resolution writes nothing, so without a
+ * meter, every render of a row with no id would spend one Sleeper call from
+ * the shared process-wide bucket in lib/sleeper-budget.ts, and other readers'
+ * interactive calls would start timing out.
  *
  * A handful per hour is all this needs: it exists to fill an id ONCE for a row
  * saved before migration 0268, after which the early return above makes it
@@ -264,9 +263,8 @@ export async function resolveHandleGate(
  * Fill in the Sleeper user id for a row saved before migration 0268.
  *
  * One `getSleeperUser` call, then the four identity keys written back through
- * the reader's OWN session client, so the owner-only RLS policy on
- * `user_preferences` is the boundary rather than something around it. The next
- * visit costs nothing.
+ * `writeSleeperLeagueSettings` for the user id taken from the reader's own
+ * session. The next visit costs nothing.
  *
  * A failed resolution writes nothing and returns the handle unchanged. The
  * caller then behaves as the "no longer resolves" case: card, form opened, and
@@ -309,26 +307,15 @@ export async function ensureSleeperUserId(
     } = await supabase.auth.getUser();
     if (!authUser) return filled;
 
-    const { data: existing } = await supabase
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", authUser.id)
-      .maybeSingle();
-
-    const merged = mergeSleeperLeagueSettings(
-      parseSleeperLeagueSettings(existing?.sleeper_league_settings),
-      {
-        sleeper_user_id: filled.sleeperUserId,
-        sleeper_display_name: filled.displayName,
-        sleeper_avatar: filled.avatar,
-        handle_verified_at: filled.verifiedAt,
-      },
-    );
-
-    await supabase
-      .from("user_preferences")
-      .update({ sleeper_league_settings: merged })
-      .eq("user_id", authUser.id);
+    // Written through the one server-side writer: migration 0323 takes the
+    // column grant away from the session role, and the id being written here
+    // was just resolved on Sleeper rather than taken from the reader.
+    await writeSleeperLeagueSettings(authUser.id, {
+      sleeper_user_id: filled.sleeperUserId,
+      sleeper_display_name: filled.displayName,
+      sleeper_avatar: filled.avatar,
+      handle_verified_at: filled.verifiedAt,
+    });
   } catch {
     // The write is an optimization. A failed one costs the next visit one
     // Sleeper call and nothing else, so it is never worth failing a render for.

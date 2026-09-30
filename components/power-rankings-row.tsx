@@ -9,6 +9,10 @@ import { BeaconValue } from "@/components/beacon-value-icon";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { TeamStatus } from "@/lib/league-team-status";
 
+/** What the sheet's focus trap counts as focusable, form fields included. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /**
  * One row of the Power Rankings table on the league overview.
  *
@@ -138,18 +142,21 @@ export function PowerRankingsRow({
         {showPicks && (
           <PositionRankCell rank={data.positionRanks.PICKS} teamCount={teamCount} />
         )}
-        <td
-          className="hidden px-4 py-2 text-right font-mono font-semibold tabular-nums text-ink md:table-cell"
-          aria-label={`Total value ${formatValue(data.totalValue)}${
-            data.valueRank != null ? `, ${rankOrdinal(data.valueRank)} in the league` : ""
-          }`}
-        >
-          <BeaconValue show={valueIsBeacon && data.totalValue != null}>
-            {formatValue(data.totalValue)}
-          </BeaconValue>
+        {/* One visible text node per figure, with only the words the eye
+            does not need appended sr-only INSIDE the same element. An
+            aria-label on a td is not reliably read, and the old markup hid the
+            rank from assistive technology behind it. */}
+        <td className="hidden px-4 py-2 text-right font-mono font-semibold tabular-nums text-ink md:table-cell">
+          {data.totalValue != null ? (
+            <BeaconValue show={valueIsBeacon}>{formatValue(data.totalValue)}</BeaconValue>
+          ) : (
+            <Missing words="No value yet" />
+          )}
           {data.valueRank != null && (
-            <span aria-hidden="true" className="block text-[10px] font-normal text-ink-subtle">
+            <span className="block text-[10px] font-normal text-ink-subtle">
+              <span className="sr-only">, </span>
               {rankOrdinal(data.valueRank)}
+              <span className="sr-only"> in the league by value</span>
             </span>
           )}
         </td>
@@ -208,7 +215,7 @@ function PulseCell({
   if (powerPulse == null) {
     return (
       <td className="px-2 py-2 text-center font-mono text-sm tabular-nums text-ink-subtle">
-        <span aria-label="Power Pulse not calculated yet">-</span>
+        <Missing words="Not calculated yet" />
       </td>
     );
   }
@@ -223,11 +230,13 @@ function PulseCell({
       <span
         className="inline-flex h-9 w-9 items-center justify-center rounded-card border font-mono text-sm font-extrabold tabular-nums"
         style={{ color: tone.color, borderColor: tone.border }}
-        aria-label={`Power Pulse ${powerPulse}${
-          pulseRank != null ? `, ${rankOrdinal(pulseRank)} of ${teamCount}` : ""
-        }`}
       >
         {powerPulse}
+        {pulseRank != null && (
+          <span className="sr-only">
+            , {rankOrdinal(pulseRank)} of {teamCount}
+          </span>
+        )}
       </span>
     </td>
   );
@@ -247,16 +256,21 @@ function PositionRankCell({
       : tier === "bottom"
         ? { color: "#A855F7" }
         : { color: "#F4F4F8" };
-  const ariaTier =
-    tier === "top" ? " (top three)" : tier === "bottom" ? " (bottom three)" : "";
-  const label = rank != null ? rankOrdinal(rank) : "-";
+  const srTier =
+    tier === "top" ? ", top three" : tier === "bottom" ? ", bottom three" : "";
   return (
     <td
       className="hidden px-3 py-2 text-center font-mono font-semibold tabular-nums md:table-cell"
       style={style}
-      aria-label={`Rank ${label}${ariaTier}`}
     >
-      {label}
+      {rank != null ? (
+        <>
+          {rankOrdinal(rank)}
+          {srTier && <span className="sr-only">{srTier}</span>}
+        </>
+      ) : (
+        <Missing words="No rank" />
+      )}
     </td>
   );
 }
@@ -283,23 +297,34 @@ function TeamRankSheet({
   // Two-phase open so the panel slides up from below instead of popping in.
   const [entered, setEntered] = useState(false);
 
+  // Read by the Escape handler, never by a dep array. The parent passes an
+  // inline arrow, so a fresh identity on every parent render would tear the
+  // focus effect down and hand focus back to the row behind the sheet while
+  // the sheet was still open. Same reasoning as components/slide-up-dialog.tsx.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     setMounted(true);
     const t = window.requestAnimationFrame(() => setEntered(true));
     return () => window.cancelAnimationFrame(t);
   }, []);
 
+  // Gated on `mounted`: the portal renders nothing on the first pass, so an
+  // effect that ran then found no close button to focus and never ran again.
+  // Same fix as components/confirm-dialog.tsx.
   useEffect(() => {
+    if (!mounted) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       } else if (event.key === "Tab" && sheetRef.current) {
         const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          FOCUSABLE,
         );
         if (focusables.length === 0) return;
         const first = focusables[0];
@@ -322,7 +347,7 @@ function TeamRankSheet({
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [onClose]);
+  }, [mounted]);
 
   if (!mounted) return null;
 
@@ -339,13 +364,13 @@ function TeamRankSheet({
         type="button"
         aria-label="Close team details"
         onClick={onClose}
-        className={`absolute inset-0 bg-black/70 transition-opacity duration-200 ${
+        className={`absolute inset-0 bg-black/70 transition-opacity duration-200 motion-reduce:transition-none ${
           entered ? "opacity-100" : "opacity-0"
         }`}
       />
       <div
         ref={sheetRef}
-        className={`relative w-full max-w-2xl rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out ${
+        className={`relative w-full max-w-2xl rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none ${
           entered ? "translate-y-0" : "translate-y-full"
         }`}
         style={{
@@ -397,7 +422,7 @@ function TeamRankSheet({
             type="button"
             onClick={onClose}
             aria-label="Close team details"
-            className="-mr-1 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink"
+            className="-mr-1 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             <span aria-hidden="true">✕</span>
           </button>
@@ -422,40 +447,41 @@ function TeamRankSheet({
         {/* Power Pulse and total value side by side. The desktop table shows
             both, so the sheet must too. */}
         <div className="mx-5 mt-4 grid grid-cols-2 gap-2">
-          <div
-            className="rounded-card border border-brand-cyan/40 bg-brand-cyan/5 px-4 py-3"
-            aria-label={`Power Pulse ${data.powerPulse ?? "not calculated yet"}${
-              data.pulseRank != null ? `, ${rankOrdinal(data.pulseRank)} of ${teamCount}` : ""
-            }`}
-          >
+          {/* Real text throughout: an aria-label on a plain div is dropped by
+              most screen readers, and the rank lines used to be hidden. A
+              missing figure says so in words a sighted reader sees too. */}
+          <div className="rounded-card border border-brand-cyan/40 bg-brand-cyan/5 px-4 py-3">
             <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
               Power Pulse
             </span>
-            <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
-              {data.powerPulse ?? "-"}
-            </span>
+            {data.powerPulse != null ? (
+              <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
+                {data.powerPulse}
+              </span>
+            ) : (
+              <span className="mt-1 block text-xs text-ink-muted">Not calculated yet</span>
+            )}
             {data.pulseRank != null && (
-              <span aria-hidden="true" className="text-[10px] text-ink-subtle">
+              <span className="text-[10px] text-ink-subtle">
+                <span className="sr-only">, </span>
                 {rankOrdinal(data.pulseRank)} of {teamCount}
               </span>
             )}
           </div>
-          <div
-            className="rounded-card border border-line bg-base px-4 py-3"
-            aria-label={`Total team value ${formatValue(data.totalValue)}${
-              data.valueRank != null ? `, ${rankOrdinal(data.valueRank)} of ${teamCount}` : ""
-            }`}
-          >
+          <div className="rounded-card border border-line bg-base px-4 py-3">
             <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
               Total value
             </span>
-            <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-ink">
-              <BeaconValue show={valueIsBeacon && data.totalValue != null}>
-                {formatValue(data.totalValue)}
-              </BeaconValue>
-            </span>
+            {data.totalValue != null ? (
+              <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-ink">
+                <BeaconValue show={valueIsBeacon}>{formatValue(data.totalValue)}</BeaconValue>
+              </span>
+            ) : (
+              <span className="mt-1 block text-xs text-ink-muted">No value yet</span>
+            )}
             {data.valueRank != null && (
-              <span aria-hidden="true" className="text-[10px] text-ink-subtle">
+              <span className="text-[10px] text-ink-subtle">
+                <span className="sr-only">, </span>
                 {rankOrdinal(data.valueRank)} of {teamCount}
               </span>
             )}
@@ -496,7 +522,7 @@ function TeamRankSheet({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-11 items-center justify-center rounded-card border border-line bg-surface px-4 py-3 text-sm font-medium text-ink-muted transition-colors hover:border-line-accent hover:text-ink"
+            className="inline-flex min-h-11 items-center justify-center rounded-card border border-line bg-surface px-4 py-3 text-sm font-medium text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             Close
           </button>
@@ -526,36 +552,52 @@ function RankTile({
       : tier === "bottom"
         ? { color: "#A855F7", border: "rgba(168, 85, 247, 0.55)", glow: "rgba(168, 85, 247, 0.10)" }
         : { color: "#F4F4F8", border: "#1F1F33", glow: "transparent" };
-  const labelText = rank != null ? rankOrdinal(rank) : "-";
-  const ariaTier =
+  const srTier =
     tier === "top"
-      ? " (top three in league)"
+      ? ", top three in league"
       : tier === "bottom"
-        ? " (bottom three in league)"
+        ? ", bottom three in league"
         : "";
+  // Real text, read in order: "QB rank, 3rd of 12, top three in league".
+  // The aria-label this used to carry sat on a plain div and was dropped.
   return (
     <div
       className={`flex flex-col items-center gap-0.5 rounded-card border px-2 py-3 text-center ${
         emphasize ? "shadow-[0_0_24px_-12px_rgba(34,211,238,0.6)]" : ""
       }`}
       style={{ borderColor: accent.border, backgroundColor: accent.glow }}
-      aria-label={`${label} rank ${labelText}${ariaTier}`}
     >
       <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
         {label}
+        <span className="sr-only"> rank, </span>
       </span>
       <span
         className="font-mono text-lg font-extrabold tabular-nums leading-none"
         style={{ color: accent.color }}
       >
-        {labelText}
+        {rank != null ? rankOrdinal(rank) : <Missing words="No rank" />}
       </span>
       {teamCount > 0 && (
         <span className="text-[9px] tabular-nums text-ink-subtle">
           of {teamCount}
+          {srTier && <span className="sr-only">{srTier}</span>}
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * A figure that does not exist yet. The dash is drawn for the eye and the
+ * words are read instead of it, because "dash" tells a listener nothing. The
+ * dash is a placeholder glyph, not a number, so hiding it hides no data.
+ */
+function Missing({ words }: { words: string }) {
+  return (
+    <>
+      <span aria-hidden="true">-</span>
+      <span className="sr-only">{words}</span>
+    </>
   );
 }
 

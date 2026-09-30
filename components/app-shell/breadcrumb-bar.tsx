@@ -53,7 +53,7 @@ export function BreadcrumbBar({
     crumbs[crumbs.length - 1] = { label: finalLabel };
   }
 
-  const jsonLd = emitJsonLd ? breadcrumbJsonLd(pathname, siteUrl) : null;
+  const jsonLd = emitJsonLd ? breadcrumbJsonLd(pathname, siteUrl, finalLabel) : null;
 
   // The homepage is the home node; a trail of one crumb pointing at itself is
   // noise. The bar still renders when there are actions to hold.

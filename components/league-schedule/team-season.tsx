@@ -28,7 +28,6 @@ import {
   listWords,
   ordinal,
   pctLabel,
-  pctWords,
   recordLabel,
   stateEdgeClass,
   sidesFor,
@@ -47,17 +46,19 @@ import {
  *   below sm would cost the reader the column headers that make each number
  *   mean something. So the table survives at every width and the compaction
  *   happens by rearranging rather than by shrinking: below sm the week shows
- *   three columns (week, opponent, difficulty) and the win chance moves to a
- *   full-width row directly underneath, where the meter has room to be read.
+ *   three columns (week, opponent, difficulty) and the result and the win
+ *   chance move to a full-width row directly underneath, where the meter has
+ *   room to be read.
  *
- * WHAT THE PHONE LAYOUT DOES NOT SHOW
- *   The Result or projection column. Five columns of figures at 360px was the
- *   thing that made this table unreadable on a phone, and the two scores are the
- *   part a reader can get in one tap: every row links to the matchup page, which
- *   carries both totals and both starting lineups. This is a deliberate
- *   exception to the rule that a hidden column has to resurface somewhere in the
- *   same layout, taken because the alternative was a fifth line of text in a
- *   cell that already had four.
+ * THE PHONE ROW CARRIES THE RESULT TOO
+ *   The Result or projection column is display:none below sm, because five
+ *   columns of figures at 360px made the table unreadable. It used to be left
+ *   to the matchup page, which meant a phone showed no score and no win or loss
+ *   for a finished week at all. The mobile-first rule does not allow that, so
+ *   the same ScoreSummary renders in the full-width row instead: "Won, 112.4
+ *   to 108.9" on a settled week, "Projected, 121.4 to 118.0" above the meter on
+ *   an unplayed one. Exactly one copy is displayed at any width (the column
+ *   from sm up, the row below it), so nothing is read twice.
  *
  * WHERE THE DIFFICULTY WORD COMES FROM
  *   Hard, even and easy compare each opponent projection against the MEDIAN
@@ -311,8 +312,8 @@ export function TeamSeason({
           <caption className="sr-only">
             {team.teamName} week by week. Columns: week, opponent with record and Power
             Pulse rank, result or projection, win chance, and difficulty. On a narrow
-            screen the win chance moves to its own row under each week and the result
-            column is left to the matchup page each row links to. Hard, even and easy
+            screen the result and the win chance move to their own row under each
+            week. Hard, even and easy
             compare each opponent projected total against the median opponent on this
             team schedule.
           </caption>
@@ -324,7 +325,8 @@ export function TeamSeason({
             <tr>
               <HeadCell Icon={CalendarDays} label="Week" />
               <HeadCell Icon={Users} label="Opponent" />
-              {/* Both fold into the opponent cell below sm, never dropped. */}
+              {/* Both fold into the full-width row under each week below sm,
+                  never dropped. */}
               <HeadCell Icon={Swords} label="Result or projection" smUp />
               <HeadCell Icon={Percent} label="Win chance" smUp />
               <HeadCell Icon={Gauge} label="Difficulty" last />
@@ -567,20 +569,7 @@ function SeasonTableRow({
           className={`relative hidden ${CELL_PAD} ${BODY_ROW_RULE} ${COL_RULE} sm:table-cell`}
         >
           {opponent !== null && <CellOverlayLink href={href} />}
-          {selfFigure === null && oppFigure === null ? (
-            <span className="text-ink-subtle">Not available</span>
-          ) : (
-            /* One side missing and the other present. The missing half says so
-               in words, the same words the cell above uses when both are gone:
-               "N/A" is pronounced three different ways by three screen readers
-               and none of them is a sentence. */
-            <span className="block font-mono text-sm font-bold tabular-nums text-ink">
-              <SideFigure value={selfFigure} />
-              <span className="mx-1 text-ink-subtle">to</span>
-              <SideFigure value={oppFigure} />
-            </span>
-          )}
-          <OutcomeLabel outcome={outcome} />
+          <ScoreSummary selfFigure={selfFigure} oppFigure={oppFigure} outcome={outcome} />
         </td>
 
         <td
@@ -602,10 +591,10 @@ function SeasonTableRow({
         </td>
       </tr>
 
-      {/* WIN CHANCE, ON ITS OWN LINE BELOW sm.
-          Its column is display:none on a phone, and a fourth column would not
-          fit at 360px anyway, so it gets a full-width row of its own directly
-          under the week it belongs to.
+      {/* RESULT AND WIN CHANCE, ON THEIR OWN LINE BELOW sm.
+          Both columns are display:none on a phone, and a fourth column would
+          not fit at 360px anyway, so they get a full-width row of their own
+          directly under the week they belong to.
 
           THREE THINGS TIE IT TO THAT WEEK, and it needs all three, because a
           full-width row under a table row is otherwise just the next thing down.
@@ -633,7 +622,20 @@ function SeasonTableRow({
           )}`}
         >
           {opponent !== null && <CellOverlayLink href={href} />}
-          <WinChance isFinal={row.isFinal} winProb={winProb} inline />
+          {/* The result column is display:none at this width, so its figures
+              live here instead. A settled week needs no win chance under it:
+              the outcome word already says how it went. */}
+          <ScoreSummary
+            selfFigure={selfFigure}
+            oppFigure={oppFigure}
+            outcome={outcome}
+            inline
+          />
+          {!row.isFinal && (
+            <div className="mt-2">
+              <WinChance isFinal={row.isFinal} winProb={winProb} inline />
+            </div>
+          )}
         </td>
       </tr>
 
@@ -735,18 +737,18 @@ function WinChance({
 
   return (
     <>
-      <span
-        aria-hidden="true"
-        className={inline ? "flex items-baseline gap-1.5" : "block"}
-      >
+      {/* One visible text node for the figure. The words the eye gets from
+          the column heading are sr-only INSIDE the same element, so pointing
+          at the number reads the number rather than going silent. */}
+      <span className={inline ? "flex items-baseline gap-1.5" : "block"}>
         <span className={`font-mono text-base font-bold tabular-nums ${tone}`}>
           {pctLabel(winProb)}
+          {!inline && <span className="sr-only"> to win</span>}
         </span>
         {inline && (
           <span className="text-[11px] font-medium text-ink-muted">to win</span>
         )}
       </span>
-      <span className="sr-only">{pctWords(winProb)} to win</span>
       <span
         aria-hidden="true"
         className="relative mt-1 block h-2 w-full overflow-hidden rounded-full border border-line bg-base"
@@ -762,6 +764,56 @@ function WinChance({
 }
 
 /**
+ * The "112.4 to 108.9" pair and the outcome word under it, in both layouts.
+ *
+ * One component so the desktop column and the phone row cannot quote the same
+ * week two different ways. `inline` is the phone row: the outcome word leads,
+ * on the same line, because a full-width row has no column heading to explain
+ * what the two numbers are.
+ */
+function ScoreSummary({
+  selfFigure,
+  oppFigure,
+  outcome,
+  inline = false,
+}: {
+  selfFigure: number | null;
+  oppFigure: number | null;
+  outcome: string | null;
+  inline?: boolean;
+}) {
+  const figures =
+    selfFigure === null && oppFigure === null ? (
+      <span className="font-sans text-sm font-normal text-ink-subtle">Not available</span>
+    ) : (
+      /* One side missing and the other present. The missing half says so
+         in words, the same words used when both are gone: "N/A" is
+         pronounced three different ways by three screen readers and none of
+         them is a sentence. */
+      <span className="font-mono text-sm font-bold tabular-nums text-ink">
+        <SideFigure value={selfFigure} />
+        <span className="mx-1 text-ink-subtle">to</span>
+        <SideFigure value={oppFigure} />
+      </span>
+    );
+
+  if (inline) {
+    return (
+      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <OutcomeLabel outcome={outcome} inline />
+        {figures}
+      </span>
+    );
+  }
+  return (
+    <>
+      <span className="block">{figures}</span>
+      <OutcomeLabel outcome={outcome} />
+    </>
+  );
+}
+
+/**
  * Won, Lost, Tied, Bye, or Projected.
  *
  * The word is the label and it is always there. The icon and the tint only
@@ -769,7 +821,13 @@ function WinChance({
  * neither. A win is the one outcome that gets a colour, because it is the one a
  * reader is scanning the column for.
  */
-function OutcomeLabel({ outcome }: { outcome: string | null }) {
+function OutcomeLabel({
+  outcome,
+  inline = false,
+}: {
+  outcome: string | null;
+  inline?: boolean;
+}) {
   const word = outcome ?? "Projected";
   const Icon: LucideIcon | null =
     word === "Won"
@@ -785,10 +843,12 @@ function OutcomeLabel({ outcome }: { outcome: string | null }) {
 
   return (
     <span
-      className={`mt-1 flex items-center gap-1 text-[11px] font-semibold ${tone}`}
+      className={`${inline ? "inline-flex" : "mt-1 flex"} items-center gap-1 text-[11px] font-semibold ${tone}`}
     >
       {Icon && <Icon aria-hidden="true" className="h-3 w-3 shrink-0" />}
       {word}
+      {/* A pause between the word and the score that follows it on a phone. */}
+      {inline && <span className="sr-only">,</span>}
     </span>
   );
 }

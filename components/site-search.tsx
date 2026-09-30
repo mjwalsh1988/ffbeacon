@@ -9,6 +9,7 @@ import { SEARCHABLE_TOOLS, type SearchableTool } from "@/lib/site";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { PositionChip } from "@/components/position-chip";
 import { formatEasternDate } from "@/lib/datetime";
+import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
 const MIN_QUERY_LENGTH = 2;
@@ -82,7 +83,8 @@ export function SiteSearch() {
   const [players, setPlayers] = useState<PlayerResult[]>([]);
   const [articles, setArticles] = useState<ArticleResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // No option is active until the reader presses Down (lib/keyboard-navigation).
+  const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -152,18 +154,18 @@ export function SiteSearch() {
     };
   }, [trimmed, longEnough, open]);
 
-  // Reset the active option whenever the result set changes so the highlight
-  // never points past the end of the list.
+  // Clear the active option whenever the result set changes. The reader has
+  // typed, not chosen, and the next Down arrow lands on the FIRST result.
   useEffect(() => {
-    setActiveIdx(0);
-  }, [flat.length]);
+    setActiveIdx(NO_ACTIVE_OPTION);
+  }, [flat]);
 
   const close = useCallback(() => {
     setOpen(false);
     setQuery("");
     setPlayers([]);
     setArticles([]);
-    setActiveIdx(0);
+    setActiveIdx(NO_ACTIVE_OPTION);
   }, []);
 
   // Backstop: close on any completed route change. go() already closes on a
@@ -245,14 +247,12 @@ export function SiteSearch() {
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIdx((i) => (flat.length ? Math.min(flat.length - 1, i + 1) : 0));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIdx((i) => Math.max(0, i - 1));
+      const key = e.key;
+      setActiveIdx((i) => nextComboboxIndex(i, key, flat.length));
     } else if (e.key === "Enter") {
-      const active = flat[activeIdx];
+      const active = activeIdx >= 0 ? flat[activeIdx] : undefined;
       if (active) {
         e.preventDefault();
         go(active);
@@ -282,7 +282,7 @@ export function SiteSearch() {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Search players, articles, and tools"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-card border border-line bg-surface text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-card border border-line before:absolute before:-inset-1 before:content-[''] bg-surface text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
       >
         <Search aria-hidden="true" className="h-[18px] w-[18px]" />
       </button>
@@ -327,9 +327,9 @@ export function SiteSearch() {
                   role="combobox"
                   aria-autocomplete="list"
                   aria-expanded={hasResults}
-                  aria-controls={listboxId}
+                  aria-controls={hasResults ? listboxId : undefined}
                   aria-activedescendant={
-                    hasResults ? optionId(activeIdx) : undefined
+                    hasResults && activeIdx >= 0 ? optionId(activeIdx) : undefined
                   }
                   aria-describedby={hintId}
                   autoComplete="off"

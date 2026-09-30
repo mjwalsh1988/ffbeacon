@@ -20,7 +20,17 @@
  *
  * Statements are added straight into one aggregate table of
  * (winner, loser, weight). Nothing is materialised per board.
+ *
+ * SIZE GUARD. A board produces about n squared statements, so one board far
+ * past the product's 2,000 player limit would stall or crash the whole nightly
+ * merge. The database refuses a board over the limit (migration 0321), but this
+ * job must not depend on that: a board whose on-board or left-off list is over
+ * MAX_BOARD_PLAYERS is SKIPPED, whole, and counted in `skippedOversized`. It is
+ * skipped rather than truncated because a truncated board says something its
+ * owner never said.
  */
+
+import { MAX_BOARD_PLAYERS } from "@/lib/ranking-boards";
 
 export type StatementBoard = {
   /** Board order, best first. */
@@ -45,10 +55,12 @@ export type StatementAggregate = {
   boardsCount: Map<string, number>;
   /** Boards that contributed at least one statement. */
   boards: number;
+  /** Boards refused for being over MAX_BOARD_PLAYERS. They contribute nothing. */
+  skippedOversized: number;
 };
 
 export function createAggregate(): StatementAggregate {
-  return { wins: new Map(), boardsCount: new Map(), boards: 0 };
+  return { wins: new Map(), boardsCount: new Map(), boards: 0, skippedOversized: 0 };
 }
 
 function addWeight(
@@ -78,6 +90,10 @@ export function addBoard(
     if (seen.has(id)) continue;
     seen.add(id);
     onBoard.push(id);
+    if (onBoard.length > MAX_BOARD_PLAYERS) {
+      agg.skippedOversized += 1;
+      return;
+    }
   }
   const n = onBoard.length;
   if (n === 0) return;
@@ -88,9 +104,14 @@ export function addBoard(
     if (seen.has(id) || leftOffSet.has(id)) continue;
     leftOffSet.add(id);
     leftOff.push(id);
+    if (leftOff.length > MAX_BOARD_PLAYERS) {
+      agg.skippedOversized += 1;
+      return;
+    }
   }
 
-  const depth = board.depth ?? n;
+  // Clamped for the same reason: depth sizes the pool slice below.
+  const depth = Math.min(Math.max(0, board.depth ?? n), MAX_BOARD_PLAYERS);
   const cutoff = Math.floor(depth + depth * Math.max(0, opts.poolMargin));
   const poolOthers: string[] = [];
   const poolSeen = new Set<string>();

@@ -1,8 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
+import { loadLatestPickSnapshot } from "@/lib/draft-pick-snapshot";
+import { mapWithConcurrency } from "@/lib/supabase/fetch-all";
 
 type ServiceClient = SupabaseClient<Database>;
+
+/** Combos whose pick snapshot is read at once. */
+const PICK_SNAPSHOT_CONCURRENCY = 6;
 
 export type PowerRankingsResult =
   | { ok: true; combosWritten: number; rostersConsidered: number }
@@ -348,18 +353,13 @@ export async function loadPlayerValueMaps(
 }
 
 /**
- * Pick prices for every combo in one pass. Newest capture wins per
- * (season, round, slot).
+ * Pick prices for every combo: the newest capture of each (format, source),
+ * read whole. See lib/draft-pick-snapshot.ts for why the newest capture is the
+ * full current price list.
  *
- * The walk pages on `id` alone, and newest-wins is decided in memory from the
- * captured_at each row carries. The previous version leaned on a multi-column
- * sort to put the newest row first and then kept whichever row it met first,
- * which made correctness depend on page ordering twice over. That sort key was
- * not unique either: every row in this table shares (captured_at, season,
- * round, pick_position) with its siblings in the other format and source
- * combos, so rows could shuffle across page boundaries and go missing. Sorting
- * on the primary key removes both problems, and the rule that used to be
- * implicit in the ORDER BY is now written down.
+ * This used to page through every capture ever taken for every combo (about
+ * 35,000 rows) and keep the newest row per slot in memory. Two small reads per
+ * combo replace it, a few combos at a time.
  */
 async function loadPickLookups(
   supabase: ServiceClient,
@@ -368,75 +368,23 @@ async function loadPickLookups(
   const out = new Map<string, PickValueLookup>();
   if (combos.length === 0) return out;
 
-  const formatIds = Array.from(new Set(combos.map((c) => c.format_config_id)));
-  const sources = Array.from(new Set(combos.map((c) => c.source)));
+  // One entry per distinct (format, source); the combo list can repeat neither,
+  // but deduplicating keeps the read count honest if it ever does.
+  const unique = Array.from(new Map(combos.map((c) => [`${c.format_config_id}|${c.source}`, c])).values());
 
-  // Winning row per combo and pick slot, so a later page can still displace an
-  // earlier one when it carries a newer capture. The combo and slot keys are
-  // carried on the value rather than parsed back out of the map key, so a
-  // source slug that ever contains the separator cannot corrupt the lookup.
-  const best = new Map<
-    string,
-    { comboKey: string; slotKey: string; capturedMs: number; id: string; value: number }
-  >();
+  const snapshots = await mapWithConcurrency(unique, PICK_SNAPSHOT_CONCURRENCY, (combo) =>
+    loadLatestPickSnapshot(supabase, combo.format_config_id, combo.source),
+  );
 
-  const PAGE = 1000;
-  let loaded = 0;
-  let cursor: string | null = null;
-  for (;;) {
-    let q = supabase
-      .from("draft_pick_values")
-      .select("id, season, round, pick_position, value, captured_at, format_config_id, source")
-      .in("format_config_id", formatIds)
-      .in("source", sources)
-      .order("id", { ascending: true })
-      .limit(PAGE);
-    if (cursor !== null) q = q.gt("id", cursor);
-    const { data, error } = await q;
-    if (error) throw new Error(`load draft_pick_values failed: ${error.message}`);
-    if (!data || data.length === 0) break;
-    for (const row of data) {
-      if (!row.format_config_id || !row.source) continue;
-      const comboK = `${row.format_config_id}|${row.source}`;
-      const slotKey = `${row.season}|${row.round}|${row.pick_position}`;
-      const key = `${comboK}|${slotKey}`;
-      const current = best.get(key);
-      // Parsed rather than string-compared: timestamptz comes back with a
-      // trimmed fractional part, so the text form is not reliably orderable.
-      const capturedMs = Date.parse(row.captured_at);
-      if (Number.isNaN(capturedMs)) continue;
-      // Newest capture wins; `id` breaks a tie so two runs over the same table
-      // always pick the same row.
-      const wins =
-        !current ||
-        capturedMs > current.capturedMs ||
-        (capturedMs === current.capturedMs && row.id > current.id);
-      if (wins) {
-        best.set(key, { comboKey: comboK, slotKey, capturedMs, id: row.id, value: Number(row.value) });
-      }
+  unique.forEach((combo, i) => {
+    const rows = snapshots[i].rows;
+    if (rows.length === 0) return;
+    const lookup: PickValueLookup = { values: new Map<string, number>() };
+    for (const row of rows) {
+      lookup.values.set(`${row.season}|${row.round}|${row.pick_position}`, row.value);
     }
-    loaded += data.length;
-    cursor = data[data.length - 1].id;
-    if (data.length < PAGE) break;
-  }
-
-  const { count: expected, error: countErr } = await supabase
-    .from("draft_pick_values")
-    .select("id", { count: "exact", head: true })
-    .in("format_config_id", formatIds)
-    .in("source", sources);
-  if (countErr) throw new Error(`count draft_pick_values failed: ${countErr.message}`);
-  if (expected != null && loaded < expected) {
-    throw new Error(
-      `load draft_pick_values incomplete: read ${loaded} of ${expected} rows`,
-    );
-  }
-
-  for (const row of best.values()) {
-    const lookup = out.get(row.comboKey) ?? { values: new Map<string, number>() };
-    lookup.values.set(row.slotKey, row.value);
-    out.set(row.comboKey, lookup);
-  }
+    out.set(`${combo.format_config_id}|${combo.source}`, lookup);
+  });
   return out;
 }
 

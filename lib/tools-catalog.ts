@@ -33,6 +33,7 @@ export type ToolHref =
   | "/tools/who-should-i-start"
   | "/tools/trade-calculator"
   | "/tools/faab"
+  | "/tools/free-agent-finder"
   | "/tools/custom-rankings";
 
 export type ToolCatalogEntry = {
@@ -147,5 +148,19 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
       "Your boards feed the community rankings for each format",
     ],
     cta: "Build your rankings",
+  },
+  {
+    href: "/tools/free-agent-finder",
+    eyebrow: "Waivers & bids",
+    title: "Free Agent Finder",
+    pitch:
+      "Check one player against every Sleeper league you are in at once and see which ones still have him unowned. Your platform can only answer for the league you are looking at. This answers for all of them.",
+    bullets: [
+      "One search across every league saved to your account",
+      "The leagues where he is free listed first, the rest kept underneath",
+      "Injured reserve and taxi squad count as rostered, and the slot is named",
+      "A league we hold no rosters for is reported as unanswered, not as a yes",
+    ],
+    cta: "Find a free agent",
   },
 ];

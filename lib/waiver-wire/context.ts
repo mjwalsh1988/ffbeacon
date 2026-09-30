@@ -12,17 +12,21 @@
  * URL, then the signed-in reader's stored default, then the cookie, then the
  * registry default.
  *
- * THE SOURCE FALLS BACK RATHER THAN FAILING. A reader whose chosen source has
- * no rankings for their chosen format gets the next source that does, and the
- * page says so in a banner, which is the same behaviour the FAAB calculator
- * already has.
+ * THE FORMAT FALLS THROUGH, THE SOURCE STAYS. A reader whose chosen source does
+ * not cover their chosen format keeps the source and is moved to the nearest
+ * format it does cover (reconcileFormatWithSource), with a banner, exactly as
+ * the rankings board does. The source-level fallback below remains only for a
+ * source that covers the format but publishes no rankings table for it.
  */
 
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   describeSource,
+  getActiveFormats,
   getAvailableSources,
+  reconcileFormatWithSource,
   resolveSourceForFormat,
+  type ReconciledFormat,
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { loadFaabSettings } from "@/lib/faab/settings";
@@ -46,6 +50,8 @@ export type WaiverContext = {
   sourceName: string;
   /** Set when the reader's chosen source had nothing for this format. */
   fallbackBanner: { requested: string; actual: string } | null;
+  /** Set when the reader's source does not cover their format and the format moved. */
+  formatFallback: ReconciledFormat["fallback"];
   settings: FaabSettings;
   season: number | null;
   currentWeek: number;
@@ -67,14 +73,30 @@ export async function resolveWaiverContext(params: {
     resolveSeasonClock(supabase),
   ]);
 
-  const [{ data: format }, registry] = await Promise.all([
-    supabase
-      .from("format_configs")
-      .select("id, slug, display_name, scoring_type, te_premium_bonus")
-      .eq("slug", formatResolution.slug)
-      .maybeSingle(),
+  const [registry, allFormats] = await Promise.all([
     getAvailableSources(supabase),
+    getActiveFormats(supabase),
   ]);
+
+  // Keep the reader's SOURCE and move the FORMAT when that source does not
+  // cover it, with a banner. Read-time only, never written back to the cookie
+  // or the saved preference.
+  const reconciled = reconcileFormatWithSource(
+    registry,
+    allFormats,
+    sourceResolution.slug,
+    formatResolution.slug,
+  );
+  const formatRow = allFormats.find((f) => f.slug === reconciled.formatSlug) ?? null;
+  const format = formatRow
+    ? {
+        id: formatRow.id,
+        slug: formatRow.slug,
+        display_name: formatRow.display_name,
+        scoring_type: formatRow.scoring_type,
+        te_premium_bonus: formatRow.te_premium_bonus,
+      }
+    : null;
 
   const resolution = format
     ? resolveSourceForFormat(registry, "rankings", format.slug, sourceResolution.slug)
@@ -93,6 +115,7 @@ export async function resolveWaiverContext(params: {
             actual: describeSource(registry, resolution.source),
           }
         : null,
+    formatFallback: reconciled.fallback,
     settings,
     season: clock.season,
     currentWeek: clock.currentWeek,

@@ -29,11 +29,13 @@
  *      level, and the recent stat lines. Both keyed on the same player set.
  *   4. Assembly, which is arithmetic.
  *
- * CACHING. The whole board is memoized per (season, week, format, source). It
- * is identical for every visitor on that key and the data behind it moves at
- * most nightly, so the Tuesday-morning crowd shares one computation. The cache
- * carries the projection source in its key for the same reason every other
- * surface does: a flip that took a day to show up would be worse than no flip.
+ * CACHING. The whole board is memoized per (season, week, format, source,
+ * projection engine, settings fingerprint). It is identical for every visitor
+ * on that key and the data behind it moves at most nightly, so the
+ * Tuesday-morning crowd shares one computation. The projection engine is
+ * resolved outside the cached function and carried in its key for the same
+ * reason every other surface does: a flip that took an hour to show up would
+ * be worse than no flip.
  */
 
 import { unstable_cache } from "next/cache";
@@ -42,6 +44,9 @@ import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 import { resolveSeasonClock } from "@/lib/start-sit/clock";
 import { loadAdjustedProjections } from "@/lib/projections/read";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { fingerprint } from "@/lib/league-activity/diff";
 import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import { closestScoringBase, scoringSettingsForFormat } from "@/lib/league-scoring";
 import { loadRankedUniverseCached } from "@/lib/faab/player-list";
@@ -522,23 +527,48 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
 }
 
 /**
- * The board, memoized per (season is implied by the key's week, format, source,
- * week).
+ * The board, memoized per (season, week, format, source, projection engine,
+ * settings).
  *
- * The season is not in the key because the clock resolves it inside, and two
- * seasons cannot be live at the same moment. The projection engine is not in
- * the key either, deliberately and unusually: it is resolved inside and the
- * cache is an hour, so a flip shows up within the hour rather than needing the
- * key to carry it. An hour is the same window the player list already accepts.
+ * The projection engine is resolved HERE, outside the cached function, and put
+ * in the key (CLAUDE.md, Projection Engine Source: the source is part of every
+ * cache key that outlives a flip). The resolve reads the same settings
+ * document and the same one-week window `loadAdjustedProjections` resolves
+ * inside, so the key names the engine the board is actually built on, and it
+ * costs no query while the feature is off.
+ *
+ * The settings fingerprint covers both documents the board is computed from:
+ * the FAAB settings (the replacement rule) and the Power Pulse settings (every
+ * projection adjustment). Without it an admin's save would keep serving the old
+ * board for up to an hour under the same key.
  */
-export function loadWaiverBoardCached(params: LoadBoardParams): Promise<WaiverBoard> {
+export async function loadWaiverBoardCached(params: LoadBoardParams): Promise<WaiverBoard> {
+  const supabase = createCachedReadClient();
+  const [clock, pulseSettings] = await Promise.all([
+    resolveSeasonClock(supabase),
+    loadPowerPulseSettings(supabase),
+  ]);
+  const projectionSource =
+    clock.season != null
+      ? await resolveProjectionSourceForWindow({
+          supabase,
+          season: clock.season,
+          fromWeek: params.week,
+          toWeek: params.week,
+          settings: pulseSettings.beaconProjections,
+        })
+      : "none";
+
   return unstable_cache(
     () => loadWaiverBoardUncached(params),
     [
       "waiver-board",
+      String(clock.season ?? "none"),
       String(params.week),
       params.format.id,
       params.sourceSlug,
+      projectionSource,
+      fingerprint({ faab: params.settings, pulse: pulseSettings }),
     ],
     { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerValues] },
   )();

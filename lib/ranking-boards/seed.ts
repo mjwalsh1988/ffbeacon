@@ -40,6 +40,8 @@ import {
 } from "@/lib/source";
 import { idpRelevantPlayerIdSet } from "@/lib/player-search";
 import { loadAdjustedProjections } from "@/lib/projections/read";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { resolveSeasonClock } from "@/lib/start-sit/clock";
 import { IDP_PRESETS } from "@/lib/idp/scoring-presets";
 import { IDP_POSITIONS, OFFENSE_POSITIONS } from "@/lib/site";
@@ -176,13 +178,44 @@ type DefenderRow = SeedPlayer & { projected: number | null; lastSeasonPoints: nu
 
 type DefenderRows = { rows: DefenderRow[]; lastSeason: number; projectedWindow: boolean };
 
-/** Every relevant defender with both figures. Cached for six hours per
- * (season, week): projections refresh daily and the IDP set is memoised for
- * the day anyway. Uses the service-role client because the projection read's
- * settings and accuracy tables are service-role only. */
-async function readDefenderRows(): Promise<DefenderRows> {
+/** Where the season is and which projection engine covers the rest of it.
+ * Resolved OUTSIDE the cached read and put in its key, so a new week, a new
+ * season or a flip of the projection engine each start a fresh entry rather
+ * than serving the previous one for six hours (CLAUDE.md, Projection Engine
+ * Source). The engine is resolved from the same settings document and the
+ * same window `loadAdjustedProjections` resolves inside, and costs no query
+ * while the feature is off. */
+type DefenderSeedKey = {
+  season: number | null;
+  currentWeek: number;
+  projectionSource: string;
+};
+
+async function resolveDefenderSeedKey(): Promise<DefenderSeedKey> {
   const admin = createAdminClient();
-  const clock = await resolveSeasonClock(admin);
+  const [clock, pulseSettings] = await Promise.all([
+    resolveSeasonClock(admin),
+    loadPowerPulseSettings(admin),
+  ]);
+  const inWindow = clock.season != null && clock.currentWeek <= REGULAR_SEASON_WEEKS;
+  const projectionSource = inWindow
+    ? await resolveProjectionSourceForWindow({
+        supabase: admin,
+        season: clock.season as number,
+        fromWeek: clock.currentWeek,
+        toWeek: REGULAR_SEASON_WEEKS,
+        settings: pulseSettings.beaconProjections,
+      })
+    : "none";
+  return { season: clock.season, currentWeek: clock.currentWeek, projectionSource };
+}
+
+/** Every relevant defender with both figures. Cached for six hours per
+ * (season, week, projection engine): projections refresh daily and the IDP set
+ * is memoised for the day anyway. Uses the service-role client because the
+ * projection read's settings and accuracy tables are service-role only. */
+async function readDefenderRows(clock: DefenderSeedKey): Promise<DefenderRows> {
+  const admin = createAdminClient();
   const relevant = [...(await idpRelevantPlayerIdSet(admin))];
   const players = await fetchAllRowsInChunks(
     "ranker defender players",
@@ -250,11 +283,20 @@ async function readDefenderRows(): Promise<DefenderRows> {
 
 /** The cached read. `uncached` is for code that runs outside a Next request,
  * where unstable_cache has no cache to use (the community rankings script). */
-function loadDefenderRows(uncached = false): Promise<DefenderRows> {
-  if (uncached) return readDefenderRows();
-  return unstable_cache(readDefenderRows, ["ranking-boards:defender-seed", "v1"], {
-    revalidate: 21_600,
-  })();
+async function loadDefenderRows(uncached = false): Promise<DefenderRows> {
+  const key = await resolveDefenderSeedKey();
+  if (uncached) return readDefenderRows(key);
+  return unstable_cache(
+    () => readDefenderRows(key),
+    [
+      "ranking-boards:defender-seed",
+      "v2",
+      String(key.season ?? "none"),
+      String(key.currentWeek),
+      key.projectionSource,
+    ],
+    { revalidate: 21_600 },
+  )();
 }
 
 /**

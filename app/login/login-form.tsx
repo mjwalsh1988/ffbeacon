@@ -2,6 +2,8 @@
 
 import { use, useId, useState, useTransition } from "react";
 import { trackEvent } from "@/lib/analytics";
+import { loginErrorMessage } from "@/lib/auth/login-errors";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 type Mode = "signin" | "signup";
 
@@ -23,9 +25,14 @@ export function LoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<Status>(
+    // Only a fixed message for a known code; nothing from the URL is shown.
     initial.error
-      ? { kind: "error", message: initial.error }
-      : initial.sent
+      ? { kind: "error", message: loginErrorMessage(initial.error) }
+      : // Nothing in the app sets ?sent= today, so it is shown only when it is
+        // shaped like an email address, never as free text from a link.
+        typeof initial.sent === "string" &&
+          initial.sent.length <= 254 &&
+          /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(initial.sent)
         ? { kind: "sent_magic", email: initial.sent }
         : { kind: "idle" },
   );
@@ -45,21 +52,10 @@ export function LoginForm({
 
   // Sanitize the post-login destination. Must be a same-origin path;
   // anything else is rejected as an open-redirect attempt. /my-beacon is the
-  // default landing for logged-in users.
-  //
-  // The second character is what matters, and it is BOTH slashes. A leading
-  // "/" followed by "/" is protocol-relative, and a leading "/" followed by a
-  // BACKSLASH is treated the same way: `location.assign` resolves against the
-  // current base using WHATWG URL rules, where a backslash there enters the
-  // authority state and the destination becomes an external origin. Testing
-  // only for "//" let the backslash form through.
-  const safeNext =
-    initial.next &&
-    initial.next.startsWith("/") &&
-    initial.next[1] !== "/" &&
-    initial.next[1] !== "\\"
-      ? initial.next
-      : "/my-beacon";
+  // default landing for logged-in users. lib/safe-redirect.ts says why a
+  // prefix check is not enough (browsers strip tabs and newlines before they
+  // parse, so "/", a tab and "/" is protocol-relative by the time it is used).
+  const safeNext = safeRedirectPath(initial.next, "/my-beacon");
   // The OAuth/email flows redirect through /auth/callback which only
   // honors `?next=` for same-origin paths, so we forward the validated
   // path along for the round-trip back here from Supabase.

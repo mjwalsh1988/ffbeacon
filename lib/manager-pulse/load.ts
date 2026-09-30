@@ -42,7 +42,7 @@ import {
 } from "@/lib/league-signal-check";
 import type { SideKey } from "@/lib/signal-check/types";
 import { resolveSourceForFormat, type SourceRegistryRow } from "@/lib/source";
-import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsInChunks, fetchAllRowsInChunksByKeyset } from "@/lib/supabase/fetch-all";
 import type {
   ManagerDraftFacts,
   ManagerDraftPick,
@@ -230,13 +230,20 @@ async function fetchLeagueRows(
   sleeperLeagueIds: string[],
 ): Promise<Map<string, LeagueRow>> {
   const out = new Map<string, LeagueRow>();
-  const rows = await fetchAllRowsInChunks("manager-pulse leagues", sleeperLeagueIds, (idChunk, from, to) =>
-    admin
-      .from("leagues")
-      .select("id, sleeper_league_id, season, name, status, total_rosters, roster_positions, metadata")
-      .in("sleeper_league_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse leagues",
+    sleeperLeagueIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("leagues")
+        .select("id, sleeper_league_id, season, name, status, total_rosters, roster_positions, metadata")
+        .in("sleeper_league_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   for (const row of rows) out.set(row.sleeper_league_id, row as LeagueRow);
   return out;
@@ -248,15 +255,22 @@ async function fetchLeagueRows(
 
 async function fetchRosters(admin: Client, leagueRowIds: string[]): Promise<Map<string, RosterRow[]>> {
   const out = new Map<string, RosterRow[]>();
-  const rows = await fetchAllRowsInChunks("manager-pulse rosters", leagueRowIds, (idChunk, from, to) =>
-    admin
-      .from("rosters")
-      .select(
-        "league_id, sleeper_roster_id, owner_user_id, co_owners, wins, losses, ties, points_for, points_against",
-      )
-      .in("league_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse rosters",
+    leagueRowIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("rosters")
+        .select(
+          "id, league_id, sleeper_roster_id, owner_user_id, co_owners, wins, losses, ties, points_for, points_against",
+        )
+        .in("league_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   for (const row of rows as RosterRow[]) {
     const list = out.get(row.league_id) ?? [];
@@ -422,13 +436,20 @@ async function fetchLeagueUsers(
 ): Promise<Map<string, Map<string, string>>> {
   // leagueRowId -> (sleeper_user_id -> display_name)
   const out = new Map<string, Map<string, string>>();
-  const rows = await fetchAllRowsInChunks("manager-pulse league_users", leagueRowIds, (idChunk, from, to) =>
-    admin
-      .from("league_users")
-      .select("league_id, sleeper_user_id, display_name")
-      .in("league_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse league_users",
+    leagueRowIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("league_users")
+        .select("id, league_id, sleeper_user_id, display_name")
+        .in("league_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   for (const row of rows) {
     const map = out.get(row.league_id) ?? new Map<string, string>();
@@ -454,13 +475,20 @@ type DraftRow = {
 
 async function fetchDrafts(admin: Client, leagueRowIds: string[]): Promise<DraftRow[]> {
   const out: DraftRow[] = [];
-  const rows = await fetchAllRowsInChunks("manager-pulse league_drafts", leagueRowIds, (idChunk, from, to) =>
-    admin
-      .from("league_drafts")
-      .select("league_id, sleeper_draft_id, season, type, start_time, settings, metadata")
-      .in("league_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse league_drafts",
+    leagueRowIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("league_drafts")
+        .select("id, league_id, sleeper_draft_id, season, type, start_time, settings, metadata")
+        .in("league_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   out.push(...(rows as DraftRow[]));
   return out;
@@ -484,15 +512,22 @@ type SelectionRow = {
 
 async function fetchSelections(admin: Client, draftIds: string[]): Promise<SelectionRow[]> {
   const out: SelectionRow[] = [];
-  const rows = await fetchAllRowsInChunks("manager-pulse draft_selections", draftIds, (idChunk, from, to) =>
-    admin
-      .from("draft_selections")
-      .select(
-        "sleeper_draft_id, pick_no, round, roster_id, player_id, sleeper_player_id, is_keeper, player_pool, format_slug",
-      )
-      .in("sleeper_draft_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse draft_selections",
+    draftIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("draft_selections")
+        .select(
+          "id, sleeper_draft_id, pick_no, round, roster_id, player_id, sleeper_player_id, is_keeper, player_pool, format_slug",
+        )
+        .in("sleeper_draft_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   out.push(...(rows as SelectionRow[]));
   return out;
@@ -538,13 +573,20 @@ async function fetchMarketAdp(
 async function fetchPickObservations(admin: Client, draftIds: string[]): Promise<ManagerPickObservation[]> {
   const out: ManagerPickObservation[] = [];
   if (draftIds.length === 0) return out;
-  const rows = await fetchAllRowsInChunks("manager-pulse draft_pick_observations", draftIds, (idChunk, from, to) =>
-    admin
-      .from("draft_pick_observations")
-      .select("sleeper_draft_id, pick_no, first_seen_at, observation_gap_ms, was_autopick")
-      .in("sleeper_draft_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse draft_pick_observations",
+    draftIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("draft_pick_observations")
+        .select("id, sleeper_draft_id, pick_no, first_seen_at, observation_gap_ms, was_autopick")
+        .in("sleeper_draft_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   for (const row of rows) {
     const ms = Date.parse(row.first_seen_at);
@@ -581,16 +623,23 @@ type TransactionRow = {
 
 async function fetchTransactions(admin: Client, leagueRowIds: string[]): Promise<TransactionRow[]> {
   const out: TransactionRow[] = [];
-  const rows = await fetchAllRowsInChunks("manager-pulse league_transactions", leagueRowIds, (idChunk, from, to) =>
-    admin
-      .from("league_transactions")
-      .select(
-        "league_id, sleeper_transaction_id, season, week, type, status, adds, drops, draft_picks, roster_ids, metadata, created_at_sleeper",
-      )
-      .in("league_id", idChunk)
-      .eq("status", "complete")
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse league_transactions",
+    leagueRowIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("league_transactions")
+        .select(
+          "id, league_id, sleeper_transaction_id, season, week, type, status, adds, drops, draft_picks, roster_ids, metadata, created_at_sleeper",
+        )
+        .in("league_id", idChunk)
+        .eq("status", "complete")
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   out.push(...(rows as TransactionRow[]));
   return out;
@@ -626,13 +675,20 @@ type PlayerRow = {
 
 async function fetchPlayers(admin: Client, playerIds: string[]): Promise<Map<string, PlayerRow>> {
   const out = new Map<string, PlayerRow>();
-  const rows = await fetchAllRowsInChunks("manager-pulse players", playerIds, (idChunk, from, to) =>
-    admin
-      .from("players")
-      .select("id, full_name, first_name, last_name, position, birth_date, external_ids, draft_year")
-      .in("id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse players",
+    playerIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("players")
+        .select("id, full_name, first_name, last_name, position, birth_date, external_ids, draft_year")
+        .in("id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   for (const row of rows as PlayerRow[]) out.set(row.id, row);
   return out;
@@ -750,15 +806,22 @@ async function fetchMarketValues(
 
     async function fill(formatId: string | null, source: string | null, target: Map<string, number>) {
       if (!formatId || !source) return;
-      const rows = await fetchAllRowsInChunks("manager-pulse market values", playerIds, (idChunk, from, to) =>
-        admin
-          .from("player_value_trends")
-          .select("player_id, current_value")
-          .eq("format_config_id", formatId)
-          .eq("source", source)
-          .in("player_id", idChunk)
-          .order("id", { ascending: true })
-          .range(from, to),
+      const rows = await fetchAllRowsInChunksByKeyset(
+        "manager-pulse market values",
+        playerIds,
+        (idChunk, after, limit) => {
+          let q = admin
+            .from("player_value_trends")
+            .select("id, player_id, current_value")
+            .eq("format_config_id", formatId)
+            .eq("source", source)
+            .in("player_id", idChunk)
+            .order("id", { ascending: true })
+            .limit(limit);
+          if (after !== null) q = q.gt("id", after);
+          return q;
+        },
+        (row) => row.id,
       );
       for (const row of rows) target.set(row.player_id, Number(row.current_value));
     }
@@ -798,15 +861,22 @@ type LedgerRow = {
 async function fetchLedgerRows(admin: Client, leagueRowIds: string[]): Promise<LedgerRow[]> {
   const out: LedgerRow[] = [];
   if (leagueRowIds.length === 0) return out;
-  const rows = await fetchAllRowsInChunks("manager-pulse ledger cache", leagueRowIds, (idChunk, from, to) =>
-    admin
-      .from("league_manager_ledger_cache")
-      .select(
-        "league_id, season, sleeper_roster_id, weeks_graded, lineup_efficiency, waiver_moves, waiver_hits, waiver_faab_spent, waiver_points_started, waiver_points_on_roster, wins_left_on_bench, best_lineup_wins, best_lineup_losses, best_lineup_ties, efficiency_rank, scoring_rank",
-      )
-      .in("league_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse ledger cache",
+    leagueRowIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("league_manager_ledger_cache")
+        .select(
+          "id, league_id, season, sleeper_roster_id, weeks_graded, lineup_efficiency, waiver_moves, waiver_hits, waiver_faab_spent, waiver_points_started, waiver_points_on_roster, wins_left_on_bench, best_lineup_wins, best_lineup_losses, best_lineup_ties, efficiency_rank, scoring_rank",
+        )
+        .in("league_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   out.push(...(rows as LedgerRow[]));
   return out;
@@ -830,13 +900,20 @@ async function fetchMatchupsForManager(
 ): Promise<Map<string, MatchupRow[]>> {
   const out = new Map<string, MatchupRow[]>();
   if (leagueRowIds.length === 0) return out;
-  const rows = await fetchAllRowsInChunks("manager-pulse league_matchups", leagueRowIds, (idChunk, from, to) =>
-    admin
-      .from("league_matchups")
-      .select("league_id, sleeper_roster_id, week, is_final, starter_ids")
-      .in("league_id", idChunk)
-      .order("id", { ascending: true })
-      .range(from, to),
+  const rows = await fetchAllRowsInChunksByKeyset(
+    "manager-pulse league_matchups",
+    leagueRowIds,
+    (idChunk, after, limit) => {
+      let q = admin
+        .from("league_matchups")
+        .select("id, league_id, sleeper_roster_id, week, is_final, starter_ids")
+        .in("league_id", idChunk)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q;
+    },
+    (row) => row.id,
   );
   for (const row of rows as MatchupRow[]) {
     const list = out.get(row.league_id) ?? [];

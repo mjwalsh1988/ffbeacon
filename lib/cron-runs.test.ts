@@ -1,5 +1,19 @@
-import { describe, it, expect } from "vitest";
-import { CRON_JOBS, describeCronSchedule } from "./cron-runs";
+import { describe, it, expect, vi } from "vitest";
+
+const alertMock = vi.hoisted(() => vi.fn(async (): Promise<string | null> => null));
+vi.mock("./cron-alerts", () => ({
+  ALERT_MARKER_KEY: "alertEmailedAt",
+  maybeAlertCronFailure: alertMock,
+}));
+
+import {
+  CRON_JOBS,
+  CronTimeBudgetError,
+  describeCronSchedule,
+  failedStepsOf,
+  recordCronRun,
+  withTimeBudget,
+} from "./cron-runs";
 
 // Two reference instants either side of the daylight-saving boundary.
 const SUMMER = Date.UTC(2026, 7, 1); // August, Eastern is EDT (UTC-4)
@@ -67,5 +81,103 @@ describe("CRON_JOBS registry", () => {
   it("has one entry per job name, with no duplicates", () => {
     const names = CRON_JOBS.map((j) => j.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe("failedStepsOf", () => {
+  it("reads a non-empty failedSteps list and ignores anything else", () => {
+    expect(failedStepsOf({ failedSteps: ["defenseSplits: timeout"] })).toEqual(["defenseSplits: timeout"]);
+    expect(failedStepsOf({ failedSteps: [] })).toEqual([]);
+    expect(failedStepsOf({ failedSteps: "nope" })).toEqual([]);
+    expect(failedStepsOf({ ok: true })).toEqual([]);
+    expect(failedStepsOf(null)).toEqual([]);
+  });
+});
+
+describe("withTimeBudget", () => {
+  it("passes a result through when the work beats the budget", async () => {
+    await expect(withTimeBudget(Promise.resolve(7), 1_000, "job")).resolves.toBe(7);
+  });
+
+  it("rejects with CronTimeBudgetError when the work runs long", async () => {
+    const never = new Promise<number>(() => {});
+    await expect(withTimeBudget(never, 20, "job")).rejects.toBeInstanceOf(CronTimeBudgetError);
+  });
+});
+
+/**
+ * A stand-in for the admin client that records every cron_runs write, enough
+ * for recordCronRun's insert, select-id and update calls.
+ */
+function ledgerClient() {
+  const writes: Array<{ op: "insert" | "update"; payload: Record<string, unknown> }> = [];
+  const client = {
+    from: () => ({
+      insert: (payload: Record<string, unknown>) => {
+        writes.push({ op: "insert", payload });
+        const done = Promise.resolve({ data: { id: "run-1" }, error: null });
+        return Object.assign(done, {
+          select: () => ({ single: () => Promise.resolve({ data: { id: "run-1" }, error: null }) }),
+        });
+      },
+      update: (payload: Record<string, unknown>) => {
+        writes.push({ op: "update", payload });
+        return { eq: () => Promise.resolve({ error: null }) };
+      },
+    }),
+  };
+  return { client: client as unknown as Parameters<typeof recordCronRun>[0], writes };
+}
+
+describe("recordCronRun", () => {
+  it("records a run with a failed step as an error, keeps the result, and alerts", async () => {
+    alertMock.mockResolvedValueOnce("2026-09-29T09:05:00.000Z");
+    const { client, writes } = ledgerClient();
+    const result = await recordCronRun(client, "sync-sleeper-stats", async () => ({
+      ok: true,
+      failedSteps: ["defenseSplits: canceling statement due to statement timeout"],
+    }));
+    expect(result.failedSteps).toHaveLength(1);
+    const final = writes.find((w) => w.op === "update")!.payload;
+    expect(final.status).toBe("error");
+    expect(String(final.error)).toContain("defenseSplits");
+    expect((final.result as Record<string, unknown>).alertEmailedAt).toBe("2026-09-29T09:05:00.000Z");
+    expect((final.result as Record<string, unknown>).failedSteps).toBeDefined();
+    expect(alertMock).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ jobName: "sync-sleeper-stats", partial: true }),
+    );
+  });
+
+  it("records a clean run as a success and sends nothing", async () => {
+    alertMock.mockClear();
+    const { client, writes } = ledgerClient();
+    await recordCronRun(client, "sync-ktc", async () => ({ ok: true, failedSteps: [] }));
+    expect(writes.find((w) => w.op === "update")!.payload.status).toBe("success");
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it("records a blown time budget as an error before rethrowing", async () => {
+    alertMock.mockResolvedValueOnce(null);
+    const { client, writes } = ledgerClient();
+    await expect(
+      recordCronRun(client, "beacon-brief-worker", () => new Promise(() => {}), { timeoutMs: 20 }),
+    ).rejects.toBeInstanceOf(CronTimeBudgetError);
+    const final = writes.find((w) => w.op === "update")!.payload;
+    expect(final.status).toBe("error");
+    expect(String(final.error)).toContain("time budget");
+  });
+
+  it("alerts on a failure even on the quiet path", async () => {
+    alertMock.mockClear();
+    alertMock.mockResolvedValueOnce(null);
+    const { client, writes } = ledgerClient();
+    await expect(
+      recordCronRun(client, "league-sync-worker", async () => {
+        throw new Error("boom");
+      }, { quietWhen: () => true }),
+    ).rejects.toThrow("boom");
+    expect(writes[0].payload.status).toBe("error");
+    expect(alertMock).toHaveBeenCalledTimes(1);
   });
 });

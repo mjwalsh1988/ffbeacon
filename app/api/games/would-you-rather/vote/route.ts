@@ -7,7 +7,7 @@ import {
   minimalReview,
   reloadPool,
 } from "@/lib/would-you-rather/round";
-import { castVote } from "@/lib/would-you-rather/vote";
+import { castGuestVote, castVote } from "@/lib/would-you-rather/vote";
 import {
   guestVotesRemaining,
   guestVotesUsed,
@@ -53,9 +53,12 @@ const bodySchema = z.object({
  *      originally picked.
  *   6. Re-read the tallies and build the review.
  *
- * The guest allowance is checked BEFORE the write. A guest at their limit gets
- * the sign-in state, and no vote of theirs lands, so the count they are shown
- * and the count that exists never disagree.
+ * The guest allowance is checked BEFORE the write, and then again AS the write.
+ * The first check is the cheap early refusal that saves a rate-limit slot and
+ * the round read; the authoritative one is castGuestVote, which counts and
+ * inserts in one transaction so parallel votes cannot overrun the cap. A guest
+ * at their limit gets the sign-in state, and no vote of theirs lands, so the
+ * count they are shown and the count that exists never disagree.
  */
 export async function POST(req: Request) {
   if (!requireFfBeaconHeader(req)) return privateJson({ ok: false, error: "bad_request" }, 400);
@@ -99,13 +102,29 @@ export async function POST(req: Request) {
     const loaded = await loadRound(admin, parsed.tradeId);
     if (!loaded) return fail("not_found", remainingBefore);
 
-    const cast = await castVote(admin, {
-      tradeId: parsed.tradeId,
-      voter,
-      side: parsed.side,
-      actorKey,
-    });
-    if (!cast.ok) return fail(cast.error, remainingBefore);
+    // A guest's vote goes through the one call that checks the allowance and
+    // writes the row together (migration 0326). The count above is only the
+    // cheap early refusal; on its own it was a check-then-insert that parallel
+    // votes walked straight past.
+    const cast =
+      voter.kind === "guest"
+        ? await castGuestVote(admin, {
+            tradeId: parsed.tradeId,
+            guestId: voter.guestId,
+            side: parsed.side,
+            actorKey,
+            limit: settings.guest_vote_limit,
+          })
+        : await castVote(admin, {
+            tradeId: parsed.tradeId,
+            voter,
+            side: parsed.side,
+            actorKey,
+          });
+    if (!cast.ok) {
+      if (cast.error === "guest_limit_reached") return fail("guest_limit_reached", 0);
+      return fail(cast.error, remainingBefore);
+    }
 
     // THE VOTE IS NOW ON RECORD, so nothing past this point may report a
     // failure. A caller told "nothing was recorded" would press retry, land on
@@ -126,14 +145,26 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       console.error("[would-you-rather] reveal failed after a recorded vote", err);
-      review = minimalReview(loaded, loaded.pool, cast.side, cast.alreadyVoted);
+      review = minimalReview(
+        loaded,
+        loaded.pool,
+        cast.side,
+        cast.alreadyVoted,
+        settings.reveal.show_community_results,
+      );
     }
 
     const remainingAfter =
       voter.kind === "guest"
         ? guestVotesRemaining(
             settings.guest_vote_limit,
-            cast.alreadyVoted ? used : used + 1,
+            // The guest path reports the allowance the database counted,
+            // including this vote; the early count is only a fallback.
+            "used" in cast && typeof cast.used === "number"
+              ? cast.used
+              : cast.alreadyVoted
+                ? used
+                : used + 1,
           )
         : null;
 

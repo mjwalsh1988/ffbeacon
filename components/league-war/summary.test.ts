@@ -142,7 +142,6 @@ describe("buildFootnote", () => {
     shallowPositions: [] as PositionCurve["position"][],
     modelVersion: "war-1",
     generatedAt: "2026-08-26T11:30:00.000Z",
-    isStale: false,
   };
 
   it("carries the week window, scoring, replacement definition, and calculation time from the input", () => {
@@ -168,11 +167,10 @@ describe("buildFootnote", () => {
     expect(notShallow).not.toContain("understates");
   });
 
-  it("adds the staleness clause only when isStale is true, and never silently", () => {
-    const stale = buildFootnote({ ...base, isStale: true });
-    expect(stale).toContain("the latest refresh did not complete");
-    const fresh = buildFootnote(base);
-    expect(fresh).not.toContain("did not complete");
+  it("never tells a reader the curve is out of date (a failed refresh emails the owner instead)", () => {
+    const footnote = buildFootnote(base);
+    expect(footnote).not.toContain("did not complete");
+    expect(footnote).not.toMatch(/out of date|stale/i);
   });
 
   it("uses singular phrasing for a one-week window", () => {

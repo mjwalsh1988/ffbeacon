@@ -103,6 +103,11 @@ export const TOOLS_NAV: NavChild[] = [
     href: "/tools/custom-rankings",
     description: "Beacon Ranker: rank players two at a time",
   },
+  {
+    label: "Free Agent Finder",
+    href: "/tools/free-agent-finder",
+    description: "Which of your leagues still have him free",
+  },
 ];
 
 /** Every game on the site, in display order. Single source of truth shared

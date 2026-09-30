@@ -28,11 +28,11 @@ vi.mock("@/lib/sleeper", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/sleeper")>();
   return {
     ...actual,
-    getSleeperLeague: vi.fn(),
-    getSleeperRosters: vi.fn(),
-    getSleeperLeagueUsers: vi.fn(),
-    getSleeperTradedPicks: vi.fn(),
-    getSleeperLeagueDrafts: vi.fn(),
+    lookupSleeperLeague: vi.fn(),
+    getSleeperRostersOrNull: vi.fn(),
+    getSleeperLeagueUsersOrNull: vi.fn(),
+    getSleeperTradedPicksOrNull: vi.fn(),
+    getSleeperLeagueDraftsOrNull: vi.fn(),
     getSleeperDraft: vi.fn(),
     getAllSleeperTransactions: vi.fn(),
     getSleeperWinnersBracket: vi.fn(),
@@ -76,13 +76,19 @@ vi.mock("@/lib/league-matchups", async (importOriginal) => {
   };
 });
 
-import { pulseLeagueFootprint, captureLeagueRawData } from "./league-pulse";
 import {
-  getSleeperLeague,
-  getSleeperRosters,
-  getSleeperLeagueUsers,
-  getSleeperTradedPicks,
-  getSleeperLeagueDrafts,
+  pulseLeagueFootprint,
+  pulseLeagueCore,
+  captureLeagueRawData,
+  bracketStartWeekOf,
+} from "./league-pulse";
+import {
+  lookupSleeperLeague,
+  getSleeperDraft,
+  getSleeperRostersOrNull,
+  getSleeperLeagueUsersOrNull,
+  getSleeperTradedPicksOrNull,
+  getSleeperLeagueDraftsOrNull,
   getAllSleeperTransactions,
   getSleeperWinnersBracket,
   getSleeperLosersBracket,
@@ -277,7 +283,9 @@ function makeFakeClient(
             maybeSingle: () => {
               calls.push("leagues.select.captureStatus");
               return Promise.resolve({
-                data: opts.captureRow ?? { status: "complete" },
+                // A real bracket start week, because a league with none (0 or
+                // missing) has no bracket stage at all.
+                data: opts.captureRow ?? { status: "complete", playoff_week_start: 15 },
                 error: null,
               });
             },
@@ -357,11 +365,14 @@ function makeFakeClient(
 
 /** Wires the Sleeper mocks to a clean, empty-roster first sync. */
 function wireFirstSyncPipeline(overrides: { league?: Partial<Record<string, unknown>> } = {}) {
-  vi.mocked(getSleeperLeague).mockResolvedValue(fakeSleeperLeague(overrides.league) as never);
-  vi.mocked(getSleeperRosters).mockResolvedValue([]);
-  vi.mocked(getSleeperLeagueUsers).mockResolvedValue([]);
-  vi.mocked(getSleeperTradedPicks).mockResolvedValue([]);
-  vi.mocked(getSleeperLeagueDrafts).mockResolvedValue([]);
+  vi.mocked(lookupSleeperLeague).mockResolvedValue({
+    status: "found",
+    league: fakeSleeperLeague(overrides.league) as never,
+  });
+  vi.mocked(getSleeperRostersOrNull).mockResolvedValue([]);
+  vi.mocked(getSleeperLeagueUsersOrNull).mockResolvedValue([]);
+  vi.mocked(getSleeperTradedPicksOrNull).mockResolvedValue([]);
+  vi.mocked(getSleeperLeagueDraftsOrNull).mockResolvedValue([]);
   vi.mocked(getAllSleeperTransactions).mockResolvedValue([]);
   vi.mocked(getSleeperWinnersBracket).mockResolvedValue([]);
   vi.mocked(getSleeperLosersBracket).mockResolvedValue([]);
@@ -427,7 +438,7 @@ describe("pulseLeagueFootprint: scope", () => {
     expect(result.counts.transactions).toBe(1);
 
     // What it runs.
-    expect(getSleeperLeague).toHaveBeenCalledWith(SLEEPER_LEAGUE_ID);
+    expect(lookupSleeperLeague).toHaveBeenCalledWith(SLEEPER_LEAGUE_ID);
     expect(getAllSleeperTransactions).toHaveBeenCalled();
     expect(getSleeperWinnersBracket).toHaveBeenCalledWith(SLEEPER_LEAGUE_ID);
     expect(getSleeperLosersBracket).toHaveBeenCalledWith(SLEEPER_LEAGUE_ID);
@@ -470,8 +481,8 @@ describe("pulseLeagueFootprint: fresh within the TTL", () => {
     expect(result.cached).toBe(true);
     expect(result.counts.transactions).toBe(5);
 
-    expect(getSleeperLeague).not.toHaveBeenCalled();
-    expect(getSleeperRosters).not.toHaveBeenCalled();
+    expect(lookupSleeperLeague).not.toHaveBeenCalled();
+    expect(getSleeperRostersOrNull).not.toHaveBeenCalled();
     expect(getAllSleeperTransactions).not.toHaveBeenCalled();
     expect(getSleeperWinnersBracket).not.toHaveBeenCalled();
     expect(getSleeperLosersBracket).not.toHaveBeenCalled();
@@ -523,8 +534,8 @@ describe("pulseLeagueFootprint: cached core, incomplete capture set (F8)", () =>
     // The core itself is still reported as cached: no league/roster/member
     // Sleeper calls were needed.
     expect(result.cached).toBe(true);
-    expect(getSleeperLeague).not.toHaveBeenCalled();
-    expect(getSleeperRosters).not.toHaveBeenCalled();
+    expect(lookupSleeperLeague).not.toHaveBeenCalled();
+    expect(getSleeperRostersOrNull).not.toHaveBeenCalled();
 
     // But the capture set runs anyway, because it never completed.
     expect(getAllSleeperTransactions).toHaveBeenCalled();
@@ -758,7 +769,7 @@ describe("pulseLeagueFootprint: transaction week cap", () => {
 describe("pulseLeagueFootprint: write ordering", () => {
   it("stamps last_pulsed_at/pulse_status=complete only after core's child rows persist, and before its own transaction and bracket writes", async () => {
     wireFirstSyncPipeline();
-    vi.mocked(getSleeperRosters).mockResolvedValue([
+    vi.mocked(getSleeperRostersOrNull).mockResolvedValue([
       {
         roster_id: 1,
         owner_id: "u1",
@@ -770,7 +781,7 @@ describe("pulseLeagueFootprint: write ordering", () => {
         settings: {},
       } as never,
     ]);
-    vi.mocked(getSleeperLeagueUsers).mockResolvedValue([
+    vi.mocked(getSleeperLeagueUsersOrNull).mockResolvedValue([
       {
         user_id: "u1",
         display_name: "Test Manager",
@@ -826,5 +837,287 @@ describe("pulseLeagueFootprint: write ordering", () => {
     // being complete.
     expect(transactionsUpsertIdx).toBeGreaterThan(stampIdx);
     expect(bracketsUpdateIdx).toBeGreaterThan(stampIdx);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* A league with no bracket                                                */
+/* ---------------------------------------------------------------------- */
+
+describe("captureLeagueRawData: leagues that run no bracket", () => {
+  it("reads playoff_week_start 0 or missing as no bracket, and a positive week as one", () => {
+    expect(bracketStartWeekOf(0)).toBeNull();
+    expect(bracketStartWeekOf(Number.NaN)).toBeNull();
+    expect(bracketStartWeekOf(-1)).toBeNull();
+    expect(bracketStartWeekOf(15)).toBe(15);
+  });
+
+  it("marks the bracket stage not applicable for playoff_week_start 0, so the set can complete", async () => {
+    // Chopped leagues and leagues with playoffs off store 0. Reading that as
+    // week 0 made `leg >= 0` true from week 1, the bracket stage ran and
+    // failed, and capture_completed_at was never stamped.
+    wireFirstSyncPipeline();
+    const { client, leagueUpdates } = makeFakeClient({
+      captureRow: { status: "in_season", leg: 5, playoff_week_start: 0, last_scored_leg: 4 },
+      matchupRowCount: 10,
+    });
+
+    const result = await captureLeagueRawData(
+      client,
+      { leagueRowId: LEAGUE_ROW_ID, sleeperLeagueId: SLEEPER_LEAGUE_ID, season: 2026 },
+      { force: false, includeMatchups: false },
+    );
+
+    expect(result.brackets).toBe("not_applicable");
+    expect(result.complete).toBe(true);
+    expect(getSleeperWinnersBracket).not.toHaveBeenCalled();
+    expect(leagueUpdates.some((u) => "capture_completed_at" in u)).toBe(true);
+  });
+
+  it("stays not applicable once a no-bracket league's season is complete", async () => {
+    wireFirstSyncPipeline();
+    const { client } = makeFakeClient({ captureRow: { status: "complete", playoff_week_start: 0 } });
+
+    const result = await captureLeagueRawData(
+      client,
+      { leagueRowId: LEAGUE_ROW_ID, sleeperLeagueId: SLEEPER_LEAGUE_ID, season: 2026 },
+      { force: false, includeMatchups: true },
+    );
+
+    expect(result.brackets).toBe("not_applicable");
+    expect(getSleeperWinnersBracket).not.toHaveBeenCalled();
+    expect(result.complete).toBe(true);
+  });
+
+  it("syncs the slate as fully played in the postseason rather than clamping to week 0", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getNflState).mockResolvedValue({
+      week: 1,
+      leg: 1,
+      season: "2026",
+      season_type: "post",
+      league_season: "2026",
+      previous_season: "2025",
+      display_week: 1,
+    });
+    const { client } = makeFakeClient({ captureRow: { status: "in_season", playoff_week_start: 0 } });
+
+    await captureLeagueRawData(
+      client,
+      { leagueRowId: LEAGUE_ROW_ID, sleeperLeagueId: SLEEPER_LEAGUE_ID, season: 2026 },
+      { force: false, includeMatchups: true },
+    );
+
+    // Week 19 is past the last matchup week, so everything has been played.
+    expect(vi.mocked(syncLeagueMatchups).mock.calls[0][4]).toBe(19);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* A failed Sleeper request is not an empty league                         */
+/* ---------------------------------------------------------------------- */
+
+const STALE_ROW = {
+  id: LEAGUE_ROW_ID,
+  sleeper_league_id: SLEEPER_LEAGUE_ID,
+  season: 2026,
+  last_pulsed_at: "2026-01-01T00:00:00.000Z",
+  pulse_status: "complete",
+  metadata: {},
+};
+
+describe("pulseLeagueCore: failed child requests", () => {
+  it.each([
+    ["rosters", () => vi.mocked(getSleeperRostersOrNull).mockResolvedValue(null)],
+    ["users", () => vi.mocked(getSleeperLeagueUsersOrNull).mockResolvedValue(null)],
+    ["traded_picks", () => vi.mocked(getSleeperTradedPicksOrNull).mockResolvedValue(null)],
+    ["drafts", () => vi.mocked(getSleeperLeagueDraftsOrNull).mockResolvedValue(null)],
+  ])(
+    "a failed %s request writes no child rows, never stamps complete, and marks the league error",
+    async (name, fail) => {
+      wireFirstSyncPipeline();
+      fail();
+      const { client, calls, leagueUpdates } = makeFakeClient({ cacheRow: STALE_ROW });
+
+      const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+      expect(calls).not.toContain("rosters.upsert");
+      expect(calls).not.toContain("league_users.upsert");
+      expect(calls).not.toContain("league_drafts.upsert");
+      expect(calls).not.toContain("leagues.update.stamp");
+      const errorUpdate = leagueUpdates.find((u) => u.pulse_status === "error");
+      expect(String(errorUpdate?.pulse_error)).toContain(name);
+      // The stored copy is what the page renders, and it is not called fresh.
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.cached).toBe(true);
+      expect(result.syncFailed).toContain(name);
+      expect(result.league?.pulse_status).toBe("error");
+    },
+  );
+
+  it("a failed draft detail request is a failure, not a fallback to the summary's empty slot map", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getSleeperLeagueDraftsOrNull).mockResolvedValue([
+      { draft_id: "d1", league_id: SLEEPER_LEAGUE_ID, season: "2026", status: "complete", type: "snake" },
+    ]);
+    vi.mocked(getSleeperDraft).mockResolvedValue(null);
+    const { client, calls } = makeFakeClient({ cacheRow: STALE_ROW });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(calls).not.toContain("league_drafts.upsert");
+    expect(calls).not.toContain("rosters.upsert");
+    expect(calls).not.toContain("leagues.update.stamp");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.syncFailed).toContain("draft d1");
+  });
+
+  it("a first sync with a failed child request fails outright, having nothing stored to fall back on", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getSleeperRostersOrNull).mockResolvedValue(null);
+    const { client } = makeFakeClient({ cacheRow: null });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("sleeper_failed");
+  });
+
+  it("the footprint job treats a served-from-storage core as a failed job so the worker retries", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getSleeperTradedPicksOrNull).mockResolvedValue(null);
+    const { client } = makeFakeClient({ cacheRow: STALE_ROW });
+
+    const result = await pulseLeagueFootprint(client, SLEEPER_LEAGUE_ID);
+
+    expect(result.ok).toBe(false);
+    expect(getAllSleeperTransactions).not.toHaveBeenCalled();
+  });
+
+  it("Sleeper answering [] is a real empty answer and still stamps complete", async () => {
+    wireFirstSyncPipeline();
+    const { client, calls } = makeFakeClient({ cacheRow: null });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(result.ok).toBe(true);
+    expect(calls).toContain("leagues.update.stamp");
+  });
+});
+
+describe("pulseLeagueCore: the league lookup", () => {
+  it("a failed league request marks the stored league error with the failure wording, never not-found", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(lookupSleeperLeague).mockResolvedValue({ status: "failed" });
+    const { client, leagueUpdates } = makeFakeClient({ cacheRow: STALE_ROW });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("sleeper_failed");
+    expect(leagueUpdates.some((u) => u.pulse_error === "Sleeper league fetch failed")).toBe(true);
+    expect(leagueUpdates.some((u) => "sleeper_missing_since" in u)).toBe(false);
+  });
+
+  it("not found with no stored copy reports not_found so a page can render its not-found state", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(lookupSleeperLeague).mockResolvedValue({ status: "not_found" });
+    const { client } = makeFakeClient({ cacheRow: null });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("not_found");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* Roster changes                                                          */
+/* ---------------------------------------------------------------------- */
+
+describe("pulseLeagueCore: roster change detection", () => {
+  const sleeperRoster = {
+    roster_id: 1,
+    owner_id: "u1",
+    players: ["p1", "p2"],
+    starters: ["p1"],
+    reserve: [],
+    taxi: [],
+    settings: {},
+  };
+
+  function storedMatching(overrides: Record<string, unknown> = {}) {
+    const year = new Date().getFullYear();
+    const picks: Array<Record<string, number>> = [];
+    for (const season of [year, year + 1, year + 2, year + 3]) {
+      for (const round of [1, 2, 3, 4]) {
+        picks.push({ season, round, original_roster_id: 1, current_roster_id: 1 });
+      }
+    }
+    return {
+      id: "r1",
+      sleeper_roster_id: 1,
+      player_ids: ["p2", "p1"],
+      reserve_ids: [],
+      taxi_ids: [],
+      draft_pick_assets: picks,
+      ...overrides,
+    };
+  }
+
+  it("does not stamp rosters_changed_at when Sleeper returns what was stored", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getSleeperRostersOrNull).mockResolvedValue([sleeperRoster] as never);
+    const { client, leagueUpdates } = makeFakeClient({
+      cacheRow: null,
+      storedRosterRows: [storedMatching()],
+    });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(leagueUpdates.some((u) => "rosters_changed_at" in u)).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rostersChangedAt).toBeNull();
+  });
+
+  it("stamps rosters_changed_at when a player moved, before the league reads fresh", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getSleeperRostersOrNull).mockResolvedValue([sleeperRoster] as never);
+    const { client, leagueUpdates, calls } = makeFakeClient({
+      cacheRow: null,
+      storedRosterRows: [storedMatching({ player_ids: ["p1", "p3"] })],
+    });
+
+    const result = await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    const changed = leagueUpdates.find((u) => "rosters_changed_at" in u);
+    expect(typeof changed?.rosters_changed_at).toBe("string");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rostersChangedAt).toBe(changed?.rosters_changed_at);
+    expect(calls.indexOf("leagues.update.other")).toBeLessThan(calls.indexOf("leagues.update.stamp"));
+  });
+
+  it("stamps rosters_changed_at when a traded pick changed hands", async () => {
+    wireFirstSyncPipeline();
+    vi.mocked(getSleeperRostersOrNull).mockResolvedValue([sleeperRoster] as never);
+    const year = new Date().getFullYear();
+    vi.mocked(getSleeperTradedPicksOrNull).mockResolvedValue([
+      { season: String(year + 1), round: 1, roster_id: 1, previous_owner_id: 1, owner_id: 2 },
+    ]);
+    const { client, leagueUpdates } = makeFakeClient({
+      cacheRow: null,
+      storedRosterRows: [storedMatching()],
+    });
+
+    await pulseLeagueCore(client, SLEEPER_LEAGUE_ID);
+
+    expect(leagueUpdates.some((u) => "rosters_changed_at" in u)).toBe(true);
   });
 });

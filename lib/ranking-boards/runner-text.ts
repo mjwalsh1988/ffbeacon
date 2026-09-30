@@ -113,3 +113,19 @@ export function announcement(
   const next = nextQuestionText(state, cards);
   return [line, next].filter(Boolean).join(" ");
 }
+
+/**
+ * The sentence for tier lines a save removed because the board ended before
+ * them. A line sits after a rank, so a board that finished shorter than that
+ * rank has nothing below the line and it goes. The reader is told, in the same
+ * words My Beacon's board editor uses, rather than finding a tier missing.
+ * Null when nothing was removed.
+ */
+export function tierLinesRemovedText(removed: readonly number[] | null | undefined): string | null {
+  const ranks = [...new Set((removed ?? []).filter((r) => Number.isInteger(r) && r >= 1))].sort((a, b) => a - b);
+  if (ranks.length === 0) return null;
+  if (ranks.length === 1) {
+    return `The tier line after rank ${ranks[0]} was removed because the board is now shorter.`;
+  }
+  return `The tier lines after ranks ${ranks.join(" and ")} were removed because the board is now shorter.`;
+}

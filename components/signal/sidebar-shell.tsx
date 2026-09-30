@@ -88,8 +88,10 @@ export function SidebarShell({
         event.preventDefault();
         setOpen(false);
       } else if (event.key === "Tab" && dialogRef.current) {
+        // Form fields count: a trap that cannot see an input lets Tab walk out
+        // of the drawer from it and into the page behind.
         const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         );
         if (focusables.length === 0) return;
         const first = focusables[0];

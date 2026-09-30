@@ -135,6 +135,16 @@ const nextConfig: NextConfig = {
         destination: "/tools/league-pulse",
         permanent: true,
       },
+      // /dashboard was removed when My Beacon replaced it (commit acaaafe). Its
+      // content, the saved Sleeper username and the league list, moved to
+      // /my-beacon/sleeper-leagues. Without this an old bookmark fell into the
+      // /[handle] route and 404'd as a Signal profile named "dashboard". Kept
+      // as a permanent 308 forever.
+      {
+        source: "/dashboard",
+        destination: "/my-beacon/sleeper-leagues",
+        permanent: true,
+      },
       // Trade Finder inside a league became Trade Ideas: the same suggestion
       // engine, plus a builder for a deal nobody suggested. Kept as a permanent
       // 308 in the routing layer so shared links, the Copy link button's older

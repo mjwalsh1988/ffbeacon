@@ -210,38 +210,44 @@ export function SourceToggle({
   const staticClass = `items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium ${
     inline ? "flex min-h-11 w-full" : "inline-flex h-9"
   }`;
+  // The header trigger stays 36px to match its neighbours; the invisible
+  // ::before strip 4px above and below makes its hit area 44px tall.
   const triggerClass = inline
-    ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-70"
-    : "inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-70";
+    ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent aria-disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    : "relative inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] hover:border-line-accent aria-disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
   const menuClass = inline
     ? "mt-2 w-full overflow-hidden rounded-card border border-line bg-surface-elevated"
     : "absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl";
+  // A 2px cyan outline drawn inside the row marks the focused option; the
+  // background shift alone was 1.07:1 and could not be seen.
   const itemClass = inline
-    ? "flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none"
-    : "flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none";
+    ? "flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-brand-cyan"
+    : "flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-brand-cyan";
 
   // If no source supports the current format, keep the control visible as a
   // static label so screen-reader users know the affordance still exists and
-  // why it's disabled. Same shell as the length-1 branch.
+  // why it's disabled. Same shell as the length-1 branch. Real text, not an
+  // aria-label on a span: a label on an element with no role is dropped.
   if (visibleOptions.length === 0) {
     return (
-      <span
-        className={`${staticClass} text-ink-muted`}
-        aria-label="No data source available for the current format"
-      >
-        <span aria-hidden="true" className="text-ink-muted">Source:</span>
-        <span>Unavailable</span>
+      <span className={`${staticClass} text-ink-muted`}>
+        <span className="text-ink-muted">
+          <span className="sr-only">Data </span>Source:
+        </span>{" "}
+        <span>
+          Unavailable
+          <span className="sr-only">, no data source covers the current format</span>
+        </span>
       </span>
     );
   }
 
   if (visibleOptions.length === 1) {
     return (
-      <span
-        className={`${staticClass} text-ink`}
-        aria-label={`Data source: ${currentLabel}`}
-      >
-        <span aria-hidden="true" className="text-ink-muted">Source:</span>
+      <span className={`${staticClass} text-ink`}>
+        <span className="text-ink-muted">
+          <span className="sr-only">Data </span>Source:
+        </span>{" "}
         <span>{currentLabel}</span>
       </span>
     );
@@ -254,13 +260,19 @@ export function SourceToggle({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Data source: ${currentLabel}`}
-        onClick={() => setOpen((prev) => !prev)}
-        disabled={pending}
+        // aria-disabled rather than disabled: a selection returns focus here
+        // while the navigation is pending, and a disabled button cannot hold it.
+        aria-disabled={pending || undefined}
+        onClick={() => {
+          if (pending) return;
+          setOpen((prev) => !prev);
+        }}
         className={triggerClass}
       >
         <span className={inline ? "flex items-center gap-1.5" : "contents"}>
-          <span aria-hidden="true" className="text-ink-muted">Source:</span>
+          <span className="text-ink-muted">
+            <span className="sr-only">Data </span>Source:
+          </span>{" "}
           <span>{currentLabel}</span>
         </span>
         <span aria-hidden="true" className="text-ink-subtle">▾</span>
@@ -302,54 +314,71 @@ export function SourceToggle({
               ? allFormats.find((f) => f.slug === currentFormatSlug)?.display_name ??
                 currentFormatSlug
               : null;
-            // Compose the aria-label so the screen reader hears the
-            // consequence of selecting this option BEFORE the user commits.
-            // The label is the only programmatic warning channel, we
-            // intentionally don't ALSO mount an sr-only tooltip because
-            // pairing aria-label + aria-describedby would cause a screen
-            // reader to read the fallback target twice on focus.
+            // The three warning channels CLAUDE.md requires, split so nothing
+            // is read twice. The aria-label carries the WARNING (and starts
+            // with the visible text, so a voice command naming what is on
+            // screen still matches, WCAG 2.5.3). The role="tooltip" element,
+            // wired through aria-describedby, carries only the RESULT: the
+            // format the reader will land on. The visible "(changes format)"
+            // note is the sighted twin of the label, and the tooltip becomes
+            // visible on hover and on keyboard focus.
             const ariaLabel = !formatSupported
               ? fallbackPreview
-                ? `${option.display_name}. Warning: selecting this will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name} because ${option.display_name} doesn't provide values for ${currentFormatLabel}.`
-                : `${option.display_name}. Warning: ${option.display_name} doesn't provide values for ${currentFormatLabel}.`
+                ? `${option.display_name} (changes format). Warning: selecting this will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name} because ${option.display_name} doesn't provide values for ${currentFormatLabel}.`
+                : `${option.display_name} (changes format). Warning: ${option.display_name} doesn't provide values for ${currentFormatLabel}.`
               : undefined;
+            const tooltipId = `${menuHeadingId}-tip-${index}`;
+            const tooltipText = !formatSupported
+              ? fallbackPreview
+                ? `New format: ${fallbackPreview.display_name}`
+                : `No format fits ${option.display_name}`
+              : null;
             return (
               <li
                 key={option.slug}
                 role="none"
-                className="border-b border-line last:border-b-0"
+                className="group border-b border-line last:border-b-0"
               >
                 <button
                   ref={(el) => {
                     itemRefs.current[index] = el;
                   }}
                   type="button"
-                  role="menuitem"
+                  // menuitemradio + aria-checked: the checkmark is decorative,
+                  // so the current source is announced by the state instead.
+                  role="menuitemradio"
+                  aria-checked={isSelected}
                   tabIndex={index === activeIndex ? 0 : -1}
                   onClick={() => selectSource(option.slug)}
                   aria-label={ariaLabel}
-                  title={
-                    !formatSupported && fallbackPreview && currentFormatLabel
-                      ? `Selecting ${option.display_name} will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name}.`
-                      : !formatSupported && currentFormatLabel
-                        ? `${option.display_name} doesn't provide values for ${currentFormatLabel}.`
-                        : undefined
-                  }
+                  aria-describedby={tooltipText ? tooltipId : undefined}
                   className={`${itemClass} ${isSelected ? "text-ink" : "text-ink-muted"}`}
                 >
-                  <span className="flex items-center gap-1.5">
-                    {/* FF Beacon is our proprietary source: mark its row with
-                        the brand logo so it reads as "our values" in the list.
-                        Every other source stays icon-free. Sized 1em so it sits
-                        inline without changing the option row's height. */}
-                    {option.slug === BEACON_SOURCE_SLUG && <BeaconValueIcon />}
-                    <span className="font-medium">{option.display_name}</span>
-                    {!formatSupported && (
+                  <span className="flex flex-col gap-0.5">
+                    <span className="flex items-center gap-1.5">
+                      {/* FF Beacon is our proprietary source: mark its row with
+                          the brand logo so it reads as "our values" in the list.
+                          Every other source stays icon-free. Sized 1em so it sits
+                          inline without changing the option row's height. */}
+                      {option.slug === BEACON_SOURCE_SLUG && <BeaconValueIcon />}
+                      <span className="font-medium">{option.display_name}</span>
+                      {!formatSupported && (
+                        <span className="text-xs font-normal text-brand-cyan">
+                          (changes format)
+                        </span>
+                      )}
+                    </span>
+                    {tooltipText && (
+                      // In the flow of the row rather than floating: the menu
+                      // clips anything positioned outside it. Hidden until the
+                      // row is hovered or focused; aria-describedby still
+                      // reads it while it is hidden.
                       <span
-                        className="text-xs font-normal text-brand-cyan"
-                        aria-hidden="true"
+                        id={tooltipId}
+                        role="tooltip"
+                        className="hidden text-xs font-normal text-ink-muted group-hover:block group-focus-within:block"
                       >
-                        (changes format)
+                        {tooltipText}
                       </span>
                     )}
                   </span>

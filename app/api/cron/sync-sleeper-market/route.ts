@@ -26,9 +26,9 @@ export const maxDuration = 300;
  * Runs year-round: ADP is most alive in the off-season, which is draft season,
  * so there is no off-season skip here (unlike the stats sync).
  *
- * Auth: `Authorization: Bearer <CRON_SECRET>` only. The rookie step is
- * best-effort: its failure is logged and reported but never fails the Sleeper
- * sync (the two feeds are independent).
+ * Auth: `Authorization: Bearer <CRON_SECRET>` only. The rookie step never
+ * undoes the Sleeper sync (the two feeds are independent), but its failure is
+ * recorded as a failed step, so the run reads as an error and emails.
  */
 export async function GET(req: Request) {
   const cronAuth = verifyCronRequest(req);
@@ -38,25 +38,33 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient();
   try {
-    const result = await recordCronRun(supabase, "sync-sleeper-market", () =>
-      runSleeperMarketSync(supabase),
-    );
-    // The IDP guide's draft-round figures read player_market_latest through a
-    // day-long cache on this tag; bust it so each morning's ADP shows up the
-    // same day rather than up to a day late.
-    revalidateTag(CACHE_TAGS.marketAdp);
+    // Both steps run INSIDE the recorded run. The rookie step used to run after
+    // recordCronRun had already closed the row, so its failure reached no
+    // ledger, no health check and no email.
+    const result = await recordCronRun(supabase, "sync-sleeper-market", async () => {
+      const market = await runSleeperMarketSync(supabase);
+      // The IDP guide's draft-round figures read player_market_latest through a
+      // day-long cache on this tag; bust it so each morning's ADP shows up the
+      // same day rather than up to a day late.
+      revalidateTag(CACHE_TAGS.marketAdp);
 
-    // Best-effort rookie ADP: never let it fail the primary Sleeper market sync.
-    let rookie: unknown;
-    try {
-      rookie = await runRookieAdpSync(supabase);
-    } catch (rookieErr) {
-      const message = rookieErr instanceof Error ? rookieErr.message : String(rookieErr);
-      console.error("[cron/sync-sleeper-market] rookie ADP step failed", message);
-      rookie = { ok: false, error: message };
-    }
+      // Rookie ADP is independent of the Sleeper feed, so its failure never
+      // undoes the market sync above. It is still a failure: reported as a
+      // failed step, which records the run as an error and emails.
+      let rookie: unknown;
+      const failedSteps: string[] = [];
+      try {
+        rookie = await runRookieAdpSync(supabase);
+      } catch (rookieErr) {
+        const message = rookieErr instanceof Error ? rookieErr.message : String(rookieErr);
+        console.error("[cron/sync-sleeper-market] rookie ADP step failed", message);
+        rookie = { ok: false, error: message };
+        failedSteps.push(`rookieAdp: ${message}`);
+      }
+      return { ...market, rookie, failedSteps };
+    });
 
-    return NextResponse.json({ ...result, rookie });
+    return NextResponse.json(result, { status: result.failedSteps.length > 0 ? 500 : 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[cron/sync-sleeper-market] failed", message);

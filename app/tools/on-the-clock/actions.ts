@@ -19,8 +19,15 @@
  * allows, and can assert nothing.
  */
 
-import { createAdminClient } from "@/lib/supabase/server";
-import { runSignalCheck, type RunSignalCheckResult } from "@/app/tools/trade-calculator/actions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  analyzeManualTrade,
+  claimSignalCheckRunSlot,
+  parseManualTradeInput,
+  SLOW_DOWN_MESSAGE,
+  UNREADABLE_TRADE_MESSAGE,
+  type RunSignalCheckResult,
+} from "@/lib/signal-check/run-manual";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { detectLeagueFormat, ffbeaconFormatCandidates } from "@/lib/on-the-clock/format-detect";
 import type { SleeperLeague } from "@/lib/sleeper";
@@ -130,12 +137,6 @@ export async function analyzeDraftTrade(raw: unknown): Promise<RunSignalCheckRes
     return { ok: false, error: "That draft could not be found." };
   }
 
-  const admin = createAdminClient();
-  const settings = await loadOnTheClockSettings(admin);
-  if (!settings.feature.enabled) {
-    return { ok: false, error: "On The Clock is not available yet." };
-  }
-
   const sidesRaw = (input.sides ?? {}) as Record<string, unknown>;
   const a = sanitizeSide(sidesRaw.a);
   const b = sanitizeSide(sidesRaw.b);
@@ -143,13 +144,31 @@ export async function analyzeDraftTrade(raw: unknown): Promise<RunSignalCheckRes
     return { ok: false, error: "Add at least one asset to analyze a trade." };
   }
 
+  // Metered after the free checks and before any database read. Same bucket
+  // as the public builder, so the draft room is not a second budget for the
+  // same pipeline.
+  if (!(await claimSignalCheckRunSlot())) {
+    return { ok: false, error: SLOW_DOWN_MESSAGE };
+  }
+
+  const admin = createAdminClient();
+  const settings = await loadOnTheClockSettings(admin);
+  if (!settings.feature.enabled) {
+    return { ok: false, error: "On The Clock is not available yet." };
+  }
+
   const formatSlug = await resolveDraftFormat(draftId);
   if (!formatSlug) {
     return { ok: false, error: "That draft has not been synced yet." };
   }
 
+  const parsed = parseManualTradeInput({ formatSlug, sides: { a, b } });
+  if (!parsed) {
+    return { ok: false, error: UNREADABLE_TRADE_MESSAGE };
+  }
+
   // Straight through the public pipeline. Not saved: a draft-room what-if is a
   // scratchpad, and writing a row for every hypothetical would fill the table
   // with trades nobody made. Sharing goes through the builder as it always has.
-  return runSignalCheck({ formatSlug, sides: { a, b } }, { save: false });
+  return analyzeManualTrade(parsed, null);
 }

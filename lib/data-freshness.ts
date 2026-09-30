@@ -180,6 +180,32 @@ export const FRESHNESS_SPECS: readonly FreshnessSpec[] = [
     matters:
       "The defender search gate and the defender career tables read these. Rebuilt nightly from the stats job; idle by design outside the season.",
   },
+  // The two stats-derived calcs chained onto sync-sleeper-stats. Both hit the
+  // statement timeout on several nights in late September 2026 inside runs the
+  // ledger recorded as a success, and neither was watched here, so nothing
+  // reported it. Both tables are small
+  // (about 17,000 and 2,000 rows), so ordering by computed_at without an index
+  // is a cheap sort rather than the full-table scan the header warns about.
+  {
+    table: "player_projection_accuracy",
+    column: "computed_at",
+    label: "Projection accuracy",
+    maxAgeHours: 48,
+    months: [1, 2, 8, 9, 10, 11, 12],
+    kickoffGated: true,
+    matters:
+      "Beat rates and the reliability figures Power Pulse applies to projections. Stale rows keep grading the current season on old evidence. Rebuilt nightly by the stats job; idle by design outside the season.",
+  },
+  {
+    table: "nfl_defense_vs_position",
+    column: "computed_at",
+    label: "Opponent strength",
+    maxAgeHours: 48,
+    months: [1, 2, 8, 9, 10, 11, 12],
+    kickoffGated: true,
+    matters:
+      "Strength of schedule and every matchup adjustment read these multipliers. When this stops moving, the current season's games never enter the measurement. Rebuilt nightly by the stats job; idle by design outside the season.",
+  },
 ];
 
 /** Whether a seasonal spec should be judged at this moment. */

@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Monitor, Smartphone, Globe } from "lucide-react";
 import { revokeOtherSessions } from "./actions";
-import { SITE_TIME_ZONE } from "@/lib/datetime";
+import { formatEastern } from "@/lib/datetime";
 
 export type SessionRow = {
   id: string;
@@ -184,17 +184,12 @@ function parseUserAgent(ua: string | null): ParsedUA {
 
 /* ---------- Date formatting ---------- */
 
+// Through lib/datetime.ts so the time carries its zone label ("7:30 AM EDT").
+// dateStyle/timeStyle cannot be combined with timeZoneName, which is why the
+// old inline formatter showed an Eastern time with no zone on it.
 function formatAbsolute(iso: string | null): string {
   if (!iso) return "-";
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: SITE_TIME_ZONE,
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
+  return formatEastern(iso);
 }
 
 function formatRelative(iso: string | null): string {

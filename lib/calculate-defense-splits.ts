@@ -87,8 +87,6 @@ import {
 
 type ServiceClient = SupabaseClient<Database>;
 
-const PAGE = 1000;
-
 /**
  * The scoring bases we publish splits for. idp123 (Sleeper's default IDP
  * scoring) is the defenders' base and ONLY theirs: a defender has no PPR
@@ -123,8 +121,18 @@ const STARTABLE_PER_TEAM: Record<Position, number> = {
 const MIN_MULTIPLIER = 0.8;
 const MAX_MULTIPLIER = 1.25;
 
-/** Seasons with fewer sampled games than this are not published. */
-const MIN_GAMES = 4;
+/**
+ * Seasons with fewer sampled games than this are not published.
+ *
+ * Two, not four. The comment on recentSeasons below says a three-game season
+ * contributes through the sample-size shrink at 3/(3 + priorGames) strength,
+ * and the code said otherwise: with a floor of four, every 2026 split was
+ * dropped through week 4, so the current season contributed nothing at all
+ * (nfl_defense_vs_position held no 2026 row on 2026-09-29). The shrink is what
+ * makes a small sample safe; this floor only keeps out a single game, which is
+ * one opponent's performance rather than a defense's.
+ */
+export const MIN_GAMES = 2;
 
 /**
  * How many alternating passes the opponent adjustment makes. Four converges
@@ -184,35 +192,74 @@ export async function runCalculateDefenseSplits(
   const settings = await loadSettings(supabase);
   const seasons = options.seasons ?? (await recentSeasons(supabase));
   let rowsWritten = 0;
+  const failures: string[] = [];
 
-  // Every season's read starts now and runs at once; the writes below still go
-  // season by season in the same order. Each read is the same single keyset
-  // stream as before, so its rows arrive in the same order. A read's rejection
-  // is held (the no-op catch) until the loop reaches that season, so the
-  // seasons before a failed one are written and the ones after are not,
-  // exactly as when each read started only after the previous season's writes.
-  const pendingReads = seasons.map((season) => {
-    const read = loadSeasonStats(supabase, season);
-    read.catch(() => {});
-    return read;
-  });
-
-  for (let index = 0; index < seasons.length; index += 1) {
-    const season = seasons[index];
-    const rows = await pendingReads[index];
+  // ONE SEASON AT A TIME, and one season's failure does not cost the others.
+  //
+  // The three reads used to start at once. Each is a keyset stream whose pages
+  // are almost entirely random heap reads (EXPLAIN on 2026-09-29: 535 ms and
+  // 940 buffer reads for 1,000 rows, cold), so three streams at once, beside
+  // the other stats calcs, pushed single pages past the 8-second statement
+  // timeout and the whole calc failed every night from 2026-09-26. Worse, a
+  // failed read threw out of the loop, so a timeout on the oldest season also
+  // discarded the current one, which is the season readers most need.
+  //
+  // Now each season is read, built and written before the next is touched, a
+  // failed season is recorded and skipped, and the run throws at the end only
+  // if something failed, after every season that could be written has been.
+  for (const season of seasons) {
+    let rows: StatRow[];
+    try {
+      rows = await loadSeasonStats(supabase, season);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`  ${season}: stat load failed, season skipped: ${message}`);
+      failures.push(`${season}: ${message}`);
+      continue;
+    }
     if (rows.length === 0) {
       console.log(`  ${season}: no stats, skipped`);
       continue;
     }
 
     for (const scoring of SCORING_BASES) {
-      const written = await buildSeasonScoring(supabase, season, scoring, rows, settings);
-      rowsWritten += written;
-      console.log(`  ${season} ${scoring}: ${written} defense rows`);
+      try {
+        const written = await buildSeasonScoring(supabase, season, scoring, rows, settings);
+        rowsWritten += written;
+        console.log(`  ${season} ${scoring}: ${written} defense rows`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`  ${season} ${scoring}: write failed: ${message}`);
+        failures.push(`${season} ${scoring}: ${message}`);
+      }
     }
   }
 
+  if (failures.length > 0) {
+    throw new Error(
+      `defense splits: ${failures.length} part(s) failed (${rowsWritten} rows written for the rest): ${failures.join("; ")}`,
+    );
+  }
   return { seasons, rowsWritten, durationMs: Date.now() - started };
+}
+
+/**
+ * Rows per page of the season read. 500 rather than 1,000: a page's cost is
+ * almost all random heap reads, so halving it halves the worst single
+ * statement, which is the number the 8-second statement timeout judges.
+ */
+const SEASON_PAGE = 500;
+/** Smallest page a timed-out read shrinks to before it gives up. */
+const MIN_SEASON_PAGE = 125;
+/** Attempts per page, halving the page size after each statement timeout. */
+const PAGE_ATTEMPTS = 4;
+
+function isStatementTimeout(message: string): boolean {
+  return /statement timeout|canceling statement|57014/i.test(message);
+}
+
+function isTransient(message: string): boolean {
+  return /fetch failed|socket|ETIMEDOUT|ECONNRESET|EAI_AGAIN|network|503|504|timeout/i.test(message);
 }
 
 async function loadSettings(supabase: ServiceClient): Promise<PowerPulseSettings> {
@@ -262,6 +309,7 @@ export async function recentSeasons(supabase: ServiceClient): Promise<number[]> 
 
 export async function loadSeasonStats(supabase: ServiceClient, season: number): Promise<StatRow[]> {
   const out: StatRow[] = [];
+  let pageSize = SEASON_PAGE;
   // Keyset paging (id > last), not offset: the typed IDP columns make every page
   // wider, and a deep offset over a 50,000-row season is what times out.
   for (let lastId = ""; ; ) {
@@ -269,17 +317,41 @@ export async function loadSeasonStats(supabase: ServiceClient, season: number): 
     // payload rather than the whole object. Selecting `metadata` outright would
     // drag roughly a kilobyte of stat lines per row across 40,000 rows a season
     // to read a three character team code.
-    const { data, error } = await supabase
-      .from("player_stats")
-      .select(
-        "id, player_id, season, week, opponent, offense_team:metadata->>team, gp, pts_ppr, pts_half_ppr, pts_std, idp_tkl_solo, idp_tkl_ast, idp_tkl_loss, idp_sack, idp_qb_hit, idp_pass_def, idp_ff, idp_fum_rec, idp_safe, idp_blk_kick, idp_int, idp_def_td, players(position)",
-      )
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .gt("id", lastId || "00000000-0000-0000-0000-000000000000")
-      .order("id", { ascending: true })
-      .limit(PAGE);
-    if (error) throw new Error(`defense splits stat load failed: ${error.message}`);
+    const readPage = (limit: number) =>
+      supabase
+        .from("player_stats")
+        .select(
+          "id, player_id, season, week, opponent, offense_team:metadata->>team, gp, pts_ppr, pts_half_ppr, pts_std, idp_tkl_solo, idp_tkl_ast, idp_tkl_loss, idp_sack, idp_qb_hit, idp_pass_def, idp_ff, idp_fum_rec, idp_safe, idp_blk_kick, idp_int, idp_def_td, players(position)",
+        )
+        .eq("season", season)
+        .eq("season_type", "regular")
+        .gt("id", lastId || "00000000-0000-0000-0000-000000000000")
+        .order("id", { ascending: true })
+        .limit(limit);
+
+    // A statement timeout shrinks the page and tries again; any other
+    // transient error retries at the same size. The keyset makes a smaller
+    // page read exactly the first rows the larger one would have, so nothing
+    // is skipped or read twice, and the smaller size then sticks for the rest
+    // of the season.
+    let page: Awaited<ReturnType<typeof readPage>> | null = null;
+    let lastMessage = "";
+    for (let attempt = 1; attempt <= PAGE_ATTEMPTS; attempt += 1) {
+      const res = await readPage(pageSize);
+      if (!res.error) {
+        page = res;
+        break;
+      }
+      lastMessage = res.error.message;
+      if (isStatementTimeout(lastMessage)) {
+        pageSize = Math.max(MIN_SEASON_PAGE, Math.floor(pageSize / 2));
+      } else if (!isTransient(lastMessage)) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+    if (!page) throw new Error(`defense splits stat load failed: ${lastMessage}`);
+    const { data } = page;
     if (!data || data.length === 0) break;
     lastId = data[data.length - 1].id;
     for (const row of data) {
@@ -299,7 +371,7 @@ export async function loadSeasonStats(supabase: ServiceClient, season: number): 
         position: joined?.position ?? null,
       });
     }
-    if (data.length < PAGE) break;
+    if (data.length < pageSize) break;
   }
   return out;
 }

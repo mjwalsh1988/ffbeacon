@@ -424,7 +424,11 @@ async function MatchupBody({
   leagueName: string;
 }) {
   const admin = createAdminClient();
-  await pulseLeagueDerived(admin, leagueRowId, { resynced });
+  // includePositionalWar: false. A matchup page renders no curve.
+  await pulseLeagueDerived(admin, leagueRowId, {
+    resynced,
+    includePositionalWar: false,
+  });
 
   const supabase = await createClient();
   const currentWeek = await resolveScheduleWeek(season, playoffWeekStart);
@@ -1254,7 +1258,7 @@ function MatchupSkeleton({ week }: { week: number }) {
       <p className="text-sm text-ink-muted">Loading the week {week} matchup</p>
       <div aria-hidden="true" className="mt-4 space-y-2">
         {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-          <div key={i} className="h-9 animate-pulse rounded-card bg-base/60" />
+          <div key={i} className="h-9 animate-pulse motion-reduce:animate-none rounded-card bg-base/60" />
         ))}
       </div>
     </div>

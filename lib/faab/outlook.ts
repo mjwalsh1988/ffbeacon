@@ -278,11 +278,31 @@ function loadPositionProjectionsCached(
   )().then((entries) => new Map(entries));
 }
 
-/** Which scoring base a format slug implies. */
-export function scoringBaseForFormat(formatSlug: string): ScoringBase {
-  if (formatSlug.includes("half")) return "half_ppr";
-  if (formatSlug.includes("-std-") || formatSlug.endsWith("-std")) return "std";
+/**
+ * Which scoring base a format_configs.scoring_type implies.
+ *
+ * Read from the column, never parsed out of the slug: a trailing "std" in a
+ * slug means a 1QB roster ("redraft-ppr-std" is PPR scoring), so parsing the
+ * slug priced the default format on standard scoring. An unknown or missing
+ * scoring type reads as PPR, the site default.
+ */
+export function scoringBaseForScoringType(scoringType: string | null | undefined): ScoringBase {
+  if (scoringType === "half_ppr") return "half_ppr";
+  if (scoringType === "standard") return "std";
   return "ppr";
+}
+
+/** The scoring base of a format, read from its format_configs row. */
+export async function scoringBaseForFormat(
+  supabase: ServiceClient,
+  formatSlug: string,
+): Promise<ScoringBase> {
+  const { data } = await supabase
+    .from("format_configs")
+    .select("scoring_type")
+    .eq("slug", formatSlug)
+    .maybeSingle();
+  return scoringBaseForScoringType(data?.scoring_type);
 }
 
 export async function loadPlayerOutlook(
@@ -329,7 +349,7 @@ export async function loadPlayerOutlook(
     );
   }
 
-  const scoring = scoringBaseForFormat(formatSlug);
+  const scoring = await scoringBaseForFormat(supabase, formatSlug);
   const pulseSettings = await loadPowerPulseSettings(supabase);
   // A defender is projected only while the IDP switch is on, like every other
   // IDP surface (plan R-25). Off, he takes the offensive path, which returns no

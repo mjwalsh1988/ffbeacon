@@ -232,9 +232,11 @@ export function PulseRankingsTable({
                     <td className="px-3 py-2.5 text-center">
                       <span
                         className={`inline-flex h-11 w-11 items-center justify-center rounded-card border font-mono text-base font-extrabold tabular-nums ${tone.text} ${tone.ring} ${tone.glow}`}
-                        aria-label={`Power Pulse ${team.powerPulse} out of 99`}
                       >
+                        {/* Real text plus the missing words sr-only in the
+                            same element: an aria-label on a span is dropped. */}
                         {team.powerPulse}
+                        <span className="sr-only"> out of 99</span>
                       </span>
                     </td>
 
@@ -285,7 +287,9 @@ export function PulseRankingsTable({
                           setExpanded(isOpen ? null : team.rosterRowId)
                         }
                         aria-expanded={isOpen}
-                        aria-controls={detailId}
+                        // The detail row exists only while open, so point at
+                        // it only then; a reference to a missing id is broken.
+                        aria-controls={isOpen ? detailId : undefined}
                         aria-label={`${isOpen ? "Hide" : "Show"} the full breakdown for ${team.teamName}`}
                         className="hidden h-9 w-9 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan md:inline-flex"
                       >
@@ -359,9 +363,10 @@ export function PulseRankingsTable({
               </div>
               <span
                 className={`shrink-0 rounded-card border px-3 py-2 font-mono text-xl font-extrabold tabular-nums ${scoreTone(sheetTeam.powerPulse).text} ${scoreTone(sheetTeam.powerPulse).ring}`}
-                aria-label={`Power Pulse ${sheetTeam.powerPulse} out of 99`}
               >
+                <span className="sr-only">Power Pulse </span>
                 {sheetTeam.powerPulse}
+                <span className="sr-only"> out of 99</span>
               </span>
               {/* The first focusable element in the sheet, so it can be
                   dismissed without tabbing through the whole breakdown. Esc and

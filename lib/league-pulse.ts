@@ -4,13 +4,13 @@ import {
   getAllSleeperTransactions,
   getNflState,
   getSleeperDraft,
-  getSleeperLeague,
-  getSleeperLeagueDrafts,
-  getSleeperLeagueUsers,
+  getSleeperLeagueDraftsOrNull,
+  getSleeperLeagueUsersOrNull,
   getSleeperLosersBracket,
-  getSleeperRosters,
-  getSleeperTradedPicks,
+  getSleeperRostersOrNull,
+  getSleeperTradedPicksOrNull,
   getSleeperWinnersBracket,
+  lookupSleeperLeague,
   type SleeperDraft,
   type SleeperLeague,
   type SleeperRoster,
@@ -18,7 +18,19 @@ import {
   type SleeperTransaction,
   type SleeperTradedPick,
 } from "@/lib/sleeper";
-import { resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
+import { MAX_MATCHUP_WEEK, resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
+import {
+  changedSince,
+  idList,
+  pickOwnershipKeys,
+  rostersChanged,
+  type RosterShape,
+} from "@/lib/league-roster-change";
+import {
+  clearNotFoundSighting,
+  handleSleeperLeagueNotFound,
+  LEAGUE_FETCH_FAILED_ERROR,
+} from "@/lib/league-removal";
 import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
@@ -70,7 +82,33 @@ export type LeaguePulseResult =
       cached: boolean;
       counts: { rosters: number; users: number; transactions: number };
     }
-  | { ok: false; error: string; sleeperLeagueId: string };
+  | LeaguePulseFailure;
+
+/**
+ * Why a pulse could not produce a league.
+ *
+ * - `not_found`: Sleeper has definitively said this league does not exist and
+ *   we hold no copy of it (never had one, or it was just removed after a
+ *   confirmed second answer; see lib/league-removal.ts). A page should render
+ *   its not-found state for this, not a retry state.
+ * - `not_found_unconfirmed`: Sleeper said not found, but we still hold the
+ *   league and are waiting for the second answer before deleting it.
+ * - `sleeper_failed`: a Sleeper request did not come back. Says nothing about
+ *   the league; retry.
+ * - `error`: our own write failed.
+ */
+export type LeaguePulseFailureReason =
+  | "not_found"
+  | "not_found_unconfirmed"
+  | "sleeper_failed"
+  | "error";
+
+export type LeaguePulseFailure = {
+  ok: false;
+  error: string;
+  sleeperLeagueId: string;
+  reason?: LeaguePulseFailureReason;
+};
 
 /**
  * The `leagues` row every deep view renders its header from.
@@ -129,8 +167,23 @@ export type LeaguePulseCoreResult =
        * assume.
        */
       league: LeagueCoreRow | null;
+      /**
+       * Set when Sleeper answered for the league but not for one of its
+       * required children (rosters, members, traded picks, drafts). Nothing
+       * stored was overwritten, the league is marked `error` rather than
+       * `complete` so the next view retries, and `cached` is true because
+       * what the caller will render is the stored copy. Callers that exist to
+       * capture fresh data (the footprint job, the pulse script) treat this as
+       * a failure; a page renders the stored rows.
+       */
+      syncFailed?: string;
+      /**
+       * `leagues.rosters_changed_at` after this pass: stamped when the rosters
+       * Sleeper returned differ from the stored ones. Null when unknown.
+       */
+      rostersChangedAt?: string | null;
     }
-  | { ok: false; error: string; sleeperLeagueId: string };
+  | LeaguePulseFailure;
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -184,12 +237,21 @@ type ServiceClient = SupabaseClient<Database>;
  * anyway, so the fix for a league in that state is the manual
  * `npm run calculate:power-rankings -- --sleeper-league-id <id>`.
  *
+ * A ROSTER CHANGE IS STALENESS TOO. `rostersChangedAt` is when the league sync
+ * last saw the rosters differ from what it had stored (players, reserve, taxi,
+ * pick ownership; lib/league-roster-change.ts). A cache row generated before it
+ * ranks rosters that no longer exist, so it recomputes on the pass that saw the
+ * change instead of up to a day later. A league whose rosters did not change
+ * recomputes exactly as often as before. The season freeze above still wins:
+ * a finished league's final rankings are the answer whatever moves after.
+ *
  * Exported for its own test, which is the only caller outside this file.
  */
 export async function powerRankingsAreStale(
   supabase: ServiceClient,
   leagueRowId: string,
   seasonComplete: boolean,
+  rostersChangedAt: string | null = null,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("league_power_rankings_cache")
@@ -200,7 +262,35 @@ export async function powerRankingsAreStale(
     .maybeSingle();
   if (error || !data?.generated_at) return true;
   if (seasonComplete) return false;
+  if (changedSince(rostersChangedAt, data.generated_at)) return true;
   return Date.now() - new Date(data.generated_at).getTime() >= LEAGUE_POWER_RANKINGS_TTL_MS;
+}
+
+/**
+ * `leagues.rosters_changed_at` arrives with migration 0316 and is not in the
+ * generated types until they are regenerated after it is applied. Its reads and
+ * writes go through this untyped view and degrade to "no change on record" on
+ * any error, so this code is safe to deploy either side of the migration.
+ */
+function untypedLeagues(supabase: ServiceClient) {
+  return (supabase as unknown as SupabaseClient).from("leagues");
+}
+
+async function readRostersChangedAt(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await untypedLeagues(supabase)
+      .select("rosters_changed_at")
+      .eq("id", leagueRowId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const value = (data as { rosters_changed_at?: unknown }).rosters_changed_at;
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -237,6 +327,11 @@ export async function pulseLeague(
     counts: true,
   });
   if (!core.ok) return core;
+  // The script and the admin refresh exist to fetch fresh data, so a sync that
+  // could only serve the stored copy is a failure to them, said out loud.
+  if (core.syncFailed) {
+    return { ok: false, error: core.syncFailed, sleeperLeagueId, reason: "sleeper_failed" };
+  }
 
   const derived = await pulseLeagueDerived(supabase, core.leagueRowId, {
     force: options.force,
@@ -343,22 +438,59 @@ export async function pulseLeagueCore(
     // It costs nothing on the clock. The read runs against our own database
     // while the Sleeper round trip beside it is the slow half of this function,
     // so the pair finishes when `getSleeperLeague` does.
-    const [league, priorSnapshot] = await Promise.all([
-      getSleeperLeague(sleeperLeagueId),
+    const [lookup, priorSnapshot] = await Promise.all([
+      lookupSleeperLeague(sleeperLeagueId),
       captureLeagueSnapshot(supabase, existing),
     ]);
-    if (!league) {
+    if (lookup.status === "not_found") {
+      // Sleeper itself answered that this league does not exist. Evidence, but
+      // one answer is never enough to delete anything: lib/league-removal.ts
+      // records the first sighting and deletes only on a second one at least
+      // an hour later with no successful sync in between.
+      if (!existing) {
+        return {
+          ok: false as const,
+          error: "Sleeper league not found",
+          sleeperLeagueId,
+          reason: "not_found" as const,
+        };
+      }
+      const handled = await handleSleeperLeagueNotFound(supabase, {
+        id: existing.id,
+        sleeper_league_id: existing.sleeper_league_id,
+      });
+      return {
+        ok: false as const,
+        error: "Sleeper league not found",
+        sleeperLeagueId,
+        reason: handled.outcome === "deleted" ? ("not_found" as const) : ("not_found_unconfirmed" as const),
+      };
+    }
+    if (lookup.status === "failed") {
+      // The request did not come back. That says nothing about the league.
       if (existing) {
         await supabase
           .from("leagues")
           .update({
             pulse_status: "error",
-            pulse_error: "Sleeper league fetch returned null",
+            pulse_error: LEAGUE_FETCH_FAILED_ERROR,
             updated_at: new Date().toISOString(),
           })
           .eq("id", existing.id);
       }
-      return { ok: false as const, error: "Sleeper league not found", sleeperLeagueId };
+      return {
+        ok: false as const,
+        error: "Sleeper league fetch failed",
+        sleeperLeagueId,
+        reason: "sleeper_failed" as const,
+      };
+    }
+    const league = lookup.league;
+    // Sleeper just served the league, so any earlier not-found sighting is
+    // void. Only a league whose last sync ended in an error can carry one, so
+    // every healthy league skips this write.
+    if (existing?.pulse_status === "error") {
+      await clearNotFoundSighting(supabase, existing.id);
     }
 
     const formatSlug = deriveFormatSlug(league);
@@ -412,32 +544,108 @@ export async function pulseLeagueCore(
     }
     const leagueRowId = upserted.id;
 
-    const [rosters, users, tradedPicks, draftSummaries] = await Promise.all([
-      getSleeperRosters(sleeperLeagueId),
-      getSleeperLeagueUsers(sleeperLeagueId),
-      getSleeperTradedPicks(sleeperLeagueId),
-      getSleeperLeagueDrafts(sleeperLeagueId),
-    ]);
+    // Every child fetch distinguishes "Sleeper did not answer" (null) from
+    // "Sleeper answered with nothing" ([]). The stored roster shapes are read
+    // beside them, before anything is written, so the change check below
+    // compares Sleeper's answer with what we held rather than with itself.
+    const [rosterResult, userResult, tradedPickResult, draftSummaryResult, storedShapes] =
+      await Promise.all([
+        getSleeperRostersOrNull(sleeperLeagueId),
+        getSleeperLeagueUsersOrNull(sleeperLeagueId),
+        getSleeperTradedPicksOrNull(sleeperLeagueId),
+        getSleeperLeagueDraftsOrNull(sleeperLeagueId),
+        readStoredRosterShapes(supabase, leagueRowId),
+      ]);
 
     // Fan out one /draft/{id} fetch per league draft. Sleeper's /league/{id}/drafts
     // summary does NOT include `slot_to_roster_id`, that lives on the per-draft
     // endpoint. We need it to render slot labels like "1.04" on rosters and trades.
-    const draftDetails = (
-      await Promise.all(
-        (draftSummaries ?? [])
-          .filter((d): d is SleeperDraft => !!d?.draft_id)
-          .map(async (d) => {
-            const detail = await getSleeperDraft(d.draft_id);
-            return detail ?? d;
-          }),
-      )
-    ).filter((d): d is SleeperDraft => !!d?.draft_id);
+    //
+    // A detail that did not come back is a failure, NOT a reason to fall back
+    // to the summary: the summary has no `slot_to_roster_id`, so writing it
+    // would store `{}` over a real slot map and strip every pick label.
+    const summaries = (draftSummaryResult ?? []).filter(
+      (d): d is SleeperDraft => !!d?.draft_id,
+    );
+    const detailResults = await Promise.all(summaries.map((d) => getSleeperDraft(d.draft_id)));
+    const draftDetails = detailResults.filter((d): d is SleeperDraft => !!d?.draft_id);
 
-    await Promise.all([
+    const failedFetches: string[] = [];
+    if (rosterResult === null) failedFetches.push("rosters");
+    if (userResult === null) failedFetches.push("users");
+    if (tradedPickResult === null) failedFetches.push("traded_picks");
+    if (draftSummaryResult === null) failedFetches.push("drafts");
+    const failedDetails = summaries.filter((_, i) => !detailResults[i]?.draft_id);
+    if (failedDetails.length > 0) {
+      failedFetches.push(`draft ${failedDetails.map((d) => d.draft_id).join(", ")}`);
+    }
+
+    if (failedFetches.length > 0) {
+      // A FAILED REQUEST IS NOT AN EMPTY LEAGUE. Writing anything from a
+      // partial answer is how a timeout used to rebuild every roster's picks
+      // without the traded ones, or store `{}` over a real draft slot map. So
+      // nothing below is written, the league is marked `error` rather than
+      // `complete`, and the next view retries.
+      const syncFailed = `Sleeper did not answer for: ${failedFetches.join("; ")}`;
+      const failedAt = new Date().toISOString();
+      await supabase
+        .from("leagues")
+        .update({ pulse_status: "error", pulse_error: syncFailed, updated_at: failedAt })
+        .eq("id", leagueRowId);
+      console.warn(`[pulseLeague] core ${sleeperLeagueId}: ${syncFailed}`);
+      if (!existing) {
+        // A first sync has no stored copy to fall back on.
+        return {
+          ok: false as const,
+          error: syncFailed,
+          sleeperLeagueId,
+          reason: "sleeper_failed" as const,
+        };
+      }
+      return {
+        ok: true as const,
+        leagueRowId,
+        sleeperLeagueId,
+        season,
+        cached: true,
+        counts: { rosters: 0, users: 0 },
+        league: {
+          ...(upserted as unknown as LeagueCoreRow),
+          last_pulsed_at: existing.last_pulsed_at,
+          pulse_status: "error",
+          pulse_error: syncFailed,
+        },
+        syncFailed,
+      };
+    }
+
+    const rosters = rosterResult as SleeperRoster[];
+    const users = userResult as SleeperLeagueUser[];
+    const tradedPicks = tradedPickResult as SleeperTradedPick[];
+
+    const [nextShapes] = await Promise.all([
       upsertRosters(supabase, leagueRowId, rosters, tradedPicks, draftDetails),
       upsertLeagueUsers(supabase, leagueRowId, users),
       upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
     ]);
+
+    // Did the rosters move? Stamped BEFORE the pulse stamp below, so a derived
+    // pass that starts the moment the league reads fresh already sees it. A
+    // failed read of the stored rosters counts as a change: one extra
+    // recompute is cheap, and a missed one serves stale rankings for a day.
+    let rostersChangedAt: string | null = null;
+    if (storedShapes === null || rostersChanged(storedShapes, nextShapes)) {
+      rostersChangedAt = new Date().toISOString();
+      const { error: changedErr } = await untypedLeagues(supabase)
+        .update({ rosters_changed_at: rostersChangedAt })
+        .eq("id", leagueRowId);
+      if (changedErr) {
+        console.warn(
+          `[pulseLeague] could not stamp rosters_changed_at for ${leagueRowId}: ${changedErr.message}`,
+        );
+        rostersChangedAt = null;
+      }
+    }
 
     // Everything the page needs is on disk. Now the league counts as pulsed.
     const pulsedAt = new Date().toISOString();
@@ -497,18 +705,100 @@ export async function pulseLeagueCore(
         pulse_status: "complete",
         pulse_error: null,
       },
+      rostersChangedAt,
     };
   });
 }
 
 /**
+ * The stored rosters in the shape the change check compares, or null when the
+ * read failed (which the caller treats as a change).
+ */
+async function readStoredRosterShapes(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<RosterShape[] | null> {
+  const { data, error } = await supabase
+    .from("rosters")
+    .select("sleeper_roster_id, player_ids, reserve_ids, taxi_ids, draft_pick_assets")
+    .eq("league_id", leagueRowId);
+  if (error || !Array.isArray(data)) return null;
+  return data.map((r) => ({
+    sleeperRosterId: Number(r.sleeper_roster_id),
+    playerIds: idList(r.player_ids),
+    reserveIds: idList(r.reserve_ids),
+    taxiIds: idList(r.taxi_ids),
+    picks: pickOwnershipKeys(r.draft_pick_assets),
+  }));
+}
+
+/**
+ * One in-flight shared derived pass per league. See pulseLeagueDerived.
+ *
+ * `syncs` says the pass pulls transaction history from Sleeper (the caller
+ * resynced the core, or forced); `force` says it bypasses every gate. A caller
+ * may join a pass that does at least what it needs, and never one that does
+ * less.
+ */
+type SharedDerivedPass = { promise: Promise<void>; syncs: boolean; force: boolean };
+const sharedDerivedPasses = new Map<string, SharedDerivedPass>();
+
+/**
+ * Join the league's in-flight shared pass when it covers what this caller
+ * needs, otherwise start one.
+ *
+ * A pass that does LESS than asked (it is not pulling transactions and this
+ * caller resynced, or it is not forced and this caller is) is waited out and
+ * then followed, rather than run beside. Two passes on one league at once race
+ * each other on the same tables, which is the thing this exists to stop; and
+ * joining one that skips the transaction pull would silently drop the pull the
+ * second caller was owed. Exported for its own test.
+ */
+export function joinSharedDerivedPass(
+  leagueRowId: string,
+  wants: { syncs: boolean; force: boolean },
+  run: (wants: { syncs: boolean; force: boolean }) => Promise<void>,
+): Promise<void> {
+  const inFlight = sharedDerivedPasses.get(leagueRowId);
+  if (inFlight) {
+    if ((inFlight.syncs || !wants.syncs) && (inFlight.force || !wants.force)) {
+      return inFlight.promise;
+    }
+    const next = () => joinSharedDerivedPass(leagueRowId, wants, run);
+    return inFlight.promise.then(next, next);
+  }
+  const pass: SharedDerivedPass = { promise: Promise.resolve(), ...wants };
+  pass.promise = run(wants).finally(() => {
+    if (sharedDerivedPasses.get(leagueRowId) === pass) sharedDerivedPasses.delete(leagueRowId);
+  });
+  sharedDerivedPasses.set(leagueRowId, pass);
+  return pass.promise;
+}
+
+/**
  * Everything downstream of the league itself: transaction history, trade-value
- * power rankings, and Power Pulse. None of it blocks the page header, and none
- * of it is allowed to fail the load.
+ * power rankings, Power Pulse, and (opt-in) Positional WAR and the Manager
+ * Ledger. None of it blocks the page header, and none of it is allowed to fail
+ * the load.
  *
  * `resynced` says the core actually contacted Sleeper, which is the signal to
  * pull transactions again. Within the cache window we leave the stored history
  * alone, matching what the single-pass version did.
+ *
+ * CONCURRENT CALLERS FOR ONE LEAGUE SHARE THE WORK. The hover warm-up and the
+ * page it warms routinely overlap, and they pass different option flags (the
+ * warm-up runs with the defaults, a page turns Positional WAR off). Keying the
+ * whole pass on those flags gave each its own key, so both ran the capture set,
+ * the rankings and Power Pulse side by side. Now the pass is split:
+ *
+ * - The SHARED half (capture set, activity projection, trade-value rankings,
+ *   Power Pulse) is keyed on the league alone, through joinSharedDerivedPass,
+ *   whatever optional pieces each caller wants.
+ * - The OPTIONAL pieces run beside it, each coalesced per league (and force) on
+ *   its own key, so a caller that wants the curve and one that does not still
+ *   share the curve's single run between whoever asked for it.
+ *
+ * `includeManagerLedger` still defaults to false; see the default below.
  */
 export async function pulseLeagueDerived(
   supabase: ServiceClient,
@@ -533,11 +823,88 @@ export async function pulseLeagueDerived(
     // every new one would have had to remember.
     includeManagerLedger = false,
   } = options;
-  const key = `derived:${leagueRowId}:${force}:${includePositionalWar}:${includeManagerLedger}`;
-  return coalesce(key, async () => {
-    const startedAt = Date.now();
+  const startedAt = Date.now();
+  const timings: string[] = [];
+  const timed = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
+    const at = Date.now();
+    try {
+      return await run();
+    } finally {
+      timings.push(`${label}=${Date.now() - at}ms`);
+    }
+  };
 
-    const { data: league } = await supabase
+  await Promise.all([
+    timed("shared", () =>
+      joinSharedDerivedPass(leagueRowId, { syncs: force || resynced, force }, (wants) =>
+        runSharedDerivedPass(supabase, leagueRowId, wants),
+      ),
+    ),
+
+    // Positional WAR: league-wide positional scarcity. Deliberately NOT
+    // sequenced after Power Pulse; it reads no Power Pulse output (it reads no
+    // roster at all), and it owns its own failure, so there is no ordering
+    // constraint between them.
+    //
+    // `includePositionalWar: false` exists because of WHO AWAITS THIS. A page
+    // does not call pulseLeagueDerived from the Suspense boundary that shows
+    // the curve; it calls it from the one that shows the RANKINGS TABLE. So
+    // every millisecond this stage takes was being spent holding up the
+    // page's primary content, and a cold fingerprint costs about ten seconds
+    // of universe read. Pages therefore pass false here and let the curve's
+    // OWN boundary (components/league-war/positional-war-section.tsx) await
+    // the compute, which is what its skeleton was always for. Scripts and the
+    // refresh endpoint keep the default, because they have no boundaries to
+    // protect and want one call that does everything.
+    includePositionalWar
+      ? timed("positional-war", () =>
+          coalesce(`positional-war:${leagueRowId}:${force}`, () =>
+            refreshPositionalWar(supabase, leagueRowId, { force }),
+          ),
+        )
+      : Promise.resolve(),
+
+    // Manager Ledger: how well each manager has played the roster they have.
+    // Reads only rows already stored (settled matchups, transactions, draft
+    // selections), makes no Sleeper request, and owns its own failure like
+    // every other stage here. Only ever true when a caller asks for it; see
+    // the default above for why the polarity is inverted.
+    includeManagerLedger
+      ? timed("manager-ledger", () =>
+          coalesce(`manager-ledger:${leagueRowId}:${force}`, () =>
+            refreshManagerLedger(supabase, leagueRowId, { force }),
+          ),
+        )
+      : Promise.resolve(),
+  ]);
+
+  const { count } = await supabase
+    .from("league_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("league_id", leagueRowId);
+
+  console.log(
+    `[pulseLeague] derived ${leagueRowId} in ${Date.now() - startedAt}ms (${timings.join(", ")})`,
+  );
+
+  return { transactions: count ?? 0 };
+}
+
+/**
+ * The shared half of the derived pass: the capture set and activity
+ * projection, the trade-value rankings, and Power Pulse. Run through
+ * joinSharedDerivedPass, never directly, so concurrent callers share it.
+ */
+async function runSharedDerivedPass(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  wants: { syncs: boolean; force: boolean },
+): Promise<void> {
+  const { syncs, force } = wants;
+  const startedAt = Date.now();
+
+  const [{ data: league }, rostersChangedAt] = await Promise.all([
+    supabase
       .from("leagues")
       .select(
         // `leg` is Sleeper's own current week for this league. Projected out of
@@ -551,163 +918,140 @@ export async function pulseLeagueDerived(
         "id, sleeper_league_id, season, status, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
       )
       .eq("id", leagueRowId)
-      .maybeSingle();
-    if (!league) return { transactions: 0 };
+      .maybeSingle(),
+    // When the core last saw the rosters change. Both gates below compare it
+    // with their cache, so a trade or a waiver claim is reflected on the pass
+    // that saw it. Read on its own so a missing column (before migration 0316)
+    // degrades to "no change on record" instead of failing the select above.
+    readRostersChangedAt(supabase, leagueRowId),
+  ]);
+  if (!league) return;
 
-    const season = Number(league.season ?? 0);
-    const legValue = Number(league.leg);
-    const currentLeg = Number.isFinite(legValue) && legValue > 0 ? legValue : null;
-    // Per-stage timings. Cheap, and the only way to aim the next round of
-    // tuning at what is actually slow rather than at what looks slow.
-    const timings: string[] = [];
-    const timed = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
-      const at = Date.now();
-      try {
-        return await run();
-      } finally {
-        timings.push(`${label}=${Date.now() - at}ms`);
-      }
-    };
+  const season = Number(league.season ?? 0);
+  const legValue = Number(league.leg);
+  const currentLeg = Number.isFinite(legValue) && legValue > 0 ? legValue : null;
+  // Per-stage timings. Cheap, and the only way to aim the next round of
+  // tuning at what is actually slow rather than at what looks slow.
+  const timings: string[] = [];
+  const timed = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
+    const at = Date.now();
+    try {
+      return await run();
+    } finally {
+      timings.push(`${label}=${Date.now() - at}ms`);
+    }
+  };
 
-    // The stages touch different tables and, with one exception, none reads
-    // another's output, so they run together rather than in a queue. Each owns
-    // its own failure: a thrown calculation must not take the others down, and
-    // none of them may fail the page.
-    //
-    // THE ONE EXCEPTION IS THE PAIR BELOW. The activity projector reads the
-    // transactions the sync above it writes, so those two are sequential inside
-    // a single member of this list rather than two siblings of it. As siblings
-    // they raced, and the race had a visible symptom: a reader opening a cold
-    // league saw a log with no moves in it, because the projector read the
-    // table while the sync was still filling it.
-    await Promise.all([
-      (async () => {
-        if (force || resynced) {
-          await timed("capture-set", () =>
-            captureLeagueRawData(
-              supabase,
-              {
-                leagueRowId,
-                sleeperLeagueId: league.sleeper_league_id,
-                season,
-                // Already on hand from the select above; passing it down
-                // saves captureLeagueRawData its own primary-key select.
-                meta: {
-                  status: league.status ?? null,
-                  leg: legValue,
-                  playoffWeekStart: Number(league.playoff_week_start),
-                  lastScoredLeg: Number(league.last_scored_leg),
-                },
+  // The stages touch different tables and, with one exception, none reads
+  // another's output, so they run together rather than in a queue. Each owns
+  // its own failure: a thrown calculation must not take the others down, and
+  // none of them may fail the page.
+  //
+  // THE ONE EXCEPTION IS THE PAIR BELOW. The activity projector reads the
+  // transactions the sync above it writes, so those two are sequential inside
+  // a single member of this list rather than two siblings of it. As siblings
+  // they raced, and the race had a visible symptom: a reader opening a cold
+  // league saw a log with no moves in it, because the projector read the
+  // table while the sync was still filling it.
+  await Promise.all([
+    (async () => {
+      if (syncs) {
+        await timed("capture-set", () =>
+          captureLeagueRawData(
+            supabase,
+            {
+              leagueRowId,
+              sleeperLeagueId: league.sleeper_league_id,
+              season,
+              // Already on hand from the select above; passing it down
+              // saves captureLeagueRawData its own primary-key select.
+              meta: {
+                status: league.status ?? null,
+                leg: legValue,
+                playoffWeekStart: Number(league.playoff_week_start),
+                lastScoredLeg: Number(league.last_scored_leg),
               },
-              { force, includeMatchups: false },
-            ),
+            },
+            { force, includeMatchups: false },
+          ),
+        );
+      }
+
+      // Turning transactions and played matchups into feed entries.
+      //
+      // Deliberately NOT gated on `syncs` like the sync above it, because
+      // this reads OUR tables rather than Sleeper's: a league whose 60-minute
+      // cache is warm still needs its back history projected the first time
+      // anyone opens it after this shipped. The gates inside make a repeat run
+      // a pair of indexed reads that write nothing.
+      try {
+        const projected = await timed("activity", () =>
+          projectLeagueActivity(supabase, leagueRowId, season, currentLeg),
+        );
+        if (projected.transactions > 0 || projected.results > 0) {
+          console.log(
+            `[pulseLeague] activity projected for ${leagueRowId} (transactions=${projected.transactions}, results=${projected.results})`,
           );
         }
+      } catch (err) {
+        console.warn(
+          `[pulseLeague] activity projection threw for league ${leagueRowId}:`,
+          (err as Error).message,
+        );
+      }
+    })(),
 
-        // Turning transactions and played matchups into feed entries.
-        //
-        // Deliberately NOT gated on `force || resynced` like the sync above it,
-        // because this reads OUR tables rather than Sleeper's: a league whose
-        // 60-minute cache is warm still needs its back history projected the
-        // first time anyone opens it after this shipped. The gates inside make
-        // a repeat run a pair of indexed reads that write nothing.
-        try {
-          const projected = await timed("activity", () =>
-            projectLeagueActivity(supabase, leagueRowId, season, currentLeg),
-          );
-          if (projected.transactions > 0 || projected.results > 0) {
-            console.log(
-              `[pulseLeague] activity projected for ${leagueRowId} (transactions=${projected.transactions}, results=${projected.results})`,
-            );
-          }
-        } catch (err) {
+    // Power rankings track the nightly player-value sync, not the league TTL,
+    // so they recompute at most once per 24h, plus once after a roster change
+    // the core recorded. A failure is non-fatal; the cache row can be
+    // backfilled by npm run calculate:power-rankings.
+    (async () => {
+      const seasonComplete = (league.status ?? "").toLowerCase() === "complete";
+      if (
+        !force &&
+        !(await powerRankingsAreStale(supabase, leagueRowId, seasonComplete, rostersChangedAt))
+      ) {
+        return;
+      }
+      try {
+        const calcResult = await timed("rankings", () =>
+          calculateLeaguePowerRankings(supabase, leagueRowId),
+        );
+        if (!calcResult.ok) {
           console.warn(
-            `[pulseLeague] activity projection threw for league ${leagueRowId}:`,
-            (err as Error).message,
+            `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
           );
         }
-      })(),
+      } catch (err) {
+        console.warn(
+          `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
+          (err as Error).message,
+        );
+      }
+    })(),
 
-      // Power rankings track the nightly player-value sync, not the league TTL,
-      // so they recompute at most once per 24h. A failure is non-fatal; the
-      // cache row can be backfilled by npm run calculate:power-rankings.
-      (async () => {
-        const seasonComplete = (league.status ?? "").toLowerCase() === "complete";
-        if (
-          !force &&
-          !(await powerRankingsAreStale(supabase, leagueRowId, seasonComplete))
-        ) {
-          return;
-        }
-        try {
-          const calcResult = await timed("rankings", () =>
-            calculateLeaguePowerRankings(supabase, leagueRowId),
-          );
-          if (!calcResult.ok) {
-            console.warn(
-              `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
-            );
-          }
-        } catch (err) {
-          console.warn(
-            `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
-            (err as Error).message,
-          );
-        }
-      })(),
+    // Power Pulse: expected competitive performance under the league's own
+    // scoring. Independent of the value source, so no format/source loop.
+    timed("power-pulse", () =>
+      refreshPowerPulse(supabase, leagueRowId, { force, rostersChangedAt }),
+    ),
+  ]);
 
-      // Power Pulse: expected competitive performance under the league's own
-      // scoring. Independent of the value source, so no format/source loop.
-      timed("power-pulse", () => refreshPowerPulse(supabase, leagueRowId, { force })),
+  console.log(
+    `[pulseLeague] shared derived ${league.sleeper_league_id} in ${Date.now() - startedAt}ms (${
+      timings.join(", ") || "nothing to do"
+    })`,
+  );
+}
 
-      // Positional WAR: league-wide positional scarcity. Deliberately NOT
-      // sequenced after Power Pulse above; it reads no Power Pulse output (it
-      // reads no roster at all), and each stage already owns its own
-      // failure, so there is no ordering constraint between them.
-      //
-      // `includePositionalWar: false` exists because of WHO AWAITS THIS. A page
-      // does not call pulseLeagueDerived from the Suspense boundary that shows
-      // the curve; it calls it from the one that shows the RANKINGS TABLE. So
-      // every millisecond this stage takes was being spent holding up the
-      // page's primary content, and a cold fingerprint costs about ten seconds
-      // of universe read. The stage itself is correctly parallel with the other
-      // three; the coupling was at the call site, one boundary up.
-      //
-      // Pages therefore pass false here and let the curve's OWN boundary
-      // (components/league-war/positional-war-section.tsx) await the compute,
-      // which is what its skeleton was always for. Scripts and the refresh
-      // endpoint keep the default, because they have no boundaries to protect
-      // and want one call that does everything.
-      includePositionalWar
-        ? timed("positional-war", () => refreshPositionalWar(supabase, leagueRowId, { force }))
-        : Promise.resolve(),
-
-      // Manager Ledger: how well each manager has played the roster they have.
-      // Reads only rows already stored (settled matchups, transactions, draft
-      // selections), makes no Sleeper request, and owns its own failure like
-      // every other stage here.
-      //
-      // Only ever true when a caller asks for it: the Decisions page's own
-      // boundary, `npm run pulse:league`, and the admin refresh endpoint. See
-      // the default above for why the polarity is inverted.
-      includeManagerLedger
-        ? timed("manager-ledger", () => refreshManagerLedger(supabase, leagueRowId, { force }))
-        : Promise.resolve(),
-    ]);
-
-    const { count } = await supabase
-      .from("league_transactions")
-      .select("id", { count: "exact", head: true })
-      .eq("league_id", leagueRowId);
-
-    console.log(
-      `[pulseLeague] derived ${league.sleeper_league_id} in ${Date.now() - startedAt}ms (${
-        timings.join(", ") || "nothing to do"
-      })`,
-    );
-
-    return { transactions: count ?? 0 };
-  });
+/**
+ * The week a league's playoff bracket starts, or null when it runs none.
+ * Sleeper writes `playoff_week_start: 0` for a league with playoffs off (every
+ * chopped league does), and anything that is not a positive integer is the
+ * same answer: there is no bracket to capture.
+ */
+export function bracketStartWeekOf(playoffWeekStart: number): number | null {
+  return Number.isInteger(playoffWeekStart) && playoffWeekStart > 0 ? playoffWeekStart : null;
 }
 
 export type CaptureRawOptions = {
@@ -801,9 +1145,16 @@ export async function captureLeagueRawData(
     lastScoredLeg = Number(row?.last_scored_leg);
   }
   const seasonComplete = status === "complete" || season < Number(currentNflSeason());
+  // A league with `playoff_week_start` 0 or missing runs no bracket at all
+  // (chopped leagues, playoffs switched off). Reading 0 as a real week made
+  // `leg >= 0` true from week 1, so the bracket stage ran, found nothing,
+  // was marked failed, and capture_completed_at was never stamped for any of
+  // them. For those leagues the bracket stage is not applicable, and it stays
+  // that way even once the season is complete.
+  const bracketStartWeek = bracketStartWeekOf(playoffWeekStart);
   const playoffsStarted =
-    seasonComplete ||
-    (Number.isFinite(leg) && Number.isFinite(playoffWeekStart) && leg >= playoffWeekStart);
+    bracketStartWeek !== null &&
+    (seasonComplete || (Number.isFinite(leg) && leg >= bracketStartWeek));
 
   try {
     await syncTransactions(
@@ -840,10 +1191,14 @@ export async function captureLeagueRawData(
     // this throws, the same reasoning that wraps every stage above it.
     try {
       const nflState = await getNflState();
+      // With no bracket the regular season is the whole season, so the week
+      // the postseason clamps to is past the last matchup week, not week 15
+      // (and not 0, which resolveCurrentWeek floors to week 1 and would read
+      // as "nothing played yet").
       const currentWeek = resolveCurrentWeek(
         nflState,
         season,
-        Number.isFinite(playoffWeekStart) ? playoffWeekStart : 15,
+        bracketStartWeek ?? MAX_MATCHUP_WEEK + 1,
       );
       const sync = await syncLeagueMatchups(supabase, leagueRowId, sleeperLeagueId, season, currentWeek, {
         force: options.force,
@@ -941,6 +1296,11 @@ export async function pulseLeagueFootprint(
   // zeroes that come back are the documented contract, not a measurement.
   const core = await pulseLeagueCore(supabase, sleeperLeagueId, options);
   if (!core.ok) return core;
+  // A footprint job exists to capture fresh data, so serving the stored copy
+  // because a Sleeper request failed is a failed job, and the worker retries it.
+  if (core.syncFailed) {
+    return { ok: false, error: core.syncFailed, sleeperLeagueId, reason: "sleeper_failed" };
+  }
 
   // A cache hit means core made no Sleeper request, which is usually this
   // function's own signal to skip Sleeper too, the same `force || resynced`
@@ -1148,12 +1508,12 @@ export function orphanRowIds(
  * were sixteen. Power Pulse simulated a 16-team bracket against a 12-team
  * schedule and stored playoff odds for every real manager off the back of it.
  *
- * ABSOLUTE RULE: an empty payload is never evidence about a league. lib/sleeper.ts
- * collapses a failed request into `[]`, so "Sleeper has no rosters" and "Sleeper
- * did not answer" arrive here as the same value, and pruning against an empty
- * payload would empty a healthy league on one timeout. The caller already
- * returns early on a zero-length payload; the length check below is the second
- * lock on that same door and must not be removed.
+ * ABSOLUTE RULE: an empty payload is never evidence about a league. The core now
+ * fetches through the OrNull variants in lib/sleeper.ts and writes nothing at
+ * all when a request failed, but the plain variants still collapse a failure
+ * into `[]`, and pruning against an empty payload would empty a healthy league
+ * on one timeout. The caller also returns early on a zero-length payload; the
+ * length check below is the last lock on that same door and must not be removed.
  *
  * A failed prune is logged, not thrown. A stale row is a wrong number on a page;
  * a thrown sync is no page at all.
@@ -1261,8 +1621,8 @@ async function upsertRosters(
   rosters: SleeperRoster[],
   tradedPicks: SleeperTradedPick[],
   draftDetails: SleeperDraft[],
-): Promise<void> {
-  if (rosters.length === 0) return;
+): Promise<RosterShape[]> {
+  if (rosters.length === 0) return [];
 
   // Build a map of current pick ownership by (season, round, original_roster_id).
   // Sleeper's /traded_picks returns the CURRENT state per traded pick (one row
@@ -1332,6 +1692,15 @@ async function upsertRosters(
     leagueRowId,
     rosters.map((r) => r.roster_id),
   );
+
+  // What was just written, in the shape the roster-change check compares.
+  return rows.map((row) => ({
+    sleeperRosterId: Number(row.sleeper_roster_id),
+    playerIds: idList(row.player_ids),
+    reserveIds: idList(row.reserve_ids),
+    taxiIds: idList(row.taxi_ids),
+    picks: pickOwnershipKeys(row.draft_pick_assets),
+  }));
 }
 
 async function upsertLeagueUsers(

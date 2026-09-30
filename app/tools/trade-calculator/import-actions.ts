@@ -248,15 +248,15 @@ const IMPORT_ANALYZE_MAX = 8;
  * Fails closed. A limit we cannot evaluate is not a limit that passes.
  *
  * WHY THIS EXISTS ON A SIGNED-IN-ONLY ACTION. `userOwnsLeague` reads the
- * reader's Sleeper user id out of `user_preferences.sleeper_league_settings`,
- * and `authenticated` holds a column grant on that jsonb because it has to own
- * its own preferences. So the id is SELF-ASSERTED: a reader can PATCH it
- * through PostgREST and the ownership check then agrees with them. Nothing
- * confidential is behind it (league transactions are public-read under RLS and
- * already rendered at /leagues/[id]/transactions), so what an attacker gains
- * is not data but COMPUTE: `pulseLeague` on an arbitrary league id, repeatedly.
- * The meter is the guard that actually holds, so the meter is the one that has
- * to be here.
+ * reader's Sleeper user id out of `user_preferences.sleeper_league_settings`.
+ * Until migration 0323 `authenticated` held a column grant on that jsonb, so
+ * the id was SELF-ASSERTED: a reader could PATCH it through PostgREST and the
+ * ownership check then agreed with them. 0323 revokes that grant and every
+ * write now goes through lib/sleeper-league-settings-write.ts from a server
+ * action, so the id is one Sleeper returned. Even so, the ownership check says
+ * only that Sleeper lists the league under that handle, which anyone can look
+ * up, and what `pulseLeague` spends is COMPUTE on a league id the caller picks.
+ * The meter is the guard that holds regardless, so the meter stays here.
  */
 async function claimImportSlot(bucket: string, max: number): Promise<boolean> {
   try {

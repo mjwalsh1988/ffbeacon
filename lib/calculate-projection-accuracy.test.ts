@@ -19,6 +19,7 @@ import {
   currentSeasonWeekWeight,
   latestPlayedWeek,
   positionBaselineRatio,
+  tagProjectionRows,
 } from "./calculate-projection-accuracy";
 
 /** One graded player's ratio accumulator, as the calc builds it. */
@@ -321,5 +322,50 @@ describe("replaceAccuracyRows (C6: readers never see a partial table)", () => {
     const { client, calls } = fakeClient({ failUpsertAt: 2 });
     await expect(replaceAccuracyRows(client, rows, "RUN")).rejects.toBeTruthy();
     expect(calls.some((c) => c.op === "delete")).toBe(false);
+  });
+});
+
+describe("tagProjectionRows (one scan, the same two sets the two reads produced)", () => {
+  const base = {
+    season: 2026,
+    week: 3,
+    source: "sleeper",
+    projected_pts_half_ppr: null,
+    projected_pts_std: null,
+    stat_line: null,
+  };
+
+  it("puts a row with a PPR figure in the offense set and a defender in the defender set", () => {
+    const tagged = tagProjectionRows([
+      { ...base, player_id: "wr", projected_pts_ppr: 14.2, players: { position: "WR" } },
+      {
+        ...base,
+        player_id: "lb",
+        projected_pts_ppr: null,
+        stat_line: { idp_tkl_solo: 5, idp_tkl_ast: 3 },
+        players: { position: "LB" },
+      },
+    ]);
+    expect(tagged.map((t) => [t.kind, t.row.playerId])).toEqual([
+      ["offense", "wr"],
+      ["defender", "lb"],
+    ]);
+    expect(tagged[1].row.idp123).not.toBeNull();
+    expect(tagged[1].row.ppr).toBeNull();
+  });
+
+  it("drops an unprojected offensive week and a row with no player, as the filtered reads did", () => {
+    const tagged = tagProjectionRows([
+      { ...base, player_id: "qb2", projected_pts_ppr: null, players: { position: "QB" } },
+      { ...base, player_id: null, projected_pts_ppr: 9, players: null },
+    ]);
+    expect(tagged).toEqual([]);
+  });
+
+  it("keeps a defender row that also carries a PPR figure in both sets", () => {
+    const tagged = tagProjectionRows([
+      { ...base, player_id: "db", projected_pts_ppr: 2, players: { position: "DB" } },
+    ]);
+    expect(tagged.map((t) => t.kind)).toEqual(["offense", "defender"]);
   });
 });

@@ -469,6 +469,12 @@ export type ManagerLeagueRow = {
 export type ManagerReportLimits = {
   /** League-seasons found but dropped for exceeding maxLeaguesPerRun, most recent kept first. */
   leagueSeasonsSkipped: number;
+  /**
+   * League-seasons the run meant to read and could not, so nothing from them
+   * is in this report. Optional because reports cached before it existed do
+   * not carry it; absent reads as zero.
+   */
+  leagueSeasonsFailed?: number;
   /** League-seasons with no league_manager_ledger_cache row, so lineup efficiency excludes them. */
   leagueSeasonsWithoutLedger: number;
   /** Seasons with zero draft_pick_observations rows, so per-pick timing has nothing to show. */

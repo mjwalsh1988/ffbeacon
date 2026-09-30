@@ -14,6 +14,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+/** Record the run before the platform limit can kill it (see lib/cron-runs.ts). */
+const RUN_BUDGET_MS = 285_000;
+/**
+ * A derived calc does not START past this point. Projection accuracy alone has
+ * measured 140 seconds, so starting one at 200 seconds would only be killed.
+ */
+const DERIVED_START_BUDGET_MS = 150_000;
+
 /**
  * GET /api/cron/sync-sleeper-stats
  *
@@ -47,10 +55,11 @@ export const maxDuration = 300;
  * that the current season's beat-rate and reliability MUST outweigh prior
  * seasons; unscheduled, that requirement was unmeetable by construction.
  *
- * Each derived calc runs on its own error boundary. A failure in one is logged
- * and reported in the result, but never fails the stats sync or stops the
- * others: the stats themselves are the irreplaceable part, and a derived table
- * can be rebuilt on the next run.
+ * Each derived calc runs on its own error boundary, one after another. A
+ * failure in one never undoes the stats sync or stops the others: the stats
+ * themselves are the irreplaceable part, and a derived table can be rebuilt on
+ * the next run. It IS reported as a failed step, which records the run as an
+ * error and emails the owner.
  *
  * Auth: `Authorization: Bearer <CRON_SECRET>` only. Calls the same
  * runSleeperStatsSync() the CLI uses and returns its JSON summary.
@@ -64,6 +73,7 @@ export async function GET(req: Request) {
   const supabase = createAdminClient();
   try {
     const result = await recordCronRun(supabase, "sync-sleeper-stats", async () => {
+      const started = Date.now();
       const sync = await runSleeperStatsSync(supabase);
       // A skipped run (offseason) touched no stats, so nothing derived from them
       // has changed either.
@@ -71,32 +81,55 @@ export async function GET(req: Request) {
 
       // Each on its own boundary: the stats are the irreplaceable part, and a
       // derived table that fails here rebuilds on the next run.
-      const derived = await Promise.all(
-        (
-          [
-            ["finishes", () => runCalculatePositionalFinishes(supabase)],
-            ["defenseSplits", () => runCalculateDefenseSplits(supabase)],
-            ["projectionAccuracy", () => runCalculateProjectionAccuracy(supabase)],
-            // The current season's defender totals (plan IDP-117). Reads only
-            // the typed player_stats columns this sync just wrote.
-            ["idpSeasons", () => runCalculateIdpSeasons(supabase)],
-          ] as const
-        ).map(async ([name, run]) => {
-          try {
-            return [name, { ok: true as const, result: await run() }] as const;
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error(`[cron/sync-sleeper-stats] ${name} failed`, message);
-            return [name, { ok: false as const, error: message }] as const;
-          }
-        }),
-      );
+      //
+      // ONE AT A TIME. These ran under Promise.all until 2026-09-29, which put
+      // four heavy readers of player_stats and player_weekly_projections on the
+      // database at once, each paging several streams of its own. Pages that
+      // take half a second alone crossed the 8-second statement timeout
+      // together: defense splits failed every night from 2026-09-26 and
+      // projection accuracy from 2026-09-28. Sequential is slower in wall time
+      // and it is what finishes.
+      //
+      // A failed calc is a FAILED STEP. It used to be folded into the result of
+      // a run the ledger recorded as a success, which is why nobody heard about
+      // four nights of timeouts; `failedSteps` now records the run as an error
+      // and emails (lib/cron-runs.ts).
+      const steps = [
+        ["finishes", () => runCalculatePositionalFinishes(supabase)],
+        // The current season's defender totals (plan IDP-117). Reads only
+        // the typed player_stats columns this sync just wrote.
+        ["idpSeasons", () => runCalculateIdpSeasons(supabase)],
+        ["defenseSplits", () => runCalculateDefenseSplits(supabase)],
+        ["projectionAccuracy", () => runCalculateProjectionAccuracy(supabase)],
+      ] as const;
+
+      const derived: Record<string, { ok: true; result: unknown } | { ok: false; error: string }> = {};
+      const failedSteps: string[] = [];
+      for (const [name, run] of steps) {
+        // Leave room to record the run. A calc that would start past the
+        // budget is reported as not run rather than killed halfway.
+        if (Date.now() - started > DERIVED_START_BUDGET_MS) {
+          const message = "not started: the run was out of time";
+          derived[name] = { ok: false, error: message };
+          failedSteps.push(`${name}: ${message}`);
+          continue;
+        }
+        try {
+          derived[name] = { ok: true, result: await run() };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`[cron/sync-sleeper-stats] ${name} failed`, message);
+          derived[name] = { ok: false, error: message };
+          failedSteps.push(`${name}: ${message}`);
+        }
+      }
 
       revalidateTag(CACHE_TAGS.playerStats);
       revalidateTag(CACHE_TAGS.playerFinishes);
-      return { ...sync, ...Object.fromEntries(derived) };
-    });
-    return NextResponse.json(result);
+      return { ...sync, ...derived, failedSteps };
+    }, { timeoutMs: RUN_BUDGET_MS });
+    const failed = (result as { failedSteps?: string[] }).failedSteps ?? [];
+    return NextResponse.json(result, { status: failed.length > 0 ? 500 : 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[cron/sync-sleeper-stats] failed", message);

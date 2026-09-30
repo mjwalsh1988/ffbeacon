@@ -21,7 +21,7 @@ import { loadManagerPulseInput } from "./load";
 import { computeFootprint } from "./engine";
 import { buildTendency } from "./tendencies";
 import { managerPulseFingerprint } from "./fingerprint";
-import { finalizeManagerPulseRun } from "./finalize";
+import { finalizeManagerPulseRun, sweepAbandonedPendingRuns, PENDING_RUN_ABANDON_MS } from "./finalize";
 import { DEFAULT_MANAGER_PULSE_SETTINGS } from "./default-settings";
 import type { ManagerPulseInput } from "./input-types";
 import type { ManagerReport, ManagerTendency } from "./types";
@@ -56,6 +56,9 @@ function makeFakeAdmin(handlers: Record<string, TableHandlers>) {
       return this;
     }
     in() {
+      return this;
+    }
+    lt() {
       return this;
     }
     range() {
@@ -344,5 +347,110 @@ describe("finalizeManagerPulseRun", () => {
 
     const runUpdate = calls.find((c) => c.table === "manager_pulse_runs" && c.op === "update");
     expect((runUpdate!.args[0] as { status: string }).status).toBe("error");
+  });
+});
+
+describe("finalizeManagerPulseRun coverage", () => {
+  it("counts failed league-seasons into the input and withholds the tendency row", async () => {
+    mockCompute.mockReturnValue(fakeReport());
+    mockFingerprint.mockReturnValue("new-fingerprint");
+
+    const { admin, calls } = makeFakeAdmin({
+      manager_pulse_runs: {
+        select: () => ({ data: { ...RUN_ROW, leagues_skipped: 4 }, error: null }),
+        update: () => ({ data: null, error: null }),
+      },
+      manager_pulse_cache: {
+        select: () => ({ data: null, error: null }),
+        upsert: () => ({ data: null, error: null }),
+      },
+      manager_pulse_tendencies: { upsert: () => ({ data: null, error: null }) },
+      manager_pulse_run_leagues: { select: () => runLeagueRows(["done", "failed", "failed", "skipped"]) },
+      manager_pulse_live_reports: { delete: () => ({ data: null, error: null }) },
+    });
+
+    await finalizeManagerPulseRun(admin, "run-1", DEFAULT_MANAGER_PULSE_SETTINGS);
+
+    // Loader asked for the one league it can read, with the cap-dropped count.
+    const loadArgs = mockLoad.mock.calls[0][1] as { leagueSeasons: unknown[]; leagueSeasonsSkipped: number };
+    expect(loadArgs.leagueSeasons).toHaveLength(1);
+    expect(loadArgs.leagueSeasonsSkipped).toBe(4);
+    // The engine sees the failures (two failed rows plus one skipped row).
+    const computeInput = mockCompute.mock.calls[0][0] as ManagerPulseInput;
+    expect(computeInput.leagueSeasonsFailed).toBe(3);
+
+    expect(calls.find((c) => c.table === "manager_pulse_cache" && c.op === "upsert")).toBeDefined();
+    expect(calls.find((c) => c.table === "manager_pulse_tendencies")).toBeUndefined();
+    expect(mockBuildTendency).not.toHaveBeenCalled();
+  });
+
+  it("closes as error, not as an empty window, when every league-season failed", async () => {
+    const { admin, calls } = makeFakeAdmin({
+      manager_pulse_runs: {
+        select: () => ({ data: RUN_ROW, error: null }),
+        update: () => ({ data: null, error: null }),
+      },
+      manager_pulse_cache: { select: () => ({ data: null, error: null }) },
+      manager_pulse_run_leagues: { select: () => runLeagueRows(["failed", "failed"]) },
+      manager_pulse_live_reports: { delete: () => ({ data: null, error: null }) },
+    });
+
+    await finalizeManagerPulseRun(admin, "run-1", DEFAULT_MANAGER_PULSE_SETTINGS);
+
+    expect(mockLoad).not.toHaveBeenCalled();
+    const runUpdate = calls.find((c) => c.table === "manager_pulse_runs" && c.op === "update");
+    expect((runUpdate!.args[0] as { status: string }).status).toBe("error");
+  });
+
+  it("records the underlying error server-side while the run keeps the generic detail", async () => {
+    mockLoad.mockRejectedValue(new Error("relation does not exist"));
+
+    const { admin, calls } = makeFakeAdmin({
+      manager_pulse_runs: {
+        select: () => ({ data: RUN_ROW, error: null }),
+        update: () => ({ data: null, error: null }),
+      },
+      manager_pulse_cache: { select: () => ({ data: null, error: null }) },
+      manager_pulse_run_leagues: { select: () => runLeagueRows(["done"]) },
+      manager_pulse_run_errors: { upsert: () => ({ data: null, error: null }) },
+    });
+
+    await finalizeManagerPulseRun(admin, "run-1", DEFAULT_MANAGER_PULSE_SETTINGS);
+
+    const errorWrite = calls.find((c) => c.table === "manager_pulse_run_errors" && c.op === "upsert");
+    expect(errorWrite).toBeDefined();
+    const payload = errorWrite!.args[0] as { run_id: string; message: string };
+    expect(payload.run_id).toBe("run-1");
+    expect(payload.message).toBe("relation does not exist");
+
+    const runUpdate = calls.find((c) => c.table === "manager_pulse_runs" && c.op === "update");
+    expect((runUpdate!.args[0] as { detail: string }).detail).toBe("The report could not be built.");
+  });
+});
+
+describe("sweepAbandonedPendingRuns", () => {
+  it("closes stale pending runs as error and refunds their budget", async () => {
+    const { admin, calls } = makeFakeAdmin({
+      manager_pulse_runs: {
+        update: () => ({ data: [{ id: "stuck-1" }, { id: "stuck-2" }], error: null }),
+      },
+    });
+
+    const closed = await sweepAbandonedPendingRuns(admin, Date.parse("2026-09-29T12:00:00Z"));
+
+    expect(closed).toBe(2);
+    const update = calls.find((c) => c.table === "manager_pulse_runs" && c.op === "update");
+    const payload = update!.args[0] as { status: string; counts_against_cooldown: boolean; leagues_charged: number };
+    expect(payload.status).toBe("error");
+    expect(payload.counts_against_cooldown).toBe(false);
+    expect(payload.leagues_charged).toBe(0);
+    expect(PENDING_RUN_ABANDON_MS).toBe(15 * 60_000);
+  });
+
+  it("never throws when the update fails", async () => {
+    const { admin } = makeFakeAdmin({
+      manager_pulse_runs: { update: () => ({ data: null, error: { message: "boom" } }) },
+    });
+    await expect(sweepAbandonedPendingRuns(admin)).resolves.toBe(0);
   });
 });

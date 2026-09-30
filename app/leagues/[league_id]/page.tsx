@@ -905,7 +905,7 @@ function ActivitySkeleton() {
   return (
     <div
       role="status"
-      className="h-64 animate-pulse rounded-modal border border-line bg-surface/40"
+      className="h-64 animate-pulse motion-reduce:animate-none rounded-modal border border-line bg-surface/40"
     >
       <span className="sr-only">Loading league activity</span>
     </div>
@@ -922,7 +922,7 @@ function RankingsSkeleton() {
       <p className="text-sm text-ink-muted">Loading rankings</p>
       <div aria-hidden="true" className="mt-4 space-y-2">
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-9 animate-pulse rounded-card bg-base/60" />
+          <div key={i} className="h-9 animate-pulse motion-reduce:animate-none rounded-card bg-base/60" />
         ))}
       </div>
     </div>

@@ -223,6 +223,12 @@ function CoverageRail({
       `${formatCount(limits.leagueSeasonsSkipped)} league-season${limits.leagueSeasonsSkipped === 1 ? " was" : "s were"} skipped because this lookup has a limit on how many it reads.`,
     );
   }
+  const failed = limits.leagueSeasonsFailed ?? 0;
+  if (failed > 0) {
+    notes.push(
+      `${formatCount(failed)} league-season${failed === 1 ? " was" : "s were"} left out because ${failed === 1 ? "it" : "they"} could not be read this time.`,
+    );
+  }
   if (limits.leagueSeasonsWithoutLedger > 0) {
     notes.push(
       `Lineup efficiency has no reading for ${formatCount(limits.leagueSeasonsWithoutLedger)} league-season${limits.leagueSeasonsWithoutLedger === 1 ? "" : "s"}. Those leagues have not been opened in League Pulse yet.`,

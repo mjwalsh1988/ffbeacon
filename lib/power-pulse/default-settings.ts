@@ -104,6 +104,13 @@ export type PowerPulseSettings = {
   injury: {
     enabled: boolean;
     multipliers: Record<string, number>;
+    /**
+     * How many weeks, counting the current one, a player in an injured reserve
+     * slot is kept out of every lineup before his own weekly projection decides.
+     * See the injured reserve hold in ./engine.ts. Optional so a stored document
+     * written before it existed still merges; DEFAULT_RESERVE_HOLD_WEEKS applies.
+     */
+    reserveHoldWeeks?: number;
   };
 
   /**
@@ -254,6 +261,15 @@ export type PowerPulseSettings = {
   beaconProjections: ProjectionSettings;
 };
 
+/**
+ * Weeks, counting the current one, that an injured reserve player is held out
+ * of every lineup before his weekly projection decides. Two covers this Sunday
+ * and the next, the stretch in which activating him still needs a roster move
+ * the manager may not have made yet. See the injured reserve hold in
+ * ./engine.ts.
+ */
+export const DEFAULT_RESERVE_HOLD_WEEKS = 2;
+
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   // pp-8 (2026-09-20): chopped (guillotine) leagues stop being simulated as
   // though they had a bracket. Sleeper publishes a head to head pairing for
@@ -347,7 +363,12 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   // now read as chopped once Sleeper has eliminated anyone, and a league that
   // chops two a week (the 32 team ones) is simulated that way. Seven leagues
   // had been scored as head to head leagues with no head to head games.
-  modelVersion: "pp-10",
+  //
+  // pp-11 (2026-09-29): a player in an injured reserve slot is no longer
+  // dropped from every remaining week. He sits out the current week and the
+  // next (injury.reserveHoldWeeks), then counts in the weeks his own projection
+  // has him back. A starter on short IR used to count zero for the season.
+  modelVersion: "pp-11",
 
   weights: {
     points: 0.55,
@@ -423,6 +444,7 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
       QUESTIONABLE: 0.9,
       PROBABLE: 1,
     },
+    reserveHoldWeeks: DEFAULT_RESERVE_HOLD_WEEKS,
   },
 
   opponent: {

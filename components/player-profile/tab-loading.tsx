@@ -17,13 +17,13 @@ export function TabLoading() {
       >
         <span className="sr-only">Loading player data</span>
         <div aria-hidden="true" className="space-y-4">
-          <div className="h-6 w-40 animate-pulse rounded bg-line/60" />
+          <div className="h-6 w-40 animate-pulse motion-reduce:animate-none rounded bg-line/60" />
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="h-24 animate-pulse rounded-card bg-line/40" />
-            <div className="h-24 animate-pulse rounded-card bg-line/40" />
-            <div className="h-24 animate-pulse rounded-card bg-line/40" />
+            <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card bg-line/40" />
+            <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card bg-line/40" />
+            <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card bg-line/40" />
           </div>
-          <div className="h-40 animate-pulse rounded-card bg-line/30" />
+          <div className="h-40 animate-pulse motion-reduce:animate-none rounded-card bg-line/30" />
         </div>
       </div>
     </PageBody>

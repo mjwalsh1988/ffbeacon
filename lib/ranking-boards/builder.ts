@@ -277,6 +277,11 @@ export function foldRun(
         event = { kind: "extended", depth };
         advance();
       } else if (ans.a === "tiers") {
+        // GUESTS CANNOT DRAW TIERS (decision 13), and the fold is where that
+        // holds, not the page: a guest run is the one with a cap, and the
+        // server folds every answer before accepting it. Claiming the board
+        // into an account lifts the cap, and tiers with it.
+        if (setup.cap !== null) return fail("Sign in to draw tier lines.");
         if (board.length < 2) return fail("A tier line needs two players.");
         phase = "tiers";
         tierBreaks = [...setup.initialBreaks].filter((b) => b >= 1 && b < board.length);

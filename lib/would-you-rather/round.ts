@@ -735,9 +735,7 @@ export async function buildReview(
     tradeId: loaded.pool.id,
     yourSide: params.yourSide,
     alreadyVoted: params.alreadyVoted,
-    tally: settings.reveal.show_community_results
-      ? tally
-      : { ...tally, a: 0, b: 0, total: 0, discordA: 0, discordB: 0, pctA: 0, pctB: 0 },
+    tally: revealTally(tally, settings.reveal.show_community_results),
     verdict: view,
     crowdVsModel: settings.reveal.show_community_results
       ? crowdVsModelSentence(tally, view)
@@ -754,6 +752,15 @@ export async function buildReview(
 }
 
 /**
+ * The tally a reveal carries: the real one, or every count zeroed when the
+ * admin has switched community results off. One copy, so the full review and
+ * the fallback cannot disagree about what is hidden.
+ */
+export function revealTally<T extends WyrReview["tally"]>(tally: T, show: boolean): T {
+  return show ? tally : { ...tally, a: 0, b: 0, total: 0, discordA: 0, discordB: 0, pctA: 0, pctB: 0 };
+}
+
+/**
  * The smallest honest reveal.
  *
  * Used when the vote HAS been written and building the full review then threw.
@@ -761,18 +768,22 @@ export async function buildReview(
  * a vote that is on record, and their retry would land on a different trade with
  * the first one silently counted. This says what is certainly true (their vote,
  * and the tally) and omits the rest rather than inventing it.
+ *
+ * The tally obeys settings.reveal.show_community_results exactly as the full
+ * review does. A fallback is not a reason to show a split the admin has hidden.
  */
 export function minimalReview(
   loaded: LoadedRound,
   pool: WyrPoolRow,
   yourSide: WyrSide,
   alreadyVoted: boolean,
+  showCommunityResults: boolean,
 ): WyrReview {
   return {
     tradeId: loaded.pool.id,
     yourSide,
     alreadyVoted,
-    tally: tallyOf(pool),
+    tally: revealTally(tallyOf(pool), showCommunityResults),
     verdict: null,
     crowdVsModel: null,
     war: {},

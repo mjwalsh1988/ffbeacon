@@ -218,6 +218,9 @@ export async function writeGuestAnswers(
   return !error && (data?.length ?? 0) === 1;
 }
 
+/** What a flush did: whether it wrote, and which tier lines it had to remove. */
+export type FlushResult = { ok: boolean; removedTierBreaks: number[] };
+
 /**
  * Write a run's board into user_ranking_board_players: remove the players no
  * longer on it, upsert everyone else at their rank, record who was LEFT OFF
@@ -226,6 +229,10 @@ export async function writeGuestAnswers(
  *
  * Runs on the reader's own session client, so the owner-only RLS policies are
  * the backstop for every write.
+ *
+ * Returns the tier lines the write REMOVED because the board now ends at or
+ * before them, so the caller can tell the reader (CLAUDE.md: a line at or past
+ * the last rank is removed and the reader is told). Empty when none were.
  */
 export async function flushAccountBoard(
   supabase: Client,
@@ -233,7 +240,8 @@ export async function flushAccountBoard(
   board: string[],
   state: RunState,
   opts: { tierBreaks: number[] | null },
-): Promise<boolean> {
+): Promise<FlushResult> {
+  const failed: FlushResult = { ok: false, removedTierBreaks: [] };
   const existing = await fetchAllRows("ranker flush existing", (from, to) =>
     supabase
       .from("user_ranking_board_players")
@@ -250,7 +258,7 @@ export async function flushAccountBoard(
       .delete()
       .eq("board_id", boardId)
       .in("player_id", removals.slice(i, i + 200));
-    if (error) return false;
+    if (error) return failed;
   }
   const nowIso = new Date().toISOString();
   for (let i = 0; i < board.length; i += 500) {
@@ -263,7 +271,7 @@ export async function flushAccountBoard(
     const { error } = await supabase
       .from("user_ranking_board_players")
       .upsert(rows, { onConflict: "board_id,player_id" });
-    if (error) return false;
+    if (error) return failed;
   }
 
   const { data: boardRow } = await supabase
@@ -274,7 +282,10 @@ export async function flushAccountBoard(
   const leftOff = [
     ...new Set([...(boardRow?.left_off_player_ids ?? []), ...state.leftOff]),
   ].filter((id) => !keep.has(id)).slice(0, MAX_BOARD_PLAYERS);
-  const breaks = normalizeTierBreaks(opts.tierBreaks ?? boardRow?.tier_breaks ?? [], board.length).breaks;
+  const { breaks, removed } = normalizeTierBreaks(
+    opts.tierBreaks ?? boardRow?.tier_breaks ?? [],
+    board.length,
+  );
   const { error } = await supabase
     .from("user_ranking_boards")
     .update({
@@ -284,5 +295,5 @@ export async function flushAccountBoard(
       updated_at: nowIso,
     })
     .eq("id", boardId);
-  return !error;
+  return error ? failed : { ok: true, removedTierBreaks: removed };
 }

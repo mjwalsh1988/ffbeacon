@@ -98,12 +98,25 @@ const NON_NAVIGABLE = new Set([
   "/author",
   "/brief/category",
   "/brief/player",
+  "/brief/relay",
   "/brief/tag",
   "/brief/team",
   "/players",
   "/tools/trade-calculator/v",
   "/u",
 ]);
+
+/**
+ * `/{handle}/rankings` has no page: a shared board lives one level down at
+ * `/{handle}/rankings/{boardId}`, and the profile itself is `/{handle}`. The
+ * only real page with that shape is My Beacon's own boards list.
+ */
+const REAL_NESTED_RANKINGS = new Set(["/my-beacon/rankings"]);
+
+function isNonNavigable(prefix: string, segments: string[], index: number): boolean {
+  if (NON_NAVIGABLE.has(prefix)) return true;
+  return index === 1 && segments[1] === "rankings" && !REAL_NESTED_RANKINGS.has(prefix);
+}
 
 /**
  * Route trees that draw their own breadcrumb inside their own chrome, so the
@@ -203,8 +216,9 @@ export function buildBreadcrumbs(pathname: string): Crumb[] {
     const label = ROUTE_LABELS[prefix] ?? formatLabel ?? humanizeSegment(segment);
     crumbs.push({
       label,
-      href:
-        isLast || NON_NAVIGABLE.has(prefix)
+      href: isLast
+        ? undefined
+        : isNonNavigable(prefix, segments, index)
           ? undefined
           : (CRUMB_HREF_OVERRIDES[prefix] ?? prefix),
     });
@@ -230,13 +244,23 @@ const CRUMB_HREF_OVERRIDES: Record<string, string> = {
  * The same trail as JSON-LD, for search engines. Home is included here because
  * schema.org expects the full list starting at the site root, even though the
  * visible bar draws it as a logo.
+ *
+ * A middle crumb with no page of its own is left out. Google requires an
+ * `item` URL on every step but the last, and the only URL such a crumb could
+ * name is either a 404 or (as this used to do) the current page repeated,
+ * which says the trail's middle step is the page itself. The defender profile
+ * fix (commit e3ddd24) made the same call for /players.
  */
 export function breadcrumbJsonLd(
   pathname: string,
   siteUrl: string,
+  /** The page's own name for itself, replacing the slug-derived last step. */
+  lastLabel?: string | null,
 ): Record<string, unknown> | null {
-  const crumbs = buildBreadcrumbs(pathname);
-  if (crumbs.length === 0) return null;
+  const all = buildBreadcrumbs(pathname);
+  if (all.length === 0) return null;
+  if (lastLabel) all[all.length - 1] = { ...all[all.length - 1], label: lastLabel };
+  const crumbs = all.filter((crumb, i) => i === all.length - 1 || Boolean(crumb.href));
 
   const base = siteUrl.replace(/\/$/, "");
   const items = [{ label: "Home", href: "/" }, ...crumbs].map(

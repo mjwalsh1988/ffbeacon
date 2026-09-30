@@ -1,6 +1,8 @@
 import { NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_PULSE_TTL_MS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
+import { warmBudgetFor } from "@/lib/league-endpoint-limits";
 
 /**
  * POST /api/leagues/[league_id]/warm
@@ -19,9 +21,16 @@ import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
  *   - Both halves coalesce per league, so a hover that lands while a real page
  *     render is already syncing joins that sync instead of starting a second.
  *
- * PUBLIC, like the page it warms, and safe to be: it can only cause the same
- * fetch that opening the league would, it writes nothing a page load would not
- * write, and the cache bounds how often it can reach Sleeper at all.
+ * PUBLIC, like the page it warms: it can only cause the same fetch that opening
+ * the league would, and it writes nothing a page load would not write. The
+ * cache bounds how often one LEAGUE can reach Sleeper, but not how many leagues
+ * one CALLER can send there, so a request that could reach Sleeper claims a
+ * per-caller slot first (lib/league-endpoint-limits.ts): a generous budget for
+ * a stored league gone stale, a tighter one for a league id we have never
+ * stored, and nothing at all for a fresh stored league, which costs one read.
+ * Everything is validated before a slot is claimed, so a malformed request
+ * spends nobody's budget. Over budget is a quiet 429; the hook ignores it and
+ * the page itself still syncs on open.
  *
  * The response does not wait for the derived half (transaction history, trade
  * values, Power Pulse). The caller is not reading the body; it wants the work
@@ -32,6 +41,8 @@ import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
  *   400 { error: "Invalid league id" }
  *   403 { error: "Invalid request" }    (missing same-origin header)
  *   404 { error: "League not found" }
+ *   429 { error: "Rate limited" }       (per-caller budget spent)
+ *   500 { error: "Lookup failed" }
  */
 export async function POST(
   req: Request,
@@ -49,6 +60,24 @@ export async function POST(
   }
 
   const admin = createAdminClient();
+
+  // What we already hold for this id decides whether this request can reach
+  // Sleeper at all, and so which budget (if any) it has to claim.
+  const { data: stored, error: lookupErr } = await admin
+    .from("leagues")
+    .select("last_pulsed_at, pulse_status")
+    .eq("sleeper_league_id", sleeperLeagueId)
+    .maybeSingle();
+  if (lookupErr) {
+    console.error("[warm] league lookup failed", lookupErr);
+    return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+  }
+
+  const budget = warmBudgetFor(stored ?? null, Date.now(), LEAGUE_PULSE_TTL_MS);
+  if (budget && !(await claimRateLimitSlot(budget))) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   const core = await pulseLeagueCore(admin, sleeperLeagueId);
   if (!core.ok) {
     return NextResponse.json({ error: "League not found" }, { status: 404 });

@@ -7,13 +7,23 @@ import { recordCronRun } from "@/lib/cron-runs";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { getActiveFormats } from "@/lib/source";
 import { submitIndexNow } from "@/lib/indexnow";
+import { getNflState } from "@/lib/sleeper";
+import { projectionSyncWindow } from "@/lib/game-day-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+/** Record the run as failed before the platform limit can kill it. */
+const RUN_BUDGET_MS = 285_000;
+
 /**
  * GET /api/cron/sync-weekly-projections
+ *
+ * Runs daily at 12:00 UTC over the whole remaining slate, and on Sundays,
+ * Mondays and Thursdays in season also ten minutes after each game-day player
+ * sync (the schedule and its Eastern times are in lib/cron-runs.ts), refreshing
+ * only the live week and the next.
  *
  * Vercel Cron entry point for the nightly weekly point-projection refresh.
  * Pulls Sleeper's per-week projections for the current season's upcoming weeks
@@ -33,15 +43,25 @@ export async function GET(req: Request) {
   const supabase = createAdminClient();
   try {
     const result = await recordCronRun(supabase, "sync-weekly-projections", async () => {
-      const sync = await runWeeklyProjectionsSync(supabase);
+      // The daily run refreshes every remaining week; a game-day run only the
+      // live week and the next (lib/game-day-sync.ts). Repeats are safe: every
+      // write is an upsert on the table's unique key, and the stale sweep is
+      // per week, so a narrowed run never touches a week it did not fetch.
+      const syncWindow = projectionSyncWindow(Date.now(), await getNflState());
+      const sync = await runWeeklyProjectionsSync(
+        supabase,
+        syncWindow.scope === "near" ? { fromWeek: syncWindow.fromWeek, toWeek: syncWindow.toWeek } : {},
+      );
       // Fresh projections -> bust the profile projection caches.
       if (!sync.skipped) revalidateTag(CACHE_TAGS.playerProjections);
 
       // A skipped run, or one that fetched nothing, wrote no new row for the
       // start/sit tool or any rankings board to reflect, so there is nothing to
       // push. Fired via after() so a slow or failed ping never adds to this
-      // cron's own duration; submitIndexNow never throws.
-      if (!sync.skipped && sync.totalStored > 0) {
+      // cron's own duration; submitIndexNow never throws. Only the daily run
+      // pings: IndexNow asks for changed URLs, and five extra pings of the same
+      // URLs on a game day would read as spam rather than news.
+      if (syncWindow.scope === "full" && !sync.skipped && sync.totalStored > 0) {
         const activeFormats = await getActiveFormats(supabase);
         const urls = [
           "/tools/who-should-i-start",
@@ -49,8 +69,8 @@ export async function GET(req: Request) {
         ];
         after(() => submitIndexNow(urls));
       }
-      return sync;
-    });
+      return { ...sync, window: syncWindow };
+    }, { timeoutMs: RUN_BUDGET_MS });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

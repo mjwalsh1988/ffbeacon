@@ -13,14 +13,16 @@
  *
  * Stats-specific behavior: unlike the KTC / FantasyCalc value syncs, an empty
  * week is NOT an error here. Early in a game week the endpoint can legitimately
- * return nothing, so we log it and move on. Idempotent upserts (unique on
+ * return nothing, so we log it and move on. A week whose REQUEST failed is a
+ * different thing: the remaining weeks are still stored, and then the run
+ * throws naming the weeks that did not answer. Idempotent upserts (unique on
  * player_id, week, season, season_type) mean repeated nightly refreshes simply
  * update the same rows as games complete.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
-import { getNflState, getWeeklyStats, type SleeperSeasonType } from "./sleeper";
+import { getNflState, getWeeklyStatsOrNull, type SleeperSeasonType } from "./sleeper";
 import { mapStatPayloadToRow } from "./sleeper-stats-map";
 import { withRetry } from "./supabase/retry";
 
@@ -149,8 +151,18 @@ export async function runSleeperStatsSync(
   const perWeek: SleeperStatsSyncResult["perWeek"] = [];
   let totalRows = 0;
 
+  const failedWeeks: number[] = [];
+
   for (const w of weeks) {
-    const entries = await getWeeklyStats(seasonType, season, w);
+    const entries = await getWeeklyStatsOrNull(seasonType, season, w);
+    if (entries === null) {
+      // The request failed. That is not an empty week, and reporting it as one
+      // would mark a run that stored nothing as a success. The other weeks
+      // still go in; the run fails once they have.
+      failedWeeks.push(w);
+      console.warn(`  ${season} ${seasonType} wk${w}: Sleeper did not answer`);
+      continue;
+    }
     const rows: StatInsert[] = [];
     for (const { sleeperId, payload } of entries) {
       const playerId = idBySleeper.get(sleeperId);
@@ -187,6 +199,12 @@ export async function runSleeperStatsSync(
     perWeek.push({ week: w, entries: entries.length, matched: rows.length });
     console.log(
       `  ${season} ${seasonType} wk${w}: ${entries.length} entries, ${rows.length} matched rows upserted`,
+    );
+  }
+
+  if (failedWeeks.length > 0) {
+    throw new Error(
+      `runSleeperStatsSync: Sleeper did not answer for ${season} ${seasonType} week(s) ${failedWeeks.join(", ")} (${totalRows} rows stored for the other weeks)`,
     );
   }
 

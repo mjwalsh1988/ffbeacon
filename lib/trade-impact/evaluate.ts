@@ -698,6 +698,16 @@ export async function evaluateValidatedTrade(
   const gaps: ImpactGaps = {
     lineup: lineupUnavailable,
     simulation: sim === null,
+    simulationCause:
+      sim !== null
+        ? undefined
+        : weeks.length === 0 || upcoming.length === 0
+          ? "season-over"
+          : !everyRosterCovered
+            ? world.cachedWeeklySourceMismatch
+              ? "engine-switch"
+              : "not-built"
+            : "season-over",
     picks: !world.finder.allowPicks,
   };
 

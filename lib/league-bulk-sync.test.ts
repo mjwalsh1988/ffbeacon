@@ -26,6 +26,7 @@ vi.mock("@/lib/manager-pulse/freshness", () => ({
 
 vi.mock("@/lib/manager-pulse/finalize", () => ({
   finalizeManagerPulseRun: vi.fn(),
+  sweepAbandonedPendingRuns: vi.fn(async () => 0),
 }));
 
 vi.mock("@/lib/manager-pulse/live-report", () => ({

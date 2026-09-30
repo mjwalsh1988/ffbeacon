@@ -1,6 +1,7 @@
 "use server";
 
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { signalMediaUrl } from "@/lib/signal-profile";
 
 /**
@@ -177,6 +178,27 @@ export async function loadFollowList(
   }
 
   const supabase = createAdminClient();
+
+  // The LISTED profile must itself be live, unless the caller is its owner.
+  // Without this the admin read below answers "who follows X" and "who does X
+  // follow" for any user id, including an account whose own Signal is a draft,
+  // private or hidden, which the profile page itself would refuse to show. The
+  // refusal looks the same as an empty list, so it says nothing about whether
+  // the account exists.
+  if (user.id !== profileUserId) {
+    const { data: profile } = await supabase
+      .from("signals")
+      .select("user_id")
+      .eq("user_id", profileUserId)
+      .eq("status", "published")
+      .eq("visibility", "public")
+      .eq("hidden", false)
+      .maybeSingle();
+    if (!profile) {
+      return { ok: true, entries: [], truncated: false };
+    }
+  }
+
   const selectCol =
     kind === "followers" ? "follower_user_id" : "followee_user_id";
   const matchCol =

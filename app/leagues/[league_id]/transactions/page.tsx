@@ -343,7 +343,11 @@ async function TransactionsFeed({
   resynced: boolean;
 }) {
   const adminClient = createAdminClient();
-  await pulseLeagueDerived(adminClient, leagueRowId, { resynced });
+  // includePositionalWar: false. Nothing on this page renders a curve.
+  await pulseLeagueDerived(adminClient, leagueRowId, {
+    resynced,
+    includePositionalWar: false,
+  });
 
   const supabase = await createClient();
   const [facets, loaded] = await Promise.all([
@@ -564,7 +568,7 @@ function FeedSkeleton() {
         <p className="text-sm text-ink-muted">Loading transactions</p>
         <div aria-hidden="true" className="mt-4 space-y-7">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-40 animate-pulse rounded-modal bg-base/60" />
+            <div key={i} className="h-40 animate-pulse motion-reduce:animate-none rounded-modal bg-base/60" />
           ))}
         </div>
       </div>

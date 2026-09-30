@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { recordCronRun, CRON_JOBS } from "@/lib/cron-runs";
 import {
+  closeAbandonedRuns,
   findFailingJobs,
   findMissedJobs,
   loadCronLedgerState,
@@ -49,9 +50,13 @@ const SELF = new Set<string>(["cron-health"]);
  * THREE: prune the ledger. cron_runs had no retention and had reached 135,591 rows
  * and 67 MB, 99.7 percent of it from three jobs running every minute or every
  * five. Retention is per cadence: a week of the high-frequency workers, a year
- * of the nightly jobs anyone actually reads. Rows still marked running are never
- * pruned, because a row with no terminal status is the only evidence that an
- * invocation started and died.
+ * of the nightly jobs anyone actually reads.
+ *
+ * FIVE, run first: close every row still marked running well past any
+ * maxDuration (closeAbandonedRuns). The platform kills a function at its limit
+ * and the finalize never runs, so those rows used to say "running" forever and
+ * only a job's newest row was ever examined. Closing them as errors is what
+ * lets the failure check and the pruning see them.
  *
  * Scheduled at 16:00 UTC, last in the day, so every other job has had its window
  * before this looks. Runs every day whether or not anything is wrong; the email
@@ -70,13 +75,20 @@ export async function GET(req: Request) {
     const result = await recordCronRun(supabase, "cron-health", async () => {
       const nowMs = Date.now();
 
-      const { lastRunByJob, stalled, recentByJob } = await loadCronLedgerState(
-        supabase,
-        CRON_JOBS,
-        nowMs,
-      );
+      // Close every run the platform killed before it could finish, BEFORE the
+      // ledger is read, so each one is counted as the failure it was. Its own
+      // boundary: a problem here must not take the missed-run check down.
+      let stalledReportable: Awaited<ReturnType<typeof closeAbandonedRuns>> = [];
+      let abandonError: string | null = null;
+      try {
+        stalledReportable = await closeAbandonedRuns(supabase, nowMs, SELF);
+      } catch (err) {
+        abandonError = err instanceof Error ? err.message : String(err);
+        console.warn("[cron/cron-health] closing abandoned runs failed:", abandonError);
+      }
+
+      const { lastRunByJob, recentByJob } = await loadCronLedgerState(supabase, CRON_JOBS);
       const missed = findMissedJobs(CRON_JOBS, lastRunByJob, nowMs, SELF);
-      const stalledReportable = stalled.filter((s) => !SELF.has(s.name));
       // Jobs that ran and recorded a failure (see findFailingJobs).
       const failing = findFailingJobs(CRON_JOBS, recentByJob, SELF);
 
@@ -103,8 +115,8 @@ export async function GET(req: Request) {
         console.error(
           "[cron/cron-health] overdue:",
           missed.map((m) => `${m.name} (${m.hoursSince?.toFixed(1) ?? "never"}h)`).join(", ") || "none",
-          "| stalled:",
-          stalledReportable.map((s) => s.name).join(", ") || "none",
+          "| abandoned:",
+          stalledReportable.map((s) => `${s.name} (${s.count})`).join(", ") || "none",
           "| stale tables:",
           staleTables.map((r) => `${r.label} (${r.ageHours?.toFixed(1) ?? "?"}h)`).join(", ") ||
             "none",
@@ -136,6 +148,7 @@ export async function GET(req: Request) {
         jobsChecked: CRON_JOBS.length - SELF.size,
         missed,
         stalled: stalledReportable,
+        abandonError,
         staleTables: staleTables.map((r) => ({
           table: r.table,
           label: r.label,

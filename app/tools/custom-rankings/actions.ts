@@ -141,7 +141,7 @@ export async function startRunAction(input: StartRunInput): Promise<{ ok: true; 
   if (input.mode === "board" && user) {
     const { data: board } = await supabase
       .from("user_ranking_boards")
-      .select("id, user_id, name, scope, includes_defenders, format_config_id, tier_breaks")
+      .select("id, user_id, name, scope, includes_defenders, format_config_id")
       .eq("id", input.boardId!)
       .maybeSingle();
     if (!board || board.user_id !== user.id) return { ok: false, error: "Could not find that board." };
@@ -154,6 +154,18 @@ export async function startRunAction(input: StartRunInput): Promise<{ ok: true; 
       const own = formats.find((f) => f.id === board.format_config_id);
       if (own) formatSlug = own.slug;
     }
+    // AN OPEN RUN ON THIS BOARD IS SAVED BEFORE IT IS REPLACED. The upsert
+    // below overwrites the board's one run row, and anything answered since
+    // that run's last checkpoint (up to checkpointEvery answers) existed only
+    // in its log. Flushing first writes those answers into the board, so the
+    // new run starts from them, and a second tab starting a run over the first
+    // one's board costs the first tab nothing it had already answered. The
+    // board rows are read AFTER this, so the new seed includes the flush.
+    const openRun = await loadAccountRun(supabase, board.id);
+    if (openRun && openRun.answers.length > openRun.checkpointCount) {
+      await checkpoint(supabase, openRun, openRun.answers, true, settings);
+    }
+
     const rows: { player_id: string }[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase
@@ -168,7 +180,13 @@ export async function startRunAction(input: StartRunInput): Promise<{ ok: true; 
       if ((data ?? []).length < 1000) break;
     }
     initialBoard = rows.map((r) => r.player_id);
-    initialBreaks = board.tier_breaks ?? [];
+    // Read after the flush above, which can move or remove a tier line.
+    const { data: breaksRow } = await supabase
+      .from("user_ranking_boards")
+      .select("tier_breaks")
+      .eq("id", board.id)
+      .maybeSingle();
+    initialBreaks = breaksRow?.tier_breaks ?? [];
     boardName = board.name;
     const requested = Number.isInteger(input.startRank) ? (input.startRank as number) : 1;
     startRank = Math.min(Math.max(1, requested), Math.max(1, initialBoard.length));
@@ -374,14 +392,15 @@ async function loadRunFor(ref: RunRef): Promise<
   return { ok: false, error: "Could not read that." };
 }
 
-/** Write the board rows when the checkpoint rule says so (account runs). */
+/** Write the board rows when the checkpoint rule says so (account runs).
+ * Returns the tier lines the write removed, for the reader to be told. */
 async function checkpoint(
   supabase: Awaited<ReturnType<typeof createClient>>,
   run: AccountRun,
   answers: Answer[],
   force: boolean,
   known?: Awaited<ReturnType<typeof loadRankingBuilderSettings>>,
-): Promise<void> {
+): Promise<number[]> {
   const settings = known ?? (await loadRankingBuilderSettings(createAdminClient()));
   const state = foldRun(run.setup, answers).state;
   const due =
@@ -389,21 +408,27 @@ async function checkpoint(
     answers.length - run.checkpointCount >= settings.builder.checkpointEvery ||
     state.phase === "done" ||
     state.phase === "finished";
-  if (!due) return;
-  const ok = await flushAccountBoard(supabase, run.boardId, boardForFlush(state), state, {
+  if (!due) return [];
+  const flushed = await flushAccountBoard(supabase, run.boardId, boardForFlush(state), state, {
     tierBreaks: null,
   });
-  if (ok) {
+  if (flushed.ok) {
     await createAdminClient()
       .from("ranking_builder_runs")
       .update({ checkpoint_count: answers.length })
       .eq("id", run.runId);
     revalidateTag(boardTag(run.boardId));
   }
+  return flushed.removedTierBreaks;
 }
 
 export type AnswerResult =
-  | { ok: true; count: number }
+  | {
+      ok: true;
+      count: number;
+      /** Tier lines a checkpoint removed because the board ended before them. */
+      removedTierBreaks?: number[];
+    }
   | { ok: false; error: string; answers?: Answer[] };
 
 /**
@@ -454,8 +479,8 @@ export async function answerAction(input: {
       const fresh = await loadAccountRun(supabase, run.boardId);
       return { ok: false, error: "That question has already been answered.", answers: fresh?.answers };
     }
-    await checkpoint(supabase, run, next, false, settings);
-    return { ok: true, count: next.length };
+    const removedTierBreaks = await checkpoint(supabase, run, next, false, settings);
+    return { ok: true, count: next.length, removedTierBreaks };
   }
 
   const state = verdict.state;
@@ -501,10 +526,11 @@ export async function undoAction(input: { ref: RunRef; expected: number }): Prom
       Math.min(run.checkpointCount, next.length),
     );
     if (!written) return { ok: false, error: "Could not undo. Try again." };
-    if (next.length < run.checkpointCount) {
-      await checkpoint(supabase, { ...run, checkpointCount: next.length }, next, true, settings);
-    }
-    return { ok: true, count: next.length };
+    const removedTierBreaks =
+      next.length < run.checkpointCount
+        ? await checkpoint(supabase, { ...run, checkpointCount: next.length }, next, true, settings)
+        : [];
+    return { ok: true, count: next.length, removedTierBreaks };
   }
   const state = foldRun(run.setup, next).state;
   const written = await writeGuestAnswers(
@@ -521,15 +547,17 @@ export async function undoAction(input: { ref: RunRef; expected: number }): Prom
 
 /** Save and stop: write the board as it stands. The run stays, so the reader
  * can pick up at the next question later. */
-export async function stopAction(ref: RunRef): Promise<{ ok: true; boardId: string | null } | Fail> {
+export async function stopAction(
+  ref: RunRef,
+): Promise<{ ok: true; boardId: string | null; removedTierBreaks?: number[] } | Fail> {
   const loaded = await loadRunFor(ref);
   if (!loaded.ok) return loaded;
   const { run } = loaded;
   if (run.kind === "guest") return { ok: true, boardId: null };
   const supabase = loaded.supabase as Awaited<ReturnType<typeof createClient>>;
-  await checkpoint(supabase, run, run.answers, true);
+  const removedTierBreaks = await checkpoint(supabase, run, run.answers, true);
   revalidatePath("/my-beacon/rankings");
-  return { ok: true, boardId: run.boardId };
+  return { ok: true, boardId: run.boardId, removedTierBreaks };
 }
 
 /**
@@ -537,7 +565,9 @@ export async function stopAction(ref: RunRef): Promise<{ ok: true; boardId: stri
  * run. A guest's board is already written; a guest run is closed by claiming
  * it or by the cleanup job.
  */
-export async function finishAction(ref: RunRef): Promise<{ ok: true; boardId: string | null } | Fail> {
+export async function finishAction(
+  ref: RunRef,
+): Promise<{ ok: true; boardId: string | null; removedTierBreaks?: number[] } | Fail> {
   const loaded = await loadRunFor(ref);
   if (!loaded.ok) return loaded;
   const { run } = loaded;
@@ -548,14 +578,14 @@ export async function finishAction(ref: RunRef): Promise<{ ok: true; boardId: st
     return { ok: false, error: "The run is not finished yet." };
   }
   const drew = state.tierPass.breaks.length > 0 || state.phase === "finished";
-  const ok = await flushAccountBoard(supabase, run.boardId, boardForFlush(state), state, {
+  const flushed = await flushAccountBoard(supabase, run.boardId, boardForFlush(state), state, {
     tierBreaks: drew ? state.tierPass.breaks : null,
   });
-  if (!ok) return { ok: false, error: "Could not save the board. Try again." };
+  if (!flushed.ok) return { ok: false, error: "Could not save the board. Try again." };
   await supabase.from("ranking_builder_runs").delete().eq("id", run.runId);
   revalidateTag(boardTag(run.boardId));
   revalidatePath("/my-beacon/rankings");
-  return { ok: true, boardId: run.boardId };
+  return { ok: true, boardId: run.boardId, removedTierBreaks: flushed.removedTierBreaks };
 }
 
 /** Start over: drop the run (and, for a guest, the guest board with it). An
@@ -609,17 +639,13 @@ export async function claimGuestBoardAction(): Promise<
     await clearGuestCookie();
     return { ok: true, boardId: null };
   }
-  // Take the guest row BEFORE copying it: of two tabs landing on ?claim=1 at
-  // once, only the one whose delete returned the row goes on to copy it.
-  const { data: taken } = await admin
-    .from("ranking_guest_boards")
-    .delete()
-    .eq("id", guest.id)
-    .select("id");
-  if ((taken?.length ?? 0) !== 1) {
-    await clearGuestCookie();
-    return { ok: true, boardId: null };
-  }
+  // COPY FIRST, VERIFY, THEN TAKE THE GUEST ROW. The guest row used to be
+  // deleted before the copy, so a failed insert (a player row the players
+  // table no longer holds, a transient error) lost the reader's whole board
+  // with nothing left to retry from. Now the guest row is only removed once
+  // the board, its rows and its run all exist. Two tabs landing on ?claim=1 at
+  // once both copy; the delete below decides which copy survives, and the
+  // loser removes its own (the board's rows and run cascade with it).
 
   const { data: created, error } = await supabase
     .from("user_ranking_boards")
@@ -665,7 +691,7 @@ export async function claimGuestBoardAction(): Promise<
         cap: null,
         meta: { ...setup.meta, tiersAllowed: true },
       };
-      await admin.from("ranking_builder_runs").insert({
+      const { error: runError } = await admin.from("ranking_builder_runs").insert({
         user_id: user.id,
         board_id: created.id,
         setup: accountSetup as unknown as never,
@@ -673,7 +699,44 @@ export async function claimGuestBoardAction(): Promise<
         answer_count: answers.length,
         checkpoint_count: answers.length,
       });
+      if (runError) {
+        // Without the run the reader would land on a half-built board with no
+        // way to continue it. Undo the copy; the guest board is untouched.
+        await supabase.from("user_ranking_boards").delete().eq("id", created.id);
+        return { ok: false, error: "Could not save your board. Try again." };
+      }
     }
+  }
+
+  // The copy is complete. Now take the guest row, guarded on the answer count
+  // the copy was made from, so a guest answer that landed in between is not
+  // lost to a stale copy.
+  const { data: taken, error: takeError } = await admin
+    .from("ranking_guest_boards")
+    .delete()
+    .eq("id", guest.id)
+    .eq("answer_count", guest.answer_count)
+    .select("id");
+  if (takeError) {
+    // The copy is whole and the guest row is still there. Keep the copy and
+    // drop the cookie, so the reader has their board and the orphaned guest
+    // row expires through the cleanup job instead of being claimed twice.
+    await clearGuestCookie();
+    revalidatePath("/my-beacon/rankings");
+    return { ok: true, boardId: created.id };
+  }
+  if ((taken?.length ?? 0) !== 1) {
+    // Either another tab claimed it first, or the guest board changed since it
+    // was read. Our copy is not the one that counts either way.
+    await supabase.from("user_ranking_boards").delete().eq("id", created.id);
+    const { data: still } = await admin
+      .from("ranking_guest_boards")
+      .select("id")
+      .eq("id", guest.id)
+      .maybeSingle();
+    if (still) return { ok: false, error: "Your board changed while it was being saved. Try again." };
+    await clearGuestCookie();
+    return { ok: true, boardId: null };
   }
 
   await clearGuestCookie();

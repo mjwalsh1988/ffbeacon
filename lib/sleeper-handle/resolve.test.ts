@@ -16,6 +16,16 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/rate-limit-actor", () => ({
   resolveRateLimitActorKey: async () => "user:test",
 }));
+// The id backfill writes through the one server-side writer (migration 0323
+// removes the session role's grant on the column), so the writes are captured
+// here rather than on the stub client.
+const writes = vi.hoisted(() => [] as { userId: string; patch: Record<string, unknown> }[]);
+vi.mock("@/lib/sleeper-league-settings-write", () => ({
+  writeSleeperLeagueSettings: async (userId: string, patch: Record<string, unknown>) => {
+    writes.push({ userId, patch });
+    return { ok: true };
+  },
+}));
 
 import { getSleeperUser } from "@/lib/sleeper";
 import {
@@ -30,6 +40,7 @@ const mockGetSleeperUser = vi.mocked(getSleeperUser);
 
 beforeEach(() => {
   mockGetSleeperUser.mockReset();
+  writes.length = 0;
 });
 
 /**
@@ -249,15 +260,15 @@ describe("ensureSleeperUserId", () => {
     const result = await ensureSleeperUserId(client, legacy);
     expect(result.sleeperUserId).toBe("111");
     expect(result.displayName).toBe("Beacon Mike");
-    expect(updates).toHaveLength(1);
-    const written = updates[0].sleeper_league_settings as Record<
-      string,
-      unknown
-    >;
-    expect(written.sleeper_user_id).toBe("111");
-    // Sibling keys survive the merge.
-    expect(written.signal_league_ids).toEqual(["999"]);
-    expect(written.username).toBe("beacon");
+    // Never through the session client, which loses its grant in 0323.
+    expect(updates).toHaveLength(0);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].userId).toBe("u1");
+    // Only the identity keys are patched; the writer merges, so siblings such
+    // as signal_league_ids are left for it to keep.
+    expect(writes[0].patch.sleeper_user_id).toBe("111");
+    expect(writes[0].patch.sleeper_display_name).toBe("Beacon Mike");
+    expect(writes[0].patch).not.toHaveProperty("signal_league_ids");
   });
 
   it("writes nothing and keeps the handle when Sleeper does not answer", async () => {
@@ -318,8 +329,10 @@ describe("the pre-0268 backfill reaches the league deep views", () => {
     const viewer = await resolveSleeperViewer(client, undefined);
     expect(viewer?.sleeperUserId).toBe("222");
     expect(viewer?.displayName).toBe("Beacon Mike");
-    // And it was written back, so the next visit costs no Sleeper call.
-    expect(updates).toHaveLength(1);
+    // And it was written back, so the next visit costs no Sleeper call, through
+    // the server-side writer rather than the session client.
+    expect(writes).toHaveLength(1);
+    expect(updates).toHaveLength(0);
   });
 
   it("still resolves a viewer when Sleeper cannot fill the id", async () => {

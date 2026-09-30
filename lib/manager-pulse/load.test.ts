@@ -50,21 +50,48 @@ function makeQueryBuilder(sourceRows: Row[]) {
       result = result.filter((r) => vals.includes(r[col]));
       return builder;
     },
-    order: () => builder,
+    order: (col: string) => {
+      if (col === "id") {
+        result = [...result].sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+      }
+      return builder;
+    },
+    // Keyset paging: `id > after`, compared the way the ordering above sorts.
+    gt: (col: string, val: unknown) => {
+      result = result.filter((r) => String(r[col]) > String(val));
+      return builder;
+    },
+    // `.limit()` stays chainable (a later `.gt()` can still narrow), and the
+    // cap is applied when the builder is awaited, as PostgREST would.
+    limit: (n: number) => {
+      cap = n;
+      return builder;
+    },
     // The OR-clause player lookup is not parsed; tests that exercise it keep
     // the fixture scoped to exactly the rows that should match.
     or: () => builder,
     range: (from: number, to: number) => Promise.resolve({ data: result.slice(from, to + 1), error: null }),
     then: (
       onfulfilled?: ((v: { data: Row[]; error: null }) => unknown) | null,
-    ) => Promise.resolve({ data: result, error: null }).then(onfulfilled ?? undefined),
+    ) =>
+      Promise.resolve({ data: cap === null ? result : result.slice(0, cap), error: null }).then(
+        onfulfilled ?? undefined,
+      ),
   };
+  let cap: number | null = null;
   return builder;
 }
 
+/** Every fixture row gets an `id` if it lacks one, zero-padded so string order
+ *  is insertion order, because the keyset reads walk on it. */
+function withIds(table: string, rows: Row[]): Row[] {
+  return rows.map((r, i) => ("id" in r ? r : { ...r, id: `${table}-${String(i).padStart(6, "0")}` }));
+}
+
 function fakeClient(tables: Record<string, Row[]>): SupabaseClient<Database> {
+  const seeded = Object.fromEntries(Object.entries(tables).map(([t, rows]) => [t, withIds(t, rows)]));
   return {
-    from: (table: string) => makeQueryBuilder(tables[table] ?? []),
+    from: (table: string) => makeQueryBuilder(seeded[table] ?? []),
   } as unknown as SupabaseClient<Database>;
 }
 
@@ -603,13 +630,12 @@ describe("a failed read", () => {
       from: (table: string) => {
         const builder = (base as unknown as { from: (t: string) => Record<string, unknown> }).from(table);
         if (table !== "rosters") return builder;
-        // The second page of rosters fails.
-        builder.range = (from: number) =>
-          Promise.resolve(
-            from === 0
-              ? { data: filler, error: null }
-              : { data: null, error: { message: "statement timeout" } },
-          );
+        // The second page of rosters fails: it is the only request that
+        // carries a keyset cursor.
+        builder.gt = () => ({
+          then: (onfulfilled?: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: { message: "statement timeout" } }).then(onfulfilled),
+        });
         return builder;
       },
     } as unknown as SupabaseClient<Database>;

@@ -45,6 +45,7 @@ import {
   POSITIONAL_WAR_RETRY_MS,
 } from "@/lib/positional-war/default-settings";
 import { resolveSharedCurves } from "@/lib/positional-war/share";
+import { coalesce } from "@/lib/request-coalesce";
 import type { PositionCurve } from "@/lib/positional-war/types";
 
 export { POSITIONAL_WAR_TTL_MS, POSITIONAL_WAR_RETRY_MS };
@@ -630,10 +631,28 @@ export async function runWithVerdict(
  * positional_war_succeeded_at and the status/detail are written after the
  * cache rows land.
  */
-export async function refreshPositionalWar(
+export function refreshPositionalWar(
   supabase: ServiceClient,
   leagueRowId: string,
   options: { force?: boolean } = {},
+): Promise<void> {
+  // Coalesced per league. pulseLeagueDerived calls this, and so does
+  // components/league-war/positional-war-section.tsx directly from its own
+  // Suspense boundary, so one render (or two readers opening the same league)
+  // can ask for the same league at the same moment. Without this each would
+  // build the full-universe context and run the compute on its own.
+  //
+  // The force flag is part of the key. A forced call must never join a plain
+  // one, because the plain run may stop at the staleness gate and a force
+  // exists precisely to get past it.
+  const key = `positional-war:${leagueRowId}:${options.force ? "force" : "gated"}`;
+  return coalesce(key, () => refreshPositionalWarUncoalesced(supabase, leagueRowId, options));
+}
+
+async function refreshPositionalWarUncoalesced(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  options: { force?: boolean },
 ): Promise<void> {
   let attemptedAt: string | null = null;
 

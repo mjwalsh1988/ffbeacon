@@ -70,7 +70,7 @@ export function FaabForm({
   settings,
   seasons,
   formatSlug,
-  rankingsSourceSlug = null,
+  readerSourceSlug = null,
   handleGate,
   urlViewer,
   seed = EMPTY_MANUAL_SEED,
@@ -86,8 +86,11 @@ export function FaabForm({
   formatName: string;
   /** Resolved format slug, so the manual read picks the right scoring base. */
   formatSlug: string;
-  /** Resolved rankings source slug, used to list a league's free agents. */
-  rankingsSourceSlug?: string | null;
+  /**
+   * The reader's chosen source before any per-format fall-through. League
+   * mode resolves it against each league's own derived format on the server.
+   */
+  readerSourceSlug?: string | null;
   /** Who the league panel is acting for, resolved on the server. Decides
    * whether the panel shows the identity card or the username form. */
   handleGate: HandleGateState;
@@ -223,7 +226,7 @@ export function FaabForm({
         gate={handleGate}
         urlViewer={urlViewer}
         formatSlug={formatSlug}
-        sourceSlug={rankingsSourceSlug}
+        sourceSlug={readerSourceSlug}
       />
 
       <OrDivider />

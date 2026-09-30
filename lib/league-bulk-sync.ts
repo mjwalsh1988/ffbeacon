@@ -11,7 +11,7 @@ import {
 } from "@/lib/league-bulk-sync-types";
 import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
 import { managerPulseNeedsCapture } from "@/lib/manager-pulse/freshness";
-import { finalizeManagerPulseRun } from "@/lib/manager-pulse/finalize";
+import { finalizeManagerPulseRun, sweepAbandonedPendingRuns } from "@/lib/manager-pulse/finalize";
 import { shouldComputeLiveReport, computeLiveReport } from "@/lib/manager-pulse/live-report";
 import { coalesce } from "@/lib/request-coalesce";
 import type { ManagerPulseSettings } from "@/lib/manager-pulse/types";
@@ -720,6 +720,11 @@ async function finalizeComputingRuns(
   summary: WorkerSummary,
   limit: number,
 ): Promise<void> {
+  // A run whose request died between the claim and the enqueue is stuck in
+  // 'pending' with nothing queued behind it. Closed here, beside the finalize
+  // pass, never from a page render. One guarded update; never throws.
+  await sweepAbandonedPendingRuns(admin);
+
   const { data: runs } = await admin
     .from("manager_pulse_runs")
     .select("id")

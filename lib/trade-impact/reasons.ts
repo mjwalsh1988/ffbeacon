@@ -715,7 +715,7 @@ export function buildTradeCaveats(
   }
 
   if (input.gaps.simulation) {
-    out.push("This league has no remaining games, so the odds figures are unavailable.");
+    out.push(simulationGapSentence(input.gaps.simulationCause));
   }
 
   const hasPicks =
@@ -732,4 +732,15 @@ export function buildTradeCaveats(
   }
 
   return out;
+}
+
+/** The caveat for a season simulation that did not run, by cause. */
+export function simulationGapSentence(cause: ImpactGaps["simulationCause"]): string {
+  if (cause === "engine-switch") {
+    return "The projections for the rest of this league are being rebuilt on a new projection source, so the odds figures are unavailable for now.";
+  }
+  if (cause === "not-built") {
+    return "Projections for every team in this league are not built yet, so the odds figures are unavailable for now.";
+  }
+  return "This league has no remaining games, so the odds figures are unavailable.";
 }

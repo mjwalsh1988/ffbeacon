@@ -24,7 +24,7 @@ import {
   readFaabBudget,
   resolveRelayContext,
 } from "./load";
-import { claimAndSend, claimHour, type SendOutcome } from "./post";
+import { claimAndSend, claimHour, releaseStaleClaims, type SendOutcome } from "./post";
 import { buildTradeWriteup } from "./trade-writeup";
 import {
   buildWaiverDigest,
@@ -119,6 +119,20 @@ export async function runLeagueRelay(
   if (!settings.enabled) {
     result.notes.push("League Relay is switched off.");
     return result;
+  }
+
+  // Claims a dead run left behind, released before anything reads the ledger,
+  // so this run's pre-filter sees a never-sent message as unhandled again.
+  // Skipped on a dry run, which must not change the ledger.
+  if (!opts.dryRun) {
+    // The wall clock, not `now`: an admin run may pass a simulated `now`, and
+    // a claim's age is a real-time fact.
+    const sweep = await releaseStaleClaims(admin, new Date());
+    if (sweep.released > 0 || sweep.closed > 0) {
+      result.notes.push(
+        `Stale claims: ${sweep.released} released for retry, ${sweep.closed} closed without a retry.`,
+      );
+    }
   }
 
   let query = admin

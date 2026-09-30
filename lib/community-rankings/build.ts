@@ -185,6 +185,11 @@ export async function buildCommunityRankings(
         community,
       );
     }
+    if (agg.skippedOversized > 0) {
+      console.warn(
+        `[community-rankings] ${format.slug}: skipped ${agg.skippedOversized} board(s) over the player limit`,
+      );
+    }
 
     // Positions for anyone on a board but outside every pool.
     const missingSet = new Set<string>();

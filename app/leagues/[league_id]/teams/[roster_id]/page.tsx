@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LeagueLoadError } from "@/components/league-load-error";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatTeamLabel } from "@/lib/team-label";
@@ -29,14 +32,47 @@ export const dynamic = "force-dynamic";
 type Params = Promise<{ league_id: string; roster_id: string }>;
 type Search = Promise<{ source?: string; username?: string; picks?: string }>;
 
-export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+/**
+ * The core sync and the league row, once per request.
+ *
+ * This page used to read the leagues row without syncing, so a league nobody
+ * had opened yet was a 404 here and a league opened last week served last
+ * week's roster. It now goes through the same core sync every other section
+ * route uses. Cached (React's per-request `cache()`, not the Next data cache)
+ * so generateMetadata and the page body share one `pulseLeagueCore` call.
+ * Returns `{ ok: false }` for a failed sync, so the body can show the branded
+ * retry state rather than a 404 for what may be a Sleeper outage.
+ */
+const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
+  const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
+  if (!pulse.ok) return { ok: false as const };
+
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return { ok: true as const, league: league ?? null, cached: pulse.cached };
+});
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Search;
+}): Promise<Metadata> {
   const { league_id, roster_id } = await params;
+  const { source: sourceParam, picks: picksParam } = await searchParams;
   const supabase = await createClient();
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("id, name")
-    .eq("sleeper_league_id", league_id)
-    .maybeSingle();
+  const synced = await getSyncedLeague(league_id);
+  const league = synced.ok ? synced.league : null;
   if (!league) return { title: "Team not found" };
   const { data: roster } = await supabase
     .from("rosters")
@@ -60,7 +96,15 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   });
   const title = `${teamName}, ${league.name}`;
   const description = `Roster, draft picks, and value breakdown for ${teamName} in ${league.name}.`;
-  const ogPath = `/api/og/team/${league_id}/${roster_id}`;
+  // The share image carries the reader's resolved source (and the picks
+  // decision), the same query the card's own copy-image link builds in
+  // components/team-card.tsx, so the preview matches the page it came from.
+  const resolvedSource = await resolveSourceSlug(supabase, sourceParam);
+  const ogQuery = new URLSearchParams();
+  if (resolvedSource.slug) ogQuery.set("source", resolvedSource.slug);
+  if (picksParam === "off") ogQuery.set("picks", "off");
+  const ogSuffix = ogQuery.toString();
+  const ogPath = `/api/og/team/${league_id}/${roster_id}${ogSuffix ? `?${ogSuffix}` : ""}`;
   return {
     title,
     description,
@@ -108,14 +152,22 @@ export default async function TeamDetailPage({
   const linkUsername = viewerLinkUsername(viewer);
   const adminClient = createAdminClient();
 
-  const { data: league } = await supabase
-    .from("leagues")
-    .select(
-      "id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
+  // Same core sync as every other section route, shared with generateMetadata.
+  // A failed sync is the branded retry state, not a 404: Sleeper answers a
+  // missing league and an outage the same way (components/league-load-error.tsx).
+  const synced = await getSyncedLeague(sleeperLeagueId);
+  if (!synced.ok) return <LeagueLoadError />;
+  const league = synced.league;
   if (!league) notFound();
+
+  // The derived half: transaction history, the trade-value rankings the team
+  // card's rank reads, and Power Pulse, whose status tag this page shows.
+  // includePositionalWar: false, because nothing on this page renders a curve.
+  // Coalesced and TTL-gated, so a warm league pays a few cheap checks.
+  await pulseLeagueDerived(adminClient, league.id, {
+    resynced: !synced.cached,
+    includePositionalWar: false,
+  });
 
   // Source respects the user's selection; format is derived from the
   // league's actual Sleeper settings, NOT the user's global format toggle.
@@ -224,9 +276,7 @@ export default async function TeamDetailPage({
     lastUpdatedLabel: league.last_pulsed_at
       ? formatRelative(league.last_pulsed_at)
       : "never",
-    // This page reads the already-synced rows rather than pulsing the league
-    // itself, so whatever it shows came from the cache by definition.
-    cached: true,
+    cached: synced.cached,
     coverage: context.coverage,
     sourceDisplay,
     formatDisplay,

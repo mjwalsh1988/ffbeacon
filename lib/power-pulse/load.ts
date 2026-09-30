@@ -39,6 +39,10 @@ const PAGE = 1000;
  */
 export const DB_CHUNK_CONCURRENCY = 5;
 
+/** The players read runs a little narrower than the projection reads: it is
+ *  one of several reads a league page makes in the same wave. */
+const PLAYER_CHUNK_CONCURRENCY = 4;
+
 /**
  * Runs `fn` over `items` with at most `limit` calls in flight at once,
  * preserving result order (out[i] corresponds to items[i]) regardless of
@@ -432,8 +436,13 @@ export async function loadPlayers(
   const safeIds = sleeperIds.filter((id) => /^[A-Za-z0-9]{1,32}$/.test(id));
   if (safeIds.length === 0) return out;
 
+  // Only the two Sleeper metadata keys this reads, not the whole metadata
+  // object (about 1.5 kB a row, every source's raw payload). `->>` gives the
+  // injury status as text; `->` keeps depth_chart_order as the JSON number
+  // Sleeper sent, so intOrNull sees exactly what it saw before.
   const SELECT =
-    "id, slug, first_name, last_name, full_name, position, eligible_positions, team, external_ids, metadata";
+    "id, slug, first_name, last_name, full_name, position, eligible_positions, team, external_ids, " +
+    "injury_status:metadata->sleeper->>injury_status, depth_chart_order:metadata->sleeper->depth_chart_order";
 
   /** One row as the two queries below return it. */
   type PlayerQueryRow = {
@@ -446,7 +455,8 @@ export async function loadPlayers(
     eligible_positions: string[] | null;
     team: string | null;
     external_ids: unknown;
-    metadata: unknown;
+    injury_status: unknown;
+    depth_chart_order: unknown;
   };
 
   // THE INDEXED LOOKUP FIRST, IN CHUNKS, THEN ONE SLUG FALLBACK FOR WHATEVER IS
@@ -471,32 +481,32 @@ export async function loadPlayers(
   const rows: PlayerQueryRow[] = [];
   const resolved = new Set<string>();
 
-  for (let i = 0; i < safeIds.length; i += CHUNK) {
-    const chunk = safeIds.slice(i, i + CHUNK);
-    const { data, error } = await supabase
-      .from("players")
-      .select(SELECT)
-      .in("external_ids->>sleeper", chunk);
-    if (error)
-      throw new Error(`power pulse player resolve failed: ${error.message}`);
-    for (const p of data ?? []) {
-      rows.push(p as PlayerQueryRow);
-      const ext = (p.external_ids as Record<string, unknown>) ?? {};
-      if (typeof ext.sleeper === "string") resolved.add(ext.sleeper);
-    }
+  // Chunks run a few at a time. Results are gathered in chunk order, so the
+  // first-row-wins rule below sees rows in the same order a sequential loop
+  // would have produced.
+  const chunksOf = (ids: string[]) => {
+    const out: string[][] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) out.push(ids.slice(i, i + CHUNK));
+    return out;
+  };
+  const readChunks = async (column: string, ids: string[]) =>
+    (
+      await mapWithConcurrency(chunksOf(ids), PLAYER_CHUNK_CONCURRENCY, async (chunk) => {
+        const { data, error } = await supabase.from("players").select(SELECT).in(column, chunk);
+        if (error) throw new Error(`power pulse player resolve failed: ${error.message}`);
+        return (data ?? []) as unknown as PlayerQueryRow[];
+      })
+    ).flat();
+
+  for (const p of await readChunks("external_ids->>sleeper", safeIds)) {
+    rows.push(p);
+    const ext = (p.external_ids as Record<string, unknown>) ?? {};
+    if (typeof ext.sleeper === "string") resolved.add(ext.sleeper);
   }
 
   const missing = safeIds.filter((id) => !resolved.has(id));
   if (missing.length > 0) {
-    for (let i = 0; i < missing.length; i += CHUNK) {
-      const { data, error } = await supabase
-        .from("players")
-        .select(SELECT)
-        .in("sleeper_slug_tail", missing.slice(i, i + CHUNK));
-      if (error)
-        throw new Error(`power pulse player resolve failed: ${error.message}`);
-      for (const p of data ?? []) rows.push(p as PlayerQueryRow);
-    }
+    rows.push(...(await readChunks("sleeper_slug_tail", missing)));
   }
 
   const wanted = new Set(safeIds);
@@ -511,9 +521,7 @@ export async function loadPlayers(
       const position = (p.position ?? "").toUpperCase();
       if (!valid.has(position)) continue;
 
-      const meta =
-        (p.metadata as { sleeper?: Record<string, unknown> } | null)?.sleeper ??
-        {};
+      const meta = { injury_status: p.injury_status, depth_chart_order: p.depth_chart_order };
       out.set(sid, {
         playerId: p.id,
         sleeperId: sid,

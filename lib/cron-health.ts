@@ -242,19 +242,36 @@ export function findFailingJobs(
 }
 
 /**
+ * How long a row may say "running" before it is certainly dead.
+ *
+ * Every cron route sets maxDuration at 300 seconds or less (sync-nfl-odds is
+ * 120), and Vercel kills the function at that limit, which skips the finalize in
+ * lib/cron-runs.ts and leaves the row marked running forever. Twenty minutes is
+ * the longest maxDuration four times over, so a slow run still in flight is
+ * never called abandoned, and it is short enough that the next health pass
+ * reports the death the same day. It used to be six hours, and only the NEWEST
+ * row per job was ever examined, so a minute-by-minute worker buried every dead
+ * run under the next minute's live one and none was ever reported.
+ */
+export const STALE_RUNNING_MS = 20 * 60_000;
+
+/**
  * Runs that claimed to start and never reported a finish.
  *
  * Distinct from a miss, and the opposite failure: the row exists, so the job DID
  * fire, and then the process died before recordCronRun could write a terminal
- * status. Worth reporting for the same reason, and worth keeping in the table
- * rather than pruning, because the row is the only evidence it happened.
+ * status.
  */
 export function isStaleRunning(startedAt: string, nowMs: number): boolean {
   const started = new Date(startedAt).getTime();
   if (!Number.isFinite(started)) return false;
-  // Longer than any maxDuration we set, so a slow job in flight is never called
-  // stalled while it is still working.
-  return nowMs - started > 6 * 3_600_000;
+  return nowMs - started > STALE_RUNNING_MS;
+}
+
+/** The error text an abandoned run is closed with. */
+export function abandonedRunError(startedAt: string, nowMs: number): string {
+  const minutes = Math.round((nowMs - new Date(startedAt).getTime()) / 60_000);
+  return `Abandoned: still marked running ${minutes} minutes after it started. The invocation was killed (maxDuration or a platform restart) before it could record a result.`;
 }
 
 /**
@@ -345,8 +362,12 @@ function asError(raw: unknown, context: string): Error {
  * is what the 8-second timeout kills; selecting a bounded page of ids and
  * deleting exactly those is bounded work per round trip.
  *
- * Rows still marked 'running' are never pruned. They are the only evidence that
- * an invocation started and died, which is precisely the thing worth keeping.
+ * Rows still marked 'running' are pruned like any other once they are past
+ * retention. The health pass closes an abandoned run as an error within a day
+ * (closeAbandonedRuns below), so a row still saying running a week or a year
+ * later is one that pass could not close, and keeping it forever preserved
+ * nothing: 54 such rows, the oldest from 2026-06-30, had accumulated by
+ * 2026-09-29.
  */
 export async function pruneCronRuns(
   supabase: SupabaseClient<Database>,
@@ -382,7 +403,6 @@ export async function pruneCronRuns(
         .select("id")
         .in("job_name", names)
         .lt("started_at", cutoff)
-        .neq("status", "running")
         .limit(room);
       if (error) throw asError(error, "selecting expired cron_runs ids");
 
@@ -404,24 +424,106 @@ export async function pruneCronRuns(
   return out;
 }
 
+/** One abandoned job, grouped: how many of its runs died and the newest one. */
+export type AbandonedRuns = {
+  name: string;
+  /** Start of the most recent abandoned run. */
+  startedAt: string;
+  count: number;
+};
+
+/** How many abandoned rows one pass closes. Far above the normal handful. */
+const ABANDON_MAX_PER_RUN = 1000;
+
+/** Group closed rows by job, newest first within each. Pure. */
+export function groupAbandoned(
+  rows: ReadonlyArray<{ job_name: string; started_at: string }>,
+): AbandonedRuns[] {
+  const byJob = new Map<string, AbandonedRuns>();
+  for (const row of rows) {
+    const seen = byJob.get(row.job_name);
+    if (!seen) {
+      byJob.set(row.job_name, { name: row.job_name, startedAt: row.started_at, count: 1 });
+      continue;
+    }
+    seen.count += 1;
+    if (row.started_at > seen.startedAt) seen.startedAt = row.started_at;
+  }
+  return [...byJob.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
- * The most recent start per job, and any run left marked 'running'.
+ * Close every run still marked 'running' past STALE_RUNNING_MS as an error.
+ *
+ * The finalize in recordCronRun never runs when the platform kills the
+ * function, so without this a dead run stays "running" forever: it is never
+ * counted as a failure, never pruned, and hides behind the next live row. Each
+ * row is closed with a conditional update (status still 'running'), so a run
+ * that finishes in the same instant keeps its real outcome.
+ *
+ * Returns what it closed, grouped by job, for the health email. Rows belonging
+ * to `ignore` (this job itself, whose own row is running while it looks) are
+ * never touched.
+ */
+export async function closeAbandonedRuns(
+  supabase: SupabaseClient<Database>,
+  nowMs: number,
+  ignore: ReadonlySet<string> = new Set(),
+): Promise<AbandonedRuns[]> {
+  const cutoff = new Date(nowMs - STALE_RUNNING_MS).toISOString();
+  const closed: Array<{ job_name: string; started_at: string }> = [];
+
+  while (closed.length < ABANDON_MAX_PER_RUN) {
+    const { data, error } = await supabase
+      .from("cron_runs")
+      .select("id, job_name, started_at")
+      .eq("status", "running")
+      .lt("started_at", cutoff)
+      .order("started_at", { ascending: true })
+      .limit(PRUNE_BATCH);
+    if (error) throw asError(error, "selecting abandoned cron_runs");
+    const rows = (data ?? []).filter((r) => !ignore.has(r.job_name));
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const { data: updated, error: updErr } = await supabase
+        .from("cron_runs")
+        .update({
+          status: "error",
+          finished_at: new Date(nowMs).toISOString(),
+          error: abandonedRunError(row.started_at, nowMs),
+        })
+        .eq("id", row.id)
+        .eq("status", "running")
+        .select("id");
+      if (updErr) throw asError(updErr, `closing abandoned cron_runs row ${row.id}`);
+      if ((updated ?? []).length > 0) {
+        closed.push({ job_name: row.job_name, started_at: row.started_at });
+      }
+    }
+    // A short page, or a page made only of ignored rows, is the last one.
+    if ((data ?? []).length < PRUNE_BATCH || rows.length < (data ?? []).length) break;
+  }
+  return groupAbandoned(closed);
+}
+
+/**
+ * The most recent start per job, plus each job's last few runs.
  *
  * One indexed lookup per job over (job_name, started_at desc), the index
- * migration 0032 already created for the admin health panel.
+ * migration 0032 already created for the admin health panel. Abandoned runs are
+ * no longer detected here: closeAbandonedRuns sees every one, where this only
+ * ever saw each job's newest row.
  */
 export async function loadCronLedgerState(
   supabase: SupabaseClient<Database>,
   jobs: ReadonlyArray<CronJobLike>,
-  nowMs: number,
 ): Promise<{
   lastRunByJob: Map<string, string>;
-  stalled: Array<{ name: string; startedAt: string }>;
   /** Each job's latest FREQUENT_FAILURE_STREAK runs, newest first, for findFailingJobs. */
   recentByJob: Map<string, Array<{ started_at: string; status: string; error: string | null }>>;
 }> {
   const lastRunByJob = new Map<string, string>();
-  const stalled: Array<{ name: string; startedAt: string }> = [];
   const recentByJob = new Map<string, Array<{ started_at: string; status: string; error: string | null }>>();
 
   // Still one indexed lookup per job; it now returns the last few rows rather
@@ -451,10 +553,7 @@ export async function loadCronLedgerState(
         error: r.error,
       })),
     );
-    if (row.status === "running" && isStaleRunning(row.started_at, nowMs)) {
-      stalled.push({ name: job.name, startedAt: row.started_at });
-    }
   }
 
-  return { lastRunByJob, stalled, recentByJob };
+  return { lastRunByJob, recentByJob };
 }

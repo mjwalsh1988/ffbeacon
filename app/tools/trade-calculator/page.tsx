@@ -4,8 +4,9 @@ import Link from "next/link";
 import { Scale, ShieldCheck, ListTree, ArrowRight } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
-import { supportedFormats } from "@/lib/signal-check/format";
-import { resolveFormatSlug } from "@/lib/preferences";
+import { FFBEACON_SOURCE_SLUG, supportedFormats } from "@/lib/signal-check/format";
+import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
+import { describeSource, getAvailableSources } from "@/lib/source";
 import { isSignedIn, loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
 import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import type { FormatOption } from "./signal-check-builder";
@@ -105,6 +106,21 @@ export default async function SignalCheckPage({
 
   const initialFormatFromHeader = headerFormatSupported && formatResolution.origin !== "default";
 
+  // THE SOURCE IS NOT THE READER'S HERE, AND THE PAGE SAYS SO. Signal Check
+  // prices every trade on FF Beacon values (lib/signal-check/format.ts), because
+  // the verdict is ours. That is a deliberate exception to the source toggle,
+  // so the reader is told which values these are, and told their own chosen
+  // source is not used whenever it is a different one.
+  const [sourceResolution, registry] = await Promise.all([
+    resolveSourceSlug(cookieClient, params.source),
+    getAvailableSources(cookieClient),
+  ]);
+  const beaconValuesName = describeSource(registry, FFBEACON_SOURCE_SLUG);
+  const readerSourceName =
+    sourceResolution.slug && sourceResolution.slug !== FFBEACON_SOURCE_SLUG
+      ? describeSource(registry, sourceResolution.slug)
+      : null;
+
   const showImport = settings.enabled && settings.sleeperImportsEnabled;
 
   // Confirmed Discord members skip the invite: the hero button scrolls to the
@@ -175,6 +191,13 @@ export default async function SignalCheckPage({
                 {settings.publicLabel} is not available right now. Please check back soon.
               </p>
             ) : (
+              <>
+              <p className="mb-3 text-sm leading-relaxed text-ink-muted">
+                Every trade here is priced on {beaconValuesName} values.
+                {readerSourceName
+                  ? ` Your selected source, ${readerSourceName}, is not used on this page.`
+                  : ""}
+              </p>
               <SignalCheckWorkspace
                 formats={formats}
                 minLength={settings.autocompleteMinLength}
@@ -184,6 +207,7 @@ export default async function SignalCheckPage({
                 signedIn={signedIn}
                 initialUsername={savedUsername}
               />
+              </>
             )}
           </div>
         </section>

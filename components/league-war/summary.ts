@@ -22,7 +22,7 @@ import { positionNoun } from "@/lib/site";
 import type { PlottableCurve } from "@/lib/positional-war/types";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import type { PositionalWarStatus } from "@/lib/league-positional-war-data";
-import { formatEastern, formatRelative } from "@/lib/datetime";
+import { formatEastern } from "@/lib/datetime";
 import { selectScarcestAndDeepest } from "./selection";
 
 const positionName = (position: string): string => positionNoun(position);
@@ -159,7 +159,6 @@ export type FootnoteInput = {
   shallowPositions: readonly PulsePosition[];
   modelVersion: string | null;
   generatedAt: string | null;
-  isStale: boolean;
   /**
    * Whose weekly projections the curve was built from, spelled out ("Sleeper"
    * or "FF Beacon").
@@ -184,7 +183,6 @@ export function buildFootnote(input: FootnoteInput): string {
     shallowPositions,
     modelVersion,
     generatedAt,
-    isStale,
     projectionSourceLabel = "Sleeper",
   } = input;
 
@@ -217,9 +215,10 @@ export function buildFootnote(input: FootnoteInput): string {
   parts.push(
     `${projectionSourceLabel} projections, model ${modelVersion ?? "unknown"}, ${formatEastern(generatedAt)}.`,
   );
-  if (isStale) {
-    parts.push(`Last calculated ${formatRelative(generatedAt)}; the latest refresh did not complete.`);
-  }
+  // No "the latest refresh did not complete" clause. Readers are never told
+  // our data is behind (owner's instruction, 2026-09-29): a failed refresh
+  // emails the owner through lib/cron-alerts.ts and shows on
+  // /admin/system/league-health instead.
 
   return parts.join(" ");
 }

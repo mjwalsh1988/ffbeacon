@@ -228,6 +228,25 @@ describe("the tier pass", () => {
     expect(ended.phase).toBe("finished");
     expect(ended.tierPass.breaks).toEqual([1]);
   });
+
+  it("refuses a tier pass from a guest run, on the server's own fold", () => {
+    const s = setup({ seed: ["a", "b", "c", "d"], depth: 4, cap: 4 });
+    const done = [keep, keep, keep];
+    const refused = validateAnswer(s, done, { a: "tiers" }, null);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.reason).toMatch(/Sign in/);
+    // A guest can still finish without tiers.
+    expect(validateAnswer(s, done, { a: "tiers_done" }, null).ok).toBe(true);
+    // A crafted log that reaches a tier answer stops at the refused step.
+    const folded = foldRun(s, [...done, { a: "tiers" }, { a: "tier", yes: true }]);
+    expect(folded.error?.index).toBe(3);
+    expect(folded.state.tierPass.breaks).toEqual([]);
+  });
+
+  it("allows the tier pass once the cap is lifted (a claimed guest board)", () => {
+    const s = setup({ seed: ["a", "b", "c", "d"], depth: 4, cap: null });
+    expect(validateAnswer(s, [keep, keep, keep], { a: "tiers" }, null).ok).toBe(true);
+  });
 });
 
 describe("undo, resume and validation", () => {

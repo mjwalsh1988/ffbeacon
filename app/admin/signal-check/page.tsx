@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SettingField, type SettingRow } from "@/components/admin/setting-field";
 import { SignalCheckSubnav } from "@/components/admin/signal-check-subnav";
 import { updateSignalCheckSetting } from "./actions";
 
+export const metadata: Metadata = { title: "Signal Check" };
 export const dynamic = "force-dynamic";
 
 const CATEGORY_ORDER: { key: string; title: string; blurb: string }[] = [

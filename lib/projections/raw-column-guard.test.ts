@@ -125,6 +125,9 @@ const ALLOWLIST: Record<string, string> = {
   "lib/sync-weekly-projections.idp.test.ts":
     "Tests the rows lib/sync-weekly-projections.ts (EXEMPT_FILES above) writes for defenders, and has to name the three columns to assert they stay NULL for a defender (plan IDP-114): his pts_* are Sleeper's offensive-only figures. Reads nothing from the table. Allow-listed alongside the writer, matching the build-beacon-projections test below.",
 
+  "lib/calculate-projection-accuracy.test.ts":
+    "Tests tagProjectionRows in lib/calculate-projection-accuracy.ts (already EXEMPT_FILES above), which splits the accuracy calc's one raw projection scan into its PPR and all-rows sets; its fake rows have to carry the raw columns that split reads. Reads nothing from the table. Allow-listed alongside it, matching the build-beacon-projections test below.",
+
   "lib/build-beacon-projections.test.ts":
     "Tests the raw player_weekly_projections row shape lib/build-beacon-projections.ts itself reads and writes (that file is already EXEMPT_FILES above); allow-listed alongside it, matching lib/positional-war/load.test.ts above.",
 };

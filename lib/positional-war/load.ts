@@ -162,6 +162,24 @@ const PAGE = 1000;
 const PLAYER_RESOLVE_CHUNK = 200;
 
 /**
+ * How many times one week's walk is attempted before its shortfall is thrown.
+ *
+ * A walk and its count run concurrently against a table the two projection
+ * syncs write into, so a sync landing mid-walk can leave the two disagreeing
+ * for one attempt without anything being wrong. A second attempt reads a
+ * settled week. Failing on the first disagreement turned an ordinary sync
+ * into a Positional WAR error for every league opened during it.
+ */
+const WEEK_READ_ATTEMPTS = 3;
+
+/**
+ * How many times one PAGE of a walk is retried on a query error (a statement
+ * timeout under load is the realistic one). The keyset cursor makes a retried
+ * page exactly the page that failed, so a retry cannot skip or repeat rows.
+ */
+const PAGE_ATTEMPTS = 3;
+
+/**
  * Bumped by hand when the SHAPE of anything stored under these keys changes.
  *
  * The tag busts entries when the DATA changes; this busts them when the code
@@ -364,7 +382,11 @@ async function readProjectionWeek(
         .order("id", { ascending: true })
         .limit(PAGE);
       if (cursor !== null) q = q.gt("id", cursor);
-      const { data, error } = await q;
+      let page = await q;
+      for (let attempt = 1; page.error && attempt < PAGE_ATTEMPTS; attempt++) {
+        page = await q;
+      }
+      const { data, error } = page;
       if (error) throw new Error(`positional war universe load failed: ${error.message}`);
       if (!data || data.length === 0) break;
       readCount += data.length;
@@ -390,30 +412,40 @@ async function readProjectionWeek(
   };
 
   // The count does not depend on the walk, so it runs alongside it; only the
-  // assertion afterwards needs both.
-  const [walked, countResult] = await Promise.all([
-    walk(),
-    supabase
-      .from("player_weekly_projections")
-      .select("id, players!inner(position)", { count: "exact", head: true })
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .eq("week", week)
-      .eq("source", source)
-      .in("players.position", positions),
-  ]);
-
-  if (countResult.error) {
-    throw new Error(`positional war universe count failed: ${countResult.error.message}`);
+  // assertion afterwards needs both. A disagreement is retried (see
+  // WEEK_READ_ATTEMPTS) before it is believed.
+  let lastShort = "";
+  for (let attempt = 1; attempt <= WEEK_READ_ATTEMPTS; attempt++) {
+    const [walked, expected] = await Promise.all([
+      walk(),
+      countProjectionSlice(supabase, season, week, source, positions),
+    ]);
+    if (expected == null || walked.readCount >= expected) return walked;
+    lastShort = `read ${walked.readCount} of ${expected} projection rows`;
   }
-  const expected = countResult.count;
-  if (expected != null && walked.readCount < expected) {
-    throw new Error(
-      `positional war week ${week} (${group}) load incomplete: read ${walked.readCount} of ${expected} projection rows`,
-    );
-  }
+  throw new Error(`positional war week ${week} (${group}) load incomplete: ${lastShort}`);
+}
 
-  return walked;
+/** The live row count for one (season, week, source, position group), exact. */
+async function countProjectionSlice(
+  supabase: ServiceClient,
+  season: number,
+  week: number,
+  source: string,
+  positions: readonly string[],
+): Promise<number | null> {
+  const { count, error } = await supabase
+    .from("player_weekly_projections")
+    .select("id, players!inner(position)", { count: "exact", head: true })
+    .eq("season", season)
+    .eq("season_type", "regular")
+    .eq("week", week)
+    .eq("source", source)
+    .in("players.position", [...positions]);
+  if (error) {
+    throw new Error(`positional war universe count failed: ${error.message}`);
+  }
+  return count;
 }
 
 /**
@@ -565,6 +597,11 @@ async function readUniversePlayers(
 /** The four reads the assembly needs, so it can run cached or direct. */
 type UniverseReaders = {
   projectionWeek: (season: number, week: number, group: UniverseGroup) => Promise<ProjectionWeekSlice>;
+  /**
+   * The same week read, always straight from Postgres. The assembly uses it to
+   * replace a slice the live count proves is short (see assembleUniverse).
+   */
+  projectionWeekDirect: (season: number, week: number, group: UniverseGroup) => Promise<ProjectionWeekSlice>;
   players: (playerIds: string[], includeDefenders: boolean) => Promise<ResolvedPlayers>;
   /** keys: the league's base alone, or [base, "idp123"] with defenders in. */
   accuracy: (playerIds: string[], keys: readonly string[]) => Promise<[string, AccuracyRow][]>;
@@ -580,6 +617,8 @@ function keysArg(keys: readonly string[]): string | readonly string[] {
 function directReaders(supabase: ServiceClient, source: string): UniverseReaders {
   return {
     projectionWeek: (season, week, group) =>
+      readProjectionWeek(supabase, season, week, source, group),
+    projectionWeekDirect: (season, week, group) =>
       readProjectionWeek(supabase, season, week, source, group),
     players: (playerIds, includeDefenders) =>
       readUniversePlayers(supabase, playerIds, includeDefenders),
@@ -617,6 +656,7 @@ function cachedReaders(supabase: ServiceClient, source: string): UniverseReaders
         ],
         () => direct.projectionWeek(season, week, group),
       ),
+    projectionWeekDirect: direct.projectionWeekDirect,
     players: (playerIds, includeDefenders) =>
       withDataCache(
         [
@@ -711,11 +751,44 @@ async function assembleUniverse(
     ),
   ]);
 
+  // RECOVERY BEFORE REFUSAL. A shortfall here, with every slice having passed
+  // its own guard, means some slice is older than the table: a week cached
+  // before its rows were published (a zero-row week passes its guard at zero),
+  // or rows written by a path that did not bust the tag (a sync run as a
+  // script rather than through the cron). Every slice was complete for the
+  // moment it was stored and the window has grown since, which is the shape of
+  // the production error "read 14156 of 28312". Refusing there failed every
+  // league until the entries expired a day later. So each slice is checked
+  // against its own live count, any short one is replaced by a direct read, and
+  // only a shortfall that survives a fresh read is thrown below.
+  let readCount = perWeek.reduce((sum, slice) => sum + slice.readCount, 0);
+  if (expected != null && readCount < expected) {
+    const liveCounts = await mapWithConcurrency(slices, DB_CHUNK_CONCURRENCY, ({ week, group }) =>
+      countProjectionSlice(supabase, season, week, params.source, UNIVERSE_GROUP_POSITIONS[group]),
+    );
+    const shortIndexes = slices
+      .map((_, i) => i)
+      .filter((i) => {
+        const live = liveCounts[i];
+        return live != null && perWeek[i].readCount < live;
+      });
+    const replaced = await mapWithConcurrency(shortIndexes, DB_CHUNK_CONCURRENCY, (i) =>
+      readers.projectionWeekDirect(season, slices[i].week, slices[i].group),
+    );
+    shortIndexes.forEach((sliceIndex, j) => {
+      perWeek[sliceIndex] = replaced[j];
+    });
+    if (shortIndexes.length > 0) {
+      console.warn(
+        `[positional-war] replaced ${shortIndexes.length} stale week slice(s) with a direct read (season ${season}, weeks ${fromWeek} to ${toWeek}, ${params.source})`,
+      );
+    }
+    readCount = perWeek.reduce((sum, slice) => sum + slice.readCount, 0);
+  }
+
   const windowProjections: ProjectionRow[] = [];
   const projectedIdSet = new Set<string>();
-  let readCount = 0;
   for (const slice of perWeek) {
-    readCount += slice.readCount;
     for (const row of slice.rows) {
       windowProjections.push(row);
       projectedIdSet.add(row.playerId);
@@ -724,10 +797,9 @@ async function assembleUniverse(
 
   // A short read would silently shrink the universe, which silently raises
   // every position's replacement level: a plausible-looking wrong answer
-  // rather than a failed one. This turns it into the latter, and it does so
-  // for a universe assembled entirely from cache entries just as much as for
-  // one read fresh: a stale slice, an evicted slice that came back empty, or a
-  // week missing from the fan-out all show up here as a shortfall.
+  // rather than a failed one. This turns it into the latter. It runs after the
+  // recovery above, so what it catches is a shortfall that a fresh, direct
+  // read of every short slice could not explain away.
   if (expected != null && readCount < expected) {
     throw new Error(
       `positional war universe load incomplete: read ${readCount} of ${expected} projection rows`,

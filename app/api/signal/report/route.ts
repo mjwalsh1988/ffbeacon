@@ -11,8 +11,11 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
  *   - same-origin only (x-requested-with header), matching the media route.
  *   - auth required; anonymous reporting is not allowed (RLS also blocks anon).
  *   - per-reporter rate limit: min 15s between reports, max 10 per rolling hour,
- *     max 40 per rolling day. Enforced here (not a trigger), mirroring the post
- *     limits, because reports are written by many users across many targets.
+ *     max 40 per rolling day. Checked here for the friendly message, and
+ *     enforced again by the BEFORE INSERT trigger from migration 0320, which is
+ *     what holds when somebody inserts through PostgREST instead of this route.
+ *     The trigger also forces status to 'pending' and refuses a target that is
+ *     not publicly viewable, the same check made below.
  *   - the target must be publicly reportable: the post must exist, not be
  *     hidden, and its parent Signal must be live (published + public + not
  *     hidden). This stops reporting of arbitrary or non-public ids.
@@ -172,6 +175,20 @@ export async function POST(req: Request) {
     // 23505 = unique violation: this reporter already reported this target.
     if (error.code === "23505") {
       return NextResponse.json({ ok: true, alreadyReported: true });
+    }
+    // 23514 = the insert trigger (migration 0320) refused it. It enforces the
+    // same target and rate rules this route checks above, so reaching it means
+    // a concurrent request won the race. Its own wording is never echoed.
+    if (error.code === "23514") {
+      const rateLimited = (error.message ?? "").startsWith("rate_limit");
+      return NextResponse.json(
+        {
+          error: rateLimited
+            ? "Slow down. Wait a moment before reporting again."
+            : "That content cannot be reported.",
+        },
+        { status: rateLimited ? 429 : 400 },
+      );
     }
     return NextResponse.json(
       { error: "Could not submit your report. Please try again." },

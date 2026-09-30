@@ -28,7 +28,7 @@ import {
 } from "./layout";
 import { sendEmail } from "./send";
 import { formatEastern } from "../datetime";
-import type { CronFailure, CronMiss } from "../cron-health";
+import type { AbandonedRuns, CronFailure, CronMiss } from "../cron-health";
 import type { FreshnessResult } from "../data-freshness";
 
 export const CRON_HEALTH_ALERT_TO =
@@ -41,6 +41,12 @@ function describeGap(miss: CronMiss): string {
   if (miss.hoursSince === null) return "has never run";
   if (miss.hoursSince < 48) return `last ran ${miss.hoursSince.toFixed(1)} hours ago`;
   return `last ran ${(miss.hoursSince / 24).toFixed(1)} days ago`;
+}
+
+function describeAbandoned(runs: AbandonedRuns): string {
+  return runs.count === 1
+    ? `One run, started ${formatEastern(runs.startedAt)}, never recorded a finish.`
+    : `${runs.count} runs never recorded a finish, the latest started ${formatEastern(runs.startedAt)}.`;
 }
 
 function describeStaleness(result: FreshnessResult): string {
@@ -61,7 +67,7 @@ function describeStaleness(result: FreshnessResult): string {
  */
 export async function sendCronHealthEmail(args: {
   missed: CronMiss[];
-  stalled: Array<{ name: string; startedAt: string }>;
+  stalled: AbandonedRuns[];
   stale?: FreshnessResult[];
   failing?: CronFailure[];
 }): Promise<void> {
@@ -87,7 +93,7 @@ export async function sendCronHealthEmail(args: {
     })),
     ...stalled.map((s) => ({
       label: `${s.name} never finished`,
-      value: `Still marked running since ${formatEastern(s.startedAt)}. The invocation started and died before it could report a result.`,
+      value: `${describeAbandoned(s)} The invocation started and was killed before it could report a result, so each run has now been recorded as failed.`,
     })),
     ...stale.map((r) => ({
       label: `${r.label} has gone stale`,
@@ -134,7 +140,7 @@ export async function sendCronHealthEmail(args: {
     ...missed.map((m) =>
       `${m.name}: ${describeGap(m)}, against a ${m.maxGapHours}-hour limit (schedule ${m.schedule}).`,
     ),
-    ...stalled.map((s) => `${s.name}: still marked running since ${formatEastern(s.startedAt)}.`),
+    ...stalled.map((s) => `${s.name}: ${describeAbandoned(s)}`),
     ...stale.map(
       (r) => `${r.label}: ${describeStaleness(r)}, against a ${r.maxAgeHours}-hour limit.`,
     ),

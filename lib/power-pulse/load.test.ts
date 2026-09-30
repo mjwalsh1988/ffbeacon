@@ -362,3 +362,61 @@ describe("loadPlayers positions option (IDP-122)", () => {
     expect(projectablePlayerIds(out)).toEqual(["p-wr"]);
   });
 });
+
+describe("loadPlayers reads two metadata keys, not the whole object", () => {
+  it("selects the injury status and depth order by path and carries them through", async () => {
+    let selected = "";
+    const builder: Record<string, unknown> = {
+      select: (cols: string) => ((selected = cols), builder),
+      in: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: "p-wr", slug: "a-receiver-1", first_name: "A", last_name: "Receiver", full_name: "A Receiver",
+              position: "WR", eligible_positions: ["WR"], team: "DET", external_ids: { sleeper: "1" },
+              injury_status: "Questionable", depth_chart_order: 2,
+            },
+          ],
+          error: null,
+        }),
+    };
+    const out = await loadPlayers({ from: () => builder } as never, ["1"]);
+    expect(selected).not.toMatch(/(^|,\s*)metadata(\s*,|$)/);
+    expect(selected).toContain("injury_status:metadata->sleeper->>injury_status");
+    expect(selected).toContain("depth_chart_order:metadata->sleeper->depth_chart_order");
+    expect(out.get("1")?.injuryStatus).toBe("Questionable");
+    expect(out.get("1")?.depthOrder).toBe(2);
+  });
+
+  it("reads many chunks in parallel and keeps every player", async () => {
+    const ids = Array.from({ length: 650 }, (_, i) => String(i + 1));
+    let inFlight = 0;
+    let peak = 0;
+    const client = {
+      from: () => {
+        const builder: Record<string, unknown> = {
+          select: () => builder,
+          in: async (_col: string, chunk: string[]) => {
+            inFlight++;
+            peak = Math.max(peak, inFlight);
+            await new Promise((r) => setTimeout(r, 5));
+            inFlight--;
+            return {
+              data: chunk.map((id) => ({
+                id: `p${id}`, slug: `p-${id}`, first_name: "P", last_name: id, full_name: `P ${id}`,
+                position: "RB", eligible_positions: ["RB"], team: "DET", external_ids: { sleeper: id },
+                injury_status: null, depth_chart_order: null,
+              })),
+              error: null,
+            };
+          },
+        };
+        return builder;
+      },
+    } as never;
+    const out = await loadPlayers(client, ids);
+    expect(out.size).toBe(650);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+});

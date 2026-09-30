@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import type { SearchablePlayer } from "@/lib/ranking-boards";
 import { positionNoun } from "@/lib/site";
+import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
 
 const SEARCH_DEBOUNCE_MS = 250;
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
@@ -36,7 +37,9 @@ export function AddPlayerCombobox({
   const [results, setResults] = useState<SearchablePlayer[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // No option is active until the reader presses Down (lib/keyboard-navigation).
+  const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
+  const statusId = useId();
 
   const positionsKey = positions.join(",");
   const pool = holdsDefenders ? "ranked+idp" : null;
@@ -81,9 +84,11 @@ export function AddPlayerCombobox({
     [results, excludeIds],
   );
 
+  // A new result set clears the active option: the reader has typed, not
+  // chosen, and the next Down arrow lands on the FIRST match.
   useEffect(() => {
-    if (activeIdx >= matches.length) setActiveIdx(0);
-  }, [matches.length, activeIdx]);
+    setActiveIdx(NO_ACTIVE_OPTION);
+  }, [results]);
 
   useEffect(() => {
     if (!open) return;
@@ -106,21 +111,18 @@ export function AddPlayerCombobox({
     // row without re-focusing.
     setQuery("");
     setResults([]);
-    setActiveIdx(0);
+    setActiveIdx(NO_ACTIVE_OPTION);
     inputRef.current?.focus();
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      const key = event.key;
       setOpen(true);
-      setActiveIdx((i) => Math.min(matches.length - 1, i + 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
+      setActiveIdx((i) => nextComboboxIndex(i, key, matches.length));
     } else if (event.key === "Enter") {
-      if (open && matches[activeIdx]) {
+      if (open && activeIdx >= 0 && matches[activeIdx]) {
         event.preventDefault();
         commit(matches[activeIdx]);
       }
@@ -128,12 +130,26 @@ export function AddPlayerCombobox({
       if (open) {
         event.preventDefault();
         setOpen(false);
+        setActiveIdx(NO_ACTIVE_OPTION);
       }
     }
   };
 
   const single = positions.length === 1 ? positions[0] : null;
   const who = single ? positionNoun(single, "plural") : "players";
+  const trimmedQuery = query.trim();
+  const showPanel = open && trimmedQuery.length >= 2;
+  // The listbox exists only when it has options. "Searching" and "No active
+  // players match" are status text, carried by the live line, not options.
+  const showList = showPanel && !loading && matches.length > 0;
+  const statusText =
+    trimmedQuery.length < 2
+      ? ""
+      : loading
+        ? "Searching"
+        : matches.length === 0
+          ? `No active players match ${trimmedQuery}`
+          : `${matches.length} ${matches.length === 1 ? "player" : "players"} found`;
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -146,12 +162,14 @@ export function AddPlayerCombobox({
         type="text"
         role="combobox"
         aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={listboxId}
+        aria-expanded={showList}
+        aria-controls={showList ? listboxId : undefined}
         aria-activedescendant={
-          open && matches[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
+          showList && activeIdx >= 0 && matches[activeIdx]
+            ? `${listboxId}-opt-${activeIdx}`
+            : undefined
         }
-        aria-describedby={helpId}
+        aria-describedby={`${helpId} ${statusId}`}
         autoComplete="off"
         spellCheck={false}
         value={query}
@@ -167,22 +185,25 @@ export function AddPlayerCombobox({
       <p id={helpId} className="mt-1 text-xs text-ink-subtle">
         Type at least two letters. Active {who} only.
       </p>
+      <p id={statusId} role="status" aria-live="polite" className="sr-only">
+        {statusText}
+      </p>
 
-      {open && query.trim().length >= 2 && (
+      {showPanel && !showList && (
+        // Sighted twin of the live status line; plain text, no listbox.
+        <div className="absolute left-0 right-0 z-30 mt-1 rounded-card border border-line bg-surface-elevated px-3 py-3 text-sm text-ink-subtle shadow-2xl shadow-black/50">
+          {loading ? "Searching..." : <>No active players match &quot;{trimmedQuery}&quot;.</>}
+        </div>
+      )}
+
+      {showList && (
         <ul
           id={listboxId}
           role="listbox"
           aria-label="Player search results"
           className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface-elevated shadow-2xl shadow-black/50"
         >
-          {loading ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">Searching...</li>
-          ) : matches.length === 0 ? (
-            <li className="px-3 py-3 text-sm text-ink-subtle">
-              No active players match &quot;{query.trim()}&quot;.
-            </li>
-          ) : (
-            matches.map((p, i) => {
+          {matches.map((p, i) => {
               const isActive = i === activeIdx;
               return (
                 <li
@@ -215,8 +236,7 @@ export function AddPlayerCombobox({
                   <Plus aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
                 </li>
               );
-            })
-          )}
+            })}
         </ul>
       )}
     </div>

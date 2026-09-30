@@ -2,10 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
-  mergeSleeperLeagueSettings,
-  parseSleeperLeagueSettings,
-} from "@/lib/sleeper-league-settings";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { writeSleeperLeagueSettings } from "@/lib/sleeper-league-settings-write";
 
 /**
  * Pin a specific Sleeper league to the user's profile, or clear the
@@ -33,28 +31,10 @@ export async function setFeaturedLeague(
     return { ok: false, error: "Invalid league id" };
   }
 
-  const { data: existing } = await supabase
-    .from("user_preferences")
-    .select("sleeper_league_settings")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const current = parseSleeperLeagueSettings(existing?.sleeper_league_settings);
-  const next = mergeSleeperLeagueSettings(current, {
+  const result = await writeSleeperLeagueSettings(user.id, {
     featured_league_id: sleeperLeagueId,
   });
-
-  const { error } = await supabase
-    .from("user_preferences")
-    .upsert(
-      {
-        user_id: user.id,
-        sleeper_league_settings: next,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
-  if (error) return { ok: false, error: error.message };
+  if (!result.ok) return result;
 
   revalidatePath("/my-beacon");
   revalidatePath("/my-beacon/sleeper-leagues");
@@ -93,21 +73,10 @@ export async function setLeagueShownOnProfile(
   if (shown) set.add(sleeperLeagueId);
   else set.delete(sleeperLeagueId);
 
-  const next = mergeSleeperLeagueSettings(current, {
+  const result = await writeSleeperLeagueSettings(user.id, {
     shown_league_ids: Array.from(set),
   });
-
-  const { error } = await supabase
-    .from("user_preferences")
-    .upsert(
-      {
-        user_id: user.id,
-        sleeper_league_settings: next,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
-  if (error) return { ok: false, error: error.message };
+  if (!result.ok) return result;
 
   revalidatePath("/my-beacon");
   revalidatePath("/my-beacon/sleeper-leagues");

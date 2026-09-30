@@ -711,7 +711,7 @@ function SeasonSkeleton() {
   return (
     <div
       role="status"
-      className="h-64 animate-pulse rounded-modal border border-line bg-surface/40"
+      className="h-64 animate-pulse motion-reduce:animate-none rounded-modal border border-line bg-surface/40"
     >
       <span className="sr-only">Loading your season</span>
     </div>
@@ -795,7 +795,7 @@ function LineupSkeleton() {
   return (
     <div
       role="status"
-      className="mt-6 h-96 animate-pulse rounded-modal border border-line bg-surface/40"
+      className="mt-6 h-96 animate-pulse motion-reduce:animate-none rounded-modal border border-line bg-surface/40"
     >
       <span className="sr-only">Loading your lineup</span>
     </div>

@@ -15,7 +15,10 @@
 import { useEffect, useId, useState, useTransition } from "react";
 import { RotateCcw } from "lucide-react";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
-import { DEFAULT_POWER_PULSE_SETTINGS } from "@/lib/power-pulse/default-settings";
+import {
+  DEFAULT_POWER_PULSE_SETTINGS,
+  DEFAULT_RESERVE_HOLD_WEEKS,
+} from "@/lib/power-pulse/default-settings";
 import { WAR_SETTING_BOUNDS } from "@/lib/positional-war/default-settings";
 import { savePowerPulseSettingsAction } from "./actions";
 
@@ -394,6 +397,15 @@ export function PowerPulseSettingsManager({
           label="Floor multiplier"
           value={settings.availability.minMultiplier}
           onChange={(v) => patch("availability", { minMultiplier: v })}
+        />
+        <Field
+          label="Injured reserve hold, weeks"
+          value={settings.injury.reserveHoldWeeks ?? DEFAULT_RESERVE_HOLD_WEEKS}
+          onChange={(v) => patch("injury", { reserveHoldWeeks: Math.trunc(v) })}
+          hint="How many weeks, counting this one, a player in an injured reserve slot is left out of his team's projection. After that he counts in the weeks his own projection has him playing. Bump the model version after changing this."
+          step="1"
+          min={0}
+          max={18}
         />
       </Section>
 

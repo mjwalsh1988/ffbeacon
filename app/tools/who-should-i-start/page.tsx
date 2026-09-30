@@ -36,7 +36,9 @@ import {
   getAvailableSources,
   resolveSourceForFormat,
   describeSource,
+  reconcileFormatWithSource,
 } from "@/lib/source";
+import { FormatFallbackBanner } from "@/components/format-fallback-banner";
 import { currentNflSeason } from "@/lib/sleeper";
 import { resolveHandleGate } from "@/lib/sleeper-handle/resolve";
 import { formatEastern } from "@/lib/datetime";
@@ -282,17 +284,27 @@ export async function generateMetadata({
   let imagePath = "/api/og/page/beacon-breakdown";
 
   if (rawEntries.length >= MIN_START_SIT_PLAYERS) {
-    const [{ slugs }, formatResolution, sourceResolution] = await Promise.all([
-      resolveStartSitEntriesOnce(JSON.stringify(rawEntries)),
-      resolveFormatSlug(supabase, params.format),
-      resolveSourceSlug(supabase, params.source),
-    ]);
+    const [{ slugs }, formatResolution, sourceResolution, registry, activeFormats] =
+      await Promise.all([
+        resolveStartSitEntriesOnce(JSON.stringify(rawEntries)),
+        resolveFormatSlug(supabase, params.format),
+        resolveSourceSlug(supabase, params.source),
+        getAvailableSources(supabase),
+        getActiveFormats(supabase),
+      ]);
     if (slugs.length >= MIN_START_SIT_PLAYERS) {
       imagePath = buildStartSitOgImagePath({
         slugs,
         start: clampStartCount(parseStartCountParam(params.start), slugs.length),
         week: resolveBoardWeek(params.week, clock.currentWeek),
-        format: formatResolution.slug,
+        // The same reconciled format the page renders, so the card and the
+        // board it shares agree.
+        format: reconcileFormatWithSource(
+          registry,
+          activeFormats,
+          sourceResolution.slug,
+          formatResolution.slug,
+        ).formatSlug,
         source: sourceResolution.slug,
       });
     }
@@ -358,10 +370,22 @@ export default async function WhoShouldIStartPage({
       isDiscordMember(),
     ]);
 
-  const formatRow = activeFormats.find((f) => f.slug === formatResolution.slug) ?? null;
-  const formatDisplay = formatRow?.display_name ?? formatResolution.slug;
+  // Keep the reader's SOURCE and move the FORMAT when that source does not
+  // cover it, with the same banner the rankings board shows. Read-time only:
+  // the swap is never written to the cookie or the saved preference. The
+  // board below is handed the reconciled slug, so every section of the page
+  // reads the same format.
+  const reconciled = reconcileFormatWithSource(
+    registry,
+    activeFormats,
+    sourceResolution.slug,
+    formatResolution.slug,
+  );
+  const formatSlug = reconciled.formatSlug;
+  const formatRow = activeFormats.find((f) => f.slug === formatSlug) ?? null;
+  const formatDisplay = formatRow?.display_name ?? formatSlug;
   const engineFormat: ToughestCallsFormat = {
-    slug: formatResolution.slug,
+    slug: formatSlug,
     display: formatDisplay,
     scoring_type: formatRow?.scoring_type ?? "ppr",
     te_premium_bonus: formatRow?.te_premium_bonus ?? null,
@@ -486,6 +510,8 @@ export default async function WhoShouldIStartPage({
           }
         />
 
+        <FormatFallbackBanner fallback={reconciled.fallback} className="mt-6" />
+
         {/* The H2 and the picker render in BOTH the empty and loaded state
             (section 2.4): the indexed empty state must carry this heading
             too, not only the loaded board. Only the Suspense-wrapped board
@@ -529,7 +555,7 @@ export default async function WhoShouldIStartPage({
                   <BoardSection
                     finalSlugs={finalSlugs}
                     breakdownSlugs={breakdownSlugs}
-                    params={params}
+                    params={reconciled.fallback ? { ...params, format: formatSlug } : params}
                     pulseSettings={pulseSettings}
                     basePath={TOOL_PATH}
                   />
@@ -551,7 +577,7 @@ export default async function WhoShouldIStartPage({
             week={clock.currentWeek}
             season={clock.season ?? Number(currentNflSeason())}
             projectionSourceName={projectionSourceName}
-            formatSlug={formatResolution.slug}
+            formatSlug={formatSlug}
             formatDisplay={formatDisplay}
             closestCalls={closestCalls}
           />

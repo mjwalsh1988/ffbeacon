@@ -21,7 +21,7 @@ import { WeeklyStats } from "@/components/player-profile/weekly-stats";
 import { loadSeasonScheduleCached } from "@/lib/season-schedule";
 import { buildPendingWeeks, toGameRow } from "@/lib/player-profile/game-log";
 import { WeeklyProjections } from "@/components/player-profile/weekly-projections";
-import { projectionSourceDisplay } from "@/lib/projections/source-constants";
+import { projectionSourceDisplay, SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import {
   aggregateSeasons,
   statColumns,
@@ -30,6 +30,7 @@ import {
   weekHasElapsed,
   computeStatAccuracy,
   lineFromGame,
+  lineFromProjection,
   type WeeklyGameRow,
   type PendingWeekRow,
   type AccuracyPoint,
@@ -208,8 +209,37 @@ export async function StatsTab({
     const rate = beatRateOverSeason(weeks);
     if (rate) beatRateBySeason[s] = rate;
   }
-  const projectionBeatRate =
-    currentSeason != null ? (beatRateBySeason[currentSeason] ?? null) : null;
+  // THE CARD'S BEAT RATE GRADES THE CARD'S ENGINE. The per-season rates above
+  // feed the game log and are read from the Sleeper-pinned history map (see
+  // loadProjectionsMap: only Sleeper has a published history). The projections
+  // card is headed with the RESOLVED engine, so its beat rate and per-stat
+  // accuracy are computed from that engine's own rows for this season
+  // (`projections.rows`, the same read the card's numbers come from). While the
+  // resolved engine is Sleeper the two reads hold the same rows and the figures
+  // are unchanged; once it is not, the card never shows Sleeper's record under
+  // another engine's name.
+  const cardRowByWeek = new Map(projections.rows.map((row) => [row.week, row]));
+  const cardBeatWeeks: BeatRateWeek[] = [];
+  const cardStatWeeks: StatAccuracyWeek[] = [];
+  if (currentSeason != null) {
+    for (const r of rowsBySeason[currentSeason] ?? []) {
+      const projRow = cardRowByWeek.get(r.week);
+      const played = (r.gp ?? 0) > 0;
+      cardBeatWeeks.push({
+        projected: projRow ? effectiveProjectedPoints(projRow, scoringKey, tePremiumBonus) : null,
+        actual: played ? r.pts_active : null,
+        elapsed: weekHasElapsed(r.season, r.week, live) || played,
+      });
+      if (played && projRow) {
+        cardStatWeeks.push({ actual: lineFromGame(r), projected: lineFromProjection(projRow.stats) });
+      }
+    }
+  }
+  const projectionBeatRate = beatRateOverSeason(cardBeatWeeks) ?? null;
+  // How many played weeks this engine actually projected. Zero on a season that
+  // has started means there is nothing of THIS engine's to grade yet, and the
+  // card says so rather than showing an empty rate as if it were measured.
+  const cardGradedWeeks = cardStatWeeks.length;
 
   // Per-stat accuracy per season: for each season, roll the weeks the player
   // actually played (with their projected component line) into how often each
@@ -227,7 +257,13 @@ export async function StatsTab({
     if (acc.length > 0) statAccuracyBySeason[Number(s)] = acc;
   }
   const currentSeasonStatAccuracy =
-    currentSeason != null ? (statAccuracyBySeason[currentSeason] ?? []) : [];
+    currentSeason != null ? computeStatAccuracy(cardStatWeeks, player.position) : [];
+  // The game log below grades Sleeper's published history whatever engine the
+  // card above is on. Said in words only when the two differ.
+  const gameLogEngineNote =
+    projectionSource !== SLEEPER_SOURCE
+      ? ` Projections in the game log are ${projectionSourceDisplay(SLEEPER_SOURCE)}'s published numbers, the only engine with a full history.`
+      : "";
 
   return (
     <PageBody>
@@ -253,6 +289,7 @@ export async function StatsTab({
               accuracyPoints={currentSeasonAccuracy}
               beatRate={projectionBeatRate}
               statAccuracy={currentSeasonStatAccuracy}
+              gradedWeeks={cardGradedWeeks}
             />
           )}
 
@@ -332,7 +369,7 @@ export async function StatsTab({
           <Panel
             eyebrow="Game log"
             title="Weekly stats"
-            helper="Week by week, earliest to latest. Choose a season to view actuals against projection."
+            helper={`Week by week, earliest to latest. Choose a season to view actuals against projection.${gameLogEngineNote}`}
           >
             {allSeasons.length > 0 ? (
               <WeeklyStats

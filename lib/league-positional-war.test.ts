@@ -748,6 +748,31 @@ describe("refreshPositionalWar backoff bypasses", () => {
     expect(resolveSharedCurves).toHaveBeenCalledTimes(1);
   });
 
+  it("concurrent calls for one league share a single run", async () => {
+    wireOkPipeline();
+    const { client } = makeFakeClient({
+      leaguesRow: {
+        season: 2026,
+        positional_war_status: null,
+        positional_war_attempted_at: null,
+      },
+      rosterCount: 12,
+    });
+
+    // The deep view's derived pulse and the section's own boundary both ask
+    // for the same league inside one render.
+    const a = refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true });
+    const b = refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true });
+    expect(b).toBe(a);
+    await Promise.all([a, b]);
+
+    expect(resolveSharedCurves).toHaveBeenCalledTimes(1);
+
+    // Settled, so the next call is a new run rather than a replay.
+    await refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true });
+    expect(resolveSharedCurves).toHaveBeenCalledTimes(2);
+  });
+
   it("bypasses the backoff for 'skipped' when last_pulsed_at advanced since the attempt", async () => {
     wireOkPipeline();
     const attemptedAt = new Date(Date.now() - 60_000).toISOString();

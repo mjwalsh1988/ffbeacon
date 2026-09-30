@@ -42,6 +42,8 @@ export type MultiLeagueInput = {
   needLevel: NeedLevel;
   /** Stands in for leagues that publish no FAAB budget through Sleeper. */
   fallbackBudget?: number | null;
+  /** The reader's resolved value source, passed to every league priced. */
+  sourceSlug?: string | null;
   settings: FaabSettings;
 };
 
@@ -119,6 +121,7 @@ export async function calculateAcrossLeagues(
       candidateSleeperId: input.candidateSleeperId,
       needLevel: input.needLevel,
       fallbackBudget: input.fallbackBudget ?? null,
+      sourceSlug: input.sourceSlug ?? null,
       settings: input.settings,
     });
 

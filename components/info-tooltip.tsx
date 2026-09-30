@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
@@ -20,6 +21,14 @@ import { Info } from "lucide-react";
  *
  * `setOpen` comes straight from useState, so its identity is stable and the
  * effect re-subscribes only when `open` actually changes.
+ *
+ * ESCAPE IS CONSUMED. The listener runs in the CAPTURE phase on window and
+ * stops propagation, so the Escape that closes a tooltip inside a dialog does
+ * not also reach the dialog's own document-level handler and close the dialog
+ * around it. One key press, one thing dismissed.
+ *
+ * Pass the element that holds BOTH the trigger and the bubble as `triggerRef`
+ * when the bubble is hoverable, so a press on the bubble is not "outside".
  */
 export function useTooltipDismiss(
   open: boolean,
@@ -31,19 +40,72 @@ export function useTooltipDismiss(
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         setOpen(false);
       }
     };
     const onDocPointer = (e: PointerEvent) => {
       if (!triggerRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onDocPointer);
     return () => {
-      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       document.removeEventListener("pointerdown", onDocPointer);
     };
   }, [open, setOpen, triggerRef]);
+}
+
+/** Gap kept between a bubble and the edge of the viewport, in CSS px. */
+const VIEWPORT_MARGIN = 8;
+
+/**
+ * Nudges an open bubble sideways so it stays inside the viewport. A 256px
+ * bubble centred on an icon near the edge of a 360px phone used to run off the
+ * screen, and the half nobody could see was usually the end of the sentence.
+ * The shift uses the CSS `translate` property, which composes with the
+ * centring transform rather than replacing it.
+ */
+function useKeepOnScreen(open: boolean) {
+  const bubbleRef = useRef<HTMLSpanElement>(null);
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const el = bubbleRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Measure where the bubble would sit with no shift applied.
+    const left = rect.left - shift;
+    const right = rect.right - shift;
+    const vw = document.documentElement.clientWidth;
+    let next = 0;
+    if (right > vw - VIEWPORT_MARGIN) next = vw - VIEWPORT_MARGIN - right;
+    if (left + next < VIEWPORT_MARGIN) next = VIEWPORT_MARGIN - left;
+    if (next !== shift) setShift(next);
+    // Runs once per open; `shift` is read, not tracked, so the nudge cannot loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  return { bubbleRef, bubbleStyle: shift ? { translate: `${shift}px 0` } : undefined };
+}
+
+/**
+ * The bubble is hoverable (WCAG 1.4.13): a pointer can move from the trigger
+ * onto the text and read it without the bubble vanishing. The hover handlers
+ * therefore sit on the wrapper that holds both, and this transparent strip
+ * spans the small gap between them so the pointer never crosses dead space.
+ */
+function bridgeClass(placement: InfoTooltipPlacement, gap: "1.5" | "2"): string {
+  if (placement === "above") {
+    return gap === "2"
+      ? "before:absolute before:inset-x-0 before:top-full before:h-2 before:content-['']"
+      : "before:absolute before:inset-x-0 before:top-full before:h-1.5 before:content-['']";
+  }
+  return gap === "2"
+    ? "before:absolute before:inset-x-0 before:bottom-full before:h-2 before:content-['']"
+    : "before:absolute before:inset-x-0 before:bottom-full before:h-1.5 before:content-['']";
 }
 
 /**
@@ -66,11 +128,14 @@ export function useTooltipDismiss(
  *   users, so SR users don't hear the content twice.
  *
  * Open/close behavior:
- *   - Mouse hover (pointerType=mouse) opens and closes.
+ *   - Mouse hover (pointerType=mouse) opens and closes, over the trigger AND
+ *     the bubble, so the pointer can move onto the text (WCAG 1.4.13).
  *   - Keyboard focus opens; blur closes.
  *   - Touch tap toggles via onClick (mouse-only pointer guards the
  *     hover handlers so iOS doesn't open-then-close on a single tap).
- *   - Escape and outside-click both close.
+ *   - Escape and outside-click both close. Escape is consumed, so it does
+ *     not also close a dialog the tooltip sits in.
+ *   - The bubble is nudged sideways to stay on screen at 360px.
  */
 export type InfoTooltipPlacement = "below" | "above";
 export type InfoTooltipAlign = "start" | "center" | "end";
@@ -89,8 +154,9 @@ export function InfoTooltip({
   align?: InfoTooltipAlign;
 }) {
   const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  useTooltipDismiss(open, setOpen, buttonRef);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  useTooltipDismiss(open, setOpen, wrapperRef);
+  const { bubbleRef, bubbleStyle } = useKeepOnScreen(open);
 
   const alignClass =
     align === "start"
@@ -102,29 +168,35 @@ export function InfoTooltip({
     placement === "above" ? "bottom-full mb-2" : "top-full mt-2";
 
   return (
-    <span className="relative inline-flex">
+    <span
+      ref={wrapperRef}
+      className="relative inline-flex"
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") setOpen(true);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setOpen(false);
+      }}
+    >
       <button
-        ref={buttonRef}
         type="button"
         aria-label={label ?? content}
         onClick={() => setOpen((p) => !p)}
-        onPointerEnter={(e) => {
-          if (e.pointerType === "mouse") setOpen(true);
-        }}
-        onPointerLeave={(e) => {
-          if (e.pointerType === "mouse") setOpen(false);
-        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        // The icon stays 28px so it sits in a line of text; the invisible
+        // ::before reaches 8px past every edge, making the target 44px.
+        className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors before:absolute before:-inset-2 before:content-[''] hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
       >
         <Info aria-hidden="true" className="h-4 w-4" />
       </button>
       {open && (
         <span
+          ref={bubbleRef}
           aria-hidden="true"
           role="presentation"
-          className={`pointer-events-none absolute z-50 w-64 rounded-card border border-line bg-surface-elevated/95 px-3 py-2 text-xs leading-relaxed text-ink shadow-2xl backdrop-blur ${alignClass} ${placementClass}`}
+          style={bubbleStyle}
+          className={`absolute z-50 w-64 max-w-[calc(100vw-1rem)] rounded-card border border-line bg-surface-elevated/95 px-3 py-2 text-xs leading-relaxed text-ink shadow-2xl backdrop-blur ${bridgeClass(placement, "2")} ${alignClass} ${placementClass}`}
         >
           {content}
         </span>
@@ -178,8 +250,9 @@ export function ValueTooltip({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  useTooltipDismiss(open, setOpen, buttonRef);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  useTooltipDismiss(open, setOpen, wrapperRef);
+  const { bubbleRef, bubbleStyle } = useKeepOnScreen(open);
 
   const alignClass =
     align === "start"
@@ -191,18 +264,20 @@ export function ValueTooltip({
     placement === "above" ? "bottom-full mb-1.5" : "top-full mt-1.5";
 
   return (
-    <span className="relative inline-flex">
+    <span
+      ref={wrapperRef}
+      className="relative inline-flex"
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") setOpen(true);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setOpen(false);
+      }}
+    >
       <button
-        ref={buttonRef}
         type="button"
         aria-label={content}
         onClick={() => setOpen((p) => !p)}
-        onPointerEnter={(e) => {
-          if (e.pointerType === "mouse") setOpen(true);
-        }}
-        onPointerLeave={(e) => {
-          if (e.pointerType === "mouse") setOpen(false);
-        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         className={`inline-flex items-center rounded font-mono text-xs font-semibold leading-tight tabular-nums underline decoration-dotted decoration-from-font underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-cyan ${
@@ -213,9 +288,11 @@ export function ValueTooltip({
       </button>
       {open && (
         <span
+          ref={bubbleRef}
           aria-hidden="true"
           role="presentation"
-          className={`pointer-events-none absolute z-50 w-56 rounded-card border border-line bg-surface-elevated/95 px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink shadow-2xl backdrop-blur ${alignClass} ${placementClass}`}
+          style={bubbleStyle}
+          className={`absolute z-50 w-56 max-w-[calc(100vw-1rem)] rounded-card border border-line bg-surface-elevated/95 px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink shadow-2xl backdrop-blur ${bridgeClass(placement, "1.5")} ${alignClass} ${placementClass}`}
         >
           {content}
         </span>

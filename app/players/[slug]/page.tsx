@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SectionLoadingCard } from "@/components/section-loading-card";
+import { FormatFallbackBanner } from "@/components/format-fallback-banner";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -390,7 +391,12 @@ async function PlayerPageBody({
           />
 
           {/* The value-source fallback says nothing about a defender, who has
-              no value from any source. */}
+              no value from any source. The format swap below is the same
+              case seen from the other side (the reader's source kept, the
+              format moved), so it is held back for a defender too. */}
+          {!defender && (
+            <FormatFallbackBanner fallback={context.formatFallback} className="mt-4" />
+          )}
           {!defender && context.fallbackBanner && (
             <p
               role="status"

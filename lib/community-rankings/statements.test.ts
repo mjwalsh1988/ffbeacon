@@ -99,3 +99,35 @@ describe("board weight", () => {
     expect(agg.boards).toBe(2);
   });
 });
+
+describe("oversized boards", () => {
+  it("skips a board over MAX_BOARD_PLAYERS whole, and counts it", () => {
+    const agg = aggregateBoards(
+      [
+        { playerIds: ids("P", 2001), leftOff: [], pool: [] },
+        { playerIds: ["A", "B"], leftOff: [], pool: [] },
+      ],
+      OPTS,
+    );
+    expect(agg.skippedOversized).toBe(1);
+    expect(agg.boards).toBe(1);
+    expect(agg.boardsCount.get("P1")).toBeUndefined();
+    expect(agg.wins.has("P1")).toBe(false);
+    expect(w(agg, "A", "B")).toBeCloseTo(1);
+  });
+
+  it("skips a board whose left-off list is over the limit", () => {
+    const agg = aggregateBoards([{ playerIds: ["A"], leftOff: ids("X", 2001), pool: [] }], OPTS);
+    expect(agg.skippedOversized).toBe(1);
+    expect(agg.boards).toBe(0);
+  });
+
+  it("clamps an absurd depth so the pool slice stays bounded", () => {
+    const agg = aggregateBoards(
+      [{ playerIds: ["A"], leftOff: [], pool: ids("Q", 5000), depth: 1e9 }],
+      OPTS,
+    );
+    // depth 2000 with poolMargin 1 reads at most 4000 pool players.
+    expect(agg.wins.get("A")?.size).toBe(4000);
+  });
+});

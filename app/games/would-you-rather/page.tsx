@@ -28,6 +28,8 @@ import {
   selectTradeId,
 } from "@/lib/would-you-rather/round";
 import { countActivePool, growPool, POOL_LOW_WATER_MARK } from "@/lib/would-you-rather/pool";
+import { sumDiscordVotes } from "@/lib/would-you-rather/discord";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { WyrErrorCode, WyrRound } from "@/lib/would-you-rather/types";
 import { WouldYouRatherClient } from "./would-you-rather-client";
 import { WrittenSections } from "./written-sections";
@@ -143,7 +145,28 @@ export default async function WouldYouRatherPage() {
   const { count: voteCount } = await admin
     .from("would_you_rather_votes")
     .select("id", { count: "exact", head: true });
-  votesCast = voteCount ?? 0;
+  // "Site and Discord" has to be true of the number. Discord votes are not rows
+  // in would_you_rather_votes (nobody's identity is attached to most of them);
+  // they are the per-trade discord_votes_a / discord_votes_b totals, recomputed
+  // from the polls. Only trades that have ever been polled carry any, which is
+  // a few a day, so this reads a small paged set rather than the whole pool.
+  let discordVotes = 0;
+  try {
+    const polled = await fetchAllRows("wyr discord vote totals", (from, to) =>
+      admin
+        .from("would_you_rather_trades")
+        .select("discord_votes_a, discord_votes_b")
+        .or("discord_votes_a.gt.0,discord_votes_b.gt.0")
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    discordVotes = sumDiscordVotes(polled);
+  } catch (err) {
+    // The site count still stands on its own; the masthead is not worth an
+    // error page.
+    console.error("[would-you-rather] discord vote total failed", err);
+  }
+  votesCast = (voteCount ?? 0) + discordVotes;
 
   const webApplicationLd = webApplicationJsonLd({
     name: META_TITLE,

@@ -5,6 +5,7 @@ import { ArrowRight, Calculator } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { PageBody } from "@/components/app-shell/page-body";
+import { FormatFallbackBanner } from "@/components/format-fallback-banner";
 import { PageColumns } from "@/components/app-shell/page-columns";
 import { PageMasthead, type MastheadChip, type MastheadStat } from "@/components/app-shell/page-masthead";
 import { FaqAccordion, type FaqAccordionItem } from "@/components/faq-accordion";
@@ -393,6 +394,7 @@ export default async function WaiverWeekPage({
           }
         />
 
+        <FormatFallbackBanner fallback={context.formatFallback} className="mt-6" />
         {context.fallbackBanner && (
           <p
             role="status"

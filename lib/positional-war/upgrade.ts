@@ -223,8 +223,8 @@ export async function runUpgradeWhatIf(
   // Cheap gate before the expensive reads: no cached Power Pulse rows means no
   // baseline for the eleven teams we are not projecting, and inventing one
   // would report a swing that is really just eleven teams at zero.
-  const cachedWeekly = await loadCachedWeekly(supabase, leagueRowId, season);
-  if (cachedWeekly.size === 0) return { ok: false, reason: "no-baseline" };
+  const anyCachedWeekly = await loadCachedWeekly(supabase, leagueRowId, season);
+  if (anyCachedWeekly.size === 0) return { ok: false, reason: "no-baseline" };
 
   const view = await loadPositionalWarView(supabase, leagueRowId, season);
   const curve = view?.curves.find((c) => c.position === params.position) ?? null;
@@ -310,6 +310,13 @@ export async function runUpgradeWhatIf(
     fromWeek: currentWeek,
     settings: pulseSettings.beaconProjections,
   });
+
+  // The other teams' baseline must come from the same engine the two projected
+  // sides use. Rows built on the other engine (the hour after the projection
+  // switch flips) are left out by loadCachedWeekly, and with none left there is
+  // no honest baseline to compare against.
+  const cachedWeekly = await loadCachedWeekly(supabase, leagueRowId, season, projectionSource);
+  if (cachedWeekly.size === 0) return { ok: false, reason: "no-baseline" };
 
   const [projectionRows, accuracy, defense, schedule] = await Promise.all([
     loadProjections(supabase, playerIds, season, currentWeek, undefined, projectionSource),

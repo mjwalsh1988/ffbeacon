@@ -162,11 +162,17 @@ function callSitesAcrossLib(name: string): CallSite[] {
 
 describe("captureLeagueRawData is the one door into the capture-set stages", () => {
   const derivedBody = extractFunctionBody("pulseLeagueDerived");
+  // pulseLeagueDerived's shared half (capture set, rankings, Power Pulse) lives
+  // in runSharedDerivedPass so concurrent callers for one league can share it;
+  // the capture set is called from there, and the derived pass reaches it only
+  // through joinSharedDerivedPass.
+  const sharedBody = extractFunctionBody("runSharedDerivedPass");
   const footprintBody = extractFunctionBody("pulseLeagueFootprint");
   const captureBody = extractFunctionBody("captureLeagueRawData");
 
-  it("is called inside pulseLeagueDerived", () => {
-    expect(derivedBody).toContain("captureLeagueRawData(");
+  it("is called inside pulseLeagueDerived's shared pass", () => {
+    expect(sharedBody).toContain("captureLeagueRawData(");
+    expect(derivedBody).toContain("runSharedDerivedPass(");
   });
 
   it("is called inside pulseLeagueFootprint", () => {

@@ -64,6 +64,7 @@ import {
   loadLeagueFreeAgents,
   type FreeAgentOption,
 } from "@/lib/faab/free-agents";
+import { resolveSourceForFormatId } from "@/lib/faab/value-source";
 import type {
   LeagueFaabReport,
   MultiLeagueRow,
@@ -111,6 +112,18 @@ async function claimSlot(bucket: string, max: number): Promise<boolean> {
     console.error("[faab] rate-limit check failed", err);
     return false;
   }
+}
+
+/**
+ * The reader's source as the browser sent it. Null when absent (the resolver
+ * then takes the registry default), false when present and malformed. A source
+ * slug is a preference rather than a permission, so the shape check is the
+ * whole of the validation; an unknown slug simply falls through the resolver.
+ */
+function readSourceInput(value: unknown): string | null | false {
+  if (value === null || value === undefined || value === "") return null;
+  const slug = String(value);
+  return FORMAT_PATTERN.test(slug) ? slug : false;
 }
 
 function readNeed(value: unknown): NeedLevel {
@@ -275,16 +288,22 @@ export type FreeAgentsResult =
  */
 export async function fetchLeagueFreeAgents(input: {
   sleeperLeagueId: string;
+  /**
+   * The header's format. Used ONLY for a league whose Sleeper settings matched
+   * none of our formats: every other league is ranked on its own derived
+   * format, the same one the bid is priced on.
+   */
   formatSlug: string;
-  sourceSlug: string;
+  /** The reader's chosen source, or null to take the registry default. */
+  sourceSlug: string | null;
 }): Promise<FreeAgentsResult> {
   const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
   if (!SLEEPER_ID_PATTERN.test(sleeperLeagueId)) {
     return { ok: false, error: "Invalid league id" };
   }
   const formatSlug = String(input.formatSlug ?? "");
-  const sourceSlug = String(input.sourceSlug ?? "");
-  if (!FORMAT_PATTERN.test(formatSlug) || !FORMAT_PATTERN.test(sourceSlug)) {
+  const sourceSlug = readSourceInput(input.sourceSlug);
+  if (!FORMAT_PATTERN.test(formatSlug) || sourceSlug === false) {
     return { ok: false, error: "Invalid format or source" };
   }
 
@@ -294,18 +313,11 @@ export async function fetchLeagueFreeAgents(input: {
 
   const admin = createAdminClient();
 
-  const [{ data: league }, { data: format }] = await Promise.all([
-    admin
-      .from("leagues")
-      .select("id")
-      .eq("sleeper_league_id", sleeperLeagueId)
-      .maybeSingle(),
-    admin
-      .from("format_configs")
-      .select("id")
-      .eq("slug", formatSlug)
-      .maybeSingle(),
-  ]);
+  const { data: league } = await admin
+    .from("leagues")
+    .select("id, format_config_id")
+    .eq("sleeper_league_id", sleeperLeagueId)
+    .maybeSingle();
 
   if (!league) {
     return {
@@ -313,13 +325,42 @@ export async function fetchLeagueFreeAgents(input: {
       error: "That league did not finish syncing. Pick it again in a moment.",
     };
   }
-  if (!format) return { ok: false, error: "Unknown format" };
+
+  // The league's own derived format leads, so the list is ranked on the same
+  // board the bid is priced on. The header's format stands in only for a
+  // league we could not match to a format at all.
+  let formatConfigId = league.format_config_id ?? null;
+  if (!formatConfigId) {
+    const { data: format } = await admin
+      .from("format_configs")
+      .select("id")
+      .eq("slug", formatSlug)
+      .eq("is_active", true)
+      .maybeSingle();
+    formatConfigId = format?.id ?? null;
+  }
+  if (!formatConfigId) return { ok: false, error: "Unknown format" };
+
+  // The reader's source when it ranks this format, otherwise the standard
+  // fall-through (lib/source.ts resolveSourceForFormat).
+  const rankingSource = await resolveSourceForFormatId(
+    admin,
+    "rankings",
+    formatConfigId,
+    sourceSlug,
+  );
+  if (!rankingSource) {
+    return {
+      ok: false,
+      error: "No source ranks this league's format yet, so we cannot list its free agents.",
+    };
+  }
 
   try {
     const result = await loadLeagueFreeAgents(admin, {
       leagueRowId: league.id,
-      formatConfigId: format.id,
-      source: sourceSlug,
+      formatConfigId,
+      source: rankingSource,
     });
     if (!result) {
       return {
@@ -728,11 +769,15 @@ export async function runLeagueBid(input: {
   budgetOverride?: number | null;
   /** Stands in when the league publishes no FAAB budget through Sleeper. */
   fallbackBudget?: number | null;
+  /** The reader's chosen value source. */
+  sourceSlug?: string | null;
 }): Promise<LeagueBidResult> {
   const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
   if (!SLEEPER_ID_PATTERN.test(sleeperLeagueId)) {
     return { ok: false, error: "Invalid league id" };
   }
+  const sourceSlug = readSourceInput(input.sourceSlug);
+  if (sourceSlug === false) return { ok: false, error: "Invalid source" };
   const candidateSleeperId = String(input.candidateSleeperId ?? "");
   if (!PLAYER_ID_PATTERN.test(candidateSleeperId)) {
     return { ok: false, error: "Invalid player id" };
@@ -782,6 +827,7 @@ export async function runLeagueBid(input: {
       needLevel: readNeed(input.needLevel),
       budgetOverride,
       fallbackBudget,
+      sourceSlug,
       settings,
     });
     if (!outcome.ok) return { ok: false, error: outcome.error };
@@ -806,11 +852,15 @@ export async function runAllLeagueBids(input: {
   candidateSleeperId: string;
   needLevel: string;
   fallbackBudget?: number | null;
+  /** The reader's chosen value source. */
+  sourceSlug?: string | null;
 }): Promise<AllLeaguesResult> {
   const sleeperUserId = String(input.sleeperUserId ?? "");
   if (!SLEEPER_ID_PATTERN.test(sleeperUserId)) {
     return { ok: false, error: "Invalid Sleeper user" };
   }
+  const sourceSlug = readSourceInput(input.sourceSlug);
+  if (sourceSlug === false) return { ok: false, error: "Invalid source" };
   const candidateSleeperId = String(input.candidateSleeperId ?? "");
   if (!PLAYER_ID_PATTERN.test(candidateSleeperId)) {
     return { ok: false, error: "Invalid player id" };
@@ -854,6 +904,7 @@ export async function runAllLeagueBids(input: {
         Number.isFinite(Number(input.fallbackBudget))
           ? Number(input.fallbackBudget)
           : null,
+      sourceSlug,
       settings,
     });
     return {

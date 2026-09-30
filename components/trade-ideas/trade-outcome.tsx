@@ -436,7 +436,11 @@ function SeasonStrip({ outcome, gaps }: { outcome: TradeOutcome; gaps: ImpactGap
       {(gaps.simulation || gaps.lineup) && (
         <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
           {gaps.simulation
-            ? "No regular season games left, so the odds cannot be measured."
+            ? gaps.simulationCause === "engine-switch"
+              ? "Projections for this league are being rebuilt on a new projection source, so the odds cannot be measured yet."
+              : gaps.simulationCause === "not-built"
+                ? "Projections for every team in this league are not built yet, so the odds cannot be measured yet."
+                : "No regular season games left, so the odds cannot be measured."
             : "No weekly projections in this league, so the lineup cannot be measured."}
         </p>
       )}

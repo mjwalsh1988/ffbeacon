@@ -37,6 +37,7 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
 import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { changedSince } from "@/lib/league-roster-change";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -231,6 +232,14 @@ export async function powerPulseIsStale(
    * whose week window has moved on never pays for it.
    */
   getModelVersion: () => Promise<string>,
+  /**
+   * When the league sync last saw a roster change (players, injured reserve,
+   * taxi squad or pick ownership), from `leagues.rosters_changed_at`. A cache
+   * row generated before it describes rosters that no longer exist, so it is
+   * stale whatever its age. Null or absent means no change on record, which
+   * leaves the gate exactly as it was.
+   */
+  rostersChangedAt: string | null = null,
 ): Promise<boolean> {
   const { data: backoffRow } = await supabase
     .from("leagues")
@@ -268,6 +277,7 @@ export async function powerPulseIsStale(
     .limit(1)
     .maybeSingle();
   if (error || !data?.generated_at) return true;
+  if (changedSince(rostersChangedAt, data.generated_at)) return true;
   const currentWeek = await getCurrentWeek();
   if (Number(data.through_week) < currentWeek - 1) return true;
   // Last, because it is the only check that can cost a round trip.
@@ -341,8 +351,9 @@ async function writeVerdict(
  *
  * Gating mirrors the power rankings: recompute at most once per TTL, plus
  * whenever the live NFL week moves past the stored one, so a Sunday night
- * refresh picks up the new week's schedule. `force` always recomputes and
- * always bypasses the backoff below.
+ * refresh picks up the new week's schedule, plus whenever the league sync has
+ * recorded a roster change newer than the cached row (`rostersChangedAt`).
+ * `force` always recomputes and always bypasses the backoff below.
  *
  * Backoff bypass table (see powerPulseIsStale / withinRetryBackoff for the
  * mechanics):
@@ -361,7 +372,18 @@ async function writeVerdict(
 export async function refreshPowerPulse(
   supabase: ServiceClient,
   leagueRowId: string,
-  options: { force?: boolean } = {},
+  options: {
+    force?: boolean;
+    /**
+     * `leagues.rosters_changed_at`, read by the caller (pulseLeagueDerived
+     * already reads the league row). A cache row older than it is stale
+     * whatever its age, so a trade or a waiver claim rescores the league on
+     * the pass that saw it rather than twelve hours later. Still on demand
+     * only: this never runs from a cron, and a league whose rosters did not
+     * change recomputes exactly as often as before.
+     */
+    rostersChangedAt?: string | null;
+  } = {},
 ): Promise<void> {
   let attemptedAt: string | null = null;
   try {
@@ -392,6 +414,7 @@ export async function refreshPowerPulse(
               settings: settings.beaconProjections,
             }),
           ),
+        options.rostersChangedAt ?? null,
       );
       if (!stale) return;
     }
@@ -399,7 +422,9 @@ export async function refreshPowerPulse(
     attemptedAt = new Date().toISOString();
     await stampAttempted(supabase, leagueRowId, attemptedAt);
 
-    const result = await calculateLeaguePowerPulse(supabase, leagueRowId, options);
+    const result = await calculateLeaguePowerPulse(supabase, leagueRowId, {
+      force: options.force,
+    });
     await writeVerdict(supabase, leagueRowId, result);
 
     if (!result.ok) {

@@ -163,3 +163,20 @@ describe("crowdVsModelSentence", () => {
     }
   });
 });
+
+describe("revealTally and minimalReview", () => {
+  it("zeroes every count when community results are hidden, in the fallback too", async () => {
+    const { minimalReview, revealTally } = await import("./round");
+    const p = pool({ votes_a: 5, votes_b: 3, discord_votes_a: 2, discord_votes_b: 1 });
+    const shown = tallyOf(p);
+    expect(revealTally(shown, true)).toEqual(shown);
+    const hidden = revealTally(shown, false);
+    expect(hidden.total).toBe(0);
+    expect(hidden.a).toBe(0);
+    expect(hidden.discordA).toBe(0);
+
+    const loaded = { pool: p } as unknown as Parameters<typeof minimalReview>[0];
+    expect(minimalReview(loaded, p, "a", false, false).tally.total).toBe(0);
+    expect(minimalReview(loaded, p, "a", false, true).tally.total).toBe(shown.total);
+  });
+});

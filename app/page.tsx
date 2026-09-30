@@ -24,6 +24,7 @@ import {
   Calculator,
   ListChecks,
   Scale,
+  Search,
   Swords,
   Shield,
   UserSearch,
@@ -152,6 +153,13 @@ const TOOL_CARD_CONTENT: Record<ToolHref, ToolCardContent> = {
       "Heading into waivers and not sure what to spend? Get a recommended bid range that weighs a player's real value against how badly your roster needs them, in plain English.",
     cta: "Run a bid",
     icon: Calculator,
+  },
+  "/tools/free-agent-finder": {
+    title: "Free Agent Finder",
+    description:
+      "Heard a name on Sunday morning? Check that one player against every Sleeper league you are in at once and see which ones still have him unowned.",
+    cta: "Find a free agent",
+    icon: Search,
   },
   "/tools/manager-pulse": {
     title: "Manager Pulse",
@@ -358,7 +366,7 @@ function HeroCtaFallback() {
     <span role="status" className="inline-flex">
       <span
         aria-hidden="true"
-        className="h-11 w-40 animate-pulse rounded-card bg-surface/70"
+        className="h-11 w-40 animate-pulse motion-reduce:animate-none rounded-card bg-surface/70"
       />
       <span className="sr-only">Loading membership status</span>
     </span>
@@ -402,19 +410,19 @@ function DiscordCardFallback() {
       className="relative overflow-hidden rounded-modal border border-brand-purple/40 bg-surface-elevated/80 p-6 shadow-xl shadow-black/40 sm:p-7"
     >
       <div aria-hidden="true" className="flex items-center gap-3">
-        <div className="h-12 w-12 shrink-0 animate-pulse rounded-card bg-base/60" />
+        <div className="h-12 w-12 shrink-0 animate-pulse motion-reduce:animate-none rounded-card bg-base/60" />
         <div className="space-y-2">
-          <div className="h-5 w-40 animate-pulse rounded bg-base/60" />
-          <div className="h-4 w-28 animate-pulse rounded bg-base/60" />
+          <div className="h-5 w-40 animate-pulse motion-reduce:animate-none rounded bg-base/60" />
+          <div className="h-4 w-28 animate-pulse motion-reduce:animate-none rounded bg-base/60" />
         </div>
       </div>
       <div aria-hidden="true" className="mt-6 grid grid-cols-2 gap-3">
-        <div className="h-24 animate-pulse rounded-card border border-line bg-base/60" />
-        <div className="h-24 animate-pulse rounded-card border border-line bg-base/60" />
+        <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card border border-line bg-base/60" />
+        <div className="h-24 animate-pulse motion-reduce:animate-none rounded-card border border-line bg-base/60" />
       </div>
       <div
         aria-hidden="true"
-        className="mt-5 h-11 animate-pulse rounded-card bg-base/60"
+        className="mt-5 h-11 animate-pulse motion-reduce:animate-none rounded-card bg-base/60"
       />
       <span className="sr-only">
         Loading our Discord community's live numbers
@@ -1872,11 +1880,11 @@ function CtaContentFallback() {
   return (
     <div role="status" className="relative">
       <div aria-hidden="true" className="space-y-3">
-        <div className="h-3 w-32 animate-pulse rounded bg-base/60" />
-        <div className="h-8 w-full max-w-md animate-pulse rounded bg-base/60" />
-        <div className="h-4 w-full max-w-xl animate-pulse rounded bg-base/60" />
-        <div className="h-4 w-full max-w-lg animate-pulse rounded bg-base/60" />
-        <div className="mt-4 h-11 w-48 animate-pulse rounded-card bg-base/60" />
+        <div className="h-3 w-32 animate-pulse motion-reduce:animate-none rounded bg-base/60" />
+        <div className="h-8 w-full max-w-md animate-pulse motion-reduce:animate-none rounded bg-base/60" />
+        <div className="h-4 w-full max-w-xl animate-pulse motion-reduce:animate-none rounded bg-base/60" />
+        <div className="h-4 w-full max-w-lg animate-pulse motion-reduce:animate-none rounded bg-base/60" />
+        <div className="mt-4 h-11 w-48 animate-pulse motion-reduce:animate-none rounded-card bg-base/60" />
       </div>
       <span className="sr-only">Loading membership status</span>
     </div>

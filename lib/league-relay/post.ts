@@ -1,5 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+// (SupabaseClient without the Database generic is used below only for the
+// columns migration 0327 adds, until the generated types are regenerated.)
 import type { Database, Json } from "@/lib/database.types";
 import { postWebhookMessage } from "@/lib/discord";
 import { renderPlainText, renderWriteup } from "./render";
@@ -26,6 +28,11 @@ type Admin = SupabaseClient<Database>;
  * fifteen-minute cron overlaps itself the moment one league's sync runs long,
  * and two ticks that both post are indistinguishable from a bug in the
  * scheduler.
+ *
+ * A CLAIM WHOSE FUNCTION DIED IS NOT STUCK FOREVER. releaseStaleClaims frees a
+ * claim that never started its send so a later tick takes it again, and closes
+ * one whose send started but never confirmed as 'error' rather than risk a
+ * second post. See that function.
  *
  * A FAILED SEND KEEPS ITS ROW, marked 'error'. Keeping it is what stops the
  * next tick from hammering a Discord that is already rejecting us, and it
@@ -155,16 +162,23 @@ export async function claimAndSend(admin: Admin, params: SendParams): Promise<Se
 
   // Record the exact text alongside the claim BEFORE sending, so a send that
   // times out still leaves an admin able to see what was about to go out.
-  await admin
-    .from("league_relay_posts")
-    .update({
-      payload: {
-        title: writeup.title,
-        text: renderPlainText(writeup),
-        dropped: rendered.dropped,
-      } as unknown as Json,
-    })
-    .eq("id", claimed.id);
+  //
+  // THIS WRITE IS ALSO THE SEND LEASE. It stamps send_started_at, guarded on
+  // the row still being this claim, still 'claimed', and not yet started. A
+  // claim abandoned by a function that died is released by
+  // releaseStaleClaims (below) and taken again by a later tick; if this
+  // process was only SLOW rather than dead, its row is gone or already started
+  // by then, the guard matches nothing, and it stops here instead of posting
+  // alongside the tick that took over.
+  const payload = {
+    title: writeup.title,
+    text: renderPlainText(writeup),
+    dropped: rendered.dropped,
+  } as unknown as Json;
+  const lease = await startSend(admin, claimed.id, payload);
+  if (lease === "lost") {
+    return { status: "duplicate", dedupeKey };
+  }
 
   // 3. SEND.
   const sent = await postWebhookMessage(webhookUrl, rendered.message);
@@ -182,6 +196,115 @@ export async function claimAndSend(admin: Admin, params: SendParams): Promise<Se
     .eq("id", claimed.id);
 
   return { status: "posted", dedupeKey, messageId: sent.id, title: writeup.title };
+}
+
+/**
+ * How long a 'claimed' row may sit before it is treated as abandoned.
+ *
+ * A claim lives for one build and one send inside a cron run bounded at four
+ * minutes (RUN_BUDGET_MS in relay.ts) under a five-minute route limit. A claim
+ * still 'claimed' a quarter of an hour later belongs to a function that died.
+ */
+export const STALE_CLAIM_MS = 15 * 60_000;
+
+/** Postgres "undefined column" and PostgREST's "column not in schema cache". */
+const MISSING_COLUMN_CODES = new Set(["42703", "PGRST204"]);
+
+/**
+ * Stamp the payload and the send lease on a claim, guarded so exactly one
+ * process can start the send for it. "started" means send; "lost" means the
+ * claim was released or taken over while this process was building.
+ *
+ * Before migration 0327 adds send_started_at, the guarded write fails on the
+ * missing column; the payload is then written the old way and the send goes
+ * ahead, so deploying this ahead of the migration changes nothing.
+ */
+async function startSend(admin: Admin, claimId: string, payload: Json): Promise<"started" | "lost"> {
+  // Untyped: send_started_at arrives with migration 0327, ahead of regenerated types.
+  const { data, error } = await (admin as unknown as SupabaseClient)
+    .from("league_relay_posts")
+    .update({ payload, send_started_at: new Date().toISOString() })
+    .eq("id", claimId)
+    .eq("status", "claimed")
+    .is("send_started_at", null)
+    .select("id");
+  if (error) {
+    if (error.code && MISSING_COLUMN_CODES.has(error.code)) {
+      await admin.from("league_relay_posts").update({ payload }).eq("id", claimId);
+      return "started";
+    }
+    // Any other failure writing the lease: do not send without one.
+    return "lost";
+  }
+  return (data?.length ?? 0) === 1 ? "started" : "lost";
+}
+
+export interface StaleClaimSweep {
+  /** Claims that never started a send, released so a later tick can take them. */
+  released: number;
+  /** Claims whose send started and never finished, closed as error. */
+  closed: number;
+}
+
+/**
+ * Release claims a dead function left behind. Runs at the head of every relay
+ * run. Never throws.
+ *
+ * TWO CASES, AND ONLY ONE IS RETRIED.
+ *
+ * A claim that never STARTED its send (send_started_at null) is deleted. Its
+ * dedupe key is then unhandled again, the next tick's pre-filter picks it up,
+ * and claimAndSend claims it fresh. Nothing reached Discord, so nothing can be
+ * posted twice. The delete is guarded on the same conditions, so a process
+ * that was merely slow finds its row gone at startSend and stops.
+ *
+ * A claim whose send STARTED and never recorded a result is not retried.
+ * Discord's webhook execute takes no idempotency key, and a webhook cannot
+ * list the messages it has sent, so there is no stored message id to check
+ * and no way to ask Discord whether the first send landed. Sending again could
+ * post the message twice, which is the failure this file exists to prevent. It
+ * is closed as 'error' with that reason, so it stops reading as in flight and
+ * shows in the admin panel, where deleting the row is the deliberate retry.
+ */
+export async function releaseStaleClaims(
+  admin: Admin,
+  now: Date = new Date(),
+): Promise<StaleClaimSweep> {
+  const out: StaleClaimSweep = { released: 0, closed: 0 };
+  const cutoff = new Date(now.getTime() - STALE_CLAIM_MS).toISOString();
+  // Untyped: send_started_at arrives with migration 0327, ahead of regenerated types.
+  const db = admin as unknown as SupabaseClient;
+  try {
+    const { data: released, error: releaseError } = await db
+      .from("league_relay_posts")
+      .delete()
+      .eq("status", "claimed")
+      .is("send_started_at", null)
+      // The payload is written in the same statement as the lease, so a null
+      // payload is a second witness that no send began. It also keeps a row
+      // claimed before migration 0327 (payload written, no lease column yet)
+      // out of the retry path: that one may have reached Discord.
+      .is("payload", null)
+      .lt("created_at", cutoff)
+      .select("id");
+    if (!releaseError) out.released = (released ?? []).length;
+
+    const { data: closed, error: closeError } = await db
+      .from("league_relay_posts")
+      .update({
+        status: "error",
+        error:
+          "The send started and never confirmed. Not retried automatically, because a second send could post it twice. Delete this row to retry.",
+      })
+      .eq("status", "claimed")
+      .or("send_started_at.not.is.null,payload.not.is.null")
+      .lt("created_at", cutoff)
+      .select("id");
+    if (!closeError) out.closed = (closed ?? []).length;
+  } catch {
+    // A sweep that fails leaves the rows for the next run.
+  }
+  return out;
 }
 
 /**

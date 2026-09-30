@@ -3,6 +3,8 @@ import {
   computeSeasonSplits,
   groupPerformances,
   idp123FromColumns,
+  loadSeasonStats,
+  MIN_GAMES,
   pointsFor,
   recentSeasons,
 } from "./calculate-defense-splits";
@@ -80,8 +82,20 @@ describe("computeSeasonSplits (IDP-403 calibration reads this)", () => {
     rows.push(...lbWeek("NYG", week % 2 ? "CLE" : "PIT", week, [12, 10, 8, 7]));
     rows.push(...lbWeek("DAL", week % 2 ? "PIT" : "CLE", week, [4, 3, 3]));
   }
-  // A defense seen in only three games is below MIN_GAMES and is not published.
-  for (let week = 1; week <= 3; week += 1) rows.push(...lbWeek("MIA", "BUF", week, [9, 9, 9]));
+  // A defense seen in a single game is below MIN_GAMES and is not published.
+  rows.push(...lbWeek("MIA", "BUF", 1, [9, 9, 9]));
+
+  it("keeps the floor low enough for a three-game season to publish (the shrink handles it)", () => {
+    expect(MIN_GAMES).toBeLessThanOrEqual(3);
+    const early: Row[] = [];
+    for (let week = 1; week <= 3; week += 1) {
+      early.push(...lbWeek("NYG", "CLE", week, [12, 10, 8]));
+      early.push(...lbWeek("DAL", "PIT", week, [4, 3, 3]));
+    }
+    const splits = computeSeasonSplits(early, "idp123");
+    expect(splits.map((s) => s.team).sort()).toEqual(["DAL", "NYG"]);
+    expect(splits.every((s) => s.games === 3)).toBe(true);
+  });
 
   it("sums the startable cap per game and clamps the raw multiplier", () => {
     const splits = computeSeasonSplits(rows, "idp123");
@@ -110,6 +124,59 @@ function seasonClient(result: { data: unknown; error: { message: string } | null
   };
   return { from: () => chain } as unknown as Parameters<typeof recentSeasons>[0];
 }
+
+describe("loadSeasonStats paging under the statement timeout", () => {
+  /** Answers each page from `pages` in turn; records the limit each call asked for. */
+  function pagedClient(pages: Array<{ data: unknown[] | null; error: { message: string } | null }>) {
+    const limits: number[] = [];
+    let call = 0;
+    const client = {
+      from: () => {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          gt: () => chain,
+          order: () => chain,
+          limit: (n: number) => {
+            limits.push(n);
+            return Promise.resolve(pages[Math.min(call++, pages.length - 1)]);
+          },
+        };
+        return chain;
+      },
+    } as unknown as Parameters<typeof loadSeasonStats>[0];
+    return { client, limits };
+  }
+  const statRow = (id: string) => ({
+    id,
+    player_id: "p",
+    season: 2026,
+    week: 1,
+    opponent: "DAL",
+    offense_team: "PHI",
+    gp: 1,
+    pts_ppr: 10,
+    pts_half_ppr: 9,
+    pts_std: 8,
+    players: { position: "WR" },
+  });
+
+  it("halves the page after a statement timeout and keeps the smaller size", async () => {
+    const { client, limits } = pagedClient([
+      { data: null, error: { message: "canceling statement due to statement timeout" } },
+      { data: [statRow("a"), statRow("b")], error: null },
+    ]);
+    const rows = await loadSeasonStats(client, 2026);
+    expect(rows).toHaveLength(2);
+    expect(limits).toEqual([500, 250]);
+  });
+
+  it("gives up on a non-transient error without retrying", async () => {
+    const { client, limits } = pagedClient([{ data: null, error: { message: "permission denied" } }]);
+    await expect(loadSeasonStats(client, 2026)).rejects.toThrow(/stat load failed: permission denied/);
+    expect(limits).toEqual([500]);
+  });
+});
 
 describe("recentSeasons (C7)", () => {
   it("throws on a failed read instead of guessing the calendar year", async () => {

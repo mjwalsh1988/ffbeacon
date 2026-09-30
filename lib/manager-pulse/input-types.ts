@@ -347,4 +347,11 @@ export type ManagerPulseInput = {
   weeklyMoves: ManagerWeeklyMoves[];
   /** League-seasons found but dropped past maxLeaguesPerRun. A count, for the limits block. */
   leagueSeasonsSkipped: number;
+  /**
+   * League-seasons this run meant to read and could not (a failed sync, or a
+   * league another sync was already holding). Optional because the loader does
+   * not know it: finalize.ts reads it off the run's league rows and adds it.
+   * Absent means zero.
+   */
+  leagueSeasonsFailed?: number;
 };

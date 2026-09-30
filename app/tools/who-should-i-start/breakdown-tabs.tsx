@@ -103,7 +103,9 @@ export function BreakdownTabs({ tabs }: { tabs: BreakdownTab[] }) {
           aria-labelledby={`${baseId}-tab-${tab.id}`}
           hidden={tab.id !== active}
           tabIndex={0}
-          className="mt-5 focus-visible:outline-none"
+          // The panel is a Tab stop, so it needs a ring a keyboard reader can
+          // see when focus lands on it.
+          className="mt-5 rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-cyan"
         >
           {tab.content}
         </div>

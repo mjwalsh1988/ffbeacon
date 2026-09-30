@@ -21,6 +21,8 @@ import {
   getAvailableSources,
   getActiveFormats,
   describeSource,
+  reconcileFormatWithSource,
+  type ReconciledFormat,
   type SourceRegistryRow,
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
@@ -96,6 +98,12 @@ export type PlayerContext = {
   registrySlugs: string[];
   /** Present when the requested source could not cover this format. */
   fallbackBanner: { requested: string; actual: string; formatDisplay: string } | null;
+  /**
+   * Present when the reader's source does not cover their format and the
+   * format was moved to one it does (reconcileFormatWithSource). Rendered by
+   * FormatFallbackBanner; never persisted.
+   */
+  formatFallback: ReconciledFormat["fallback"];
 };
 
 export type PositionalFinish = {
@@ -142,8 +150,18 @@ export async function loadPlayerAndContext(
   if (!playerRaw) return null;
   const player = playerRaw as unknown as PlayerRow;
 
-  const selectedFormatSlug = formatResolution.slug;
   const requestedSourceSlug = sourceResolution.slug;
+
+  // Keep the reader's SOURCE and move the FORMAT when that source does not
+  // cover it (CLAUDE.md, Source and Format Sync). Read-time only: nothing here
+  // writes the swap to a cookie or a saved preference.
+  const reconciled = reconcileFormatWithSource(
+    registry,
+    activeFormats,
+    requestedSourceSlug,
+    formatResolution.slug,
+  );
+  const selectedFormatSlug = reconciled.formatSlug;
 
   // Active formats only (the format dropdown never offers inactive ones); an
   // unknown/inactive slug resolves to null and falls through to the defaults
@@ -188,6 +206,7 @@ export async function loadPlayerAndContext(
     registry,
     registrySlugs,
     fallbackBanner,
+    formatFallback: reconciled.fallback,
   };
 
   const sleeperId = readSleeperId(player);

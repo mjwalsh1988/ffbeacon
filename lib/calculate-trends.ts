@@ -124,6 +124,46 @@ export async function loadAllHistory(
   supabase: SupabaseClient<Database>,
   sinceIso?: string,
 ): Promise<HistoryRow[]> {
+  // With a lower bound, the window is split into HISTORY_READ_SLICES
+  // contiguous captured_at ranges read side by side. Each range is its own
+  // keyset walk over [from, until), the ranges never overlap, and the id
+  // re-sort below makes the result identical to one sequential walk. The
+  // sequential walk was most of the nightly derived rebuild's time (about
+  // 150 s of 1000-row pages against a 300 s function limit).
+  let rows: HistoryRow[];
+  const from = sinceIso ? new Date(sinceIso).getTime() : NaN;
+  const until = Date.now();
+  if (sinceIso && Number.isFinite(from) && until > from) {
+    const step = (until - from) / HISTORY_READ_SLICES;
+    const ranges: { from: string; until: string | null }[] = [];
+    for (let i = 0; i < HISTORY_READ_SLICES; i += 1) {
+      ranges.push({
+        from: i === 0 ? sinceIso : new Date(from + step * i).toISOString(),
+        // The last range is open-ended, so a row stamped after the split was
+        // computed is still read.
+        until: i === HISTORY_READ_SLICES - 1 ? null : new Date(from + step * (i + 1)).toISOString(),
+      });
+    }
+    const parts = await Promise.all(
+      ranges.map((r) => loadHistoryRange(supabase, r.from, r.until)),
+    );
+    rows = parts.flat();
+  } else {
+    rows = await loadHistoryRange(supabase, sinceIso, null);
+  }
+  rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return rows;
+}
+
+/** How many captured_at ranges loadAllHistory reads at once. */
+const HISTORY_READ_SLICES = 4;
+
+/** One keyset walk over [sinceIso, untilIso), in load order (not id order). */
+async function loadHistoryRange(
+  supabase: SupabaseClient<Database>,
+  sinceIso: string | undefined,
+  untilIso: string | null,
+): Promise<HistoryRow[]> {
   const rows: HistoryRow[] = [];
   const PAGE = 1000;
   let cursor: { ts: string; id: string } | null = null;
@@ -138,6 +178,7 @@ export async function loadAllHistory(
       .order("captured_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(PAGE);
+    if (untilIso) query = query.lt("captured_at", untilIso);
     if (cursor) {
       // Set the index lower bound to the cursor timestamp itself so the scan
       // STARTS at the cursor (Index Cond), rather than at the static window
@@ -177,7 +218,6 @@ export async function loadAllHistory(
     const last = data[data.length - 1] as { id: string; captured_at: string };
     cursor = { ts: last.captured_at, id: last.id };
   }
-  rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return rows;
 }
 

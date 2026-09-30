@@ -6,6 +6,26 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/sync-sleeper-players",
+      "schedule": "5 13 * 1,2,9,10,11,12 0"
+    },
+    {
+      "path": "/api/cron/sync-sleeper-players",
+      "schedule": "35 16 * 1,2,9,10,11,12 0,1,4"
+    },
+    {
+      "path": "/api/cron/sync-sleeper-players",
+      "schedule": "45 19 * 1,2,9,10,11,12 0,1,4"
+    },
+    {
+      "path": "/api/cron/sync-sleeper-players",
+      "schedule": "45 23 * 1,2,9,10,11,12 0,1,4"
+    },
+    {
+      "path": "/api/cron/sync-sleeper-players",
+      "schedule": "15 5 * 1,2,9,10,11,12 1"
+    },
+    {
       "path": "/api/cron/sync-ktc",
       "schedule": "0 7 * * *"
     },
@@ -36,6 +56,26 @@
     {
       "path": "/api/cron/sync-weekly-projections",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/sync-weekly-projections",
+      "schedule": "15 13 * 1,2,9,10,11,12 0"
+    },
+    {
+      "path": "/api/cron/sync-weekly-projections",
+      "schedule": "45 16 * 1,2,9,10,11,12 0,1,4"
+    },
+    {
+      "path": "/api/cron/sync-weekly-projections",
+      "schedule": "55 19 * 1,2,9,10,11,12 0,1,4"
+    },
+    {
+      "path": "/api/cron/sync-weekly-projections",
+      "schedule": "55 23 * 1,2,9,10,11,12 0,1,4"
+    },
+    {
+      "path": "/api/cron/sync-weekly-projections",
+      "schedule": "25 5 * 1,2,9,10,11,12 1"
     },
     {
       "path": "/api/cron/sync-nfl-odds",
@@ -88,6 +128,10 @@
     {
       "path": "/api/cron/community-rankings",
       "schedule": "45 10 * * *"
+    },
+    {
+      "path": "/api/cron/league-maintenance",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

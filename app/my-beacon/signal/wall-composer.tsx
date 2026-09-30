@@ -358,11 +358,19 @@ export function WallComposer() {
         <EmojiPicker onSelect={insertEmoji} onClose={closeEmoji} />
       )}
 
+      {/* The visible "Add image" button below is the real control; this input
+          is only the browser's file dialog behind it. Out of the tab order and
+          the accessibility tree, so a keyboard reader does not land on a second,
+          unlabelled "Browse" stop, and disabled on the same terms as the button
+          so it cannot be reached another way once the image cap is hit. */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
         onChange={onPickFile}
+        tabIndex={-1}
+        aria-hidden="true"
+        disabled={pending || uploading || hasGif || images.length >= IMAGES_MAX}
         className="sr-only"
       />
 

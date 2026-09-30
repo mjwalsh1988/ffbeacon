@@ -647,7 +647,13 @@ const getPulseData = cache(
     sourceSlug: string | null,
     resynced: boolean,
   ) => {
-    await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+    // includePositionalWar: false. The curve on this page is drawn by
+    // PositionalWarSection behind its own Suspense boundary, which runs the
+    // compute itself, so running it here too would only hold up the rankings.
+    await pulseLeagueDerived(createAdminClient(), leagueRowId, {
+      resynced,
+      includePositionalWar: false,
+    });
     const supabase = await createClient();
     // Readiness first: a league that has not drafted, or that Sleeper has not
     // paired up yet, has no honest numbers to show and gets the waiting state
@@ -686,7 +692,7 @@ function PulseBodySkeleton() {
       <p className="text-sm text-ink-muted">Loading Power Pulse</p>
       <div aria-hidden="true" className="mt-4 space-y-2">
         {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-          <div key={i} className="h-9 animate-pulse rounded-card bg-base/60" />
+          <div key={i} className="h-9 animate-pulse motion-reduce:animate-none rounded-card bg-base/60" />
         ))}
       </div>
     </div>
@@ -865,7 +871,7 @@ function WarSkeleton() {
       <p className="text-sm text-ink-muted">Loading Positional WAR</p>
       <div
         aria-hidden="true"
-        className="mt-4 h-56 animate-pulse rounded-card bg-base/60"
+        className="mt-4 h-56 animate-pulse motion-reduce:animate-none rounded-card bg-base/60"
       />
     </div>
   );

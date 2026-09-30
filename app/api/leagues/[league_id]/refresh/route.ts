@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeague } from "@/lib/league-pulse";
+import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
+import { REFRESH_ACTOR_BUDGET } from "@/lib/league-endpoint-limits";
 
 const RATE_LIMIT_SECONDS = 60;
 
@@ -11,10 +13,17 @@ const RATE_LIMIT_SECONDS = 60;
  * or FF Beacon admin) may request a refresh of a Sleeper league. There is no
  * commissioner, admin, or logged-in requirement.
  *
- * The only protection is a shared, atomic, per-league cooldown
- * (RATE_LIMIT_SECONDS): once anyone refreshes a league, nobody can refresh that
- * same league again until the window elapses. Different leagues have independent
- * cooldowns.
+ * Two limits protect it, both claimed only after the request has been
+ * validated and the league found, so a malformed or unknown id spends nothing:
+ *   1. A per-CALLER budget (REFRESH_ACTOR_BUDGET in lib/league-endpoint-limits.ts,
+ *      a few a minute), keyed on the signed-in user id or a salted hash of the
+ *      trusted client IP. Without it one visitor could walk a list of league
+ *      ids and force a Sleeper sync for each. It is claimed FIRST, so a caller
+ *      over budget cannot occupy other people's leagues' cooldowns either. It
+ *      fails closed: a limiter that cannot be evaluated refuses.
+ *   2. A shared, atomic, per-LEAGUE cooldown (RATE_LIMIT_SECONDS): once anyone
+ *      refreshes a league, nobody can refresh that same league again until the
+ *      window elapses. Different leagues have independent cooldowns.
  *
  * Why no commissioner check (FFB-SEC-004 / FFB-SEC-007 reclassification): the old
  * gate matched a self-declared Sleeper username against the commissioner display
@@ -77,7 +86,18 @@ export async function POST(
     data: { user },
   } = await supabase.auth.getUser();
 
-  // RATE LIMIT: atomic claim via the SECURITY DEFINER function, called through the
+  // PER-CALLER LIMIT, before the per-league claim below (see the header).
+  if (!(await claimRateLimitSlot(REFRESH_ACTOR_BUDGET))) {
+    return NextResponse.json(
+      {
+        error: `Rate limited. Try again in up to ${REFRESH_ACTOR_BUDGET.windowSeconds} seconds.`,
+        retryInSeconds: REFRESH_ACTOR_BUDGET.windowSeconds,
+      },
+      { status: 429 },
+    );
+  }
+
+  // PER-LEAGUE LIMIT: atomic claim via the SECURITY DEFINER function, called through the
   // service-role client. Returns true when the caller wins the cooldown race for
   // this window, false otherwise. This closes the TOCTOU window between read and
   // write, so concurrent requests for the same league collapse to a single sync.

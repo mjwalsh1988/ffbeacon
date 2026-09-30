@@ -16,7 +16,7 @@
  * first cannot start for you in week 4.
  */
 
-import type { PowerPulseSettings } from "./default-settings";
+import { DEFAULT_RESERVE_HOLD_WEEKS, type PowerPulseSettings } from "./default-settings";
 import { projectPlayerWeek, reliabilityMultiplier } from "./project";
 import {
   buildOptimalLineup,
@@ -331,15 +331,51 @@ export function computePowerPulse(
 
   const work: TeamWork[] = [];
 
+  // INJURED RESERVE IS A HOLD, NOT A WRITE-OFF.
+  //
+  // This used to drop every IR-slotted player from EVERY remaining week, so a
+  // starter on short-term IR counted zero for the whole season and his team
+  // was projected as though it had cut him. The rule now:
+  //
+  //   1. For the current week and the next (`injury.reserveHoldWeeks` weeks in
+  //      all, 2 by default) he is not a candidate at all. Activating him takes a
+  //      roster move and an open spot, and nothing a projection says about this
+  //      Sunday changes that.
+  //   2. From then on he is a candidate in exactly the weeks his own projection
+  //      puts him on the field. Sleeper publishes the return timeline per week:
+  //      `availability: "out"` at zero points for the weeks it expects him out,
+  //      a real number once he is back (measured 2026-09-29: IR players go from
+  //      76 of 77 "out" in week 4 to 25 of 77 projected by week 12). A week
+  //      that projects to zero is skipped rather than seated at zero, so an "out"
+  //      week reads exactly as it did under the old exclusion.
+  //   3. There is no separate season-ending flag in the data: Sleeper's
+  //      injury_status says only "IR", with no return date. A season-ending
+  //      player is the case where the source marks every remaining week "out",
+  //      so rule 2 keeps him excluded all season without guessing. Where the
+  //      source has no per-week opinion at all, the long-term IR multiplier in
+  //      ./project.ts (0 by default) still zeroes him, and rule 2 skips him.
+  //
+  // Taxi squad players stay excluded outright: a taxi player cannot start
+  // without a promotion the league's own rules may forbid until next season.
+  const reserveHoldWeeks = Math.max(
+    0,
+    Math.trunc(settings.injury.reserveHoldWeeks ?? DEFAULT_RESERVE_HOLD_WEEKS),
+  );
+  const reserveEligibleFromWeek = currentWeek + reserveHoldWeeks;
+
   for (const roster of scoringRosters) {
-    const ineligible = new Set([
-      ...roster.reserveSleeperIds,
-      ...roster.taxiSleeperIds,
-    ]);
+    const taxi = new Set(roster.taxiSleeperIds);
     const rosterPlayers = roster.playerSleeperIds
-      .filter((sid) => !ineligible.has(sid))
+      .filter((sid) => !taxi.has(sid))
       .map((sid) => players.get(sid))
       .filter((p): p is PlayerRow => Boolean(p));
+    // By FF Beacon player id, which is what the week loop below has in hand.
+    const reservePlayerIds = new Set(
+      roster.reserveSleeperIds
+        .filter((sid) => !taxi.has(sid))
+        .map((sid) => players.get(sid)?.playerId)
+        .filter((id): id is string => Boolean(id)),
+    );
 
     const enriched = rosterPlayers.map((player) => {
       const accuracy = input.accuracy.get(player.playerId) ?? null;
@@ -356,6 +392,9 @@ export function computePowerPulse(
     for (const week of remainingWeeks) {
       const weekMap = new Map<string, PlayerWeek>();
       for (const { player, accuracy, reliability } of enriched) {
+        const onReserve = reservePlayerIds.has(player.playerId);
+        // Rule 1 of the injured reserve hold above.
+        if (onReserve && week < reserveEligibleFromWeek) continue;
         // A null projection means a bye week, a player Sleeper does not publish,
         // or a stat line we cannot score. All three are "no opinion", never zero.
         const projected = projectPlayerWeek({
@@ -371,6 +410,9 @@ export function computePowerPulse(
           settings,
         });
         if (!projected) continue;
+        // Rules 2 and 3: a reserve player joins only the weeks he is projected
+        // to play in.
+        if (onReserve && !(projected.points > 0)) continue;
         if (projected.usedLeagueScoring) usedLeagueScoring = true;
 
         weekMap.set(player.playerId, {

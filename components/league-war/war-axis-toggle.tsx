@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
+import { useRadioGroup } from "@/lib/use-radio-group";
 import type { WarAxisMode } from "@/lib/positional-war/chart-geometry";
 
 /**
@@ -34,7 +35,9 @@ export function WarAxisToggle({ mode }: { mode: WarAxisMode }) {
   const [pending, startTransition] = useTransition();
 
   const select = (next: WarAxisMode) => {
-    if (next === mode) return;
+    // A repeat activation while navigating is ignored rather than disabling
+    // the buttons, which would drop keyboard focus to the page body.
+    if (next === mode || pending) return;
     const params = new URLSearchParams(searchParams.toString());
     // The default axis carries no parameter, so a link to the page a reader is
     // looking at is the shortest one. `?war=rank` still resolves to rank for
@@ -62,24 +65,33 @@ export function WarAxisToggle({ mode }: { mode: WarAxisMode }) {
     },
   ];
 
+  const radios = useRadioGroup({
+    count: options.length,
+    checkedIndex: options.findIndex((o) => o.id === mode),
+    onSelect: (i) => select(options[i].id),
+  });
+
   return (
     <div
       role="radiogroup"
       aria-label="Chart axis"
+      aria-busy={pending || undefined}
       className="flex w-full items-center gap-1 rounded-card border border-line bg-base/60 p-1 sm:inline-flex sm:w-auto"
     >
-      {options.map((option) => {
+      {options.map((option, index) => {
         const active = option.id === mode;
         return (
           <button
             key={option.id}
+            ref={radios.refFor(index)}
             type="button"
             role="radio"
             aria-checked={active}
             aria-label={`Chart axis, ${option.label}. ${option.hint}`}
-            disabled={pending}
+            tabIndex={radios.tabIndexFor(index)}
+            onKeyDown={(event) => radios.onKeyDown(event, index)}
             onClick={() => select(option.id)}
-            className={`min-h-11 flex-1 truncate rounded-card px-2 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:flex-none sm:px-3 sm:text-xs ${
+            className={`min-h-11 flex-1 truncate rounded-card px-2 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:flex-none sm:px-3 sm:text-xs ${
               active
                 ? "bg-brand-cyan/15 text-brand-cyan shadow-[0_0_20px_-10px_rgba(34,211,238,0.9)]"
                 : "text-ink-muted hover:bg-surface hover:text-ink"
