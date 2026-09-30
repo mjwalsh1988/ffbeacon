@@ -1,6 +1,39 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Calculator, ListTree } from "lucide-react";
+import {
+  AlarmClock,
+  ArrowRight,
+  Armchair,
+  Axe,
+  BookOpen,
+  Calculator,
+  CalendarClock,
+  CircleDollarSign,
+  Gavel,
+  GitCompareArrows,
+  Hammer,
+  HandCoins,
+  Hourglass,
+  Layers,
+  Lock,
+  MessageCircleQuestion,
+  Percent,
+  PiggyBank,
+  Receipt,
+  Scale,
+  ScrollText,
+  Search,
+  Settings2,
+  Shuffle,
+  Sprout,
+  Target,
+  Timer,
+  TriangleAlert,
+  Unlock,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { SITE } from "@/lib/site";
 import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { pageShareMetadata } from "@/lib/page-og";
@@ -12,7 +45,6 @@ import {
   type MastheadChip,
   type MastheadStat,
 } from "@/components/app-shell/page-masthead";
-import { GuideSectionHeader, GuideSubheading } from "@/components/guides/guide-section-header";
 import { FaqAccordion, type FaqAccordionItem } from "@/components/faq-accordion";
 import { faqPageJsonLd } from "@/components/tool-explainer";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -27,13 +59,18 @@ import {
   CalculatorRail,
   MethodRail,
   NextRail,
-  PositionRail,
   WeekRail,
 } from "@/components/waiver-wire/board-rail";
 import { resolveWaiverContext } from "@/lib/waiver-wire/context";
-import { loadWaiverBoardCached } from "@/lib/waiver-wire/load";
+import { loadWaiverBoardCached, unavailableBoard } from "@/lib/waiver-wire/load";
+import { loadBudgetSpreadCached, type BudgetSpread } from "@/lib/waiver-wire/budgets";
 import { weekPath } from "@/lib/waiver-wire/weeks";
-import { BOARD_POSITIONS, type BoardPosition, type WaiverBoard } from "@/lib/waiver-wire/types";
+import { BOARD_POSITIONS, type BoardPosition } from "@/lib/waiver-wire/types";
+import { BudgetProvider } from "@/components/waiver-wire/budget-context";
+import { PlaybookNav, type PlaybookItem } from "@/components/waiver-wire/playbook-nav";
+import { KeyIdea, LessonCard, Para, TileGrid, TryIt } from "@/components/waiver-wire/playbook";
+import { HotClaims } from "@/components/waiver-wire/hot-claims";
+import { PercentExplainer } from "@/components/waiver-wire/percent-explainer";
 import { topPickup } from "@/lib/waiver-wire/reasons";
 import {
   ClearingPriceFigure,
@@ -77,9 +114,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const TITLE = "Fantasy Football Waiver Wire: How It Works and Who to Add";
+const TITLE = "Fantasy Football Waiver Wire: Pickups, FAAB Bids and How It Works";
 const DESCRIPTION =
-  "How the fantasy football waiver wire works, when claims process on Sleeper, Yahoo and ESPN, waiver priority against FAAB, and this week's pickups with a bid range for each.";
+  "This week's fantasy football waiver wire pickups with a FAAB bid for each as a percentage of your budget, priced from real claims. Plus when waivers process on Sleeper, Yahoo and ESPN, and priority against FAAB.";
 const CANONICAL = `${SITE.url}/waiver-wire`;
 
 export const metadata: Metadata = {
@@ -97,6 +134,13 @@ export const metadata: Metadata = {
     "how does the waiver wire work",
     "when do waivers process",
     "dynasty waiver wire",
+    "waiver wire pickups",
+    "best waiver wire pickups",
+    "waiver wire adds this week",
+    "faab bids",
+    "how much faab to bid",
+    "faab bid percentage",
+    "faab bid amounts",
   ],
   robots: {
     index: true,
@@ -113,50 +157,107 @@ export const metadata: Metadata = {
 
 /* ---------- Lessons ---------- */
 
-const LESSONS: { title: string; href: string; takeaway: string }[] = [
+type LessonKey =
+  | "what"
+  | "systems"
+  | "timing"
+  | "who"
+  | "price"
+  | "percent"
+  | "dynasty"
+  | "mistakes";
+
+/**
+ * The playbook, in order. `id` is the section anchor the contents nav points
+ * at; `headingId` names the section; `short` is the chip label on a phone.
+ */
+const LESSONS: {
+  key: LessonKey;
+  id: string;
+  headingId: string;
+  heading: string;
+  short: string;
+  takeaway: string;
+  icon: LucideIcon;
+}[] = [
   {
-    title: "What the waiver wire is",
-    href: "#what-heading",
+    key: "what",
+    id: "lesson-what",
+    headingId: "what-heading",
+    heading: "What the waiver wire actually is",
+    short: "What it is",
     takeaway: "A queue with a lock on it.",
+    icon: Lock,
   },
   {
-    title: "Priority against FAAB",
-    href: "#systems-heading",
+    key: "systems",
+    id: "lesson-systems",
+    headingId: "systems-heading",
+    heading: "Waiver priority against FAAB",
+    short: "Priority vs FAAB",
     takeaway: "Two games, one name.",
+    icon: GitCompareArrows,
   },
   {
-    title: "When claims actually run",
-    href: "#timing-heading",
+    key: "timing",
+    id: "lesson-timing",
+    headingId: "timing-heading",
+    heading: "When claims actually run",
+    short: "When it runs",
     takeaway: "Wednesday, nearly everywhere.",
+    icon: CalendarClock,
   },
   {
-    title: "Who is actually worth adding",
-    href: "#who-heading",
+    key: "who",
+    id: "lesson-who",
+    headingId: "who-heading",
+    heading: "Who is actually worth adding",
+    short: "Who to add",
     takeaway: "Buy the role, not the box score.",
+    icon: Target,
   },
   {
-    title: "What a claim costs",
-    href: "#price-heading",
+    key: "price",
+    id: "lesson-price",
+    headingId: "price-heading",
+    heading: "What a claim actually costs",
+    short: "What it costs",
     takeaway: "Most of them cost nothing.",
+    icon: Receipt,
   },
   {
-    title: "Dynasty waivers are a different wire",
-    href: "#dynasty-heading",
+    key: "percent",
+    id: "lesson-percent",
+    headingId: "percent-heading",
+    heading: "Bid in percentages, not dollars",
+    short: "Percentages",
+    takeaway: "Budgets differ; shares do not.",
+    icon: Percent,
+  },
+  {
+    key: "dynasty",
+    id: "lesson-dynasty",
+    headingId: "dynasty-heading",
+    heading: "Dynasty waivers are a different wire",
+    short: "Dynasty",
     takeaway: "You are buying a season, not a week.",
+    icon: Sprout,
   },
   {
-    title: "The mistakes that cost the most",
-    href: "#mistakes-heading",
+    key: "mistakes",
+    id: "lesson-mistakes",
+    headingId: "mistakes-heading",
+    heading: "The mistakes that cost the most",
+    short: "Mistakes",
     takeaway: "Hoarding, and bidding round numbers.",
+    icon: TriangleAlert,
   },
 ];
 
-const LESSON_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"] as const;
-
-function lessonEyebrow(anchor: string): string {
-  const i = LESSONS.findIndex((l) => l.href === anchor);
-  return `Lesson ${i + 1} of ${LESSONS.length}`;
-}
+const PLAYBOOK_ITEMS: PlaybookItem[] = [
+  ...LESSONS.map((l) => ({ id: l.id, title: l.heading, short: l.short })),
+  { id: "faq", title: "Questions, answered", short: "FAQ" },
+];
 
 const FAQ: FaqAccordionItem[] = [
   {
@@ -192,7 +293,12 @@ const FAQ: FaqAccordionItem[] = [
   {
     question: "How much FAAB should I bid on a waiver claim?",
     answer:
-      "It depends on what he adds to your lineup and on how many rivals want him, and the second of those moves the price more than anything about the player. Our FAAB calculator prices a claim against your actual roster, your remaining budget, and what your rivals can still spend, and the FAAB strategy guide covers the thinking behind it.",
+      "Think in percentages of your season budget rather than dollars, and price the competition before the player. A claim nobody else wants usually clears for nothing, while one that several teams want usually takes a real share of the budget; the measured figures are in the section on what a claim costs. Every pickup on this page carries a range: the lower figure wins about 6 times in 10 and the higher about 9 in 10, read from what claims like it have actually cleared at. Pay it only if he would start for you. Our FAAB calculator prices a claim against your actual roster, your remaining budget and what your rivals can still spend.",
+  },
+  {
+    question: "Why are FAAB bids shown as a percentage of budget?",
+    answer:
+      "Because budgets differ from league to league. Among the leagues synced to this site, $100 and $1,000 are both common and neither covers most leagues, so a dollar figure on a public page is wrong for a large share of the people reading it. A percentage of the season budget is the same decision in every league: 20 percent is $20 in a $100 league and $200 in a $1,000 one. The converter on this page turns every bid into dollars for your own budget.",
   },
   {
     question: "How is the dynasty waiver wire different?",
@@ -278,9 +384,12 @@ export default async function WaiverWirePage({
 
   const week = context.currentWeek;
 
-  const [isMember, market, board] = await Promise.all([
+  const [isMember, market, spread, board] = await Promise.all([
     isDiscordMember(),
     loadWaiverMarket(),
+    context.season != null
+      ? loadBudgetSpreadCached(context.season)
+      : Promise.resolve<BudgetSpread>({ total: 0, buckets: [], otherLeagues: 0 }),
     context.format && context.sourceSlug
       ? loadWaiverBoardCached({
           week,
@@ -289,35 +398,22 @@ export default async function WaiverWirePage({
           sourceName: context.sourceName,
           settings: context.settings,
         })
-      : Promise.resolve<WaiverBoard>({
-          season: context.season ?? 0,
-          week,
-          currentWeek: context.currentWeek,
-          rows: [],
-          assumptions: {
-            teams: 12,
-            offensiveStarters: 9,
-            budget: 100,
-            formatName: context.format?.display_name ?? "your format",
+      : Promise.resolve(
+          unavailableBoard({
+            season: context.season,
+            week,
+            currentWeek: context.currentWeek,
+            formatName: context.format?.display_name ?? null,
             sourceName: context.sourceName,
-            projectionSourceName: "Sleeper",
-            availabilityCeilingPct: 70,
-          },
-          rosterRatesComputedAt: null,
-          emptyReason: "no-rankings",
-        }),
+          }),
+        ),
   ]);
 
   const position = parsePosition(search.pos);
-  const budget = board.assumptions.budget;
 
-  // The headline add, and the counts the rail's filter needs. Both derived
-  // here so the rail and the board cannot disagree about either.
-  const hero = position ? null : topPickup(board.rows);
-  const counts = new Map<BoardPosition, number>();
-  for (const row of board.rows) {
-    counts.set(row.position, (counts.get(row.position) ?? 0) + 1);
-  }
+  // The headline add. `?pos=` only picks the board's opening tab now, so the
+  // hero stays whichever tab a shared link opens on.
+  const hero = topPickup(board.rows);
 
   const chips: MastheadChip[] = [
     { label: "Updated weekly", tone: "cyan" },
@@ -343,9 +439,21 @@ export default async function WaiverWirePage({
       accent: "purple",
     });
   }
+  const topBid = hero?.bid ?? board.rows.find((r) => r.bid)?.bid ?? null;
+  if (topBid) {
+    stats.push({
+      label: "Top pickup bid",
+      value:
+        topBid.lowPct === topBid.highPct
+          ? `${topBid.highPct}%`
+          : `${topBid.lowPct}-${topBid.highPct}%`,
+      detail: "of your season budget",
+      accent: "purple",
+    });
+  }
   if (market.overall?.enough) {
     stats.push({
-      label: "Claims that cost $0",
+      label: "Claims that cost nothing",
       value: `${Math.round(market.overall.zeroShare * 100)}%`,
       detail: "of winning claims",
     });
@@ -370,8 +478,30 @@ export default async function WaiverWirePage({
       url: CANONICAL,
       articleSection: "Waiver Wire",
       about: { "@type": "Thing", name: "Fantasy football waiver wire" },
+      ...(board.rosterRatesComputedAt ? { dateModified: board.rosterRatesComputedAt } : {}),
     },
     faqPageJsonLd(FAQ),
+    ...(board.rows.length > 0
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: `Week ${week} fantasy football waiver wire pickups`,
+            numberOfItems: Math.min(10, board.rows.length),
+            itemListElement: [
+              ...(hero ? [hero] : []),
+              ...board.rows.filter((r) => r.playerId !== hero?.playerId),
+            ]
+              .slice(0, 10)
+              .map((row, i) => ({
+                "@type": "ListItem",
+                position: i + 1,
+                name: `${row.name}, ${row.position}${row.team ? ` ${row.team}` : ""}`,
+                url: `${SITE.url}/players/${encodeURIComponent(row.slug)}`,
+              })),
+          },
+        ]
+      : []),
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
@@ -401,14 +531,14 @@ export default async function WaiverWirePage({
             <>
               <a
                 href="#board-heading"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-base transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 py-3 sm:w-auto text-sm font-semibold text-[#07070D] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 This week&apos;s pickups
                 <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
               </a>
               <Link
                 href="/tools/faab"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 sm:w-auto text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <Calculator aria-hidden="true" className="h-4 w-4" />
                 FAAB calculator
@@ -430,23 +560,16 @@ export default async function WaiverWirePage({
         )}
       </PageBody>
 
-      {/* THE BOARD RUNS IN TWO COLUMNS AND THE PROSE DOES NOT.
-          `PageColumns` puts the controls and the method notes in a rail that
-          follows the board down a wide screen and falls below it on a phone,
-          which is where supplementary content belongs. The lessons underneath
-          come back out into a single reading column, because a line of body
-          copy across a dashboard is unreadable and a contents rail beside an
-          essay is furniture nobody asked for. */}
+      {/* THE BOARD AND THE PLAYBOOK SHARE ONE GRID.
+          `PageColumns` puts the week picker and the method notes in a rail that
+          follows the board down a wide screen and falls below it on a phone.
+          The playbook underneath uses the same two-column grid, with its own
+          contents nav in the rail, so the main column keeps one width from the
+          masthead to the FAQ instead of narrowing halfway down the page. */}
       <PageColumns
         railLabel="Board controls and how these numbers are built"
         rail={
           <>
-            <PositionRail
-              basePath="/waiver-wire"
-              active={position}
-              counts={counts}
-              total={board.rows.length}
-            />
             <CalculatorRail />
             <WeekRail
               week={null}
@@ -478,20 +601,24 @@ export default async function WaiverWirePage({
       >
         <TheShortVersion />
 
-        {hero && <TopPickup row={hero} week={week} isPast={false} />}
+        <BudgetProvider>
+          {hero && <TopPickup row={hero} week={week} isPast={false} />}
 
-        <WaiverBoardPanel
-          board={board}
-          basePath="/waiver-wire"
-          activePosition={position}
-          headingId="board-heading"
-          heading="This week's waiver wire pickups"
-          excludePlayerIds={hero ? [hero.playerId] : []}
-        />
+          <WaiverBoardPanel
+            board={board}
+            basePath="/waiver-wire"
+            activePosition={position}
+            headingId="board-heading"
+            heading="This week's waiver wire pickups"
+            excludePlayerIds={hero ? [hero.playerId] : []}
+          />
+        </BudgetProvider>
+
+        <HotClaims claims={board.hotClaims} window={board.assumptions.claimWeeks} />
 
         <Link
           href={weekPath(week)}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2.5 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2.5 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           Open the week {week} page on its own
           <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
@@ -499,25 +626,69 @@ export default async function WaiverWirePage({
       </PageColumns>
 
       <PageBody>
-        <div className="mt-6">
-          <Syllabus />
-        </div>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0">
+            <PlaybookIntro />
+            <PlaybookNav items={PLAYBOOK_ITEMS} variant="bar" />
 
-        <div className="mt-10 max-w-4xl text-[15px] sm:text-base">
-          <WhatSection />
-          <SystemsSection />
-          <TimingSection />
-          <WhoSection />
-          <PriceSection market={market} budget={budget} />
-          <DynastySection />
-          <MistakesSection />
+            <div className="mt-6 space-y-6">
+              <WhatSection />
+              <SystemsSection />
+              <TimingSection />
+              <WhoSection />
+              <PriceSection market={market} />
+              <PercentSection spread={spread} />
+              <DynastySection />
+              <MistakesSection />
 
-          <section aria-labelledby="faq-heading" className="mt-12">
-            <GuideSectionHeader id="faq-heading" eyebrow="FAQ" heading="Questions, answered" />
-            <div className="mt-5">
-              <FaqAccordion items={FAQ} />
+              <section
+                id="faq"
+                aria-labelledby="faq-heading"
+                className="relative scroll-mt-32 overflow-hidden rounded-3xl xl:scroll-mt-28 border border-line bg-surface/40 p-4 sm:p-7"
+              >
+                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+                  <MessageCircleQuestion aria-hidden="true" className="h-3.5 w-3.5" />
+                  FAQ
+                </p>
+                <h2
+                  id="faq-heading"
+                  className="mt-1 text-xl font-bold tracking-tight text-ink sm:text-[26px]"
+                >
+                  Waiver wire questions, answered
+                </h2>
+                <div className="mt-5">
+                  <FaqAccordion items={FAQ} />
+                </div>
+              </section>
             </div>
-          </section>
+          </div>
+
+          <aside className="hidden xl:block">
+            <div className="sticky top-[5.5rem] space-y-4">
+              <PlaybookNav items={PLAYBOOK_ITEMS} variant="rail" />
+              <div
+                className="rounded-3xl p-px"
+                style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
+              >
+                <div className="rounded-[calc(1.5rem-1px)] bg-[#16162A] p-4">
+                  <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-cyan">
+                    <Calculator aria-hidden="true" className="h-3.5 w-3.5" />
+                    Put it to work
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                    The calculator prices a claim against your own roster and what your rivals
+                    can still spend.
+                  </p>
+                  <Link
+                    href="/tools/faab"
+                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-beacon px-4 py-2.5 text-sm font-semibold text-[#07070D] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    Open the FAAB calculator
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
       </PageBody>
 
@@ -537,132 +708,144 @@ export default async function WaiverWirePage({
 
 /* ---------- Shared bits ---------- */
 
-const LINK_CLASS =
-  "font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80";
-
-function Para({ children }: { children: React.ReactNode }) {
-  return <p className="mt-4 leading-relaxed text-ink-muted">{children}</p>;
-}
-
-function BulletList({ items }: { items: React.ReactNode[] }) {
+/** The lesson card for one entry in LESSONS, looked up by its key. */
+function Lesson({ lessonKey, children }: { lessonKey: LessonKey; children: React.ReactNode }) {
+  const i = LESSONS.findIndex((l) => l.key === lessonKey);
+  const l = LESSONS[i];
   return (
-    <ul role="list" className="mt-4 list-disc space-y-2 pl-6 leading-relaxed text-ink-muted">
-      {items.map((item, i) => (
-        <li key={i}>{item}</li>
-      ))}
-    </ul>
+    <LessonCard
+      id={l.id}
+      headingId={l.headingId}
+      number={i + 1}
+      total={LESSONS.length}
+      heading={l.heading}
+      takeaway={l.takeaway}
+      icon={l.icon}
+      tone={i % 2 === 0 ? "purple" : "cyan"}
+    >
+      {children}
+    </LessonCard>
   );
 }
 
-function KeyIdea({ children }: { children: React.ReactNode }) {
+/** A heading inside a lesson, one level under the lesson's own. */
+function LessonSubheading({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-6 rounded-card border-l-4 border-brand-purple bg-surface p-4 sm:p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-purple">
-        Key idea
-      </p>
-      <p className="mt-1 text-base font-medium leading-relaxed text-ink">{children}</p>
-    </div>
+    <h3 className="mt-8 text-lg font-semibold tracking-tight text-ink sm:text-xl">{children}</h3>
   );
 }
 
-function TryIt({
-  href,
-  label,
-  children,
-}: {
-  href: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mt-6 flex flex-col gap-3 rounded-card border border-brand-cyan/40 bg-brand-cyan/5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-      <p className="text-sm leading-relaxed text-ink-muted">
-        <span className="font-semibold text-brand-cyan">Try it. </span>
-        {children}
-      </p>
-      <Link
-        href={href}
-        className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-      >
-        {label}
-      </Link>
-    </div>
-  );
-}
-
+/**
+ * The whole mechanic in three steps, above the board. A reader who arrived on
+ * the head term gets the answer before any list of names.
+ */
 function TheShortVersion() {
+  const steps: { icon: LucideIcon; title: string; body: string }[] = [
+    {
+      icon: Hourglass,
+      title: "He is dropped",
+      body: "He does not go straight back on the shelf. He sits on waivers until your league's next run.",
+    },
+    {
+      icon: HandCoins,
+      title: "Everybody claims",
+      body: "Every manager who wants him puts in a claim, blind, before the run starts.",
+    },
+    {
+      icon: Gavel,
+      title: "The league decides",
+      body: "By queue position with waiver priority, by the highest bid with FAAB. Nearly every league runs it Wednesday morning.",
+    },
+  ];
   return (
     <section
       aria-labelledby="short-version"
-      className="rounded-card p-px"
-      style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
+      className="relative overflow-hidden rounded-3xl border border-line bg-surface/40 p-4 sm:p-6"
     >
-      <div className="rounded-card p-4 sm:p-5" style={{ background: "#16162A" }}>
-        <h2
-          id="short-version"
-          className="text-[11px] font-semibold uppercase tracking-[0.14em]"
-          style={{ color: "#22D3EE" }}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+        }}
+      />
+      <h2
+        id="short-version"
+        className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan"
+      >
+        The short version
+      </h2>
+      <ol role="list" className="mt-3 grid gap-2 sm:grid-cols-3 sm:gap-3">
+        {steps.map((step, i) => {
+          const Icon = step.icon;
+          return (
+            <li
+              key={step.title}
+              className="relative flex gap-3 rounded-2xl border border-line/80 bg-base/50 p-3.5 sm:flex-col sm:gap-2"
+            >
+              <span
+                aria-hidden="true"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#07070D]"
+                style={{
+                  backgroundImage:
+                    i === 1
+                      ? "linear-gradient(140deg, #22D3EE 0%, #A855F7 100%)"
+                      : i === 0
+                        ? "linear-gradient(140deg, #A855F7 0%, #6D28D9 100%)"
+                        : "linear-gradient(140deg, #22D3EE 0%, #0E7490 100%)",
+                }}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-ink">
+                  <span className="mr-1 font-mono text-xs text-ink-subtle">
+                    {i + 1}
+                    <span className="sr-only">.</span>
+                  </span>
+                  {step.title}
+                </h3>
+                <p className="mt-0.5 text-[13px] leading-relaxed text-ink-muted">{step.body}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-4 text-sm leading-relaxed text-ink-muted">
+        The decision is simpler than the machinery. Add the player whose ROLE changed, not the
+        one who had a good Sunday, and price him against the worst player you would actually
+        start. The{" "}
+        <Link
+          href="/guides/faab-strategy"
+          className="font-semibold text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
-          The short version
-        </h2>
-        <p className="mt-2 text-[15px] leading-relaxed sm:text-base" style={{ color: "#F4F4F8" }}>
-          A dropped player does not go straight back on the shelf. He sits on waivers until
-          your league&apos;s next run, everybody who wants him puts in a claim, and the league
-          decides who gets him: by queue position if you use waiver priority, by the highest
-          bid if you use FAAB. Nearly every league runs that on Wednesday morning by default.
-        </p>
-        <p className="mt-3 text-sm leading-relaxed" style={{ color: "#F4F4F8" }}>
-          The decision is simpler than the machinery. Add the player whose ROLE changed, not
-          the one who had a good Sunday, and price him against the worst player you would
-          actually start rather than against how good he is in the abstract. The{" "}
-          <Link
-            href="/guides/faab-strategy"
-            className="font-semibold text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            FAAB strategy guide
-          </Link>{" "}
-          covers the money; this page covers everything around it.
-        </p>
-      </div>
+          FAAB strategy guide
+        </Link>{" "}
+        covers the money; this page covers everything around it.
+      </p>
     </section>
   );
 }
 
-function Syllabus() {
+/** The playbook's opening, so the lessons read as one course rather than a list. */
+function PlaybookIntro() {
   return (
-    <section aria-labelledby="syllabus-heading">
-      <h2
-        id="syllabus-heading"
-        className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle"
-      >
-        <ListTree aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-        The {LESSON_WORDS[LESSONS.length]} sections
-      </h2>
-      <ol role="list" className="mt-3 grid gap-2 sm:grid-cols-2">
-        {LESSONS.map((l, i) => (
-          <li key={l.href}>
-            <a
-              href={l.href}
-              className="flex min-h-11 items-start gap-3 rounded-card border border-line bg-surface/60 p-3 transition-colors hover:border-line-accent hover:bg-ink/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <span
-                aria-hidden="true"
-                className="font-mono text-sm font-semibold tabular-nums text-brand-cyan"
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-ink">
-                  <span className="sr-only">Section {i + 1}: </span>
-                  {l.title}
-                </span>
-                <span className="block text-xs text-ink-muted">{l.takeaway}</span>
-              </span>
-            </a>
-          </li>
-        ))}
-      </ol>
-    </section>
+    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-purple">
+          <BookOpen aria-hidden="true" className="h-3.5 w-3.5" />
+          The waiver wire playbook
+        </p>
+        <p className="mt-1 text-lg font-semibold text-ink sm:text-xl">
+          Everything around the claim, in {LESSONS.length} lessons.
+        </p>
+      </div>
+      <p className="max-w-sm text-sm leading-relaxed text-ink-muted sm:text-right">
+        How the wire works, when it runs, who is worth it and what it costs. Jump to any lesson
+        from the contents.
+      </p>
+    </div>
   );
 }
 
@@ -670,13 +853,7 @@ function Syllabus() {
 
 function WhatSection() {
   return (
-    <section aria-labelledby="what-heading" className="mt-12">
-      <GuideSectionHeader
-        id="what-heading"
-        eyebrow={lessonEyebrow("#what-heading")}
-        heading="What the waiver wire actually is"
-        tone="purple"
-      />
+    <Lesson lessonKey="what">
       <Para>
         The waiver wire is a lock on the free agent pool. When a manager drops a player, he
         does not become instantly available to whoever is quickest. He goes on waivers for a
@@ -695,30 +872,37 @@ function WhatSection() {
         paying attention to.
       </Para>
 
-      <GuideSubheading className="mt-8">The three states a player can be in</GuideSubheading>
-      <BulletList
-        items={[
-          <>
-            <span className="font-semibold text-ink">Rostered.</span> Somebody owns him. The
-            only routes to him are a trade or that manager dropping him.
-          </>,
-          <>
-            <span className="font-semibold text-ink">On waivers.</span> Recently dropped, or
-            never yet rostered in a league that puts everybody through waivers. Claims only,
-            processed together at your league&apos;s next run.
-          </>,
-          <>
-            <span className="font-semibold text-ink">A free agent.</span> Cleared waivers
-            unclaimed. Anybody can add him instantly, at any hour, for nothing.
-          </>,
+      <LessonSubheading>The three states a player can be in</LessonSubheading>
+      <TileGrid
+        columns="sm:grid-cols-3"
+        headingLevel={4}
+        tiles={[
+          {
+            icon: Lock,
+            tone: "danger",
+            title: "Rostered",
+            body: "Somebody owns him. The only routes to him are a trade or that manager dropping him.",
+          },
+          {
+            icon: Hourglass,
+            tone: "amber",
+            title: "On waivers",
+            body: "Recently dropped, or never yet rostered in a league that puts everybody through waivers. Claims only, processed together at your league's next run.",
+          },
+          {
+            icon: Unlock,
+            tone: "success",
+            title: "A free agent",
+            body: "Cleared waivers unclaimed. Anybody can add him instantly, at any hour, for nothing.",
+          },
         ]}
       />
       <KeyIdea>
-        Most of the players worth adding all season were free agents, not waiver claims.
-        The wire matters because of the handful of weeks when somebody&apos;s job changes and
-        four managers want the same name.
+        Most of the players worth adding all season were free agents, not waiver claims. The
+        wire matters because of the handful of weeks when somebody&apos;s job changes and four
+        managers want the same name.
       </KeyIdea>
-    </section>
+    </Lesson>
   );
 }
 
@@ -726,13 +910,7 @@ function WhatSection() {
 
 function SystemsSection() {
   return (
-    <section aria-labelledby="systems-heading" className="mt-12">
-      <GuideSectionHeader
-        id="systems-heading"
-        eyebrow={lessonEyebrow("#systems-heading")}
-        heading="Waiver priority against FAAB"
-        tone="cyan"
-      />
+    <Lesson lessonKey="systems">
       <Para>
         Every league resolves competing claims one of two ways, and which one you are in
         changes the whole shape of the decision. It is worth knowing which before the season
@@ -745,20 +923,20 @@ function SystemsSection() {
         There is a third variation worth naming because it catches people out. Some priority
         leagues use a REVERSE STANDINGS order that resets every week rather than a rolling
         queue, so the worst team in the league is first in line every Wednesday and using it
-        costs nothing at all. In one of those, there is no reason to hold priority back, and
-        a manager playing it like a rolling queue is leaving free players on the table all
+        costs nothing at all. In one of those, there is no reason to hold priority back, and a
+        manager playing it like a rolling queue is leaving free players on the table all
         season.
       </Para>
       <KeyIdea>
         In a rolling priority league the question is whether he is worth your place in line.
-        In a FAAB league the question is what he is worth in dollars. In a weekly reset
-        league there is barely a question at all: if you are near the top, use it.
+        In a FAAB league the question is what he is worth in dollars. In a weekly reset league
+        there is barely a question at all: if you are near the top, use it.
       </KeyIdea>
       <TryIt href="/guides/faab-strategy" label="Read the FAAB guide">
-        If your league uses FAAB, the bidding is its own skill: how much of the budget a
-        starter is worth, when to empty it, and why the odd number wins.
+        If your league uses FAAB, the bidding is its own skill: how much of the budget a starter
+        is worth, when to empty it, and why the odd number wins.
       </TryIt>
-    </section>
+    </Lesson>
   );
 }
 
@@ -766,33 +944,50 @@ function SystemsSection() {
 
 function TimingSection() {
   return (
-    <section aria-labelledby="timing-heading" className="mt-12">
-      <GuideSectionHeader
-        id="timing-heading"
-        eyebrow={lessonEyebrow("#timing-heading")}
-        heading="When claims actually run"
-        tone="purple"
-      />
+    <Lesson lessonKey="timing">
       <Para>
         The single most searched waiver question, and the one most often answered wrongly by a
-        page that assumes everybody is on the same platform. Here is what each of the four big
-        ones does by default.
+        page that assumes everybody is on the same platform. First the rhythm of a default
+        week, then what each of the four big platforms does.
       </Para>
+      <TileGrid
+        numbered
+        columns="sm:grid-cols-2 2xl:grid-cols-4"
+        tiles={[
+          {
+            icon: CalendarClock,
+            tone: "purple",
+            title: "From Tuesday: claims go in",
+            body: "Waivers on most platforms default to an overnight run, so a claim entered any time from Tuesday is in time.",
+          },
+          {
+            icon: AlarmClock,
+            tone: "danger",
+            title: "Tuesday night: the real deadline",
+            body: "A claim has to be in before the run starts, which in most leagues is overnight into Wednesday.",
+          },
+          {
+            icon: Gavel,
+            tone: "cyan",
+            title: "Wednesday morning: the run",
+            body: "Every claim is processed at once, by priority or by the highest bid.",
+          },
+          {
+            icon: Unlock,
+            tone: "success",
+            title: "After the run: free agents",
+            body: "Anyone left unclaimed is first come, first served, for anybody watching.",
+          },
+        ]}
+      />
       <div className="mt-6">
         <ProcessingFigure />
       </div>
-      <Para>
-        Two practical consequences. The first is that Tuesday evening is the real deadline in
-        most leagues, not Wednesday morning, because a claim has to be in before the run
-        starts. The second is that the waiver run is not the last chance: anyone who clears
-        unclaimed is a free agent from that moment, and Wednesday morning is when the leftovers
-        become free to anybody watching.
-      </Para>
       <KeyIdea>
         Set a reminder for Tuesday night, not Wednesday morning. By the time the run has
         happened, the decision has been made for you.
       </KeyIdea>
-    </section>
+    </Lesson>
   );
 }
 
@@ -800,148 +995,168 @@ function TimingSection() {
 
 function WhoSection() {
   return (
-    <section aria-labelledby="who-heading" className="mt-12">
-      <GuideSectionHeader
-        id="who-heading"
-        eyebrow={lessonEyebrow("#who-heading")}
-        heading="Who is actually worth adding"
-        tone="cyan"
-      />
+    <Lesson lessonKey="who">
       <Para>
         Almost every waiver mistake is the same mistake: bidding on a box score instead of a
-        role. A receiver who caught two passes and took one of them eighty yards scored
-        eighteen points and is still the fourth option on his own offence. A back who carried
-        it seventeen times for fifty-one yards scored nothing and just became his team&apos;s
+        role. A receiver who caught two passes and took one of them eighty yards scored eighteen
+        points and is still the fourth option on his own offence. A back who carried it
+        seventeen times for fifty-one yards scored nothing and just became his team&apos;s
         starter. The second one is the add, every time.
       </Para>
       <Para>
-        That is why the board on this page leads with usage rather than with points. Targets
-        and carries are the closest thing to a direct measurement of what a coaching staff
-        thinks of a player, and they move a week or two before the fantasy points do.
+        That is why the board on this page leads with usage rather than with points. Targets and
+        carries are the closest thing to a direct measurement of what a coaching staff thinks of
+        a player, and they move a week or two before the fantasy points do.
       </Para>
 
-      <GuideSubheading className="mt-8">The four questions, in order</GuideSubheading>
-      <BulletList
-        items={[
-          <>
-            <span className="font-semibold text-ink">Can I actually get him?</span> A player
-            rostered in most leagues is not a waiver plan. Our board leaves out anyone held in
-            70 percent or more of the leagues we track for exactly this reason.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Did something change?</span> A new
-            starter, an injury ahead of him, a trade that cleared the depth chart. If you
-            cannot name the change in a sentence, you are buying a good afternoon.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Is he better than what I would
-            start?</span> Not better than the worst player on your roster. Better than the
-            worst player you would actually put in a lineup, which is a much higher bar.
-          </>,
-          <>
-            <span className="font-semibold text-ink">What is he worth to everyone else?</span>{" "}
-            The price is set by how many rivals need him, not by how much you like him.
-          </>,
+      <LessonSubheading>The four questions, in order</LessonSubheading>
+      <TileGrid
+        numbered
+        headingLevel={4}
+        tiles={[
+          {
+            icon: Search,
+            tone: "cyan",
+            title: "Can I actually get him?",
+            body: "A player rostered in most leagues is not a waiver plan. Our board leaves out anyone held in 70 percent or more of the leagues we track for exactly this reason.",
+          },
+          {
+            icon: Shuffle,
+            tone: "purple",
+            title: "Did something change?",
+            body: "A new starter, an injury ahead of him, a trade that cleared the depth chart. If you cannot name the change in a sentence, you are buying a good afternoon.",
+          },
+          {
+            icon: Scale,
+            tone: "cyan",
+            title: "Is he better than what I would start?",
+            body: "Not better than the worst player on your roster. Better than the worst player you would actually put in a lineup, which is a much higher bar.",
+          },
+          {
+            icon: Users,
+            tone: "purple",
+            title: "What is he worth to everyone else?",
+            body: "The price is set by how many rivals need him, not by how much you like him.",
+          },
         ]}
       />
       <KeyIdea>
-        Buy the role, not the box score. The player whose job changed is worth money even if
-        he scored nothing on Sunday, and the player who scored thirty in a role that has not
-        changed is worth almost nothing.
+        Buy the role, not the box score. The player whose job changed is worth money even if he
+        scored nothing on Sunday, and the player who scored thirty in a role that has not changed
+        is worth almost nothing.
       </KeyIdea>
       <TryIt href="/tools/faab" label="Open the calculator">
         The FAAB calculator answers the third question properly. Connect your league and it
         prices a claim against the player you would actually drop and the lineup you would
         actually set.
       </TryIt>
-    </section>
+    </Lesson>
   );
 }
 
 /* ---------- Lesson 5 ---------- */
 
-function PriceSection({ market, budget }: { market: WaiverMarket; budget: number }) {
+function PriceSection({ market }: { market: WaiverMarket }) {
   return (
-    <section aria-labelledby="price-heading" className="mt-12">
-      <GuideSectionHeader
-        id="price-heading"
-        eyebrow={lessonEyebrow("#price-heading")}
-        heading="What a claim actually costs"
-        tone="purple"
-      />
-      <Para>
-        These are not estimates. They are measured from every waiver auction in every league
-        synced to FF Beacon, stored as anonymous quantiles with no league, roster or manager
-        attached to any of them.
-      </Para>
-      <div className="mt-6">
-        <FreeClaimFigure read={market.overall} budget={budget} />
+    <Lesson lessonKey="price">
+      <div className="grid gap-6 2xl:grid-cols-2 2xl:items-start">
+        <div>
+          <Para>
+            These are not estimates. They are measured from every waiver auction in every league
+            synced to FF Beacon, stored as anonymous quantiles with no league, roster or manager
+            attached to any of them.
+          </Para>
+          <Para>
+            The number that surprises people is how many claims cost nothing at all. Most weeks,
+            most adds are uncontested, which means the budget is not really for them. It is for
+            the small number of Tuesdays when a starting job changes hands and four managers all
+            work that out at once.
+          </Para>
+        </div>
+        <FreeClaimFigure read={market.overall} />
       </div>
-      <Para>
-        The number that surprises people is how many claims cost nothing at all. Most weeks,
-        most adds are uncontested, which means the budget is not really for them. It is for
-        the small number of Tuesdays when a starting job changes hands and four managers all
-        work that out at once.
-      </Para>
       <div className="mt-6">
-        <ClearingPriceFigure slices={market.bidders} budget={budget} />
+        <ClearingPriceFigure slices={market.bidders} />
       </div>
       <Para>
         Read those two together and the whole strategy falls out of them. The number of rivals
         bidding moves the price more than anything about the player, and you cannot see that
-        number before you bid. What you can see is how many teams around you have a hole at
-        his position, which is the closest available proxy and the thing our calculator counts
-        for you when a league is connected.
+        number before you bid. What you can see is how many teams around you have a hole at his
+        position, which is the closest available proxy and the thing our calculator counts for
+        you when a league is connected.
       </Para>
       <KeyIdea>
         You are not bidding against the player&apos;s value. You are bidding against the other
         managers who need him, and there are usually fewer of them than you fear.
       </KeyIdea>
-    </section>
+    </Lesson>
   );
 }
 
 /* ---------- Lesson 6 ---------- */
 
+function PercentSection({ spread }: { spread: BudgetSpread }) {
+  return (
+    <Lesson lessonKey="percent">
+      <Para>
+        Every bid on this page is a share of the season budget, and that is deliberate. The
+        figures above are shares too. A public page cannot see your league, and the leagues it
+        is written for do not agree on how much money there is to spend.
+      </Para>
+      <div className="mt-6">
+        <PercentExplainer
+          spread={spread}
+          headingId="percent-figure-heading"
+          headingLevel={3}
+          bare
+        />
+      </div>
+      <KeyIdea>
+        Read a bid as a share of what you started the season with. If the board says 12 to 20
+        percent and your league plays for $1,000, that is $120 to $200, and the converter on the
+        board does the arithmetic for you.
+      </KeyIdea>
+    </Lesson>
+  );
+}
+
+/* ---------- Lesson 7 ---------- */
+
 function DynastySection() {
   return (
-    <section aria-labelledby="dynasty-heading" className="mt-12">
-      <GuideSectionHeader
-        id="dynasty-heading"
-        eyebrow={lessonEyebrow("#dynasty-heading")}
-        heading="Dynasty waivers are a different wire"
-        tone="cyan"
-      />
+    <Lesson lessonKey="dynasty">
       <Para>
-        In a redraft league a waiver claim is a rental. You are buying whatever this player
-        does between now and the end of the season, and in week fourteen that is three games.
-        In a dynasty league you are buying an asset you keep, so the arithmetic changes in
-        both directions at once.
+        In a redraft league a waiver claim is a rental. You are buying whatever this player does
+        between now and the end of the season, and in week fourteen that is three games. In a
+        dynasty league you are buying an asset you keep, so the arithmetic changes in both
+        directions at once.
       </Para>
-      <BulletList
-        items={[
-          <>
-            <span className="font-semibold text-ink">Young players are worth more than
-            their production.</span> A 22-year-old who just got on the field is a real buy at
-            a real price even if he does nothing this season, because you own him next
-            September.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Old fill-ins are worth less.</span> A
-            30-year-old starting four games while somebody heals wins you those four games and
-            then occupies a roster spot for three years.
-          </>,
-          <>
-            <span className="font-semibold text-ink">The wire is thinner.</span> Dynasty
-            rosters are deeper and the taxi squad soaks up exactly the profile a redraft league
-            leaves free, so the genuinely available player is rarer and worth more when he
-            appears.
-          </>,
-          <>
-            <span className="font-semibold text-ink">A rebuilder should be bidding harder
-            than a contender.</span> The contender is buying three months. The rebuilder is
-            buying a lottery ticket that costs money they have no other use for.
-          </>,
+      <TileGrid
+        tiles={[
+          {
+            icon: Sprout,
+            tone: "success",
+            title: "Young players are worth more than their production",
+            body: "A 22-year-old who just got on the field is a real buy at a real price even if he does nothing this season, because you own him next September.",
+          },
+          {
+            icon: Hourglass,
+            tone: "amber",
+            title: "Old fill-ins are worth less",
+            body: "A 30-year-old starting four games while somebody heals wins you those four games and then occupies a roster spot for three years.",
+          },
+          {
+            icon: Layers,
+            tone: "cyan",
+            title: "The wire is thinner",
+            body: "Dynasty rosters are deeper and the taxi squad soaks up exactly the profile a redraft league leaves free, so the genuinely available player is rarer and worth more when he appears.",
+          },
+          {
+            icon: Hammer,
+            tone: "purple",
+            title: "A rebuilder should bid harder than a contender",
+            body: "The contender is buying three months. The rebuilder is buying a lottery ticket that costs money they have no other use for.",
+          },
         ]}
       />
       <Para>
@@ -954,88 +1169,111 @@ function DynastySection() {
         Whether you should be buying at all depends on whether this roster is contending or
         rebuilding, and the dynasty guide has the honest test for which one you are.
       </TryIt>
-    </section>
+    </Lesson>
   );
 }
 
-/* ---------- Lesson 7 ---------- */
+/* ---------- Lesson 8 ---------- */
 
 function MistakesSection() {
   return (
-    <section aria-labelledby="mistakes-heading" className="mt-12">
-      <GuideSectionHeader
-        id="mistakes-heading"
-        eyebrow={lessonEyebrow("#mistakes-heading")}
-        heading="The mistakes that cost the most"
-        tone="purple"
-      />
-      <BulletList
-        items={[
-          <>
-            <span className="font-semibold text-ink">Finishing the season with money
-            left.</span> Leftover FAAB in January bought nothing. A dollar in week two and a
-            dollar in week fourteen are not the same money, because the later one has fewer
-            chances left to be spent.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Bidding round numbers.</span> Everybody
-            bids 10 and 20, so those are exactly the ties you are most likely to be in, and
-            your league settles them with priority or a coin flip rather than in your favour.
-            Make it 11.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Claiming a player you would not
-            start.</span> A claim costs a roster spot as well as money, and the player you
-            drop to make room is part of the price.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Waiting for the perfect
-            week.</span> The best waiver adds of a season are usually claimed in weeks two
-            through five, when a starting job changes and nobody is sure yet whether it is
-            real.
-          </>,
-          <>
-            <span className="font-semibold text-ink">Reading last week&apos;s points as
-            this week&apos;s role.</span> The whole of lesson four, and the one that costs the
-            most money per mistake.
-          </>,
+    <Lesson lessonKey="mistakes">
+      <TileGrid
+        columns="sm:grid-cols-2 sm:[&>li:last-child]:col-span-2 2xl:grid-cols-3 2xl:[&>li:last-child]:col-span-1"
+        tiles={[
+          {
+            icon: PiggyBank,
+            tone: "danger",
+            title: "Finishing the season with money left",
+            body: "Leftover FAAB in January bought nothing. A dollar in week two and a dollar in week fourteen are not the same money, because the later one has fewer chances left to be spent.",
+          },
+          {
+            icon: CircleDollarSign,
+            tone: "danger",
+            title: "Bidding round numbers",
+            body: "Everybody bids 10 and 20, so those are exactly the ties you are most likely to be in, and your league settles them with priority or a coin flip rather than in your favour. Make it 11.",
+          },
+          {
+            icon: Armchair,
+            tone: "danger",
+            title: "Claiming a player you would not start",
+            body: "A claim costs a roster spot as well as money, and the player you drop to make room is part of the price.",
+          },
+          {
+            icon: Timer,
+            tone: "danger",
+            title: "Waiting for the perfect week",
+            body: "The best waiver adds of a season are usually claimed in weeks two through five, when a starting job changes and nobody is sure yet whether it is real.",
+          },
+          {
+            icon: ScrollText,
+            tone: "danger",
+            title: "Reading last week's points as this week's role",
+            body: "The whole of lesson four, and the one that costs the most money per mistake.",
+          },
         ]}
       />
       <Para>
         The counterweight to all of that is the thing the measured prices above actually show:
-        most claims cost nothing, so the cost of being slightly too aggressive is small and
-        the cost of being permanently too cautious is a budget you never spent.
+        most claims cost nothing, so the cost of being slightly too aggressive is small and the
+        cost of being permanently too cautious is a budget you never spent.
       </Para>
-      <div className="mt-8 rounded-card border border-line bg-surface/50 p-5">
-        <h3 className="text-base font-semibold text-ink">Where to go from here</h3>
-        <ul role="list" className="mt-3 space-y-2 text-sm leading-relaxed text-ink-muted">
-          <li>
-            <Link href="/guides/faab-strategy" className={LINK_CLASS}>
-              FAAB strategy
-            </Link>{" "}
-            for how much to bid, in nine lessons with a worked example.
-          </li>
-          <li>
-            <Link href="/guides/faab-settings-by-platform" className={LINK_CLASS}>
-              FAAB settings by platform
-            </Link>{" "}
-            if you are trying to turn it on, change the budget, or work out what your
-            league&apos;s waiver type means.
-          </li>
-          <li>
-            <Link href="/tools/free-agent-finder" className={LINK_CLASS}>
-              Free agent finder
-            </Link>{" "}
-            to check one name against every league you are in at once.
-          </li>
-          <li>
-            <Link href="/guides/chopped-league-strategy" className={LINK_CLASS}>
-              Chopped and guillotine leagues
-            </Link>
-            , where the wire is the entire game.
-          </li>
-        </ul>
-      </div>
-    </section>
+
+      <LessonSubheading>Where to go from here</LessonSubheading>
+      <ul role="list" className="mt-4 grid gap-3 sm:grid-cols-2">
+        {[
+          {
+            href: "/guides/faab-strategy",
+            title: "FAAB strategy",
+            body: "How much to bid, in nine lessons with a worked example.",
+            icon: Wallet,
+          },
+          {
+            href: "/guides/faab-settings-by-platform",
+            title: "FAAB settings by platform",
+            body: "Turning it on, changing the budget, and what your league's waiver type means.",
+            icon: Settings2,
+          },
+          {
+            href: "/tools/free-agent-finder",
+            title: "Free agent finder",
+            body: "One name against every league you are in at once.",
+            icon: Search,
+          },
+          {
+            href: "/guides/chopped-league-strategy",
+            title: "Chopped and guillotine leagues",
+            body: "Where the wire is the entire game.",
+            icon: Axe,
+          },
+        ].map((link) => {
+          const Icon = link.icon;
+          return (
+            <li key={link.href}>
+              <Link
+                href={link.href}
+                className="group flex h-full min-h-11 items-start gap-3 rounded-2xl border border-line bg-base/50 p-4 transition-colors hover:border-brand-cyan/50 hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-cyan/10 text-brand-cyan"
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1 text-sm font-semibold text-ink group-hover:text-brand-cyan">
+                    {link.title}
+                    <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">
+                    {link.body}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </Lesson>
   );
 }

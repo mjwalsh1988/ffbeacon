@@ -25,7 +25,7 @@ import Link from "next/link";
 import { CalendarDays, Info, ListFilter, Wallet } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
 import { formatEastern } from "@/lib/datetime";
-import { boardWeeks, weekPath, weekPhase } from "@/lib/waiver-wire/weeks";
+import { boardWeeks, claimWeeksText, weekPath, weekPhase } from "@/lib/waiver-wire/weeks";
 import { BOARD_POSITIONS, type BoardPosition, type WaiverBoard } from "@/lib/waiver-wire/types";
 
 const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
@@ -196,13 +196,13 @@ export function CalculatorRail() {
           Price a claim properly
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-          Every bid here assumes a 12-team league and a neutral level of need. Connect your
-          Sleeper league and the calculator prices the claim against who you would actually
-          drop and what your rivals can still spend.
+          Every bid here is what it has taken to win a player like him, as a share of the
+          budget. Connect your Sleeper league and the calculator adds what he is worth to your
+          roster, who you would drop, and what your rivals can still spend.
         </p>
         <Link
           href="/tools/faab"
-          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-base transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-[#07070D] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           Open the FAAB calculator
         </Link>
@@ -237,9 +237,15 @@ export function MethodRail({ board }: { board: WaiverBoard }) {
             The bids
           </dt>
           <dd className="mt-1 text-ink-muted">
-            Priced for a {a.teams}-team league starting {a.offensiveStarters} with a $
-            {a.budget} season budget and a neutral level of need, so a dollar figure is also a
-            percentage of whatever you have left.
+            A percentage of the season budget, never dollars, because budgets differ from league
+            to league. The lower figure wins about 6 times in 10 and the higher about 9 in 10,
+            read from what waiver claims have actually cleared at in {a.marketName} leagues
+            synced to FF Beacon.
+            {a.claimWeeks && a.claimAuctions > 0
+              ? ` Where a player was claimed himself in ${claimWeeksText(a.claimWeeks)}, his own ${a.claimAuctions === 1 ? "auction pulls" : "auctions pull"} the price toward what he actually cost.`
+              : ""}{" "}
+            It prices winning him, not what he is worth to your roster: pay it only if he
+            would start for you.
           </dd>
         </div>
         <div>
@@ -248,8 +254,9 @@ export function MethodRail({ board }: { board: WaiverBoard }) {
             The points
           </dt>
           <dd className="mt-1 text-ink-muted">
-            {a.formatName} scoring from the {a.projectionSourceName} projections. Player values
-            come from {a.sourceName}.
+            {a.formatName} scoring from the {a.projectionSourceName} projections, measured
+            against the last startable player in a {a.teams}-team league starting{" "}
+            {a.offensiveStarters}. Player values come from {a.sourceName}.
           </dd>
         </div>
         <div>

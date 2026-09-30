@@ -40,6 +40,9 @@ export type WaiverContext = {
     display_name: string;
     scoring_type: string | null;
     te_premium_bonus: number | null;
+    /** "redraft" or "dynasty", which picks the market the bids are read from. */
+    league_type: string | null;
+    is_superflex: boolean | null;
   } | null;
   /**
    * Null when no active source has rankings for the resolved format at all.
@@ -95,6 +98,8 @@ export async function resolveWaiverContext(params: {
         display_name: formatRow.display_name,
         scoring_type: formatRow.scoring_type,
         te_premium_bonus: formatRow.te_premium_bonus,
+        league_type: formatRow.league_type ?? null,
+        is_superflex: formatRow.is_superflex ?? null,
       }
     : null;
 

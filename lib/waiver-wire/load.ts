@@ -51,13 +51,17 @@ import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import { closestScoringBase, scoringSettingsForFormat } from "@/lib/league-scoring";
 import { loadRankedUniverseCached } from "@/lib/faab/player-list";
 import { replacementRankFor } from "@/lib/faab/manual";
-import type { FaabPoolEntry, FaabSettings } from "@/lib/faab/types";
+import type { FaabSettings } from "@/lib/faab/types";
+import { loadPriorCellsCached } from "@/lib/faab/priors-read";
+import { claimWindowFor, loadClaimMarketCached } from "./claim-market";
 import { buildOpportunity, opportunitySwing, type StatLine } from "./opportunity";
 import { boardScore, buildReason } from "./reasons";
 import {
   AVAILABILITY_CEILING_PCT,
   STANDARD_LEAGUE,
   boardBid,
+  marketNameFor,
+  priorLeagueKind,
   replacementPoints,
 } from "./bid";
 import {
@@ -65,6 +69,7 @@ import {
   type BoardEmptyReason,
   type BoardPosition,
   type BoardRow,
+  type HotClaim,
   type RosterRate,
   type WaiverBoard,
 } from "./types";
@@ -89,6 +94,10 @@ const CANDIDATE_LIMIT = 160;
  */
 const CURVE_DEPTH = 320;
 
+/** The most-claimed list: how long, and how many auctions before a name is on it. */
+const HOT_CLAIM_LIMIT = 10;
+const HOT_CLAIM_MIN_AUCTIONS = 5;
+
 /** How many weeks of stat lines the opportunity read looks back over. */
 const OPPORTUNITY_LOOKBACK = 6;
 
@@ -98,6 +107,8 @@ type FormatRow = {
   display_name: string;
   scoring_type: string | null;
   te_premium_bonus: number | null;
+  league_type: string | null;
+  is_superflex: boolean | null;
 };
 
 type RosterRateRow = {
@@ -243,10 +254,36 @@ function emptyBoard(
     week,
     currentWeek,
     rows: [],
+    hotClaims: [],
     assumptions,
     rosterRatesComputedAt: null,
     emptyReason: reason,
   };
+}
+
+/**
+ * The board a page renders when it cannot build one at all: no format, or no
+ * source with rankings for it. Shared by the hub and the weekly pages so the
+ * two cannot describe the gap differently.
+ */
+export function unavailableBoard(params: {
+  season: number | null;
+  week: number;
+  currentWeek: number;
+  formatName: string | null;
+  sourceName: string;
+}): WaiverBoard {
+  return emptyBoard(params.season ?? 0, params.week, params.currentWeek, "no-rankings", {
+    teams: STANDARD_LEAGUE.teams,
+    offensiveStarters: STANDARD_LEAGUE.offensiveStarters,
+    marketName: "fantasy",
+    claimWeeks: null,
+    claimAuctions: 0,
+    formatName: params.formatName ?? "your format",
+    sourceName: params.sourceName,
+    projectionSourceName: projectionSourceDisplay(null),
+    availabilityCeilingPct: AVAILABILITY_CEILING_PCT,
+  });
 }
 
 export type LoadBoardParams = {
@@ -268,11 +305,15 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
     te_premium_bonus: format.te_premium_bonus,
   });
   const scoringBase = closestScoringBase(scoringSettings);
+  const leagueKind = priorLeagueKind(format.league_type);
+  const superflex = format.is_superflex === true;
 
   const baseAssumptions: WaiverBoard["assumptions"] = {
     teams: STANDARD_LEAGUE.teams,
     offensiveStarters: STANDARD_LEAGUE.offensiveStarters,
-    budget: STANDARD_LEAGUE.budget,
+    marketName: marketNameFor(leagueKind, superflex),
+    claimWeeks: null,
+    claimAuctions: 0,
     formatName: format.display_name,
     sourceName,
     projectionSourceName: projectionSourceDisplay(null),
@@ -288,9 +329,15 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
   const currentWeek = clock.currentWeek;
 
   /* ---- Wave 2: who could be on the board at all. ---- */
-  const [universe, rateRows] = await Promise.all([
+  const claimWindow = claimWindowFor(week);
+  const [universe, rateRows, cells, claimMarket] = await Promise.all([
     loadRankedUniverseCached({ formatConfigId: format.id, source: sourceSlug }),
     loadRosterRates(supabase, season),
+    loadPriorCellsCached().catch((error) => {
+      console.error("[waiver-wire] market cells read failed", error);
+      return [];
+    }),
+    loadClaimMarketCached(season, claimWindow),
   ]);
 
   if (universe.length === 0) {
@@ -362,7 +409,7 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
     }),
   ]);
 
-  const assumptions: WaiverBoard["assumptions"] = {
+  let assumptions: WaiverBoard["assumptions"] = {
     ...baseAssumptions,
     projectionSourceName: projectionSourceDisplay(projections.source),
   };
@@ -410,27 +457,6 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
     replacementByPosition.set(position, replacementPoints(curve, rank));
   }
 
-  // The pool the bid engine locates replacement and elite VALUE against. It is
-  // the ranked universe with its values attached, which is the same pool the
-  // calculator passes, so the two price a player identically.
-  const poolValues = new Map<string, number>();
-  for (let i = 0; i < Math.min(universe.length, CURVE_DEPTH * 2); i += 200) {
-    const slice = universe.slice(i, i + 200).map((p) => p.playerId);
-    const { data } = await supabase
-      .from("player_value_trends")
-      .select("player_id, current_value")
-      .eq("format_config_id", format.id)
-      .eq("source", sourceSlug)
-      .in("player_id", slice);
-    for (const row of data ?? []) {
-      const v = numeric((row as { current_value: unknown }).current_value);
-      if (v != null) poolValues.set(String((row as { player_id: string }).player_id), v);
-    }
-  }
-  const playerPool: FaabPoolEntry[] = universe
-    .slice(0, CURVE_DEPTH * 2)
-    .map((p) => ({ overallRank: p.overallRank, value: poolValues.get(p.playerId) ?? null }));
-
   const isPast = week < currentWeek;
   const rows: BoardRow[] = [];
 
@@ -455,6 +481,7 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
       ? ratesBySleeperId.get(candidate.sleeperId)
       : undefined;
     const rosterRate = rateRow ? toRosterRate(rateRow) : null;
+    const market = candidate.sleeperId ? (claimMarket.get(candidate.sleeperId) ?? null) : null;
 
     const row: BoardRow = {
       playerId: candidate.playerId,
@@ -477,12 +504,18 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
           }
         : null,
       pointsAboveReplacement,
+      market,
       bid: boardBid({
-        overallRank: candidate.overallRank,
-        positionRank: candidate.positionRank,
-        value,
+        position,
+        leagueKind,
+        superflex,
+        week,
+        pointsAboveReplacement,
+        touchDelta: opportunity.touchDelta,
+        rosterPct: rosterRate?.pct ?? null,
+        market,
+        cells,
         settings,
-        playerPool,
       }),
       reason: buildReason({
         position,
@@ -507,6 +540,42 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
 
   rows.sort((a, b) => b.score - a.score || a.overallRank - b.overallRank);
 
+  const claimAuctions = rows.reduce((sum, r) => sum + (r.market?.auctions ?? 0), 0);
+  assumptions = {
+    ...assumptions,
+    claimWeeks: claimAuctions > 0 ? claimWindow : null,
+    claimAuctions,
+  };
+
+  // What the room spent on, from the same auctions. Resolved against the
+  // ranked universe so every name links to a profile we hold.
+  const onBoard = new Set(rows.map((r) => r.playerId));
+  const bySleeperId = new Map(
+    universe.filter((p) => p.sleeperId).map((p) => [p.sleeperId as string, p]),
+  );
+  const hotClaims: HotClaim[] = [...claimMarket.entries()]
+    .filter(([, m]) => m.auctions >= HOT_CLAIM_MIN_AUCTIONS)
+    .sort((a, b) => b[1].auctions - a[1].auctions || b[1].p50 - a[1].p50)
+    .flatMap(([sleeperId, m]) => {
+      const p = bySleeperId.get(sleeperId);
+      if (!p || !isBoardPosition(p.position)) return [];
+      const rate = ratesBySleeperId.get(sleeperId);
+      return [
+        {
+          playerId: p.playerId,
+          slug: p.slug,
+          name: p.name,
+          position: p.position,
+          team: p.team,
+          sleeperId,
+          market: m,
+          rosterPct: rate ? pct(rate.leagues_rostered, rate.leagues_total) : null,
+          onBoard: onBoard.has(p.playerId),
+        },
+      ];
+    })
+    .slice(0, HOT_CLAIM_LIMIT);
+
   // Everybody scored the "no evidence" floor. That is not a board, and
   // publishing it as one would put forty names under a heading promising
   // measured advice with nothing measured behind them.
@@ -520,6 +589,7 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
     week,
     currentWeek,
     rows,
+    hotClaims,
     assumptions,
     rosterRatesComputedAt,
     emptyReason: null,
@@ -562,7 +632,9 @@ export async function loadWaiverBoardCached(params: LoadBoardParams): Promise<Wa
   return unstable_cache(
     () => loadWaiverBoardUncached(params),
     [
-      "waiver-board",
+      // The row shape is part of the key. v2 is the percentage bid and the claim
+      // market (migration 0331); an old entry would render with fields missing.
+      "waiver-board-v2",
       String(clock.season ?? "none"),
       String(params.week),
       params.format.id,

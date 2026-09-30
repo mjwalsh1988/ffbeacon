@@ -103,3 +103,10 @@ export function weekNeighbours(
     next: i < weeks.length - 1 ? weeks[i + 1] : null,
   };
 }
+
+/** "week 3" or "weeks 3 and 4", for the waiver runs the claim prices cover. */
+export function claimWeeksText(window: { from: number; to: number }): string {
+  return window.from === window.to
+    ? `week ${window.to}`
+    : `weeks ${window.from} and ${window.to}`;
+}

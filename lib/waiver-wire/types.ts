@@ -25,17 +25,19 @@
  *      minus the last startable player at his position in a league this size.
  *      Ten points from a tight end is a different thing from ten points from a
  *      running back, and the raw projection cannot tell you which.
- *   5. WHAT SHOULD I BID. `bid`, from
- *      `lib/faab/calculate-faab.ts calculateFaabRecommendation`, the same
- *      function the FAAB calculator runs. One engine, so the article and the
- *      tool can never disagree about a player.
+ *   5. WHAT SHOULD I BID. `bid`, a share of the season budget read from what
+ *      waiver claims actually cost: the same measured market cells the FAAB
+ *      calculator reads (`faab_market_priors`, through the same `pickCell` and
+ *      `priorCdf`), weighted toward this player's OWN recent auctions in the
+ *      synced leagues (`market`, from `waiver_claim_market()`). See
+ *      `lib/waiver-wire/bid.ts` for why the old rank curve was retired here.
  *
- * ABSOLUTE RULE: the bid on this page is priced for a STATED standard league
- * and is labelled as one everywhere it appears. The calculator can ask what a
- * player does for YOUR roster because it has your roster; a public article
- * cannot, and pretending otherwise would put a precise-looking number on a
- * question nobody asked. Every board says which league it priced
- * (`BoardAssumptions`) and links to the calculator for the reader's own.
+ * ABSOLUTE RULE: the bid on this page is a PERCENTAGE OF THE SEASON BUDGET and
+ * never a dollar figure. A public page cannot see a reader's budget, and a
+ * percentage is the one form of the answer that is right in every league. It
+ * prices what it takes to WIN the player, not what he is worth to a roster it
+ * cannot see; the calculator asks that second question against the reader's
+ * own league, and every board links to it.
  *
  * ABSOLUTE RULE: a missing number is never a zero. Sleeper publishes no
  * projection for IDP slots, publishes snap share a week late, and publishes
@@ -115,15 +117,58 @@ export type BoardProjection = {
   beatRate: number | null;
 };
 
-/** The recommended claim, priced for the board's stated standard league. */
+/**
+ * What this player actually cost on waivers in the synced leagues, over the
+ * most recent waiver runs we hold. From `waiver_claim_market()` (migration
+ * 0331). Every price is a share of that league's full season budget, 0 to 100,
+ * so a $100 league and a $1,000 league read on the same scale.
+ */
+export type ClaimMarket = {
+  /** Auctions he was won in. One per league per waiver week. */
+  auctions: number;
+  /** Distinct leagues those auctions ran in. */
+  leagues: number;
+  /** Mean teams bidding on him per auction, the winner included. */
+  avgBidders: number;
+  /** Share of his auctions with at least two bidders, 0 to 1. */
+  contestedShare: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  /** The newest waiver week in the window he was claimed in. */
+  latestWeek: number;
+};
+
+/** How many teams the price assumes are bidding. The market cells' own keys. */
+export type BidderKey = "1" | "2" | "3" | "4p";
+
+/**
+ * The recommended claim, as a SHARE OF THE SEASON BUDGET.
+ *
+ * ABSOLUTE RULE: the board never prints a dollar figure. A public page does not
+ * know a reader's budget, and a $12 bid means one thing in a $100 league and
+ * another in a $1,000 one. A share of the budget means the same thing in both,
+ * which is why the calculator works in shares throughout and this does too.
+ */
 export type BoardBid = {
-  /** Dollars in a $100 budget, which is also the percentage of one. */
+  /**
+   * The value bid: the smallest share that wins about 60 percent of the time
+   * against a market like this one (settings.goal.valueTarget).
+   */
   lowPct: number;
+  /** The make-sure bid: about 90 percent (settings.goal.sureTarget). */
   highPct: number;
-  /** The calculator's own label for the tier this claim fell in. */
+  /** Rivals the price assumes, including the reader. */
+  bidders: BidderKey;
+  /**
+   * Where the number came from. "claims" when his own recent auctions carry
+   * most of the weight, "blended" when they carry some, "market" when he has
+   * none and the price is the measured market for players like him.
+   */
+  basis: "claims" | "blended" | "market";
+  tier: "free" | "cheap" | "real" | "priority";
   tierLabel: string;
-  /** True when the engine's answer is "do not bid, he will clear waivers". */
-  isDumpCandidate: boolean;
 };
 
 /** One player on the board. */
@@ -147,6 +192,8 @@ export type BoardRow = {
    * league of the board's stated size. Null when he has no projection.
    */
   pointsAboveReplacement: number | null;
+  /** His own recent auctions. Null when nobody claimed him in the window. */
+  market: ClaimMarket | null;
   bid: BoardBid | null;
   /**
    * The one sentence saying why he is on the list, built from the figures on
@@ -168,7 +215,12 @@ export type BoardRow = {
 export type BoardAssumptions = {
   teams: number;
   offensiveStarters: number;
-  budget: number;
+  /** Which market the bids were read from, in words, e.g. "dynasty superflex". */
+  marketName: string;
+  /** The waiver weeks the per-player claim prices cover. Null when none. */
+  claimWeeks: { from: number; to: number } | null;
+  /** Auctions behind the per-player prices, summed across the board. */
+  claimAuctions: number;
   /** The format's display name, e.g. "Redraft PPR". */
   formatName: string;
   /** The value source's display name, e.g. "KeepTradeCut". */
@@ -182,6 +234,25 @@ export type BoardAssumptions = {
   availabilityCeilingPct: number;
 };
 
+/**
+ * One of the most-claimed players in the latest waiver runs, whether or not he
+ * is still available. The board lists who you can still get; this lists what
+ * the room actually spent on, which is the market the bids are read from.
+ */
+export type HotClaim = {
+  playerId: string;
+  slug: string;
+  name: string;
+  position: string;
+  team: string | null;
+  sleeperId: string | null;
+  market: ClaimMarket;
+  /** Rostered share now, 0 to 100. Null without a roster-rate row. */
+  rosterPct: number | null;
+  /** True when he is still on this week's board. */
+  onBoard: boolean;
+};
+
 /** Everything one week's board needs to render. */
 export type WaiverBoard = {
   season: number;
@@ -189,6 +260,8 @@ export type WaiverBoard = {
   /** The live NFL week, which may be behind or ahead of the board's week. */
   currentWeek: number;
   rows: BoardRow[];
+  /** The most-claimed players in the claim window, most auctions first. */
+  hotClaims: HotClaim[];
   assumptions: BoardAssumptions;
   /** When the roster rates behind the availability column were computed. */
   rosterRatesComputedAt: string | null;

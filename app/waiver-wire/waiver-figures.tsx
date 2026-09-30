@@ -25,7 +25,6 @@
 import { ChartFigure, DataTable, Td, Th, makeScale } from "@/components/chart-kit";
 import {
   NOT_ENOUGH,
-  moneyPctText,
   pctText,
   sampleText,
   shareText,
@@ -36,6 +35,15 @@ const CYAN = "#22D3EE";
 const PURPLE = "#A855F7";
 const INK_SUBTLE = "#8A8A9C";
 const LINE = "#2A2A47";
+
+/**
+ * A share of the season budget, in words. Never a dollar figure: budgets run
+ * from $100 to $1,000 across the leagues we hold, and a percentage is the one
+ * form of the number that is right in all of them.
+ */
+function budgetPct(value: number): string {
+  return `${pctText(value)}% of budget`;
+}
 
 /* ------------------------------------------------------------------ *
  * What a contested claim actually clears at
@@ -57,13 +65,7 @@ export type ClearingSlice = { label: string; read: MarketRead | null };
  * words in place of the bar, rather than dropped, so the shape of what we do
  * and do not know is visible.
  */
-export function ClearingPriceFigure({
-  slices,
-  budget,
-}: {
-  slices: ClearingSlice[];
-  budget: number;
-}) {
+export function ClearingPriceFigure({ slices }: { slices: ClearingSlice[] }) {
   const usable = slices.filter((s) => s.read?.enough);
   const max = Math.max(4, ...usable.map((s) => s.read?.p90 ?? 0));
 
@@ -81,16 +83,16 @@ export function ClearingPriceFigure({
     usable.length === 0
       ? "We do not yet hold enough waiver auctions to publish clearing prices by how many teams were bidding."
       : `Measured across every league synced to FF Beacon, an uncontested claim clears near ${
-          solo?.enough ? moneyPctText(solo.p50, budget) : "nothing"
+          solo?.enough ? budgetPct(solo.p50) : "nothing"
         } while a claim four or more teams wanted clears near ${
-          crowd?.enough ? moneyPctText(crowd.p50, budget) : "several times that"
+          crowd?.enough ? budgetPct(crowd.p50) : "several times that"
         }. The number of rivals bidding moves the price more than anything else about the player.`;
 
   return (
     <ChartFigure
       titleLevel={3}
       title="What a waiver claim actually costs, by how many teams wanted him"
-      description={`Median winning bid as a share of the league's whole budget, shown as dollars in a $${budget} budget. Measured from real waiver auctions in leagues synced to FF Beacon, not from anybody's opinion.`}
+      description="Median winning bid as a percentage of the league's whole season budget, so it reads the same in a $100 league and a $1,000 one. Measured from real waiver auctions in leagues synced to FF Beacon, not from anybody's opinion."
       summary={summary}
       tableLabel="View the prices behind this chart"
       table={
@@ -110,13 +112,13 @@ export function ClearingPriceFigure({
             <tr key={slice.label}>
               <Td>{slice.label}</Td>
               <Td numeric>
-                {slice.read?.enough ? moneyPctText(slice.read.p50, budget) : NOT_ENOUGH}
+                {slice.read?.enough ? budgetPct(slice.read.p50) : NOT_ENOUGH}
               </Td>
               <Td numeric>
-                {slice.read?.enough ? moneyPctText(slice.read.p75, budget) : NOT_ENOUGH}
+                {slice.read?.enough ? budgetPct(slice.read.p75) : NOT_ENOUGH}
               </Td>
               <Td numeric>
-                {slice.read?.enough ? moneyPctText(slice.read.p90, budget) : NOT_ENOUGH}
+                {slice.read?.enough ? budgetPct(slice.read.p90) : NOT_ENOUGH}
               </Td>
               <Td>{slice.read ? sampleText(slice.read) : "No auctions yet"}</Td>
             </tr>
@@ -175,7 +177,7 @@ export function ClearingPriceFigure({
                         fontSize="12"
                         fill={INK_SUBTLE}
                       >
-                        {pctText(p50)}
+                        {pctText(p50)}%
                       </text>
                     </>
                   ) : (
@@ -421,7 +423,7 @@ export function ProcessingFigure({ rows = PROCESSING_ROWS }: { rows?: Processing
  * that are not, and hoarding it all season is the mistake rather than the
  * discipline.
  */
-export function FreeClaimFigure({ read, budget }: { read: MarketRead | null; budget: number }) {
+export function FreeClaimFigure({ read }: { read: MarketRead | null }) {
   const enough = !!read?.enough;
   const free = enough ? read.zeroShare : null;
 
@@ -432,7 +434,7 @@ export function FreeClaimFigure({ read, budget }: { read: MarketRead | null; bud
       description="The share of winning claims that cleared at zero, across every waiver auction in the leagues synced to FF Beacon."
       summary={
         enough && free != null
-          ? `${shareText(free)} of winning waiver claims cleared for nothing at all, because nobody else put in for that player. The budget is not for those. It is for the small number of weeks when somebody's job changes and four managers want the same name, where the median winning bid is ${moneyPctText(read.p50, budget)}.`
+          ? `${shareText(free)} percent of winning waiver claims cleared for nothing at all, because nobody else put in for that player. The budget is not for those. It is for the small number of weeks when somebody's job changes and several managers want the same name. Across every claim, the median winning bid is ${budgetPct(read.p50)}.`
           : "We do not yet hold enough waiver auctions to publish how often a claim clears for nothing."
       }
       tableLabel="View the numbers behind this"
@@ -452,7 +454,7 @@ export function FreeClaimFigure({ read, budget }: { read: MarketRead | null; bud
           </tr>
           <tr>
             <Td>Median winning bid, all claims</Td>
-            <Td numeric>{enough ? moneyPctText(read.p50, budget) : NOT_ENOUGH}</Td>
+            <Td numeric>{enough ? budgetPct(read.p50) : NOT_ENOUGH}</Td>
           </tr>
           <tr>
             <Td>Sample</Td>
@@ -477,7 +479,7 @@ export function FreeClaimFigure({ read, budget }: { read: MarketRead | null; bud
           </div>
           <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm">
             <span className="font-mono text-xl font-bold tabular-nums text-brand-cyan">
-              {shareText(free)}
+              {shareText(free)}%
             </span>
             <span className="text-ink-muted">of winning claims cleared for nothing</span>
           </p>

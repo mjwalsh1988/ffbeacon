@@ -1,69 +1,43 @@
 /**
- * The waiver board: a panel per position, each holding a grid of player cards.
+ * The waiver board: one panel, a tab per position, a grid of cards in each.
  *
- * THE DEFAULT VIEW IS GROUPED BY POSITION, AND THAT IS A CORRECTNESS FIX RATHER
- * THAN A LAYOUT PREFERENCE. Ranking every available player against each other
- * on points above replacement sounds right and produces a board of kickers and
- * defenses. The reason is structural: replacement level for a wide receiver in
- * a twelve-team league is about the 47th best one, which is better than
- * anything that ever reaches waivers, so every skill player scores negative. A
- * defense only has to beat the 12th best defense, and the wire is full of
- * defenses nobody rosters, so they all score positive. The comparison is
- * arithmetically honest and completely useless: it answers "who beats their own
- * replacement" when the reader asked "who should I add".
+ * GROUPED BY POSITION, AND THAT IS A CORRECTNESS FIX RATHER THAN A LAYOUT
+ * PREFERENCE. Ranking every available player against each other on points
+ * above replacement produces a board of kickers and defenses: replacement for
+ * a wide receiver in a twelve-team league is about the 47th best one, better
+ * than anything that reaches waivers, while a defense only has to beat the
+ * 12th best and the wire is full of them. Inside a position the same score is
+ * exactly right, and that is the only place it is used.
  *
- * Grouping removes the cross-position comparison entirely. Inside a position,
- * ordering on the same score is exactly right, and that is where it is used.
- *
- * WHY PANELS AND A GRID RATHER THAN A STACK OF WIDE ROWS. One column of
- * full-width rows is a very long page of very empty lines at desktop width, and
- * it gives a reader no structure to navigate by: twenty-four identical blocks
- * with no visible beginning or end to anything. The shared `Panel` gives each
- * position a header band, a beacon hairline and a real region landmark, and the
- * two-up card grid inside halves the scroll. `components/waiver-wire/
- * player-card.tsx` carries the reasoning for the card itself.
+ * ONE OBJECT, NOT SIX. The positions used to be six panels stacked down the
+ * page. They are now tabs inside a single board (`BoardTabs`), with the budget
+ * converter in the board's own header, so the whole thing reads as one tool
+ * rather than a column of boxes. Every card is still rendered on the server;
+ * see `board-tabs.tsx` for how the inactive ones stay in the HTML.
  *
  * AN EMPTY BOARD ALWAYS SAYS WHY. "Nobody is worth adding this week" is a
  * claim, and it is never the one we are making. Each `BoardEmptyReason` gets
- * its own sentence naming the specific thing that is missing, because a reader
- * who knows the projections have not landed will come back on Wednesday and a
- * reader looking at a shrug will not.
+ * its own sentence naming the specific thing that is missing.
  *
  * Presentational server component.
  */
 
 import Link from "next/link";
-import { ArrowRight, CircleAlert } from "lucide-react";
-import { Panel } from "@/components/dashboard-panel";
+import { CircleAlert, LayoutGrid } from "lucide-react";
 import type {
   BoardEmptyReason,
   BoardPosition,
   WaiverBoard,
 } from "@/lib/waiver-wire/types";
 import { OFFENSE_POSITIONS, positionNoun, positionNounMap } from "@/lib/site";
-import { WaiverPlayerCard } from "./player-card";
+import { POSITION_HEX, WaiverPlayerCard } from "./player-card";
+import { BoardTabs, RevealGrid, type BoardTab } from "./board-tabs";
+import { BudgetConverter } from "./budget-context";
 
-/** How many players a SINGLE-POSITION board shows at once. */
-const VISIBLE_ROWS = 24;
+/** Cards a position shows before "Show more": three rows of two on a phone. */
+const INITIAL_CARDS = 6;
 
-/**
- * How many of each position the grouped default view shows.
- *
- * The shape of a real waiver week. Running backs and receivers are where claims
- * are actually made, tight end is thinner, and the two streaming positions get
- * a short list because a reader wants this week's option rather than a ranking
- * of all thirty-two. Every group links through to its own full list.
- */
-const GROUP_DEPTH: Record<BoardPosition, number> = {
-  RB: 6,
-  WR: 6,
-  TE: 4,
-  QB: 4,
-  DEF: 4,
-  K: 2,
-};
-
-/** The order the groups render in. Where claims are actually made, first. */
+/** The order the tabs run in. Where claims are actually made, first. */
 const GROUP_ORDER: BoardPosition[] = ["RB", "WR", "TE", "QB", "DEF", "K"];
 
 const GROUP_HEADING: Record<BoardPosition, string> = {
@@ -71,23 +45,20 @@ const GROUP_HEADING: Record<BoardPosition, string> = {
   DEF: `Streaming ${positionNoun("DEF", "plural", "short")}`,
 };
 
-/**
- * One line per group, and it carries the structural truth exactly once.
- *
- * Replacement level for a skill position in a twelve-team league is better than
- * nearly everything that ever reaches waivers, so almost every player on this
- * board projects below the last startable one at his position. That is worth
- * saying, and it was being said in every single card's sentence, twenty-four
- * times down one page, until it read as wallpaper. Said once per section it is
- * a useful frame for the six cards under it.
- */
+/** One line per position, said once above its grid rather than in every card. */
 const GROUP_HELPER: Record<BoardPosition, string> = {
-  RB: "Where most claims are won. Almost nothing on any wire beats a startable back outright, so these are the best of what is genuinely free, led by whoever just inherited carries.",
-  WR: "The deepest position on the board and the slowest to show a role change in points, which is why these are ranked on targets before anything else.",
-  TE: "Thin by nature. One reliable target share is usually worth more here than the projection suggests, because the position falls away so fast behind it.",
-  QB: "Rarely worth a large bid in a one-quarterback league and often worth one in superflex, so read these against your own lineup rather than the number.",
-  DEF: "A one-week rental rather than a claim you keep, ranked on this week's matchup and priced accordingly.",
-  K: "Stream the matchup. Nothing here is worth real money, and the gap between the first and the last of them is about a point.",
+  RB: "Where most claims are won. Almost nothing on a wire beats a startable back outright, so these are the best of what is genuinely free, led by whoever just inherited carries.",
+  WR: "The deepest position and the slowest to show a role change in points, which is why these lean on targets before anything else.",
+  TE: "Thin by nature. One reliable target share is usually worth more here than the projection suggests.",
+  QB: "Rarely worth a large bid in a one-quarterback league and often worth one in superflex.",
+  DEF: "A one-week rental rather than a claim you keep, ranked on this week's matchup.",
+  K: "Stream the matchup. The gap between the first and the last of them is about a point.",
+};
+
+/** The tab's full label: short enough to sit on one line. */
+const TAB_LABEL: Record<BoardPosition, string> = {
+  ...positionNounMap(OFFENSE_POSITIONS, { form: "plural", heading: true }),
+  DEF: "Defenses",
 };
 
 const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POSITIONS, {
@@ -117,7 +88,7 @@ const EMPTY_COPY: Record<BoardEmptyReason, { heading: string; body: string }> = 
 function EmptyBoard({ reason }: { reason: BoardEmptyReason }) {
   const copy = EMPTY_COPY[reason];
   return (
-    <div className="rounded-modal border border-dashed border-line-accent bg-surface/40 p-6 sm:p-8">
+    <div className="rounded-2xl border border-dashed border-line-accent bg-surface/40 p-6 sm:p-8">
       <div className="flex items-start gap-3">
         <CircleAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-brand-cyan" />
         <div className="min-w-0">
@@ -140,36 +111,14 @@ function EmptyBoard({ reason }: { reason: BoardEmptyReason }) {
   );
 }
 
-function EmptyPosition({ position }: { position: BoardPosition }) {
-  return (
-    <p className="rounded-card border border-dashed border-line bg-surface/40 p-5 text-sm leading-relaxed text-ink-muted">
-      Nothing at this position clears the bar this week. That is a real answer rather than a
-      missing one: every {POSITION_WORD[position]} we rank is either already rostered nearly
-      everywhere or projects below the last startable one.
-    </p>
-  );
-}
-
-/** The grid every group and the filtered view both render into. */
-function CardGrid({
-  rows,
-  isPast,
-}: {
-  rows: WaiverBoard["rows"];
-  isPast: boolean;
-}) {
-  return (
-    <ol role="list" className="grid gap-3 lg:grid-cols-2">
-      {rows.map((row, i) => (
-        <WaiverPlayerCard key={row.playerId} row={row} index={i + 1} isPast={isPast} />
-      ))}
-    </ol>
-  );
-}
+/**
+ * Two abreast from the smallest phone up; three only at 2xl, where the main
+ * column still has room beside the site sidebar and the rail.
+ */
+const GRID_CLASS = "grid grid-cols-2 gap-2 sm:gap-3 2xl:grid-cols-3";
 
 export function WaiverBoardPanel({
   board,
-  basePath,
   activePosition,
   headingId,
   heading,
@@ -177,8 +126,9 @@ export function WaiverBoardPanel({
   excludePlayerIds = [],
 }: {
   board: WaiverBoard;
-  /** The route the group links point back at. */
+  /** The page's own path. Kept for callers; the tabs write `?pos=` in place. */
   basePath: string;
+  /** The position the page opened on (`?pos=`), or null for the default. */
   activePosition: BoardPosition | null;
   headingId: string;
   heading: string;
@@ -189,10 +139,7 @@ export function WaiverBoardPanel({
   if (board.emptyReason) {
     return (
       <section aria-labelledby={headingId}>
-        <h2
-          id={headingId}
-          className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
-        >
+        <h2 id={headingId} className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
           {heading}
         </h2>
         <div className="mt-5">
@@ -202,107 +149,115 @@ export function WaiverBoardPanel({
     );
   }
 
+  const excluded = new Set(excludePlayerIds);
   const counts = new Map<BoardPosition, number>();
   for (const row of board.rows) {
     counts.set(row.position, (counts.get(row.position) ?? 0) + 1);
   }
 
-  // The hero is dropped from the groups rather than from the counts: the count
-  // is how many players are worth a claim at that position, which he still is.
-  const excluded = new Set(excludePlayerIds);
-  const shown = board.rows.filter((r) => !excluded.has(r.playerId));
+  const tabs: BoardTab[] = GROUP_ORDER.filter((position) =>
+    board.rows.some((r) => r.position === position && !excluded.has(r.playerId)),
+  ).map((position) => {
+    const rows = board.rows
+      .filter((r) => r.position === position && !excluded.has(r.playerId));
+    // The count is how many are worth a claim, which the hero still is.
+    const total = counts.get(position) ?? 0;
+    const cards = rows.map((row, i) => (
+      <WaiverPlayerCard
+        key={row.playerId}
+        row={row}
+        index={i + 1}
+        isPast={isPast}
+        claimWeeks={board.assumptions.claimWeeks}
+      />
+    ));
+    return {
+      key: position,
+      short: position,
+      label: TAB_LABEL[position],
+      count: total,
+      hue: POSITION_HEX[position],
+      content: (
+        <>
+          <div className="mb-3 flex flex-col gap-1 px-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:px-0">
+            <h3 className="text-lg font-bold tracking-tight text-ink">
+              {GROUP_HEADING[position]}
+              <span className="ml-2 font-mono text-sm font-semibold text-ink-subtle">
+                {total}
+                <span className="sr-only"> worth a claim in week {board.week}</span>
+              </span>
+            </h3>
+            <p className="text-xs leading-relaxed text-ink-muted sm:max-w-md sm:text-right">
+              {GROUP_HELPER[position]}
+            </p>
+          </div>
+          <RevealGrid
+            first={cards.slice(0, INITIAL_CARDS)}
+            rest={cards.slice(INITIAL_CARDS)}
+            restCount={Math.max(0, cards.length - INITIAL_CARDS)}
+            restStart={INITIAL_CARDS + 1}
+            moreLabel={POSITION_WORD[position]}
+            className={GRID_CLASS}
+          />
+        </>
+      ),
+    };
+  });
 
-  if (activePosition) {
-    const filtered = shown.filter((r) => r.position === activePosition);
-    const visible = filtered.slice(0, VISIBLE_ROWS);
-    return (
-      <section aria-labelledby={headingId} className="space-y-4">
-        <div>
-          <h2
-            id={headingId}
-            className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
-          >
-            {heading}
-          </h2>
-          {/* A live region because filtering is a navigation here: the page
-              reloads and a reader lands back at the top, so this says what they
-              are now looking at without making them hunt for the difference. */}
-          <p role="status" className="mt-2 text-sm text-ink-muted">
-            Showing {visible.length} of {filtered.length} {POSITION_WORD[activePosition]} worth
-            a claim in week {board.week}.
-          </p>
-        </div>
-
-        {visible.length === 0 ? (
-          <EmptyPosition position={activePosition} />
-        ) : (
-          <Panel
-            eyebrow={`Week ${board.week}`}
-            title={GROUP_HEADING[activePosition]}
-            helper={GROUP_HELPER[activePosition]}
-            headingLevel={3}
-            action={
-              <Link
-                href={basePath}
-                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                All positions
-                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-              </Link>
-            }
-          >
-            <CardGrid rows={visible} isPast={isPast} />
-          </Panel>
-        )}
-      </section>
-    );
-  }
-
-  const groups = GROUP_ORDER.filter((position) =>
-    shown.some((r) => r.position === position),
-  );
+  const initialKey = activePosition ?? tabs[0]?.key ?? "RB";
 
   return (
-    <section aria-labelledby={headingId} className="space-y-4">
-      <div>
-        <h2 id={headingId} className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+    <section
+      aria-labelledby={headingId}
+      className="relative overflow-hidden rounded-3xl border border-line bg-surface/40 p-2.5 sm:p-5"
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-full opacity-20 blur-3xl"
+        style={{ background: "#A855F7" }}
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-24 top-24 h-64 w-64 rounded-full opacity-10 blur-3xl"
+        style={{ background: "#22D3EE" }}
+      />
+
+      <div className="relative px-1.5 pt-1.5 sm:px-0 sm:pt-0">
+        <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+          <LayoutGrid aria-hidden="true" className="h-3.5 w-3.5" />
+          Week {board.week} board
+        </p>
+        <h2
+          id={headingId}
+          className="mt-1 scroll-mt-24 text-2xl font-bold tracking-tight text-ink sm:text-3xl"
+        >
           {heading}
         </h2>
-        <p role="status" className="mt-2 text-sm text-ink-muted">
-          The best available at each position in week {board.week}, from {board.rows.length}{" "}
-          players worth a claim. Every section links to its own full list.
+        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+          {board.rows.length} players worth a claim, ranked within each position. Every bid is a
+          share of your season budget.
         </p>
       </div>
 
-      {groups.map((position) => {
-        const group = shown
-          .filter((r) => r.position === position)
-          .slice(0, GROUP_DEPTH[position]);
-        const total = counts.get(position) ?? 0;
-        return (
-          <Panel
-            key={position}
-            eyebrow={`${total} worth a claim`}
-            title={GROUP_HEADING[position]}
-            helper={GROUP_HELPER[position]}
-            headingLevel={3}
-            action={
-              total > group.length ? (
-                <Link
-                  href={`${basePath}?pos=${position}`}
-                  className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                >
-                  All {total}
-                  <span className="sr-only"> {POSITION_WORD[position]} worth a claim</span>
-                  <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-                </Link>
-              ) : undefined
-            }
-          >
-            <CardGrid rows={group} isPast={isPast} />
-          </Panel>
-        );
-      })}
+      <div className="relative mt-4">
+        <BudgetConverter />
+      </div>
+
+      <div className="relative mt-4">
+        <BoardTabs
+          tabs={tabs}
+          initialKey={initialKey}
+          label={`Week ${board.week} waiver wire pickups by position`}
+        />
+      </div>
     </section>
   );
 }

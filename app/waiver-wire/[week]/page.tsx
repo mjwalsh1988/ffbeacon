@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Calculator } from "lucide-react";
+import {
+  ArrowRight,
+  Calculator,
+  GraduationCap,
+  ListChecks,
+  MessageCircleQuestion,
+} from "lucide-react";
 import { SITE } from "@/lib/site";
 import { authorJsonLd, serializeJsonLd } from "@/lib/json-ld";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -18,11 +24,14 @@ import {
   CalculatorRail,
   MethodRail,
   NextRail,
-  PositionRail,
   WeekRail,
 } from "@/components/waiver-wire/board-rail";
 import { resolveWaiverContext } from "@/lib/waiver-wire/context";
-import { loadWaiverBoardCached } from "@/lib/waiver-wire/load";
+import { loadWaiverBoardCached, unavailableBoard } from "@/lib/waiver-wire/load";
+import { loadBudgetSpreadCached, type BudgetSpread } from "@/lib/waiver-wire/budgets";
+import { BudgetProvider } from "@/components/waiver-wire/budget-context";
+import { HotClaims } from "@/components/waiver-wire/hot-claims";
+import { PercentExplainer } from "@/components/waiver-wire/percent-explainer";
 import {
   isPublishableWeek,
   parseWeekSegment,
@@ -32,6 +41,7 @@ import {
   weekPhaseLabel,
 } from "@/lib/waiver-wire/weeks";
 import { BOARD_POSITIONS, type BoardPosition, type WaiverBoard } from "@/lib/waiver-wire/types";
+import { claimWeeksText } from "@/lib/waiver-wire/weeks";
 import { topPickup } from "@/lib/waiver-wire/reasons";
 import { WeekPager } from "../week-strip";
 
@@ -102,11 +112,11 @@ function parsePosition(value: string | string[] | undefined): BoardPosition | nu
 }
 
 function titleFor(week: number, season: number | null): string {
-  return `Week ${week} Waiver Wire${season ? ` ${season}` : ""}: Top Adds and FAAB Bids`;
+  return `Week ${week} Waiver Wire Pickups${season ? ` ${season}` : ""}: Top Adds and FAAB Bid %`;
 }
 
 function descriptionFor(week: number): string {
-  return `Week ${week} fantasy football waiver wire pickups, ranked by what they add over a startable replacement, with how widely each is already rostered and a FAAB bid range for a standard league.`;
+  return `Week ${week} fantasy football waiver wire pickups at every position, with how widely each is rostered, his role change, and a FAAB bid as a percentage of your budget priced from real waiver claims.`;
 }
 
 export async function generateMetadata({
@@ -135,8 +145,12 @@ export async function generateMetadata({
       `week ${week} waiver wire adds`,
       `week ${week} fantasy football waiver wire`,
       `week ${week} waiver pickups`,
+      `week ${week} waiver wire pickups`,
+      `best waiver wire pickups week ${week}`,
+      `week ${week} faab bids`,
       "waiver wire adds",
       "faab bids",
+      "faab bid percentage",
     ],
     robots: {
       index: true,
@@ -175,20 +189,34 @@ export async function generateMetadata({
  * week 4, and an answer that could have been written in July is one they have
  * read five times already.
  */
-function faqFor(week: number, board: WaiverBoard): FaqAccordionItem[] {
-  const top = board.rows[0];
+function faqFor(week: number, board: WaiverBoard, hero: WaiverBoard["rows"][number] | null): FaqAccordionItem[] {
+  const top = hero ?? board.rows[0];
   const a = board.assumptions;
+  const hot = board.hotClaims[0];
+  const heroBid = top?.bid
+    ? top.bid.lowPct === top.bid.highPct
+      ? `${top.bid.highPct} percent`
+      : `${top.bid.lowPct} to ${top.bid.highPct} percent`
+    : null;
   return [
     {
       question: `Who is the top waiver wire add in week ${week}?`,
       answer: top
-        ? `${top.name}, the ${top.position} for ${top.team ?? "his team"}, leads this board. ${top.reason} The list is ordered by what a player adds over the last startable player at his position rather than by raw projected points, because ten points from a tight end and ten from a running back are not the same purchase.`
+        ? `${top.name}, the ${top.position} for ${top.team ?? "his team"}, leads this board. ${top.reason}${heroBid ? ` The suggested bid is ${heroBid} of your season budget.` : ""} Within each position the list is ordered by what a player adds over the last startable player there rather than by raw projected points, because ten points from a tight end and ten from a running back are not the same purchase.`
         : `We have not published a ranked board for week ${week} yet. The page fills in once this week's projections land, which is usually a few days before the slate.`,
     },
     {
       question: `How much FAAB should I bid in week ${week}?`,
-      answer: `Every player on this board carries a range priced for a ${a.teams}-team league with a $${a.budget} season budget, so the dollar figure is also a percentage of whatever you have left. It assumes a neutral level of need, which is the one thing a public page cannot know about you. If your starting running back went down on Sunday, your real number is higher than the one here, and the FAAB calculator will work it out against your actual roster.`,
+      answer: `Every player on this board carries a range as a percentage of your season budget, because budgets differ from league to league. The lower figure wins about 6 times in 10 and the higher about 9 in 10, read from what waiver claims have actually cleared at in ${a.marketName} leagues synced to FF Beacon${a.claimWeeks ? `, and pulled toward each player's own price where he was claimed in ${claimWeeksText(a.claimWeeks)}` : ""}. It prices winning him, not what he is worth to your roster, so pay it only if he would start for you. The FAAB calculator works out that second part against your actual roster.`,
     },
+    ...(hot
+      ? [
+          {
+            question: `Who was the most-claimed player on waivers in ${claimWeeksText(a.claimWeeks ?? { from: week, to: week })}?`,
+            answer: `${hot.name} (${hot.position}${hot.team ? `, ${hot.team}` : ""}), claimed in ${hot.market.leagues} of the synced leagues with ${hot.market.avgBidders.toFixed(1)} teams bidding on average. The median winning bid was ${Math.round(hot.market.p50)} percent of the season budget, and the middle half of winning bids ran from ${Math.round(hot.market.p25)} to ${Math.round(hot.market.p75)} percent.`,
+          },
+        ]
+      : []),
     {
       question: "What does rostered percentage mean here?",
       answer: board.rosterRatesComputedAt
@@ -228,7 +256,7 @@ export default async function WaiverWeekPage({
   // fills in three months later is worse than no page at all.
   if (!isPublishableWeek(week, context.currentWeek)) notFound();
 
-  const [isMember, board] = await Promise.all([
+  const [isMember, board, spread] = await Promise.all([
     isDiscordMember(),
     context.format && context.sourceSlug
       ? loadWaiverBoardCached({
@@ -238,36 +266,27 @@ export default async function WaiverWeekPage({
           sourceName: context.sourceName,
           settings: context.settings,
         })
-      : Promise.resolve<WaiverBoard>({
-          season: context.season ?? 0,
-          week,
-          currentWeek: context.currentWeek,
-          rows: [],
-          assumptions: {
-            teams: 12,
-            offensiveStarters: 9,
-            budget: 100,
-            formatName: context.format?.display_name ?? "your format",
+      : Promise.resolve(
+          unavailableBoard({
+            season: context.season,
+            week,
+            currentWeek: context.currentWeek,
+            formatName: context.format?.display_name ?? null,
             sourceName: context.sourceName,
-            projectionSourceName: "Sleeper",
-            availabilityCeilingPct: 70,
-          },
-          rosterRatesComputedAt: null,
-          emptyReason: "no-rankings",
-        }),
+          }),
+        ),
+    context.season != null
+      ? loadBudgetSpreadCached(context.season)
+      : Promise.resolve<BudgetSpread>({ total: 0, buckets: [], otherLeagues: 0 }),
   ]);
 
   const position = parsePosition(search.pos);
   const phase = weekPhase(week, context.currentWeek);
-  // The headline add, and the counts the rail's filter needs. Both derived
-  // here so the rail and the board cannot disagree about either.
-  const hero = position ? null : topPickup(board.rows);
-  const counts = new Map<BoardPosition, number>();
-  for (const row of board.rows) {
-    counts.set(row.position, (counts.get(row.position) ?? 0) + 1);
-  }
+  // The headline add. `?pos=` only picks the board's opening tab now, so the
+  // hero stays whichever tab a shared link opens on.
+  const hero = topPickup(board.rows);
   const { prev, next } = weekNeighbours(week, context.currentWeek);
-  const faq = faqFor(week, board);
+  const faq = faqFor(week, board, hero);
   const title = titleFor(week, board.season || context.season);
   const canonical = `${SITE.url}${weekPath(week)}`;
 
@@ -293,12 +312,15 @@ export default async function WaiverWeekPage({
       detail: "players on this board",
       accent: "cyan",
     });
-    const topBid = board.rows.find((r) => r.bid && !r.bid.isDumpCandidate)?.bid;
+    const topBid = hero?.bid ?? board.rows.find((r) => r.bid)?.bid;
     if (topBid) {
       stats.push({
-        label: "Top bid",
-        value: `$${topBid.highPct}`,
-        detail: "of a $100 budget",
+        label: "Top pickup bid",
+        value:
+          topBid.lowPct === topBid.highPct
+            ? `${topBid.highPct}%`
+            : `${topBid.lowPct}-${topBid.highPct}%`,
+        detail: "of your season budget",
         accent: "purple",
       });
     }
@@ -337,8 +359,30 @@ export default async function WaiverWeekPage({
         "@type": "Thing",
         name: `Week ${week} fantasy football waiver wire`,
       },
+      ...(board.rosterRatesComputedAt ? { dateModified: board.rosterRatesComputedAt } : {}),
     },
     faqPageJsonLd(faq),
+    ...(board.rows.length > 0
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: `Week ${week} fantasy football waiver wire pickups`,
+            numberOfItems: Math.min(10, board.rows.length),
+            itemListElement: [
+              ...(hero ? [hero] : []),
+              ...board.rows.filter((r) => r.playerId !== hero?.playerId),
+            ]
+              .slice(0, 10)
+              .map((row, i) => ({
+                "@type": "ListItem",
+                position: i + 1,
+                name: `${row.name}, ${row.position}${row.team ? ` ${row.team}` : ""}`,
+                url: `${SITE.url}/players/${encodeURIComponent(row.slug)}`,
+              })),
+          },
+        ]
+      : []),
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
@@ -378,14 +422,14 @@ export default async function WaiverWeekPage({
             <>
               <Link
                 href="/tools/faab"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-base transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 py-3 sm:w-auto text-sm font-semibold text-[#07070D] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <Calculator aria-hidden="true" className="h-4 w-4" />
                 Price a bid for your league
               </Link>
               <Link
                 href="/waiver-wire"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 sm:w-auto text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 How the waiver wire works
                 <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
@@ -433,12 +477,6 @@ export default async function WaiverWeekPage({
         railLabel="Board controls and how these numbers are built"
         rail={
           <>
-            <PositionRail
-              basePath={weekPath(week)}
-              active={position}
-              counts={counts}
-              total={board.rows.length}
-            />
             <CalculatorRail />
             <WeekRail
               week={week}
@@ -468,76 +506,117 @@ export default async function WaiverWeekPage({
           </>
         }
       >
-        {hero && <TopPickup row={hero} week={week} isPast={phase === "past"} />}
+        <BudgetProvider>
+          {hero && <TopPickup row={hero} week={week} isPast={phase === "past"} />}
 
-        <WaiverBoardPanel
-          board={board}
-          basePath={weekPath(week)}
-          activePosition={position}
-          headingId="board-heading"
-          heading={`Week ${week} waiver wire pickups`}
-          excludePlayerIds={hero ? [hero.playerId] : []}
-        />
+          <WaiverBoardPanel
+            board={board}
+            basePath={weekPath(week)}
+            activePosition={position}
+            headingId="board-heading"
+            heading={`Week ${week} waiver wire pickups`}
+            excludePlayerIds={hero ? [hero.playerId] : []}
+          />
+        </BudgetProvider>
+
+        <HotClaims claims={board.hotClaims} window={board.assumptions.claimWeeks} />
 
         <WeekPager prev={prev} next={next} />
       </PageColumns>
 
+      {/* The same two-column grid as the board above, so the page keeps one
+          width top to bottom. The next-steps list is the rail on a wide
+          screen and follows the FAQ on a phone. */}
       <PageBody>
-        <section aria-labelledby="week-faq-heading" className="mt-12">
-          <h2
-            id="week-faq-heading"
-            className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
-          >
-            Week {week} waiver questions, answered
-          </h2>
-          <div className="mt-5">
-            <FaqAccordion items={faq} />
-          </div>
-        </section>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
+            <PercentExplainer
+              spread={spread}
+              headingId="week-percent-heading"
+              eyebrow="How to read the bids"
+            />
 
-        <section aria-labelledby="week-next-heading" className="mt-12">
-          <h2
-            id="week-next-heading"
-            className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
-          >
-            Before you put the claim in
-          </h2>
-          <p className="mt-3 max-w-3xl leading-relaxed text-ink-muted">
-            This board prices a standard league. Three things on the site take it the rest
-            of the way to yours.
-          </p>
-          <ul role="list" className="mt-5 grid gap-3 sm:grid-cols-3">
-            {[
-              {
-                href: "/tools/faab",
-                title: "Price it for your roster",
-                body: "Connect the league and the calculator prices the claim against who you would drop and what your rivals can still spend.",
-              },
-              {
-                href: "/guides/faab-strategy",
-                title: "Learn the bidding",
-                body: "Nine lessons on how much to bid, when to spend it all, and the mistakes that lose leagues in October.",
-              },
-              {
-                href: "/tools/who-should-i-start",
-                title: "Then set the lineup",
-                body: "Once he is yours, the start/sit tool says whether he beats the player already in the slot.",
-              },
-            ].map((link) => (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  className="flex h-full min-h-11 flex-col rounded-card border border-line bg-surface/60 p-4 transition-colors hover:border-brand-cyan/50 hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                >
-                  <span className="text-sm font-semibold text-ink">{link.title}</span>
-                  <span className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-                    {link.body}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+            <section
+              aria-labelledby="week-faq-heading"
+              className="relative overflow-hidden rounded-3xl border border-line bg-surface/40 p-4 sm:p-7"
+            >
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+                <MessageCircleQuestion aria-hidden="true" className="h-3.5 w-3.5" />
+                FAQ
+              </p>
+              <h2
+                id="week-faq-heading"
+                className="mt-1 text-xl font-bold tracking-tight text-ink sm:text-[26px]"
+              >
+                Week {week} waiver questions, answered
+              </h2>
+              <div className="mt-5">
+                <FaqAccordion items={faq} />
+              </div>
+            </section>
+          </div>
+
+          <aside aria-labelledby="week-next-heading" className="min-w-0">
+            <div className="space-y-4 xl:sticky xl:top-[5.5rem]">
+              <section className="rounded-3xl border border-line bg-surface/50 p-4 sm:p-5">
+                <h2 id="week-next-heading" className="text-lg font-bold tracking-tight text-ink">
+                  Before you put the claim in
+                </h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                  This board prices what it takes to win each player, not what he is worth to
+                  your roster. Three things take it the rest of the way to yours.
+                </p>
+                <ul role="list" className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                  {[
+                    {
+                      href: "/tools/faab",
+                      title: "Price it for your roster",
+                      body: "The calculator prices the claim against who you would drop and what your rivals can still spend.",
+                      icon: Calculator,
+                    },
+                    {
+                      href: "/guides/faab-strategy",
+                      title: "Learn the bidding",
+                      body: "How much to bid, when to spend it all, and the mistakes that lose leagues in October.",
+                      icon: GraduationCap,
+                    },
+                    {
+                      href: "/tools/who-should-i-start",
+                      title: "Then set the lineup",
+                      body: "Whether he beats the player already in the slot.",
+                      icon: ListChecks,
+                    },
+                  ].map((link) => {
+                    const Icon = link.icon;
+                    return (
+                      <li key={link.href}>
+                        <Link
+                          href={link.href}
+                          className="group flex h-full min-h-11 items-start gap-3 rounded-2xl border border-line bg-base/50 p-3.5 transition-colors hover:border-brand-cyan/50 hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-cyan/10 text-brand-cyan"
+                          >
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-ink group-hover:text-brand-cyan">
+                              {link.title}
+                            </span>
+                            <span className="mt-0.5 block text-[13px] leading-relaxed text-ink-muted">
+                              {link.body}
+                            </span>
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            </div>
+          </aside>
+        </div>
       </PageBody>
 
       <DiscordCtaSection
