@@ -16667,3 +16667,13 @@ T734 | completed | Waiver wire redesign: tabbed board, premium cards, podium cla
      | notes: Six stacked position panels replaced by ARIA tabs in one board (all cards server-rendered, ?pos= mirrored with replaceState, noscript shows every panel). Card stats switch rows to tiles by container query. Lessons are cards at the board width with icon tile grids. PositionRail no longer rendered. Found in audit: text-base is font size only here, so gradient buttons now use text-[#07070D]; other pages still use bg-beacon text-base and likely have the same low-contrast text.
      | depends on: T733
      | verified: yes (a11y audit, must-fix and most should-fix items fixed; typecheck, lint, 484 files 6,794 tests, build; Chrome at 360 constrained, 500, 820, 1440)
+T735 | completed | Amzn-SearchBot blocked site-wide in robots.txt beside Amazonbot; Observability Plus turned off in Vercel Billing
+     | files: app/robots.ts, lib/llms/crawlability.test.ts
+     | notes: Spend stayed about $1.85 a day after T729 (baseline before Sep 11 was about $0.50). Amzn-SearchBot is a separate Amazon crawler the Amazonbot token did not cover: 35k requests and 4 of 16 function CPU hours in the week to Sep 30. Observability Plus events were $1.10 a day of it; disabled 2026-09-30 by owner request, so path, user agent and External API breakdowns and 30-day retention are gone. Still open: eight desktop Chrome 142 to 145 user agents with near-identical counts (9.1k to 9.8k invocations each, 0% cached, bursty, about half on /leagues/[league_id]) made 32% of function invocations and 34% of CPU that week. Looks like one scraper rotating user agents; no IPs were available to confirm.
+     | depends on: T729
+     | verified: yes (crawlability tests 21 of 21, lint, typecheck; live robots.txt shows both user agents under Disallow: /; Billing toggle shows Observability Plus off)
+T736 | completed | Vercel Firewall rule "Challenge old Chrome on league pages": path starts with /leagues/ AND user agent matches Chrome/14[2-5]\.0\.0\.0, action Challenge
+     | files: none (Vercel dashboard, Firewall > Rules)
+     | notes: Targets the T735 scraper. A real reader still on Chrome 142 to 145 (desktop or Android) sees the checkpoint once and passes. Chrome releases move on, so if the scraper updates its version strings the regex will need widening; if a genuine old-Chrome audience shows up in complaints, loosen it.
+     | depends on: T735
+     | verified: yes (curl with a Chrome 142 user agent on /leagues/1 returns 429 "Vercel Security Checkpoint"; Chrome 154 on the same path passes through to the app)
