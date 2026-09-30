@@ -18,11 +18,13 @@ import { RESERVED_ROUTE_SEGMENTS } from "@/lib/signal/reserved-routes";
  * else fall through to it. Naming them individually would only create a second
  * group that could drift from the first.
  *
- * The one named group is Amazonbot's, and it is `Disallow: /` (see the header
- * of app/robots.ts for why). The tests below pin it to exactly that, so the
- * exception cannot quietly grow into a second rule set, or a block, for any
- * crawler the site wants.
+ * The one named group is Amazon's (Amazonbot and Amzn-SearchBot), and it is
+ * `Disallow: /` (see the header of app/robots.ts for why). The tests below pin it
+ * to exactly that, so the exception cannot quietly grow into a second rule set,
+ * or a block, for any crawler the site wants.
  */
+
+const AMAZON_AGENTS = ["Amazonbot", "Amzn-SearchBot"];
 
 const MACHINE_READABLE = ["/llms.txt", "/llms-full.txt"] as const;
 
@@ -41,19 +43,22 @@ function asArray(value: string | string[] | undefined): string[] {
 }
 
 describe("robots.txt", () => {
-  it("publishes the wildcard group plus Amazonbot's, and nothing else", () => {
+  it("publishes the wildcard group plus Amazon's, and nothing else", () => {
     const rules = robots().rules;
     const list = Array.isArray(rules) ? rules : [rules];
-    expect(list.map((r) => r.userAgent)).toEqual(["*", "Amazonbot"]);
+    expect(list.map((r) => r.userAgent)).toEqual(["*", AMAZON_AGENTS]);
   });
 
-  it("blocks Amazonbot from the whole site and allows it nothing", () => {
-    const rules = robots().rules;
-    const list = Array.isArray(rules) ? rules : [rules];
-    const amazon = list.find((r) => r.userAgent === "Amazonbot");
-    expect(asArray(amazon?.disallow)).toEqual(["/"]);
-    expect(asArray(amazon?.allow)).toEqual([]);
-  });
+  it.each(AMAZON_AGENTS)(
+    "blocks %s from the whole site and allows it nothing",
+    (agent) => {
+      const rules = robots().rules;
+      const list = Array.isArray(rules) ? rules : [rules];
+      const amazon = list.find((r) => asArray(r.userAgent).includes(agent));
+      expect(asArray(amazon?.disallow)).toEqual(["/"]);
+      expect(asArray(amazon?.allow)).toEqual([]);
+    },
+  );
 
   it.each([
     "Googlebot",

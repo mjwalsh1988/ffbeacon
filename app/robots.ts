@@ -46,12 +46,19 @@ import { SITE } from "@/lib/site";
  * (developer.amazon.com/amazonbot) but not crawl-delay, so slowing it down was
  * not an option. If Amazon ever starts sending readers, delete the group.
  *
- * Its group is `Disallow: /`, so it does not need the repeated disallow list the
+ * Amzn-SearchBot joined the same group on 2026-09-30. It is a separate Amazon
+ * crawler (Alexa and Rufus search answers, not model training) and did not match
+ * the Amazonbot token, so it kept crawling after the block: 6.2k requests in the
+ * 24 hours before this change, the most of any user agent, and 13k hits on
+ * /leagues/ pages in the week before that. A private Sleeper league is never
+ * going to be an Alexa answer. The owner chose to block it outright as well.
+ *
+ * The group is `Disallow: /`, so it does not need the repeated disallow list the
  * paragraph above warns about: there is nothing left for it to drift from. Every
  * other crawler, Googlebot, Bingbot, GPTBot, OAI-SearchBot, ClaudeBot,
  * PerplexityBot and Applebot included, still reads only the wildcard group. A
  * crawler obeys the group that names it and ignores the rest, and none of the
- * others match the token "Amazonbot".
+ * others match the token "Amazonbot" or "Amzn-SearchBot".
  *
  * Vercel's Firewall and Bot Protection settings can block AI crawlers regardless of
  * this file. Those live in the Vercel dashboard, not the repo.
@@ -81,7 +88,7 @@ export default function robots(): MetadataRoute.Robots {
       },
       {
         // Blocked from everything. See the header for why and when.
-        userAgent: "Amazonbot",
+        userAgent: ["Amazonbot", "Amzn-SearchBot"],
         disallow: "/",
       },
     ],
