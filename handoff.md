@@ -1,5 +1,97 @@
 # Handoff
 
+## NEXT SESSION: START HERE. BEACON BRIEF GAME-BY-GAME EDITION (2026-10-01, UNCOMMITTED)
+
+Plan: docs/beacon-brief/relays-and-briefs-plan.md section 23. Tasks: BD-T096 to
+BD-T111 at the end of progress.md. NOTHING IS COMMITTED OR PUSHED; the owner said
+not to commit until told.
+
+State
+- Built and passing: typecheck, lint 0/0, all tests, production build. Three
+  review agents (implementation, security, accessibility) ran on the build and a
+  fourth on the visual redesign; their fixes are applied.
+- Production database already changed: migration 0333 (nfl_game_lines) applied,
+  weeks 1 to 3 of 2026 closing lines backfilled (48 games).
+- Migration 0334 (new desk instructions) is generated and deliberately NOT
+  applied. Apply it only AFTER the code is deployed.
+- Week 3 redo is a private draft (articles status 'draft', metadata.backfill_of
+  = the live week 3 article). Current edition id:
+  ba70e630-ed12-45da-8534-911e0c75a0de. Preview on a local dev server (no
+  login on localhost): http://localhost:3000/brief/preview/ba70e630-ed12-45da-8534-911e0c75a0de
+  The owner is reviewing the look. The live week 3 page is untouched.
+- Apply button: works only from a production build (refuses on a dev server),
+  replaces the live page in place, posts nothing to Discord, sends no email.
+
+Session of 2026-10-01 (second): phone check done, weeks 2 and 1 redone
+- All three redos are private drafts: week 3 bbdb0272-a532-43a7-b05b-f1c8234f2e88
+  (re-stored), week 2 50a8d763-9660-4615-9bac-2a446c727d1c, week 1
+  e4254796-aa8b-46be-a8e0-1a7099d7a96d. Previews at /brief/preview/{id}.
+- Phone check: Chrome's resize_window still did nothing (the tab reports
+  hidden), so pages were captured with headless Chrome over the DevTools
+  protocol at exact widths. Script: shoot.mjs in the session scratchpad.
+  Fixed: game card team names broke mid-word ("Clevelan d"); both SVG charts
+  had labels under 6 px at 390 px and now draw a narrow layout below sm.
+- Backfill bundles now read values AS OF the period end (BD-T113). Before this,
+  a backfill read today's trends, so week 1 would have shown late-September
+  movers. Weeks 1 and 2 were originally written days after their periods
+  closed, so their live value figures differ from the pinned ones; the redos
+  use the pinned ones throughout.
+- Not done: accessibility and security review sub-agents on BD-T112 to T115.
+- Third pass (BD-T114/T115): a Relay's status now reaches its subjects only,
+  which removed backups and cleared players from all three timelines (Mayer in
+  week 1, Ollie Gordon, Darnold, Dobbins, Harvey in week 3, Mariota, Winston,
+  Bagent in week 2). Five Relays had their is_primary flags corrected in
+  production. The redos were re-stored; CURRENT draft ids:
+  week 1 cddcb16c-2c08-4c33-981e-23e5abd7b59f,
+  week 2 45f8d074-89b4-4cd6-b6ec-98397fcb4017,
+  week 3 90d69e03-9110-4d45-94ed-4d3ff7de0357.
+- The owner chose to WAIT for the deploy before publishing. Applying before
+  the deploy would leave the three live pages in the plain-text fallback.
+- Fourth pass (BD-T116): security, accessibility and design reviews run and
+  their fixes applied; all three redos re-stored and every warning and
+  research row ticked in the browser. CURRENT draft ids (supersede the ones
+  above): week 1 8eb7bfb0-ed89-4da0-a157-9c6d45bac34b, week 2
+  170b8b89-7a35-4487-9a8e-08fd64e30dc7, week 3
+  31e8017d-93c5-4cfd-8465-fbdd34efbde4. Committed and pushed to main.
+
+Open items, in order
+1. After the deploy is live: apply migration 0334, then press Apply on each
+   redo at /admin/brief-desk/editions/{id} on the live site.
+2. Update the routine's copy of scripts/brief-desk/prompt.md if it keeps its own.
+3. (Historical) Commit when the owner says so, deploy, apply 0334, update the routine's copy
+   of scripts/brief-desk/prompt.md if it keeps its own, then press Apply on each
+   redo at /admin/brief-desk/editions/{id} on the live site.
+
+How to redo a week (week 3 is the worked example)
+- Bundle: npx tsx --env-file=.env.local scripts/brief-desk/backfill-edition.ts bundle --season 2026 --week N --out <scratch>/weekN-bundle.json
+  (PowerShell: quote comma lists, e.g. --weeks "2,3", or it splits them.)
+- Published payload of the live edition: brief_editions draft_payload for that
+  week (week 2 edition id 239d499e-f116-4444-81cd-59f8af151013, week 1
+  349c303c-1950-48df-840c-dc4394f53e41). Reuse its researched news sections,
+  research_log, relays and FAQ; trim the news to one line per player.
+- Game facts for recaps: ESPN game package per game,
+  https://cdn.espn.com/core/nfl/game?xhr=1&gameId={espn_event_id} (scoringPlays,
+  leaders). Record each game page in research_log.
+- Generator to copy: docs/beacon-brief/examples/make-week3-draft.mjs (its dir
+  constant points at the old scratchpad; change it to the new session's); the stored result is docs/beacon-brief/examples/week-3-2026-brief.json.
+  Shape: sections week-N-in-numbers [awards, scorers], game-by-game [cards],
+  how-the-projections-did [projections], injuries-and-availability [tiles,
+  timeline, planner, quote], moves-and-role-changes [lines],
+  what-to-do-this-week [actions, movers, toggle, rule]; 16 games[] recaps of
+  70 to 100 words with fun_stat; scorers block limit 6; editor_take null.
+- Fact-check every superlative against the bundle before storing (the week 3
+  generator asserts them).
+- Store: ... backfill-edition.ts store --season 2026 --week N --draft <file>
+  It validates against the week's bundle and replaces any earlier redo.
+
+Gotchas found this session
+- Shell edits through bash heredocs/node -e stripped backslashes and template
+  strings twice; use the Edit tool or a script file for code edits.
+- Edit tool turns a typed — escape into the literal em dash; lint catches
+  it. Fix with a script that writes the escape from character codes.
+- The dev page is about 4 MB; keep Chrome batches small or the extension times out.
+
+
 ## NEXT SESSION: START HERE. BEACON RANKER SHIPPED (e9fe6a0, 2026-09-26)
 
 - Plan: docs/ranking-boards/board-builder-plan.md. Task list: the BR-T## section at

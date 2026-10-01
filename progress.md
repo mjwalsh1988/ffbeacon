@@ -16677,3 +16677,90 @@ T736 | completed | Vercel Firewall rule "Challenge old Chrome on league pages": 
      | notes: Targets the T735 scraper. A real reader still on Chrome 142 to 145 (desktop or Android) sees the checkpoint once and passes. Chrome releases move on, so if the scraper updates its version strings the regex will need widening; if a genuine old-Chrome audience shows up in complaints, loosen it.
      | depends on: T735
      | verified: yes (curl with a Chrome 142 user agent on /leagues/1 returns 429 "Vercel Security Checkpoint"; Chrome 154 on the same path passes through to the app)
+
+## Beacon Brief: the game-by-game edition (plan section 23, 2026-10-01)
+
+BD-T096 | completed | nfl_game_lines table for the settled line of each finished game, RLS public read and service-role write
+     | files: supabase/migrations/0333_nfl_game_lines.sql, lib/database.types.ts
+     | depends on: none
+     | verified: yes (applied to production; pg_policies lists select_public and service_role_all; anon select works, anon insert rejected by RLS in a rolled-back test)
+BD-T097 | completed | ESPN per-event odds reader (open and close spread, total, moneylines) beside the scoreboard reader
+     | files: lib/nfl-odds.ts, lib/nfl-game-lines.test.ts
+     | depends on: BD-T096
+     | verified: yes (parser tested against the real Falcons at Packers document)
+BD-T098 | completed | Closing-line capture, run from the odds cron and from a backfill script; weeks 1 to 3 of 2026 backfilled (48 games)
+     | files: lib/sync-nfl-game-lines.ts, app/api/cron/sync-nfl-odds/route.ts, scripts/sync-nfl-game-lines.ts
+     | depends on: BD-T097
+     | verified: yes (48 rows stored; week 3 spot-checked against the book)
+BD-T099 | completed | The odds sync no longer rewrites a game after kickoff (it was replacing lines with nulls)
+     | files: lib/sync-nfl-odds.ts, lib/sync-nfl-odds.test.ts
+     | depends on: none
+     | verified: yes (tests)
+BD-T100 | completed | Week finals no longer add special-teams touchdowns already in pts_allow (Vikings 23, Buccaneers 16 had read 29 to 16)
+     | files: lib/brief-desk/week-results.ts, lib/brief-desk/week-results.test.ts
+     | depends on: none
+     | verified: yes (all 96 team scores of weeks 1 to 3 match ESPN)
+BD-T101 | completed | Pure builders for week_games, game_player_lines, week_awards and projection_report
+     | files: lib/brief-desk/games.ts, lib/brief-desk/games.test.ts
+     | depends on: BD-T096
+     | verified: yes (tests)
+BD-T102 | completed | Reads behind the game datasets (lines, finals, projections through the shared read path, period value moves, bench roll-up) and the bundle wiring, cache key and game_index
+     | files: lib/brief-desk/game-data.ts, lib/brief-desk/bundle.ts, lib/brief-desk/types.ts
+     | depends on: BD-T101
+     | verified: yes (week 3 bundle built with 16 cards; next-week projections now PPR rather than standard)
+BD-T103 | completed | Block kinds game_cards, week_awards and projection_report, the draft's games array and editor_take, and the validator rules for them
+     | files: lib/brief-desk/blocks.ts, lib/brief-desk/draft-schema.ts, lib/brief-desk/validate-draft.ts, lib/brief-desk/validate-draft.test.ts
+     | depends on: BD-T102
+     | verified: yes (tests)
+BD-T104 | completed | Game cards, week in numbers, projection report and editor's take on the edition page
+     | files: components/brief-desk/blocks/game-cards.tsx, components/brief-desk/blocks/week-awards.tsx, components/brief-desk/blocks/projection-report.tsx, components/brief-desk/editor-take.tsx, components/brief-desk/blocks/render-block.tsx, components/brief-desk/edition-page.tsx
+     | depends on: BD-T103
+     | verified: yes (a11y review: headings, alt text, contrast pass; fixed team-name truncation, doubled heading, unlabelled fun-stat landmarks, coded jump links, 44px targets, low-contrast red; no data hidden at any breakpoint)
+BD-T105 | completed | Shared write helpers for the drafts route and the backfill; recaps and the editor's take in content_md and in owner edits
+     | files: lib/brief-desk/edition-write.ts, app/api/brief-desk/drafts/route.ts, lib/brief-desk/publish.ts
+     | depends on: BD-T103
+     | verified: yes (typecheck, tests)
+BD-T106 | completed | Backfill: store a private redo, preview it, apply it in place with no Discord post and no email
+     | files: lib/brief-desk/backfill.ts, lib/brief-desk/edition-data.ts, scripts/brief-desk/backfill-edition.ts, app/brief/preview/[id]/page.tsx, app/robots.ts, app/admin/brief-desk/actions.ts, app/admin/brief-desk/editions/[id]/page.tsx, components/admin/brief-desk/edition-review.tsx
+     | depends on: BD-T105
+     | verified: yes (security review: no critical or high issues; apply now checks both rows are Brief editions for the same week and runs only from a production build; known low risk: the localhost preview skips login on a dev server, so a dev server opened to the LAN could show drafts to that network)
+BD-T107 | completed | Desk instructions and bootstrap prompt for the new format; the week 3 redo is the new reference example
+     | files: lib/brief-desk/instructions-seed.ts, scripts/brief-desk/prompt.md, docs/beacon-brief/examples/week-3-2026-brief.json, docs/beacon-brief/relays-and-briefs-plan.md
+     | depends on: BD-T104
+     | verified: yes
+BD-T108 | pending | Apply migration 0334 (instructions) AFTER the code is deployed
+     | files: supabase/migrations/0334_brief_desk_instructions_game_by_game.sql
+     | depends on: deploy
+     | verified: no
+BD-T109 | in_progress | Week 3 redo stored as a private draft (edition ba70e630-ed12-45da-8534-911e0c75a0de, 3,164 words, 16 recaps); desktop look checked in Chrome, phone width not yet checked (Chrome was maximized); owner to review, add the editor's take and apply after deploy
+     | files: none (database row)
+     | depends on: BD-T106, deploy
+     | verified: no
+BD-T110 | completed | Redraft weeks 2 and 1 the same way (private drafts: week 2 50a8d763-9660-4615-9bac-2a446c727d1c, week 1 e4254796-aa8b-46be-a8e0-1a7099d7a96d; week 3 re-stored as bbdb0272-a532-43a7-b05b-f1c8234f2e88). Generators in the session scratchpad; every count and superlative asserted against the bundle. Both live editions were written days after their periods closed, so their value figures were rewritten from the pinned bundle.
+     | files: none (database drafts only)
+     | depends on: BD-T109, BD-T113
+     | verified: yes (stored through validation; 390 px headless capture of all three, no overflow)
+BD-T112 | completed | Phone layout fixes: game card team names stack under the logo below sm (Cleveland broke mid-word); return timeline and value movers charts draw a narrow layout below sm (labels were under 6 px at 390 px)
+     | files: components/brief-desk/blocks/game-cards.tsx, components/brief-desk/blocks/injury-timeline.tsx, components/brief-desk/blocks/value-movers.tsx
+     | depends on: BD-T111
+     | verified: yes (typecheck, lint, tests, build; headless Chrome at 390 and 768 px). Accessibility review sub-agent not yet run on this change.
+BD-T114 | completed | A Relay's availability and timeline reach its subjects only (relay_players.is_primary, or the only player): the injury timeline and the ruled-out tile had applied them to every tagged player, so a backup named in passing was listed out (Mayer from the Bowers surgery report, Ollie Gordon "out for the season" from Achane's). Data fix on five Relays in weeks 1 to 3 (two mis-flagged primaries, three group reports flagged for every named player). All three redos re-stored: week 1 cddcb16c-2c08-4c33-981e-23e5abd7b59f, week 2 45f8d074-89b4-4cd6-b6ec-98397fcb4017, week 3 90d69e03-9110-4d45-94ed-4d3ff7de0357
+     | files: lib/brief-desk/types.ts, lib/brief-desk/bundle.ts, lib/brief-desk/datasets.ts, lib/brief-desk/datasets.test.ts, docs/beacon-brief/examples/make-week3-draft.mjs, docs/beacon-brief/examples/week-3-2026-brief.json
+     | depends on: BD-T113
+     | verified: yes (typecheck, lint, tests, build; timeline diffed before and after for all three weeks, every removal checked against its Relay)
+BD-T115 | completed | Edition byline shows "Updated {date}" when last_updated is more than a minute after published_at, matching the article layout; dateModified, og modified_time and the sitemap lastmod already read last_updated
+     | files: components/brief-desk/edition-byline.tsx, components/brief-desk/edition-page.tsx
+     | depends on: BD-T111
+     | verified: yes (typecheck, lint, build). Accessibility review sub-agent not yet run.
+BD-T116 | completed | Review fixes from the security, accessibility and design sub-agents. Security: Apply snapshots the live text as a revision and keeps the originally published payload in articles.metadata.pre_backfill_payload, claims the redo before writing (no double apply), writes the edition row first and restores it if the article update fails; protocol-relative links refused in ArticleMarkdown; preview validates the id before the login redirect; the game-lines cron tail stops starting requests before maxDuration. Accessibility: recap editor forms named per game; Apply confirm returns focus on Cancel and has aria-controls; planner names undated players when no timeline sits above it and drops the duplicate footnote; fun stat is a note, not a landmark; game strip uses nicknames; grouped thousands; "35.3 PPR" spacing; 44px planner and grid links; Updated shown only beside Published. Design: one team per line in the game tiles, nicknames in the phone score header, falls-only movers chart drawn from the left in red, action cards show the bid range only, stat tiles with a large figure, bench figures in display size, Relays covered shows 12 then a disclosure, one-decimal points everywhere, plain-language dataset notes, value-award labels say "of anyone who played". Week 3 prose now reads its bench figures from the bundle and its two "biggest of the week" claims say "of anyone who played". All three redos re-stored and ticked in the browser: week 1 8eb7bfb0-ed89-4da0-a157-9c6d45bac34b, week 2 170b8b89-7a35-4487-9a8e-08fd64e30dc7, week 3 31e8017d-93c5-4cfd-8465-fbdd34efbde4
+     | files: lib/brief-desk/backfill.ts, components/beacon-brief/article-markdown.tsx, app/brief/preview/[id]/page.tsx, lib/sync-nfl-game-lines.ts, app/api/cron/sync-nfl-odds/route.ts, components/admin/brief-desk/edition-review.tsx, components/brief-desk/** , lib/brief-desk/{dataset-read,datasets,games}.ts, docs/beacon-brief/examples/*
+     | depends on: BD-T115
+     | verified: yes (typecheck, lint, tests, build; 390 and 1440 px captures). Not done, by choice: the uppercase masthead title (site-wide component), revoking the default anon/authenticated table grants on nfl_game_lines (project-wide pattern), and a stricter localhost check on the preview route.
+BD-T113 | completed | Backfill bundles read values as of the period end: an override period runs computeTrendRows over player_value_history with its clock at period_end instead of reading today's player_value_trends; dataset notes name the seven days they cover
+     | files: lib/brief-desk/bundle.ts, lib/brief-desk/datasets.ts, lib/calculate-trends.ts (HistoryRow exported)
+     | depends on: BD-T104
+     | verified: yes (week 3 pinned bundle reproduces the published week 3 figures exactly: Richardson +1,961, Dart -1,393, Washington +1,140; typecheck, lint, tests, build). Implementation and security review sub-agents not yet run.
+BD-T111 | completed | Visual pass on the edition: plain player-name links, compact stat rows in place of wide tables, grouped injury grid, return-planner cards, bench figures in one row, projection beat-rate bars, grouped numbers, bold winners in the jump menu
+     | files: components/brief-desk/blocks/player-line-row.tsx, components/brief-desk/blocks/top-scorers.tsx, components/brief-desk/blocks/box-score-lines.tsx, components/brief-desk/blocks/game-cards.tsx, components/brief-desk/blocks/injury-timeline.tsx, components/brief-desk/blocks/return-planner.tsx, components/brief-desk/blocks/week-awards.tsx, components/brief-desk/blocks/projection-report.tsx, components/brief-desk/blocks/block-shell.tsx, components/beacon-brief/article-markdown.tsx, lib/brief-desk/dataset-read.ts, lib/brief-desk/datasets.ts, lib/brief-desk/bundle.ts, lib/brief-desk/games.ts, lib/brief-desk/edition-metadata.test.ts, docs/beacon-brief/examples/make-week3-draft.mjs
+     | depends on: BD-T104
+     | verified: yes (typecheck, lint, tests; desktop screenshots in Chrome; accessibility review fixes applied: name overflow at 320 px, 44 px name targets, fun-stat link underline, stronger prose underline, kicker snap share, Week badge wording). Phone-width screenshots pending.
