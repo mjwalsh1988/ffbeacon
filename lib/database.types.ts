@@ -3823,6 +3823,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      nfl_game_lines: {
+        Row: {
+          away_moneyline: number | null;
+          away_team: string;
+          captured_at: string;
+          close_game_total: number | null;
+          close_home_spread: number | null;
+          espn_event_id: string;
+          home_moneyline: number | null;
+          home_team: string;
+          id: string;
+          kickoff_at: string | null;
+          metadata: Json | null;
+          open_game_total: number | null;
+          open_home_spread: number | null;
+          over_odds: number | null;
+          provider: string | null;
+          season: number;
+          season_type: string;
+          source: string;
+          under_odds: number | null;
+          week: number;
+        };
+        Insert: {
+          away_moneyline?: number | null;
+          away_team: string;
+          captured_at?: string;
+          close_game_total?: number | null;
+          close_home_spread?: number | null;
+          espn_event_id: string;
+          home_moneyline?: number | null;
+          home_team: string;
+          id?: string;
+          kickoff_at?: string | null;
+          metadata?: Json | null;
+          open_game_total?: number | null;
+          open_home_spread?: number | null;
+          over_odds?: number | null;
+          provider?: string | null;
+          season: number;
+          season_type?: string;
+          source?: string;
+          under_odds?: number | null;
+          week: number;
+        };
+        Update: {
+          away_moneyline?: number | null;
+          away_team?: string;
+          captured_at?: string;
+          close_game_total?: number | null;
+          close_home_spread?: number | null;
+          espn_event_id?: string;
+          home_moneyline?: number | null;
+          home_team?: string;
+          id?: string;
+          kickoff_at?: string | null;
+          metadata?: Json | null;
+          open_game_total?: number | null;
+          open_home_spread?: number | null;
+          over_odds?: number | null;
+          provider?: string | null;
+          season?: number;
+          season_type?: string;
+          source?: string;
+          under_odds?: number | null;
+          week?: number;
+        };
+        Relationships: [];
+      };
       nfl_game_odds: {
         Row: {
           away_implied_total: number | null;

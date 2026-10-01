@@ -3,8 +3,10 @@
  * derived from them, for the projection engine's game-environment signal.
  *
  * Source: https://cdn.espn.com/core/nfl/scoreboard?xhr=1, public, no key, no
- * auth. This is the ONLY file allowed to call that host, the same rule
- * lib/sleeper.ts follows for api.sleeper.app.
+ * auth, plus the per-event odds document on sports.core.api.espn.com for the
+ * settled line of a finished game (getEspnGameLine, below). This is the ONLY
+ * file allowed to call either host, the same rule lib/sleeper.ts follows for
+ * api.sleeper.app.
  *
  * HOST. The adapter was written against site.api.espn.com's scoreboard. From
  * 2026-09-02 that host answered every request with an Akamai "Access Denied"
@@ -298,6 +300,134 @@ export async function getEspnScoreboard(
   }
 
   return games;
+}
+
+// ---------------------------------------------------------------------------
+// The settled line for one finished game (nfl_game_lines, migration 0333).
+//
+// The scoreboard drops a game's odds once it kicks off, so the line a game was
+// actually played under has to come from ESPN's per-event odds document, which
+// keeps the open, close and current numbers after the final whistle:
+//
+//   sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/{id}/
+//   competitions/{id}/odds
+//
+// The first item is the highest-priority book (DraftKings today). Its
+// homeTeamOdds.open / .close carry the home side's spread as an American
+// string ("-7.5"), which is already home-relative, so no favourite parsing is
+// needed for those two; the top-level details/spread pair goes through
+// parseHomeSpread like the scoreboard's does, as the fallback for the close.
+// ---------------------------------------------------------------------------
+
+const ESPN_CORE_EVENT_URL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events";
+
+const EVENT_ID_PATTERN = /^[0-9]{1,20}$/;
+
+export type EspnGameLine = {
+  provider: string | null;
+  openHomeSpread: number | null;
+  closeHomeSpread: number | null;
+  openGameTotal: number | null;
+  closeGameTotal: number | null;
+  homeMoneyline: number | null;
+  awayMoneyline: number | null;
+  overOdds: number | null;
+  underOdds: number | null;
+  /** The provider's odds item, verbatim, for metadata. */
+  raw: unknown;
+};
+
+type AmericanQuote = { american?: string; alternateDisplayValue?: string };
+type EspnSideOdds = {
+  favorite?: boolean;
+  moneyLine?: number;
+  open?: { pointSpread?: AmericanQuote; moneyLine?: AmericanQuote };
+  close?: { pointSpread?: AmericanQuote; moneyLine?: AmericanQuote };
+};
+type EspnOddsItem = {
+  provider?: { name?: string };
+  details?: string;
+  overUnder?: number;
+  spread?: number;
+  overOdds?: number;
+  underOdds?: number;
+  open?: { total?: AmericanQuote };
+  close?: { total?: AmericanQuote };
+  homeTeamOdds?: EspnSideOdds;
+  awayTeamOdds?: EspnSideOdds;
+};
+
+/** "-7.5", "+4.5", "46.5", "EVEN" or "PK" as a number; anything else null. */
+export function parseAmericanNumber(quote: AmericanQuote | string | null | undefined): number | null {
+  const text = typeof quote === "string" ? quote : (quote?.american ?? quote?.alternateDisplayValue ?? null);
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (/^(pk|pick(?:'?em)?|even)$/i.test(trimmed)) return 0;
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function wholeOrNull(value: unknown): number | null {
+  const n = typeof value === "string" ? parseAmericanNumber(value) : finiteOrNull(value);
+  return n === null ? null : Math.round(n);
+}
+
+/**
+ * Read the settled line out of ESPN's per-event odds document. Pure: takes
+ * the parsed JSON and the game's two team codes (ours). Returns null when the
+ * document carries no odds item at all.
+ */
+export function parseEspnGameLine(payload: unknown, homeTeam: string, awayTeam: string): EspnGameLine | null {
+  const items = (payload as { items?: unknown })?.items;
+  if (!Array.isArray(items) || items.length === 0) return null;
+  const item = items[0] as EspnOddsItem;
+  if (!item || typeof item !== "object") return null;
+
+  const home = item.homeTeamOdds ?? {};
+  const away = item.awayTeamOdds ?? {};
+  const closeFromSide = parseAmericanNumber(home.close?.pointSpread);
+  const closeFromDetails = parseHomeSpread(
+    typeof item.details === "string" ? item.details : null,
+    finiteOrNull(item.spread),
+    homeTeam,
+    awayTeam,
+    { homeFavorite: home.favorite ?? null, awayFavorite: away.favorite ?? null },
+  );
+
+  return {
+    provider: typeof item.provider?.name === "string" ? item.provider.name : null,
+    openHomeSpread: parseAmericanNumber(home.open?.pointSpread),
+    closeHomeSpread: closeFromSide ?? closeFromDetails,
+    openGameTotal: parseAmericanNumber(item.open?.total),
+    closeGameTotal: parseAmericanNumber(item.close?.total) ?? finiteOrNull(item.overUnder),
+    homeMoneyline: wholeOrNull(home.close?.moneyLine?.american ?? home.moneyLine),
+    awayMoneyline: wholeOrNull(away.close?.moneyLine?.american ?? away.moneyLine),
+    overOdds: wholeOrNull(item.overOdds),
+    underOdds: wholeOrNull(item.underOdds),
+    raw: item,
+  };
+}
+
+/**
+ * The settled line for one ESPN event. Null when the request failed or the
+ * event id is not an ESPN id; a document with no odds item also reads as null,
+ * and the caller tries again on its next run rather than storing nothing.
+ */
+export async function getEspnGameLine(
+  eventId: string,
+  homeTeam: string,
+  awayTeam: string,
+): Promise<EspnGameLine | null> {
+  if (!EVENT_ID_PATTERN.test(eventId)) return null;
+  const url = `${ESPN_CORE_EVENT_URL}/${eventId}/competitions/${eventId}/odds`;
+  const payload = await safeFetchEspn<unknown>(url);
+  if (payload === null) return null;
+  return parseEspnGameLine(payload, homeTeam, awayTeam);
 }
 
 /** Exported for the alias-map test: the set of codes normalizeEspnTeam must resolve to. */

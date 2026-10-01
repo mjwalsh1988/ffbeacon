@@ -29,7 +29,9 @@ function game(overrides: Partial<EspnOddsGame> = {}): EspnOddsGame {
     week: 6,
     homeTeam: "SEA",
     awayTeam: "NE",
-    kickoffAt: "2026-10-08T00:20:00Z",
+    // Far in the future, so the "never rewrite a game that kicked off" rule
+    // never drops this fixture whatever day the suite runs.
+    kickoffAt: "2099-10-08T00:20:00Z",
     gameTotal: 44.5,
     homeSpread: -3.5,
     provider: "DraftKings",
@@ -99,6 +101,32 @@ describe("runNflOddsSync failure posture", () => {
       { week: 7, status: "ok", fetched: 0, stored: 0 },
     ]);
     expect(upsertCalls).toHaveLength(1);
+  });
+
+  it("never rewrites a game that has kicked off, so its last pre-game line survives", async () => {
+    getEspnScoreboardMock.mockResolvedValue([
+      game({ homeTeam: "SEA", kickoffAt: "2020-10-08T00:20:00Z", gameTotal: null, homeSpread: null }),
+      game({ homeTeam: "KC", awayTeam: "LV" }),
+    ]);
+    const { client, upsertCalls } = fakeSupabase();
+
+    const result = await runNflOddsSync(client, { season: 2026, seasonType: "regular", fromWeek: 6, toWeek: 6 });
+
+    expect(result.skipped).toBe(false);
+    expect(result.perWeek).toEqual([{ week: 6, status: "ok", fetched: 2, stored: 1 }]);
+    expect(upsertCalls).toHaveLength(1);
+    expect((upsertCalls[0].rows as Array<{ home_team: string }>).map((r) => r.home_team)).toEqual(["KC"]);
+  });
+
+  it("is not a skip when ESPN returned games that had all kicked off", async () => {
+    getEspnScoreboardMock.mockResolvedValue([game({ kickoffAt: "2020-10-08T00:20:00Z" })]);
+    const { client, upsertCalls } = fakeSupabase();
+
+    const result = await runNflOddsSync(client, { season: 2026, seasonType: "regular", fromWeek: 6, toWeek: 6 });
+
+    expect(result.skipped).toBe(false);
+    expect(result.totalStored).toBe(0);
+    expect(upsertCalls).toHaveLength(0);
   });
 
   it("returns skipped:true without throwing when every week fetched cleanly with no games", async () => {

@@ -4,6 +4,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runNflOddsSync } from "@/lib/sync-nfl-odds";
+import { runNflGameLinesSync } from "@/lib/sync-nfl-game-lines";
 import { recordCronRun } from "@/lib/cron-runs";
 
 export const runtime = "nodejs";
@@ -42,6 +43,9 @@ export async function GET(req: Request) {
   }
 
   const supabase = createAdminClient();
+  // The game-lines tail stops starting requests 15 s before maxDuration, so
+  // the run always gets to record its finish.
+  const deadlineMs = Date.now() + (maxDuration - 15) * 1000;
   try {
     const result = await recordCronRun(supabase, "sync-nfl-odds", async () => {
       const sync = await runNflOddsSync(supabase);
@@ -49,7 +53,17 @@ export async function GET(req: Request) {
       // tag for an hour and says the odds sync busts it. Nothing did, so a
       // freshly synced kickoff reached the player profile up to an hour late.
       if (!sync.skipped) revalidateTag(CACHE_TAGS.playerProjections);
-      return sync;
+      // The settled line for every game that has finished since the last run
+      // (migration 0333). Never fatal to the odds refresh above: a missing
+      // closing line is retried tomorrow, and the upcoming lines are the half
+      // the projection engine reads.
+      let gameLines: Awaited<ReturnType<typeof runNflGameLinesSync>> | { error: string };
+      try {
+        gameLines = await runNflGameLinesSync(supabase, { season: sync.season, seasonType: sync.seasonType, deadlineMs });
+      } catch (err) {
+        gameLines = { error: err instanceof Error ? err.message : String(err) };
+      }
+      return { ...sync, gameLines };
     });
     return NextResponse.json(result);
   } catch (err) {

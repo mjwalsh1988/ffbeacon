@@ -168,7 +168,17 @@ export async function runNflOddsSync(
       continue;
     }
 
-    const inserts: NflGameOddsInsert[] = games.map((game) => {
+    // A game that has kicked off is never rewritten. ESPN's scoreboard drops
+    // a game's odds at kickoff, and refreshing a played game wrote nulls over
+    // its last line: fifteen of sixteen games in each of weeks 2 and 3 of 2026
+    // lost theirs that way. The row keeps the last pre-game line, and the
+    // settled line is captured separately (lib/sync-nfl-game-lines.ts).
+    const nowMs = Date.parse(nowIso);
+    const upcoming = games.filter((game) => {
+      const kickoff = game.kickoffAt ? Date.parse(game.kickoffAt) : NaN;
+      return !Number.isFinite(kickoff) || kickoff > nowMs;
+    });
+    const inserts: NflGameOddsInsert[] = upcoming.map((game) => {
       const implied = impliedTotals(game.gameTotal, game.homeSpread);
       return {
         source: NFL_ODDS_SOURCE_SLUG,
@@ -187,6 +197,12 @@ export async function runNflOddsSync(
         updated_at: nowIso,
       };
     });
+
+    if (inserts.length === 0) {
+      perWeek.push({ week, status: "ok", fetched: games.length, stored: 0 });
+      console.log(`  ${season} ${seasonType} wk${week}: ${games.length} games from ESPN, all kicked off, none rewritten`);
+      continue;
+    }
 
     await withRetry(
       async () => {
@@ -226,7 +242,8 @@ export async function runNflOddsSync(
   // "nothing to report" state (the dead months), not a failure. Weeks that
   // FAILED are excluded from this check on purpose: a run made up entirely of
   // failed fetches must never read as "ESPN has nothing this week."
-  if (failedWeeks.length === 0 && totalStored === 0) {
+  const totalFetched = perWeek.reduce((sum, w) => sum + w.fetched, 0);
+  if (failedWeeks.length === 0 && totalFetched === 0) {
     return finish({
       skipped: true,
       reason: `no games published by ESPN for ${season} ${seasonType} (weeks ${weeks[0]}-${weeks[weeks.length - 1]})`,
