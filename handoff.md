@@ -54,11 +54,20 @@ Session of 2026-10-01 (second): phone check done, weeks 2 and 1 redone
   170b8b89-7a35-4487-9a8e-08fd64e30dc7, week 3
   31e8017d-93c5-4cfd-8465-fbdd34efbde4. Committed and pushed to main.
 
-Open items, in order
-1. After the deploy is live: apply migration 0334, then press Apply on each
-   redo at /admin/brief-desk/editions/{id} on the live site.
-2. Update the routine's copy of scripts/brief-desk/prompt.md if it keeps its own.
-3. (Historical) Commit when the owner says so, deploy, apply 0334, update the routine's copy
+- LAUNCHED 2026-10-01: migration 0334 applied (instructions match the file
+  byte for byte), and all three redos applied in place on the live site (same
+  ids, slugs, published dates and Discord dates; 16 game cards each; old text
+  kept as revision 1 and the original payload in metadata.pre_backfill_payload).
+  The cloud routine "FF Beacon Brief weekly draft" (trig_014WGE51HeAqxN8My5V7Y9oh)
+  had its own copy of the prompt; its step 3 now matches scripts/brief-desk/prompt.md.
+  First real run of the new format: Tuesday 2026-10-06, 13:00 UTC.
+
+Open items: none for the game-by-game Brief. Watch the 2026-10-06 routine run.
+Optional follow-ups: the uppercase masthead title is long on phones (site-wide
+component); relay ingestion still flags only one primary player per Relay, so
+group reports ("15 players ruled out") need the subject flags corrected by hand.
+
+(Historical) Commit when the owner says so, deploy, apply 0334, update the routine's copy
    of scripts/brief-desk/prompt.md if it keeps its own, then press Apply on each
    redo at /admin/brief-desk/editions/{id} on the live site.
 
