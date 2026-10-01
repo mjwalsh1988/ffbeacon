@@ -6,14 +6,21 @@
  * pts_allow, and the score follows from the two lines of one game:
  *
  *   a team's points = the opponent defense's pts_allow
- *                   + 6 for each defensive or special-teams touchdown it scored
+ *                   + 6 for each defensive touchdown it scored (def_td)
  *                   + 2 for each safety it scored
  *
  * pts_allow alone is not the score: Sleeper leaves out the points a defense
  * gave up on its own offense's turnovers returned for a score, so Carolina's
  * 34 to 3 win in week 2 of 2026 shows Atlanta's defense allowing 28, and the
- * pick-six makes up the rest. The formula reproduced all 16 ESPN finals for
- * that week and every week 1 score quoted in that week's Brief.
+ * pick-six makes up the rest.
+ *
+ * A SPECIAL-TEAMS touchdown is different and is NOT added: Sleeper already
+ * charges a punt or kick return score to the other side's pts_allow. Adding
+ * def_st_td as well turned Minnesota's 23 to 16 win in Tampa in week 3 of 2026
+ * (Myles Price's 86-yard punt return) into 29 to 16. With this rule all 96
+ * team scores of weeks 1 to 3 of 2026 match ESPN's finals, including the week
+ * 2 safety (Las Vegas) and the week 3 interception returns (Washington and
+ * Denver).
  *
  * A game with only one line, or a line with no pts_allow, is left out rather
  * than guessed, and the desk is told to confirm scores against a page it
@@ -36,9 +43,13 @@ function stat(stats: Record<string, unknown>, key: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Points a team scored beyond what the opponent's defense is charged with. */
+/**
+ * Points a team scored beyond what the opponent's defense is charged with:
+ * its own defensive touchdowns and safeties. Special-teams touchdowns are
+ * already in the opponent's pts_allow (see the header).
+ */
 function returnPoints(stats: Record<string, unknown>): number {
-  return 6 * (stat(stats, "def_td") + stat(stats, "def_st_td")) + 2 * stat(stats, "safe");
+  return 6 * stat(stats, "def_td") + 2 * stat(stats, "safe");
 }
 
 /** Every team's result that both defense lines support, keyed by abbreviation. */

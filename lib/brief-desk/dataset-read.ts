@@ -125,6 +125,8 @@ export function readPlayer(row: DatasetRow): {
   name: string;
   position: string | null;
   team: string | null;
+  /** For the photo; null on datasets written before it was carried. */
+  sleeperId: string | null;
 } {
   return {
     id: readText(row, PLAYER_ID_KEYS),
@@ -132,7 +134,74 @@ export function readPlayer(row: DatasetRow): {
     name: readText(row, NAME_KEYS) ?? "Unnamed player",
     position: readText(row, POSITION_KEYS),
     team: readText(row, TEAM_KEYS),
+    sleeperId: readText(row, ["sleeper_id"]),
   };
+}
+
+function cellNumber(row: DatasetRow, key: string): number {
+  const v = row[key];
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * A week line read as one sentence, from a top_scorers or box_score_lines row:
+ * "22 of 31, 287 passing yards, 2 TD; 4 carries, 18 rushing yards; 76% of
+ * snaps". Every stat column the row carries is in it, so a compact row drops
+ * no figure a wide table would have shown. A defender's row (pts_idp123)
+ * reads his defensive line instead. Pure.
+ */
+export function rowLineText(row: DatasetRow): string {
+  const n = (k: string) => cellNumber(row, k);
+  const has = (k: string) => row[k] !== undefined && row[k] !== null;
+  const pos = (readText(row, POSITION_KEYS) ?? "").toUpperCase();
+  const parts: string[] = [];
+  if (has("pts_idp123")) {
+    const tkl = n("idp_tkl") || n("idp_tkl_solo") + n("idp_tkl_ast");
+    if (tkl) parts.push(`${tkl} tackles${n("idp_tkl_solo") ? ` (${n("idp_tkl_solo")} solo)` : ""}`);
+    const pairs: Array<[string, string, string]> = [
+      ["idp_tkl_loss", "tackle for loss", "tackles for loss"],
+      ["idp_sack", "sack", "sacks"],
+      ["idp_qb_hit", "QB hit", "QB hits"],
+      ["idp_pass_def", "pass defended", "passes defended"],
+      ["idp_int", "interception", "interceptions"],
+      ["idp_ff", "forced fumble", "forced fumbles"],
+      ["idp_fum_rec", "fumble recovery", "fumble recoveries"],
+      ["idp_def_td", "defensive TD", "defensive TDs"],
+    ];
+    for (const [k, one, many] of pairs) if (n(k)) parts.push(`${n(k)} ${n(k) === 1 ? one : many}`);
+    if (has("def_snap_pct")) parts.push(`${n("def_snap_pct")}% of defensive snaps`);
+    return parts.length > 0 ? parts.join(", ") : "No defensive stats";
+  }
+  // A kicker's or a team defense's row carries no columns a sentence could be
+  // built from; the row shows the points alone rather than "No touches".
+  if (pos === "K" || pos === "DEF") return has("snap_pct") ? `${n("snap_pct")}% of snaps` : "";
+  const pass = () => {
+    if (!n("pass_att")) return;
+    const b = [`${n("pass_cmp")} of ${n("pass_att")}`, `${n("pass_yd")} passing yards`];
+    if (n("pass_td")) b.push(`${n("pass_td")} TD`);
+    if (n("pass_int")) b.push(`${n("pass_int")} INT`);
+    parts.push(b.join(", "));
+  };
+  const rush = () => {
+    if (!n("rush_att")) return;
+    const b = [`${n("rush_att")} ${n("rush_att") === 1 ? "carry" : "carries"}`, `${n("rush_yd")} rushing yards`];
+    if (n("rush_td")) b.push(`${n("rush_td")} TD`);
+    parts.push(b.join(", "));
+  };
+  const rec = () => {
+    if (!n("rec") && !n("rec_tgt") && !n("rec_yd") && !n("rec_td")) return;
+    const catches = `${n("rec")} ${n("rec") === 1 ? "catch" : "catches"}`;
+    const b = [n("rec_tgt") ? `${catches} on ${n("rec_tgt")} ${n("rec_tgt") === 1 ? "target" : "targets"}` : catches, `${n("rec_yd")} receiving yards`];
+    if (n("rec_td")) b.push(`${n("rec_td")} TD`);
+    parts.push(b.join(", "));
+  };
+  if (pos === "QB") [pass, rush, rec].forEach((f) => f());
+  else if (pos === "RB") [rush, rec, pass].forEach((f) => f());
+  else [rec, rush, pass].forEach((f) => f());
+  if (n("fum_lost")) parts.push(`${n("fum_lost")} lost ${n("fum_lost") === 1 ? "fumble" : "fumbles"}`);
+  if (has("snap_pct")) parts.push(`${n("snap_pct")}% of snaps`);
+  return parts.length > 0 ? parts.join("; ") : "No touches";
 }
 
 /** Plain-language headers for the column names the datasets use. */
@@ -227,19 +296,25 @@ export function isSignedColumn(column: string): boolean {
   return /^change|_change|delta|diff|move/i.test(column);
 }
 
+/** Thousands grouped: a bare "1961" is read aloud as a year by some screen readers. */
+const SIGNED_NUMBER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+
 export function formatSigned(n: number): string {
   const rounded = Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
-  if (rounded > 0) return `+${rounded}`;
-  if (rounded < 0) return `${rounded}`;
+  if (rounded > 0) return `+${SIGNED_NUMBER.format(rounded)}`;
+  if (rounded < 0) return SIGNED_NUMBER.format(rounded);
   return "0";
 }
+
+const UNGROUPED_COLUMNS = new Set(["season", "year", "draft_year", "rookie_year"]);
 
 /** A cell as text: numbers to a sensible precision, nulls as n/a. */
 export function formatCell(v: Cell, column?: string): string {
   if (v === null || v === undefined) return NA;
   if (typeof v === "number") {
     if (column && isSignedColumn(column)) return formatSigned(v);
-    if (Number.isInteger(v)) return String(v);
+    // Grouped like the prose ("3,171"), except a year, which is never grouped.
+    if (Number.isInteger(v)) return column && UNGROUPED_COLUMNS.has(column) ? String(v) : SIGNED_NUMBER.format(v);
     return (Math.round(v * 10) / 10).toFixed(1);
   }
   const s = String(v).trim();

@@ -59,6 +59,25 @@ export const researchLogEntrySchema = z
   })
   .strict();
 
+/**
+ * One game's words on its card (plan section 23). The NUMBERS on the card come
+ * from the week_games and game_player_lines datasets; the run writes only the
+ * headline, the recap and the sentence beside the fun stat, and names the
+ * player the fun stat is about so the card can show his real line under it.
+ */
+export const gameRecapSchema = z
+  .object({
+    game_key: z.string().regex(/^[A-Z]{2,4}-[A-Z]{2,4}$/, "game_key is AWAY-HOME, for example ATL-GB"),
+    headline: z.string().min(8).max(100),
+    recap_md: z.string().min(80).max(1400),
+    fun_stat: z
+      .object({ player_id: uuid, text: z.string().min(10).max(240) })
+      .strict()
+      .nullable()
+      .default(null),
+  })
+  .strict();
+
 export const draftSchema = z
   .object({
     edition: z
@@ -81,6 +100,14 @@ export const draftSchema = z
       .array(z.object({ question: z.string().min(8).max(200), answer_md: z.string().min(20).max(3000) }).strict())
       .max(8)
       .default([]),
+    /** One recap per game in the bundle's week_games dataset, in season. */
+    games: z.array(gameRecapSchema).max(20).default([]),
+    /**
+     * The owner's own two or three sentences, written on the review page. The
+     * validator refuses a draft that arrives carrying one: it is the one part
+     * of an edition no run may write.
+     */
+    editor_take: z.string().max(2000).nullable().default(null),
     players: z.array(uuid).max(250).default([]),
     teams: z.array(z.string().min(2).max(4)).max(32).default([]),
     research_log: z.array(researchLogEntrySchema).max(300).default([]),

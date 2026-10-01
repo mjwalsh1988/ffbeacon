@@ -12,6 +12,7 @@ import {
 } from "@/components/admin/brief-desk/edition-review";
 import { draftSchema, researchLogEntrySchema } from "@/lib/brief-desk/draft-schema";
 import { loadBriefDeskSettings } from "@/lib/brief-desk/settings";
+import { backfillTargetOf } from "@/lib/brief-desk/backfill";
 import { nonTickLines, parseReviewTicks } from "@/lib/brief-desk/review-ticks";
 import type { ValidationReport } from "@/lib/brief-desk/types";
 import { parseRelayFacts } from "@/lib/relays/types";
@@ -52,12 +53,20 @@ export default async function BriefDeskEditionReviewPage({
   const [{ data: article }, settings] = await Promise.all([
     admin
       .from("articles")
-      .select("id, title, slug, status, meta_description, tl_dr")
+      .select("id, title, slug, status, meta_description, tl_dr, metadata")
       .eq("id", edition.article_id)
       .maybeSingle(),
     loadBriefDeskSettings(admin),
   ]);
   if (!article) notFound();
+
+  // A backfill redo names the live edition it will replace.
+  const backfillTargetId = backfillTargetOf(article);
+  let backfillOf: { slug: string } | null = null;
+  if (backfillTargetId) {
+    const { data: target } = await admin.from("articles").select("slug").eq("id", backfillTargetId).maybeSingle();
+    backfillOf = target ? { slug: target.slug } : null;
+  }
 
   const parsed = draftSchema.safeParse(edition.draft_payload);
   const draft = parsed.success ? parsed.data : null;
@@ -127,6 +136,7 @@ export default async function BriefDeskEditionReviewPage({
         ticks={parseReviewTicks(edition.review_notes)}
         reviewerNotes={nonTickLines(edition.review_notes)}
         discordDefault={settings.discordBriefsEnabled}
+        backfillOf={backfillOf}
       />
     </BriefDeskPageShell>
   );

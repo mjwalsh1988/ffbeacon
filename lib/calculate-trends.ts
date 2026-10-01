@@ -8,7 +8,7 @@ import { chunkUpsert, withRetry } from "./supabase/retry";
 import type { Database } from "./database.types";
 import { FALLBACK_STALE_DAYS, staleDaysFor } from "./beacon/freshness";
 
-type HistoryRow = {
+export type HistoryRow = {
   id: string;
   player_id: string;
   format_config_id: string;

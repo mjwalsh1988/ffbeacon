@@ -37,6 +37,7 @@ import { EditionByline } from "./edition-byline";
 import { RelaysCovered, RELAYS_COVERED_ID } from "./relays-covered";
 import { sectionIcon } from "./section-icons";
 import { RenderBlock, type BlockContext } from "./blocks/render-block";
+import { EditorTake } from "./editor-take";
 
 export const FAQ_SECTION_ID = "questions-people-ask";
 
@@ -86,6 +87,13 @@ export function EditionPage({ edition }: { edition: PublishedEdition }) {
     relays: edition.relays,
     players: edition.players,
     formats: meta.formats,
+    games: draft?.games ?? [],
+    renderOrder: sections.flatMap((s) =>
+      s.block_refs.flatMap((ref) => {
+        const b = blocksById.get(ref);
+        return b ? [{ id: b.id, kind: b.kind }] : [];
+      }),
+    ),
   };
 
   const tlDr = draft?.tl_dr ?? article.tlDr;
@@ -98,6 +106,7 @@ export function EditionPage({ edition }: { edition: PublishedEdition }) {
         <PageMasthead eyebrow="The Beacon Brief" title={article.title} chips={chips}>
           <EditionByline
             publishedAt={article.publishedAt}
+            updatedAt={article.lastUpdated}
             periodStart={edition.periodStart}
             periodEnd={edition.periodEnd}
             formats={meta.formats}
@@ -129,6 +138,8 @@ export function EditionPage({ edition }: { edition: PublishedEdition }) {
               </div>
             </aside>
           )}
+
+          <EditorTake take={draft?.editor_take} />
 
           <div className="text-[15px] sm:text-base">
             {draft ? (

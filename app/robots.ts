@@ -84,6 +84,9 @@ export default function robots(): MetadataRoute.Robots {
           // Signed-in account surfaces. Personal, and empty to an anonymous crawler.
           "/my-beacon",
           "/login",
+          // The owner's edition preview. Admin-gated and noindex; a crawler
+          // would only ever be sent to the login page.
+          "/brief/preview/",
         ],
       },
       {

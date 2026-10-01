@@ -67,6 +67,11 @@ export function BlockDataMissing({ id, caption, conclusion }: { id: string; capt
   );
 }
 
-/** The shared link style for a player name inside a block. */
+/**
+ * The shared link style for a player name inside a block: the same plain
+ * name the rankings table uses, coloured only on hover and focus. A name in a
+ * row or a tile is a link by its position, the way every player list on the
+ * site works, so it needs no underline to say so.
+ */
 export const BLOCK_LINK_CLASS =
-  "font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+  "font-medium text-ink transition-colors hover:text-brand-cyan focus-visible:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";

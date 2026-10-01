@@ -42,6 +42,12 @@ export const DATASET_KINDS = [
   "box_score_lines",
   "injury_timeline",
   "waiver_targets",
+  // The premium edition (plan section 23, ./games.ts). game_player_lines is
+  // never placed on its own: it travels with game_cards, which reads both.
+  "week_games",
+  "game_player_lines",
+  "week_awards",
+  "projection_report",
 ] as const;
 export type DatasetKind = (typeof DATASET_KINDS)[number];
 
@@ -56,8 +62,16 @@ export const BLOCK_KINDS = [
   "return_planner",
   "relay_quote",
   "callout",
+  "game_cards",
+  "week_awards",
+  "projection_report",
 ] as const;
 export type BlockKind = (typeof BLOCK_KINDS)[number];
+
+/** Datasets a block reads beside the one it names (game_cards reads its players from here). */
+export const COMPANION_DATASETS: Partial<Record<BlockKind, string[]>> = {
+  game_cards: ["game_player_lines"],
+};
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
 
@@ -120,6 +134,9 @@ export const BLOCK_OPTION_SCHEMAS = {
       tone: z.enum(["cyan", "purple"]).default("cyan"),
     })
     .strict(),
+  game_cards: z.object({}).strict(),
+  week_awards: z.object({}).strict(),
+  projection_report: z.object({}).strict(),
 } as const satisfies Record<BlockKind, z.ZodTypeAny>;
 
 export interface BlockKindMeta {
@@ -143,6 +160,16 @@ export const BLOCK_KIND_META: BlockKindMeta[] = [
   { kind: "return_planner", description: "The reader picks a week range; the list shows who is expected back inside it.", accepts: ["injury_timeline"], interactive: true, options: "default_weeks: [from, to] within 1 to 18" },
   { kind: "relay_quote", description: "One Relay card inline, for the story a paragraph is about.", accepts: [], interactive: false, options: "relay_id: present in the bundle" },
   { kind: "callout", description: "A short aside with an icon, for a rule of thumb or a caveat.", accepts: [], interactive: false, options: "icon: one of the section icons; tone: cyan or purple" },
+  {
+    kind: "game_cards",
+    description:
+      "Every game of the week as a card: logos, the final, the closing spread, total and moneylines against the result, your recap and fun stat from draft.games, the top fantasy lines with projection beats and misses, and the value risers and fallers. Starts with a jump menu.",
+    accepts: ["week_games"],
+    interactive: false,
+    options: "none (the recaps come from draft.games, one per game in week_games)",
+  },
+  { kind: "week_awards", description: "The week in numbers: top scorers, the biggest projection beat and miss, value jump and drop, the shootout, the upset, and bench points across synced leagues.", accepts: ["week_awards"], interactive: false, options: "none" },
+  { kind: "projection_report", description: "How the projection did this week by position, plus the season's most and least reliable players against it.", accepts: ["projection_report"], interactive: false, options: "none" },
 ];
 
 /**
@@ -160,7 +187,16 @@ export const REQUIRED_IN_SEASON_BLOCKS: Array<{
   label: string;
   kinds: BlockKind[];
   needsWeekLines?: boolean;
+  /**
+   * Required only when the bundle built the named dataset. The game datasets
+   * exist only for a week whose games have finals and lines, so demanding the
+   * block otherwise is the same unsatisfiable rule needsWeekLines guards.
+   */
+  needsDataset?: DatasetKind;
 }> = [
+  { label: "a game_cards block", kinds: ["game_cards"], needsDataset: "week_games" },
+  { label: "a week_awards block", kinds: ["week_awards"], needsDataset: "week_awards" },
+  { label: "a projection_report block", kinds: ["projection_report"], needsDataset: "projection_report" },
   { label: "a stat_tiles block", kinds: ["stat_tiles"] },
   { label: "a value_movers chart", kinds: ["value_movers"] },
   { label: "a top_scorers or box_score_lines table", kinds: ["top_scorers", "box_score_lines"], needsWeekLines: true },

@@ -18,7 +18,9 @@ function safeHref(raw: string): string | null {
   const url = raw.trim();
   if (/^https?:\/\//i.test(url)) return url;
   if (/^mailto:/i.test(url)) return url;
-  if (url.startsWith("/")) return url;
+  // A site path, but not "//host" or "/\host", which browsers read as another
+  // site and which would render as an internal link with no rel or target.
+  if (url.startsWith("/") && !/^\/[/\\]/.test(url)) return url;
   return null;
 }
 
@@ -79,7 +81,11 @@ function parseInline(text: string, key: string): ReactNode[] {
           {...(external
             ? { target: "_blank", rel: "noopener noreferrer" }
             : {})}
-          className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          // Inside running text a link needs a mark besides colour (WCAG
+          // 1.4.1), so it keeps a thin, faint underline under body-coloured
+          // text, and turns cyan on hover and focus: the reading stays calm
+          // and a link is still findable.
+          className="text-ink underline decoration-brand-cyan/70 decoration-1 underline-offset-[3px] transition-colors hover:text-brand-cyan hover:decoration-brand-cyan focus-visible:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           {inner}
           {external && <span className="sr-only"> (opens in a new tab)</span>}

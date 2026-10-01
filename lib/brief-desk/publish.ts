@@ -34,7 +34,20 @@ type Admin = SupabaseClient<Database>;
 /** Markdown for articles.content_md, assembled from the draft's sections and FAQ. */
 export function assembleContentMd(draft: Draft): string {
   const parts: string[] = [];
+  if (draft.editor_take && draft.editor_take.trim()) {
+    parts.push(`## Editor's take\n\n${draft.editor_take.trim()}`);
+  }
   for (const s of draft.sections) parts.push(`## ${s.heading}\n\n${s.body_md.trim()}`);
+  // The recaps, so the plain copy (the fallback render, RSS, the word count)
+  // carries the game-by-game words too. The card figures stay in the datasets.
+  if (draft.games.length > 0) {
+    const games = draft.games.map((g) => {
+      const [away, home] = g.game_key.split("-");
+      const fun = g.fun_stat ? `\n\n${g.fun_stat.text.trim()}` : "";
+      return `### ${away} at ${home}: ${g.headline}\n\n${g.recap_md.trim()}${fun}`;
+    });
+    parts.push(`## Game by game\n\n${games.join("\n\n")}`);
+  }
   if (draft.faq.length > 0) {
     parts.push(
       `## Questions people ask\n\n${draft.faq.map((f) => `### ${f.question}\n\n${f.answer_md.trim()}`).join("\n\n")}`,
@@ -262,6 +275,10 @@ export interface EditionTextEdit {
   sections?: Record<string, string>;
   /** Block id to new caption and conclusion. Data is never editable. */
   blocks?: Record<string, { caption: string; conclusion: string }>;
+  /** The owner's take. An empty string removes it. */
+  editor_take?: string;
+  /** game_key to new headline, recap and fun-stat sentence. The card's numbers are never editable. */
+  games?: Record<string, { headline: string; recap_md: string; fun_stat_text?: string }>;
 }
 
 /**
@@ -293,6 +310,18 @@ export async function updateEditionText(
       b.conclusion = text.conclusion.slice(0, 300);
     }
   }
+  if (typeof e.editor_take === "string") {
+    draft.editor_take = e.editor_take.trim() ? e.editor_take.trim() : null;
+  }
+  for (const g of draft.games) {
+    const text = e.games?.[g.game_key];
+    if (!text) continue;
+    if (text.headline.trim()) g.headline = text.headline.trim();
+    if (text.recap_md.trim()) g.recap_md = text.recap_md.trim();
+    if (g.fun_stat && typeof text.fun_stat_text === "string" && text.fun_stat_text.trim()) {
+      g.fun_stat = { ...g.fun_stat, text: text.fun_stat_text.trim() };
+    }
+  }
   const check = draftSchema.safeParse(draft);
   if (!check.success) return { ok: false, error: check.error.issues.map((i) => i.message).join("; ") };
 
@@ -307,6 +336,12 @@ export async function updateEditionText(
     ...draft.blocks.flatMap((b) => [
       ...textProblemsIn(b.caption, `block "${b.id}" caption`),
       ...textProblemsIn(b.conclusion, `block "${b.id}" conclusion`),
+    ]),
+    ...(draft.editor_take ? textProblemsIn(draft.editor_take, "editor's take") : []),
+    ...draft.games.flatMap((g) => [
+      ...textProblemsIn(g.headline, `game ${g.game_key} headline`),
+      ...textProblemsIn(g.recap_md, `game ${g.game_key} recap`),
+      ...(g.fun_stat ? textProblemsIn(g.fun_stat.text, `game ${g.game_key} fun stat`) : []),
     ]),
   ];
   if (problems.length > 0) return { ok: false, error: problems.join("; ") };

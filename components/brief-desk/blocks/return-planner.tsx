@@ -26,8 +26,9 @@ const SELECT_CLASS =
   "min-h-11 rounded-card border border-line bg-base px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
 function playerCell(r: TimelineRow) {
+  // On its own in a card, so it takes the house 44px tap target.
   return r.slug ? (
-    <Link href={`/players/${r.slug}`} className={BLOCK_LINK_CLASS}>
+    <Link href={`/players/${r.slug}`} className={`inline-flex min-h-11 items-center ${BLOCK_LINK_CLASS}`}>
       {r.name}
     </Link>
   ) : (
@@ -38,9 +39,12 @@ function playerCell(r: TimelineRow) {
 export function ReturnPlanner({
   rows,
   defaultWeeks,
+  undatedListedAbove = false,
 }: {
   rows: TimelineRow[];
   defaultWeeks: [number, number];
+  /** An injury timeline above this block already lists the players with no timeline; otherwise they are named here. */
+  undatedListedAbove?: boolean;
 }) {
   const id = useId();
   const [from, setFrom] = useState(defaultWeeks[0]);
@@ -86,25 +90,30 @@ export function ReturnPlanner({
             : `${back.length} ${back.length === 1 ? "player is" : "players are"} expected back between week ${lo} and week ${hi}.`}
         </p>
         {back.length > 0 && (
-          <ul role="list" className="mt-2 space-y-1 text-sm text-ink-muted">
+          <ul role="list" className="mt-2 grid gap-1.5 sm:grid-cols-2">
             {back.map((r, i) => (
-              <li key={`${r.slug ?? r.name}-${i}`}>
-                {playerCell(r)}
-                {r.team ? ` (${[r.position, r.team].filter(Boolean).join(", ")})` : ""}: week {r.returnWeek}
-                {r.timeline ? `, reported as "${r.timeline}"` : ""}
+              <li key={`${r.slug ?? r.name}-${i}`} className="flex min-h-11 items-center gap-3 rounded-md border border-line/70 bg-surface/50 px-3 py-1.5">
+                <span className="shrink-0 rounded-full bg-brand-cyan/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-cyan">{`Week ${r.returnWeek}`}</span>
+                <span className="min-w-0">
+                  <span className="block break-words text-sm">{playerCell(r)}</span>
+                  <span className="block text-[11px] text-ink-subtle">
+                    {[[r.position, r.team].filter(Boolean).join(", "), r.timeline ? `reported as "${r.timeline}"` : null].filter(Boolean).join(", ")}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>
         )}
         {later.length > 0 && (
           <p className="mt-2 text-xs text-ink-subtle">
-            {later.length} {later.length === 1 ? "player is" : "players are"} expected after week {hi}:{" "}
-            {later.map((r) => `${r.name} (week ${r.returnWeek})`).join(", ")}.
+            {`Expected after week ${hi}: ${later.map((r) => `${r.name} (week ${r.returnWeek})`).join(", ")}.`}
           </p>
         )}
         {undated.length > 0 && (
           <p className="mt-2 text-xs text-ink-subtle">
-            No timeline was given for {undated.map((r) => r.name).join(", ")}, so {undated.length === 1 ? "that player is" : "they are"} not counted here.
+            {undatedListedAbove
+              ? `${undated.length} ${undated.length === 1 ? "player" : "players"} had no timeline and ${undated.length === 1 ? "is" : "are"} listed under the timeline above, by status.`
+              : `No timeline given: ${undated.map((r) => r.name).join(", ")}.`}
           </p>
         )}
       </div>

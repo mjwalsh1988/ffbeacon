@@ -45,6 +45,8 @@ export interface DatasetPlayer {
   slug: string;
   position: string | null;
   team: string | null;
+  /** Sleeper's id, for the photo on a compact row. Optional: older callers build players without it. */
+  sleeper_id?: string | null;
 }
 
 export type PlayerIndex = ReadonlyMap<string, DatasetPlayer>;
@@ -65,6 +67,17 @@ export interface FormatTrend {
   sourceSlug: string | null;
   sourceDisplay: string;
   rows: FormatTrendRow[];
+  /**
+   * Set when the rows were computed as of a closed period's end rather than
+   * read from today's player_value_trends (a backfilled week). The notes then
+   * name the seven days they cover instead of "the last seven days".
+   */
+  asOf?: string | null;
+}
+
+/** The window a change_7d covers, in the words a dataset note uses. */
+export function sevenDayWindow(trend: FormatTrend | null | undefined): string {
+  return trend?.asOf ? `the seven days to ${trend.asOf.slice(0, 10)}` : "the last seven days";
 }
 
 /** One player's line for one week, named columns from player_stats. */
@@ -159,8 +172,17 @@ export function idpLineCells(line: WeekLine): Row {
 
 export type DatasetRelay = Pick<
   BundleRelay,
-  "id" | "slug" | "kind" | "headline" | "availability" | "timeline" | "source_posted_at" | "players" | "teams"
+  "id" | "slug" | "kind" | "headline" | "availability" | "timeline" | "source_posted_at" | "players" | "subject_player_ids" | "teams"
 >;
+
+/**
+ * The players a Relay's availability and timeline describe: its subjects
+ * only. "Bowers had surgery; Mayer's role expected to grow" tags both, and
+ * reading the status onto every tagged player listed Mayer as out.
+ */
+function availabilitySubjects(relay: DatasetRelay): string[] {
+  return relay.subject_player_ids;
+}
 
 type Row = Record<string, string | number | null>;
 
@@ -181,7 +203,7 @@ export function snapPercent(n: number | null | undefined): number | null {
 }
 
 function playerCells(p: DatasetPlayer): Row {
-  return { player_id: p.id, name: p.name, slug: p.slug, position: p.position, team: p.team };
+  return { player_id: p.id, name: p.name, slug: p.slug, position: p.position, team: p.team, sleeper_id: p.sleeper_id ?? null };
 }
 
 /**
@@ -204,7 +226,7 @@ export function rankTrendRows(
 }
 
 function valueNote(trend: FormatTrend): string {
-  return `Values from ${trend.sourceDisplay}, ${trend.formatDisplay}. The move column is the change over the last seven days.`;
+  return `Values from ${trend.sourceDisplay}, ${trend.formatDisplay}. The move column is the change over ${sevenDayWindow(trend)}.`;
 }
 
 /** value_movers_up or value_movers_down: the biggest change_7d in one direction. */
@@ -300,7 +322,7 @@ export function buildValueMoversByFormatDataset(
     title: "Value movers by format",
     columns,
     rows,
-    source_note: `Values from ${sources}: ${trends.map((t) => `${t.formatDisplay} on ${t.sourceDisplay}`).join("; ")}. The move column is the change over the last seven days.`,
+    source_note: `Values from ${sources}: ${trends.map((t) => `${t.formatDisplay} on ${t.sourceDisplay}`).join("; ")}. The move column is the change over ${sevenDayWindow(trends[0])}.`,
     computed_at: computedAt,
   };
 }
@@ -373,7 +395,7 @@ export function buildTopScorersDataset(
     title: `Top ${position} scorers, week ${week} (PPR)`,
     columns: ["rank", "player_id", "name", "slug", "position", "team", "week", ...LINE_COLUMNS],
     rows,
-    source_note: `Week ${week} box scores from player_stats, ranked by PPR points. Half PPR and standard totals are shown beside them.`,
+    source_note: `Week ${week} box scores, ranked by PPR points. Half PPR and standard totals are shown beside them.`,
     computed_at: computedAt,
   };
 }
@@ -416,9 +438,9 @@ export function buildBoxScoreLinesDataset(
       ...(hasDefenders ? IDP_LINE_COLUMNS.filter((c) => c !== "opponent") : []),
     ],
     rows: [...rows, ...defenderRows],
-    source_note: `Week ${week} box scores from player_stats for the players the period's Relays name. A player missing from the table has no stat row for the week.${
+    source_note: `Week ${week} box scores for the players the period's Relays name. A player missing from the table has no box score for the week.${
       hasDefenders
-        ? " Defensive players carry defensive columns only, scored in Sleeper default IDP scoring (pts_idp123); their offensive columns are empty on purpose."
+        ? " Defensive players carry defensive columns only, scored in Sleeper's default IDP scoring; their offensive columns are empty on purpose."
         : ""
     }`,
     computed_at: computedAt,
@@ -597,7 +619,7 @@ export function buildInjuryTimelineDataset(
   const newestByPlayer = new Map<string, DatasetRelay>();
   for (const relay of relays) {
     if (!relay.availability || relay.availability === "none") continue;
-    for (const pid of relay.players) {
+    for (const pid of availabilitySubjects(relay)) {
       const prev = newestByPlayer.get(pid);
       if (!prev || new Date(relay.source_posted_at).getTime() > new Date(prev.source_posted_at).getTime()) {
         newestByPlayer.set(pid, relay);
@@ -655,9 +677,9 @@ export function buildInjuryTimelineDataset(
       "no_timeline",
     ],
     rows,
-    source_note: `Players the period's Relays report as out, on IR, on PUP or doubtful, by their newest report. expected_return_week is the later bound of the stated timeline counted from ${
-      currentWeek === null ? "the report (no week arithmetic off-season)" : `week ${currentWeek}`
-    }; a row with no_timeline = yes had no timeline stated and none is inferred.`,
+    source_note: `Players the period's Relays report as out, on injured reserve, on PUP or doubtful, by their newest report. The expected return is the later end of the reported timeline, counted from ${
+      currentWeek === null ? "the report (no week is worked out in the off-season)" : `week ${currentWeek}`
+    }; a player whose report gave no timeline is listed without one, and none is guessed.`,
     computed_at: computedAt,
   };
 }
@@ -750,7 +772,7 @@ export function buildWaiverTargetsDataset(input: WaiverTargetsInput): BundleData
       "dynasty_rank",
     ],
     rows,
-    source_note: `Seven-day risers on ${redraft.sourceDisplay}, ${redraft.formatDisplay}, ranked outside the top ${demand} (a ${teams}-team, ${starters}-starter league's weekly starters), excluding players on the injury timeline. The bid range is the FF Beacon FAAB calculator at its default league shape (${teams} teams, ${starters} starters, ${faabSettings.userDefaults.defaultNeed} need, ${faabSettings.userDefaults.defaultBudget} budget) as a percent of remaining budget; it is not a league-specific figure and no waiver add-rate data is used.${
+    source_note: `Risers over ${sevenDayWindow(redraft)} on ${redraft.sourceDisplay}, ${redraft.formatDisplay}, ranked outside the top ${demand} (a ${teams}-team, ${starters}-starter league's weekly starters), excluding players on the injury timeline. The bid range is the FF Beacon FAAB calculator at its default league shape (${teams} teams, ${starters} starters, ${faabSettings.userDefaults.defaultNeed} need, ${faabSettings.userDefaults.defaultBudget} budget) as a percent of remaining budget; it is not a league-specific figure and no waiver add-rate data is used.${
       dynasty ? ` Dynasty columns are ${dynasty.formatDisplay} on ${dynasty.sourceDisplay}.` : ""
     }`,
     computed_at: computedAt,
@@ -784,7 +806,7 @@ export function buildWeekStatTilesDataset(input: StatTilesInput): BundleDataset 
   const injuries = relays.filter((r) => r.kind === "injury").length;
   const ruledOut = new Set<string>();
   for (const r of relays) {
-    if (r.availability === "out" || r.availability === "ir") for (const pid of r.players) ruledOut.add(pid);
+    if (r.availability === "out" || r.availability === "ir") for (const pid of availabilitySubjects(r)) ruledOut.add(pid);
   }
   const transactions = relays.filter((r) => TRANSACTION_KINDS.has(r.kind)).length;
 
@@ -839,8 +861,8 @@ export function buildWeekStatTilesDataset(input: StatTilesInput): BundleDataset 
     columns: ["id", "label", "value"],
     rows,
     source_note: `Counts are the period's Relays. ${
-      dynasty ? `The value figure is the seven-day change on ${dynasty.sourceDisplay}, ${dynasty.formatDisplay}.` : "No value source was available for this period."
-    }${inSeason ? " The top scorer is the week's best PPR line in player_stats." : ""}`,
+      dynasty ? `The value figure is the change over ${sevenDayWindow(dynasty)} on ${dynasty.sourceDisplay}, ${dynasty.formatDisplay}.` : "No value source was available for this period."
+    }${inSeason ? " The top scorer is the week's best PPR line in the box scores." : ""}`,
     computed_at: computedAt,
   };
 }

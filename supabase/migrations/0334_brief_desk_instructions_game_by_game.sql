@@ -1,16 +1,27 @@
-/**
- * The editorial brief handed to the desk run inside the bundle
- * (docs/beacon-brief/relays-and-briefs-plan.md, section 8.4).
- *
- * This is the SEED for the bd_brief_instructions setting (migration 0285). The
- * live copy is the database row, editable at /admin/brief-desk/settings; this
- * constant is the fallback when the row is missing. The bootstrap prompt the
- * routine itself carries (scripts/brief-desk/prompt.md) is deliberately short
- * and only says to follow this text, so every editorial change is a settings
- * edit rather than a deploy.
- */
-
-export const BRIEF_INSTRUCTIONS_SEED = `You are drafting one edition of The Beacon Brief for FF Beacon. The bundle you fetched is the whole of what you may write from. Follow these instructions exactly.
+-- Migration 0334: the Brief desk instructions for the game-by-game edition
+--
+-- DATA ONLY. Updates the bd_brief_instructions row to the new
+-- lib/brief-desk/instructions-seed.ts text (plan section 20): the edition is
+-- built around one card per game, the week in numbers and the projection
+-- report, with a recap per game in draft.games and the editor's take left to
+-- the owner.
+--
+-- APPLY ONLY AFTER THE CODE THAT READS IT IS DEPLOYED. The bundle carries
+-- this text to the Tuesday routine, and these instructions ask for blocks and
+-- a games array only the new code accepts. Applied early, the routine drafts
+-- an edition the live validator rejects.
+--
+-- The WHERE clause replaces the row only while it still holds the previous
+-- seed byte for byte (md5 4aab95f1851b84691f79ccd72919d1cc, checked against
+-- the live row on 2026-10-01). An owner edit made in /admin/brief-desk/settings
+-- since then is left alone; in that case paste the new text there by hand.
+--
+-- Generated from the seed rather than typed, with dollar quoting, so no
+-- character in the text can break the literal.
+--
+-- Access matrix: beacon_settings is unchanged (service role writes only).
+update public.beacon_settings
+set value = to_jsonb($seed$You are drafting one edition of The Beacon Brief for FF Beacon. The bundle you fetched is the whole of what you may write from. Follow these instructions exactly.
 
 1. SOURCES OF TRUTH, IN ORDER. First, the bundle's relays: what was reported. Second, the bundle's numbers: what the site computed. Third, pages you fetch during this run: what is true now. Your training memory is not a source. A roster, depth chart, timeline or contract detail that is not in one of those three is not stated.
 
@@ -52,4 +63,7 @@ export const BRIEF_INSTRUCTIONS_SEED = `You are drafting one edition of The Beac
    fun_stat: { player_id, text } about one player on that game's card (game_index[].player_ids). Pick the line a reader would repeat to a friend, and say why it is notable; the card prints his real line under your sentence, so do not restate the whole box score. Use null only when nothing on the card is notable.
    game_key is exactly as game_index gives it (AWAY-HOME). Leave editor_take null: it is the owner's, written at review.
 
-When the draft is complete, POST it to the drafts endpoint as the JSON shape the bundle describes and stop. If the drafts endpoint rejects the draft, read the reason, fix exactly that, and POST again. Never call any other endpoint on the site and never write to the repository.`;
+When the draft is complete, POST it to the drafts endpoint as the JSON shape the bundle describes and stop. If the drafts endpoint rejects the draft, read the reason, fix exactly that, and POST again. Never call any other endpoint on the site and never write to the repository.$seed$::text),
+    updated_at = now()
+where key = 'bd_brief_instructions'
+  and md5(value #>> '{}') = '4aab95f1851b84691f79ccd72919d1cc';

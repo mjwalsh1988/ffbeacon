@@ -15,7 +15,10 @@
 
 import { isBlockKind, parseBlockOptions, type BLOCK_OPTION_SCHEMAS } from "@/lib/brief-desk/blocks";
 import type { z } from "zod";
-import type { BundleDataset, DraftBlock } from "@/lib/brief-desk/types";
+import type { BundleDataset, Draft, DraftBlock } from "@/lib/brief-desk/types";
+import { GameCardsBlock } from "./game-cards";
+import { WeekAwardsBlock } from "./week-awards";
+import { ProjectionReportBlock } from "./projection-report";
 import type { BlockPlayer } from "@/lib/brief-desk/edition-data";
 import type { RelayCardData } from "@/lib/relays/load";
 import { BlockDataMissing, BlockShell } from "./block-shell";
@@ -37,6 +40,21 @@ export interface BlockContext {
   relays: Record<string, RelayCardData>;
   players: Record<string, BlockPlayer>;
   formats: Array<{ slug: string; display: string }>;
+  /** The desk's per-game words (draft.games), for the game cards. */
+  games: Draft["games"];
+  /**
+   * Ids of the blocks that render, in page order, with their kinds. A block
+   * that points the reader at another one ("listed under the timeline above")
+   * checks here that the other one is really there, above it.
+   */
+  renderOrder?: Array<{ id: string; kind: string }>;
+}
+
+/** Whether a block of `kind` renders before the block `id` on this page. */
+function rendersAbove(ctx: BlockContext, id: string, kind: string): boolean {
+  const order = ctx.renderOrder ?? [];
+  const at = order.findIndex((b) => b.id === id);
+  return at > 0 && order.slice(0, at).some((b) => b.kind === kind);
 }
 
 export function RenderBlock({ block, ctx }: { block: DraftBlock; ctx: BlockContext }) {
@@ -102,9 +120,16 @@ export function RenderBlock({ block, ctx }: { block: DraftBlock; ctx: BlockConte
     }
     case "return_planner": {
       const o = parsed.options as Options<"return_planner">;
+      const timelineAbove = rendersAbove(ctx, id, "injury_timeline");
       return (
-        <BlockShell id={id} caption={caption} conclusion={conclusion} dataset={dataset}>
-          <ReturnPlanner rows={readTimelineRows(dataset as BundleDataset)} defaultWeeks={o.default_weeks} />
+        // The timeline above prints the same dataset's footnote; printing it
+        // again under the planner put one paragraph on the page twice in a row.
+        <BlockShell id={id} caption={caption} conclusion={conclusion} dataset={timelineAbove ? null : dataset}>
+          <ReturnPlanner
+            rows={readTimelineRows(dataset as BundleDataset)}
+            defaultWeeks={o.default_weeks}
+            undatedListedAbove={timelineAbove}
+          />
         </BlockShell>
       );
     }
@@ -114,6 +139,30 @@ export function RenderBlock({ block, ctx }: { block: DraftBlock; ctx: BlockConte
     }
     case "callout":
       return <CalloutBlock id={id} caption={caption} conclusion={conclusion} options={parsed.options as Options<"callout">} />;
+    case "game_cards":
+      return (
+        <GameCardsBlock
+          id={id}
+          caption={caption}
+          conclusion={conclusion}
+          games={dataset as BundleDataset}
+          playerLines={ctx.datasets.game_player_lines ?? null}
+          recaps={ctx.games}
+          formats={ctx.formats}
+        />
+      );
+    case "week_awards":
+      return (
+        <WeekAwardsBlock
+          id={id}
+          caption={caption}
+          conclusion={conclusion}
+          dataset={dataset as BundleDataset}
+          games={ctx.datasets.week_games ?? null}
+        />
+      );
+    case "projection_report":
+      return <ProjectionReportBlock id={id} caption={caption} conclusion={conclusion} dataset={dataset as BundleDataset} />;
     default: {
       const exhaustive: never = block.kind;
       return exhaustive;

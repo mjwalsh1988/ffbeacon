@@ -99,6 +99,68 @@ async function loadBlockPlayers(supabase: PublicClient, ids: string[]): Promise<
 }
 
 /**
+ * Any edition by its brief_editions id, whatever its status, for the owner's
+ * preview (app/brief/preview/[id]). Admin client throughout: a draft or an
+ * edition in review is invisible to the public client by RLS, which is the
+ * point. The caller has already checked the reader may see it.
+ */
+export async function loadEditionForPreview(editionId: string): Promise<PublishedEdition | null> {
+  const admin: SupabaseClient<Database> = createAdminClient();
+  const { data: row } = await admin
+    .from("brief_editions")
+    .select("article_id, draft_payload, season, week, period_start, period_end, cadence, relay_ids")
+    .eq("id", editionId)
+    .maybeSingle();
+  if (!row) return null;
+  const { data: a } = await admin
+    .from("articles")
+    .select("id, slug, title, tl_dr, meta_description, content_md, article_type, tags, published_at, last_updated, canonical_url, metadata")
+    .eq("id", row.article_id)
+    .maybeSingle();
+  if (!a || a.article_type !== "brief") return null;
+
+  const meta = parseEditionMetadata(a.metadata ?? null);
+  const parsed = draftSchema.safeParse(row.draft_payload);
+  const draft = parsed.success ? parsed.data : null;
+  const relayIds = new Set<string>(row.relay_ids ?? []);
+  if (draft) for (const id of draftRelayIds(draft)) relayIds.add(id);
+  const supabase = createCachedReadClient();
+  const [relayCards, players] = await Promise.all([
+    loadRelaysByIds(supabase, [...relayIds]),
+    loadBlockPlayers(supabase, draft ? blockPlayerIds(draft) : []),
+  ]);
+  const relays: Record<string, RelayCardData> = {};
+  for (const r of relayCards) relays[r.id] = r;
+  return {
+    article: {
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      tlDr: a.tl_dr,
+      metaDescription: a.meta_description,
+      contentMd: a.content_md,
+      articleType: a.article_type,
+      tags: a.tags ?? [],
+      publishedAt: a.published_at,
+      lastUpdated: a.last_updated,
+      canonicalUrl: a.canonical_url,
+      category: null,
+      players: [],
+      teams: [],
+    },
+    draft,
+    season: row.season,
+    week: row.week,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    cadence: row.cadence,
+    meta,
+    relays,
+    players,
+  };
+}
+
+/**
  * The published edition behind a slug, or null when the slug is not a
  * published Brief. The article is read through the public client; only the
  * draft payload and the period columns come through the admin client.

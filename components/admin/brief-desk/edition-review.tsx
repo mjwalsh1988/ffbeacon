@@ -3,6 +3,7 @@
 import { useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
+  applyBriefBackfill,
   approveBriefEdition,
   archiveBriefEdition,
   rejectBriefEdition,
@@ -365,6 +366,104 @@ function HeadEditor({
   );
 }
 
+/**
+ * The owner's take (plan section 23.5). Two or three sentences in the owner's
+ * own voice, shown under the summary on the public page. Saving an empty box
+ * removes it.
+ */
+function EditorTakeEditor({
+  draft,
+  pending,
+  run,
+  editionId,
+}: {
+  draft: Draft;
+  pending: boolean;
+  run: RunFn;
+  editionId: string;
+}) {
+  const id = useId();
+  const [take, setTake] = useState(draft.editor_take ?? "");
+  const dirty = take !== (draft.editor_take ?? "");
+  return (
+    <form
+      className="space-y-2 rounded-card border border-brand-purple/50 bg-brand-purple/10 p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => saveEditionText(editionId, { editor_take: take }), take.trim() ? "Saved your take." : "Removed your take.");
+      }}
+    >
+      <h3 className="text-sm font-semibold text-ink">Your editor&apos;s take</h3>
+      <label htmlFor={`${id}-take`} className="block text-xs font-medium text-ink">
+        Two or three sentences in your own voice, shown under the summary as &quot;Editor&apos;s take, Michael Walsh&quot; (up to 2000 characters; leave empty for none)
+      </label>
+      <textarea id={`${id}-take`} rows={5} maxLength={2000} className={areaClass} value={take} onChange={(e) => setTake(e.target.value)} />
+      <button type="submit" className={btnClass} disabled={pending || !dirty}>
+        Save your take
+      </button>
+    </form>
+  );
+}
+
+/** One game's headline, recap and fun-stat sentence. The card's numbers are never editable. */
+function GameRecapEditor({
+  game,
+  pending,
+  run,
+  editionId,
+}: {
+  game: Draft["games"][number];
+  pending: boolean;
+  run: RunFn;
+  editionId: string;
+}) {
+  const id = useId();
+  const [headline, setHeadline] = useState(game.headline);
+  const [recap, setRecap] = useState(game.recap_md);
+  const [fun, setFun] = useState(game.fun_stat?.text ?? "");
+  const dirty = headline !== game.headline || recap !== game.recap_md || fun !== (game.fun_stat?.text ?? "");
+  const label = game.game_key.replace("-", " at ");
+  // Sixteen of these forms sit on one page with the same three fields, so the
+  // form is named by its game heading and every field and the button carry
+  // the game too: a screen reader's form-fields list otherwise reads sixteen
+  // identical "Headline" entries.
+  const forGame = <span className="sr-only">{`, ${label}`}</span>;
+  return (
+    <form
+      aria-labelledby={`${id}-game`}
+      className="space-y-2 rounded-card border border-line bg-surface/60 p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(
+          () => saveEditionText(editionId, { games: { [game.game_key]: { headline, recap_md: recap, ...(game.fun_stat ? { fun_stat_text: fun } : {}) } } }),
+          `Saved the ${label} recap.`,
+        );
+      }}
+    >
+      <h4 id={`${id}-game`} className="text-sm font-semibold text-ink">{label}</h4>
+      <label htmlFor={`${id}-h`} className="block text-xs font-medium text-ink">
+        Headline (8 to 100 characters){forGame}
+      </label>
+      <input id={`${id}-h`} maxLength={100} className={areaClass} value={headline} onChange={(e) => setHeadline(e.target.value)} />
+      <label htmlFor={`${id}-r`} className="block text-xs font-medium text-ink">
+        Recap (markdown, 80 to 1400 characters){forGame}
+      </label>
+      <textarea id={`${id}-r`} rows={5} maxLength={1400} className={areaClass} value={recap} onChange={(e) => setRecap(e.target.value)} />
+      {game.fun_stat ? (
+        <>
+          <label htmlFor={`${id}-f`} className="block text-xs font-medium text-ink">
+            Fun stat sentence (10 to 240 characters){forGame}
+          </label>
+          <textarea id={`${id}-f`} rows={2} maxLength={240} className={areaClass} value={fun} onChange={(e) => setFun(e.target.value)} />
+        </>
+      ) : null}
+      <button type="submit" className={btnClass} disabled={pending || !dirty}>
+        Save this recap{forGame}
+      </button>
+    </form>
+  );
+}
+
 export function EditionReview({
   editionId,
   status,
@@ -377,7 +476,10 @@ export function EditionReview({
   ticks,
   reviewerNotes,
   discordDefault,
+  backfillOf = null,
 }: {
+  /** Set when this edition is a backfill redo: the live edition it replaces. */
+  backfillOf?: { slug: string } | null;
   editionId: string;
   status: string;
   slug: string;
@@ -398,6 +500,8 @@ export function EditionReview({
   const [postToDiscord, setPostToDiscord] = useState(discordDefault);
   const [titleChoice, setTitleChoice] = useState<number | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
+  const [confirmApply, setConfirmApply] = useState(false);
+  const applyButtonRef = useRef<HTMLButtonElement>(null);
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
   const resultRef = useRef<HTMLParagraphElement>(null);
@@ -406,7 +510,8 @@ export function EditionReview({
   const titleRef = useRef<HTMLInputElement>(null);
 
   const inReview = status === "in_review";
-  const editable = draft !== null && (inReview || status === "published");
+  const isBackfill = backfillOf !== null && status === "draft";
+  const editable = draft !== null && (inReview || status === "published" || isBackfill);
   const titleOptions = draft?.title_options ?? [];
   const needsTitle = inReview && titleOptions.length > 0;
 
@@ -448,6 +553,28 @@ export function EditionReview({
       >
         {result ? result.msg : ""}
       </p>
+
+      <p className="text-sm text-ink-muted">
+        <a
+          href={`/brief/preview/${editionId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[44px] items-center font-semibold text-brand-cyan underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          Preview this edition as readers will see it
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      </p>
+
+      {isBackfill ? (
+        <p className="text-sm text-ink-muted">
+          This is a redo of the live edition at{" "}
+          <a href={`/brief/${backfillOf?.slug}`} className="font-semibold text-brand-cyan underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
+            /brief/{backfillOf?.slug}
+          </a>{" "}
+          in the game-by-game format. It is private until you apply it below. Applying replaces the live page in place and posts nothing to Discord.
+        </p>
+      ) : null}
 
       {status === "published" ? (
         <p className="text-sm text-ink-muted">
@@ -567,6 +694,7 @@ export function EditionReview({
             <p className="mt-1 text-sm text-ink-muted">{draft.format_note}</p>
           </div>
           {editable ? <HeadEditor draft={draft} pending={pending} run={run} editionId={editionId} /> : null}
+          {editable ? <EditorTakeEditor draft={draft} pending={pending} run={run} editionId={editionId} /> : null}
 
           {draft.sections.map((s) => (
             <SectionView
@@ -580,6 +708,24 @@ export function EditionReview({
               editionId={editionId}
             />
           ))}
+
+          {draft.games.length > 0 ? (
+            <div className="space-y-3">
+              <h3 className="text-xl font-semibold tracking-tight text-ink">Game recaps ({draft.games.length})</h3>
+              {editable ? (
+                draft.games.map((g) => <GameRecapEditor key={g.game_key} game={g} pending={pending} run={run} editionId={editionId} />)
+              ) : (
+                <ul role="list" className="space-y-3">
+                  {draft.games.map((g) => (
+                    <li key={g.game_key} className="rounded-card border border-line bg-surface/60 p-4">
+                      <p className="font-semibold text-ink">{`${g.game_key.replace("-", " at ")}: ${g.headline}`}</p>
+                      <ArticleMarkdown content={g.recap_md} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
 
           {unreferencedBlocks.length > 0 ? (
             <div className="rounded-card border border-line bg-surface/60 p-4">
@@ -766,7 +912,57 @@ export function EditionReview({
           </div>
         ) : null}
 
-        {!inReview && status !== "rejected" ? (
+        {isBackfill && draft ? (
+          <div className="space-y-3 rounded-card border border-line bg-surface/60 p-4">
+            <h3 className="text-sm font-semibold text-ink">Apply this redo to the live edition</h3>
+            <p className="text-sm text-ink-muted">
+              Replaces the words, the blocks and the game cards on /brief/{backfillOf?.slug} in place. The address, the publish date and the Discord history stay as they are. Nothing is posted to Discord and no email is sent. A revision of the old text is kept.
+            </p>
+            <button
+              type="button"
+              className={btnClass}
+              disabled={pending}
+              onClick={() => setConfirmApply(true)}
+              aria-expanded={confirmApply}
+              aria-controls="apply-confirm"
+              ref={applyButtonRef}
+            >
+              Apply to the live edition
+            </button>
+            {confirmApply ? (
+              <div id="apply-confirm" className="space-y-2" role="group" aria-label="Confirm the apply">
+                <p className="text-sm text-ink">This replaces the live page now. Are you sure?</p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={pending}
+                    onClick={() => {
+                      setConfirmApply(false);
+                      run(() => applyBriefBackfill(editionId), "Applied. The live edition now shows this redo.");
+                    }}
+                  >
+                    Yes, replace the live page
+                  </button>
+                  <button
+                    type="button"
+                    className={btnClass}
+                    onClick={() => {
+                      // The Cancel button unmounts with the group; focus goes
+                      // back to Apply rather than dropping to the page top.
+                      setConfirmApply(false);
+                      requestAnimationFrame(() => applyButtonRef.current?.focus());
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!inReview && status !== "rejected" && !isBackfill ? (
           <p className="text-sm text-ink-muted">
             No approval actions apply to an edition with status {status.replace("_", " ")}.
           </p>

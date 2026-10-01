@@ -2,7 +2,7 @@
  * value_movers: a horizontal bar chart of change_7d, risers and fallers,
  * through chart-kit. The SVG is aria-hidden; the summary paragraph states the
  * conclusion and the biggest move either way; the table under the disclosure
- * carries every number. Bars are purple for a rise and cyan for a fall, and
+ * carries every number. Bars are purple for a rise and red for a fall, and
  * every bar also carries its signed figure as text, so colour never carries
  * the direction alone.
  *
@@ -10,7 +10,10 @@
  */
 
 import Link from "next/link";
-import { ChartEmpty, ChartFigure, DataTable, SERIES_A, SERIES_B, Td, Th } from "@/components/chart-kit";
+import { ChartEmpty, ChartFigure, DataTable, SERIES_A, Td, Th } from "@/components/chart-kit";
+
+/** A fall, in the red the game cards and tables use for one (about 6:1 on the card). The sign on every label carries the direction too. */
+const FALL_COLOR = "#F87171";
 import type { BundleDataset } from "@/lib/brief-desk/types";
 import { formatCell, formatSigned, readNumber, readPlayer } from "@/lib/brief-desk/dataset-read";
 import { BLOCK_LINK_CLASS, DatasetFooter } from "./block-shell";
@@ -32,6 +35,76 @@ type Mover = {
   change: number;
   current: number | null;
 };
+
+const NARROW_W = 340;
+const NARROW_ROW_H = 36;
+const NAME_H = 16;
+
+/**
+ * The bars, in one of two layouts. "wide" (sm and up) puts the name in a
+ * column beside its bar. "narrow" is the phone layout: scaled from 640 wide to
+ * a 390px screen the wide chart's labels land under 6px, so each name sits on
+ * its own line above its bar and the bars take the full width.
+ */
+function MoversSvg({ movers, layout }: { movers: Mover[]; layout: "wide" | "narrow" }) {
+  const narrow = layout === "narrow";
+  const w = narrow ? NARROW_W : W;
+  const labelW = narrow ? 0 : LABEL_W;
+  const rowH = narrow ? NARROW_ROW_H : ROW_H;
+  const nameH = narrow ? NAME_H : 0;
+  const barH = narrow ? 12 : ROW_H - 10;
+  const fontSize = narrow ? 13 : 12;
+
+  const hasPos = movers.some((m) => m.change > 0);
+  const hasNeg = movers.some((m) => m.change < 0);
+  // Only a chart with both directions diverges from a centre line. A
+  // falls-only chart draws magnitude from the left like the risers chart, so
+  // each bar starts beside its name instead of far across the plot.
+  const diverging = hasPos && hasNeg;
+  const maxAbs = Math.max(1, ...movers.map((m) => Math.abs(m.change)));
+  const plotW = w - labelW - VALUE_W * (diverging ? 2 : 1);
+  const zeroX = diverging ? labelW + VALUE_W + plotW / 2 : labelW;
+  const unit = (diverging ? plotW / 2 : plotW) / maxAbs;
+  const height = TOP * 2 + movers.length * rowH;
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox={`0 0 ${w} ${height}`}
+      className={narrow ? "h-auto w-full sm:hidden" : "hidden h-auto w-full sm:block"}
+      style={narrow ? undefined : { maxHeight: `${Math.min(height, 520)}px` }}
+    >
+      <line x1={zeroX} y1={TOP + nameH} x2={zeroX} y2={height - TOP} stroke="#6B6B7D" strokeWidth="1" />
+      {movers.map((m, i) => {
+        const y = TOP + i * rowH;
+        const barY = narrow ? y + nameH + 2 : y + 5;
+        const textY = barY + barH / 2 + 4;
+        const len = Math.abs(m.change) * unit;
+        const rightward = !diverging || m.change >= 0;
+        const x = rightward ? zeroX : zeroX - len;
+        const color = m.change >= 0 ? SERIES_A : FALL_COLOR;
+        const valueX = rightward ? zeroX + len + 6 : zeroX - len - 6;
+        return (
+          <g key={`${m.slug ?? m.name}-${i}`}>
+            {narrow ? (
+              <text x={2} y={y + 12} fontSize={fontSize} fill="#D4D4DE">
+                {m.name.length > 34 ? `${m.name.slice(0, 33)}.` : m.name}
+              </text>
+            ) : (
+              <text x={LABEL_W - 8} y={textY} textAnchor="end" fontSize={fontSize} fill="#A8A8B8">
+                {m.name.length > 24 ? `${m.name.slice(0, 23)}.` : m.name}
+              </text>
+            )}
+            <rect x={x} y={barY} width={Math.max(2, len)} height={barH} rx="3" fill={color} />
+            <text x={valueX} y={textY} textAnchor={rightward ? "start" : "end"} fontSize={fontSize} fontWeight="600" fill={color}>
+              {formatSigned(m.change)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 export function ValueMoversBlock({
   caption,
@@ -66,14 +139,6 @@ export function ValueMoversBlock({
   if (biggestFall) summaryParts.push(`The biggest fall is ${biggestFall.name} at ${formatSigned(biggestFall.change)}.`);
   if (movers.length === 0) summaryParts.push("No value moves were recorded for this period.");
 
-  const hasPos = movers.some((m) => m.change > 0);
-  const hasNeg = movers.some((m) => m.change < 0);
-  const maxAbs = Math.max(1, ...movers.map((m) => Math.abs(m.change)));
-  const plotW = W - LABEL_W - VALUE_W * (hasPos && hasNeg ? 2 : 1);
-  const zeroX = hasPos && hasNeg ? LABEL_W + VALUE_W + plotW / 2 : hasNeg ? LABEL_W + VALUE_W + plotW : LABEL_W;
-  const unit = (hasPos && hasNeg ? plotW / 2 : plotW) / maxAbs;
-  const height = TOP * 2 + movers.length * ROW_H;
-
   return (
     <div className="my-6">
       <ChartFigure
@@ -106,39 +171,10 @@ export function ValueMoversBlock({
         {movers.length === 0 ? (
           <ChartEmpty>No value moves were recorded for this period.</ChartEmpty>
         ) : (
-          <svg
-            aria-hidden="true"
-            viewBox={`0 0 ${W} ${height}`}
-            className="h-auto w-full"
-            style={{ maxHeight: `${Math.min(height, 520)}px` }}
-          >
-            <line x1={zeroX} y1={TOP} x2={zeroX} y2={height - TOP} stroke="#6B6B7D" strokeWidth="1" />
-            {movers.map((m, i) => {
-              const y = TOP + i * ROW_H;
-              const len = Math.abs(m.change) * unit;
-              const x = m.change >= 0 ? zeroX : zeroX - len;
-              const color = m.change >= 0 ? SERIES_A : SERIES_B;
-              const valueX = m.change >= 0 ? zeroX + len + 6 : zeroX - len - 6;
-              return (
-                <g key={`${m.slug ?? m.name}-${i}`}>
-                  <text x={LABEL_W - 8} y={y + ROW_H / 2 + 4} textAnchor="end" fontSize="12" fill="#A8A8B8">
-                    {m.name.length > 24 ? `${m.name.slice(0, 23)}.` : m.name}
-                  </text>
-                  <rect x={x} y={y + 5} width={Math.max(2, len)} height={ROW_H - 10} rx="3" fill={color} />
-                  <text
-                    x={valueX}
-                    y={y + ROW_H / 2 + 4}
-                    textAnchor={m.change >= 0 ? "start" : "end"}
-                    fontSize="12"
-                    fontWeight="600"
-                    fill={color}
-                  >
-                    {formatSigned(m.change)}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+          <>
+            <MoversSvg movers={movers} layout="wide" />
+            <MoversSvg movers={movers} layout="narrow" />
+          </>
         )}
       </ChartFigure>
       <DatasetFooter dataset={dataset} />

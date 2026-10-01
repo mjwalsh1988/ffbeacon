@@ -43,7 +43,15 @@ export interface ValidationContext {
   playerIds: Set<string>;
   /** Article and Relay slugs already taken. */
   existingSlugs: Set<string>;
+  /**
+   * The week's carded games (the bundle's game_index), each with the player
+   * ids on its card. Empty when the bundle built no week_games dataset.
+   */
+  games?: Array<{ game_key: string; player_ids: string[] }>;
 }
+
+/** A recap shorter than this says nothing a reader can use; longer is a section, not a card. */
+export const RECAP_WORD_RANGE: [number, number] = [40, 170];
 
 /**
  * Characters the writing rules forbid, written as escapes so this file is pure
@@ -96,11 +104,20 @@ const RAW_HTML = /<\/?[a-z][^>]*>/i;
 export const SERP_TITLE_MAX = 60;
 export const SERP_DESCRIPTION_MAX = 155;
 
-/** How many FAQ entries the editorial instructions ask for (plan 8.4 item 4). */
-export const FAQ_RANGE: [number, number] = [3, 6];
+/**
+ * How many FAQ entries the editorial instructions ask for. Two to four since
+ * the premium edition (plan section 23): the game cards carry the week, and a
+ * long FAQ was the filler the rework set out to cut.
+ */
+export const FAQ_RANGE: [number, number] = [2, 4];
 
+/**
+ * In season the recaps on the game cards count toward the total, so the range
+ * rose with them (plan section 23). The news sections are shorter than they
+ * were; sixteen recaps of roughly 80 words are most of the difference.
+ */
 export const WORD_RANGES: Record<"in_season" | "off_season", [number, number]> = {
-  in_season: [1800, 4000],
+  in_season: [3000, 5500],
   off_season: [1200, 2500],
 };
 
@@ -286,6 +303,49 @@ export function validateDraft(draft: Draft, ctx: ValidationContext): ValidationR
   textProblems(draft.tl_dr, "tl_dr", errors);
   textProblems(draft.format_note, "format_note", errors);
 
+  // The owner's take is written on the review page, never by a run.
+  if (draft.editor_take && draft.editor_take.trim()) {
+    errors.push("editor_take is written by the owner on the review page; leave it null");
+  }
+
+  // Game recaps: exactly one per carded game, each fun stat about a player on
+  // that game's card, and the same text rules as everything else.
+  const cardGames = ctx.games ?? [];
+  const cardByKey = new Map(cardGames.map((g) => [g.game_key, new Set(g.player_ids)]));
+  const recapped = new Set<string>();
+  for (const [i, g] of draft.games.entries()) {
+    const where = `games[${i}] (${g.game_key})`;
+    if (!cardByKey.has(g.game_key)) {
+      errors.push(`${where} is not a game in the bundle's week_games`);
+    } else if (recapped.has(g.game_key)) {
+      errors.push(`${where} is recapped twice`);
+    }
+    recapped.add(g.game_key);
+    textProblems(g.headline, `${where} headline`, errors);
+    textProblems(g.recap_md, `${where} recap`, errors);
+    if (/<script/i.test(g.recap_md)) errors.push(`${where} recap contains a script`);
+    const recapWords = countArticleWords(g.recap_md);
+    if (recapWords < RECAP_WORD_RANGE[0] || recapWords > RECAP_WORD_RANGE[1]) {
+      warnings.push(`${where} recap is ${recapWords} words; aim for ${RECAP_WORD_RANGE[0]} to ${RECAP_WORD_RANGE[1]}`);
+    }
+    words += countArticleWords(g.headline) + recapWords;
+    if (g.fun_stat) {
+      textProblems(g.fun_stat.text, `${where} fun_stat`, errors);
+      const card = cardByKey.get(g.game_key);
+      if (card && !card.has(g.fun_stat.player_id)) {
+        errors.push(`${where} fun_stat names player ${g.fun_stat.player_id}, who is not on that game's card`);
+      }
+      words += countArticleWords(g.fun_stat.text);
+    }
+  }
+  if (inSeason) {
+    for (const g of cardGames) {
+      if (!recapped.has(g.game_key)) errors.push(`game ${g.game_key} has no recap in games; every carded game gets one`);
+    }
+  } else if (draft.games.length > 0 && cardGames.length === 0) {
+    warnings.push("games carries recaps but this period has no game cards; they will not render");
+  }
+
   // Required in-season blocks (errors in season, warnings off-season). The
   // scoreboard block is the exception: the bundle only builds a week-line
   // dataset for the regular and post seasons, so through the pre-season that
@@ -293,7 +353,10 @@ export function validateDraft(draft: Draft, ctx: ValidationContext): ValidationR
   // exist is a rule no pre-season edition can satisfy.
   const hasWeekLines = ctx.period.phase === "regular" || ctx.period.phase === "post";
   const kinds = new Set(draft.blocks.map((b) => b.kind));
+  const offeredKinds = new Set(Object.values(ctx.datasets));
   for (const req of REQUIRED_IN_SEASON_BLOCKS) {
+    // A block whose dataset this bundle never built is not asked for at all.
+    if (req.needsDataset && !offeredKinds.has(req.needsDataset)) continue;
     if (!req.kinds.some((k) => kinds.has(k))) {
       const required = inSeason && (!req.needsWeekLines || hasWeekLines);
       (required ? errors : warnings).push(`missing ${req.label}`);

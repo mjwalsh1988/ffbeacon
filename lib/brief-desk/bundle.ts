@@ -10,7 +10,10 @@
  * column: values through player_value_trends on the registry's default source
  * per edition format (resolveSourceForFormat, so a source that does not cover
  * a format falls through the way the site does, and the bundle names the
- * source actually used per format); the week line through player_stats; the
+ * source actually used per format; for an override, which always names a
+ * closed past period, the same trend calculation is run over
+ * player_value_history as of the period's end instead, so a backfilled week
+ * shows that week's movers and not today's); the week line through player_stats; the
  * projection and beat rate through lib/projections/read.ts
  * loadAdjustedProjections, which resolves the projection source itself.
  *
@@ -60,7 +63,10 @@ import { loadBriefDeskSettings, type BriefDeskSettings } from "./settings";
 import { isInSeasonPhase, requiredSlugPrefix } from "./slug";
 import type { Bundle, BundleFormatValue, BundleNotDue, BundlePlayer, BundleRelay, BundleTeam, BundleWeekResult } from "./types";
 import { loadWeekResults } from "./week-results";
+import { loadGameDatasets, PPR_STORED_SCORING } from "./game-data";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { computeTrendRows, INTERVAL_DAYS_BY_CADENCE, type HistoryRow } from "@/lib/calculate-trends";
+import { FALLBACK_STALE_DAYS, staleDaysFor } from "@/lib/beacon/freshness";
 
 type Admin = SupabaseClient<Database>;
 
@@ -74,7 +80,12 @@ const MAX_ROLL_BACK_MS = 90 * 86_400_000;
 /** How many players the datasets need names for beyond the Relays' own. */
 const MOVER_CANDIDATES = 30;
 const WAIVER_CANDIDATES = 60;
-const EXAMPLE_PATH = path.join("docs", "beacon-brief", "examples", "week-1-2026-brief.json");
+/**
+ * The reference edition the run matches (instruction 11). The week 3, 2026
+ * redo is the first in the game-by-game format (plan section 23); week 1 stays
+ * beside it in the folder as the record of the old shape.
+ */
+const EXAMPLE_PATH = path.join("docs", "beacon-brief", "examples", "week-3-2026-brief.json");
 
 /** The typed defensive columns (migration 0296), read beside the offensive ones. */
 const IDP_STAT_COLUMNS =
@@ -222,13 +233,17 @@ async function loadPeriodRelays(admin: Admin, period: EditionPeriod): Promise<Bu
       .range(from, to),
   );
   const playersByRelay = new Map<string, string[]>();
+  const primaryByRelay = new Map<string, string[]>();
   const teamIdsByRelay = new Map<string, string[]>();
   for (const batch of chunk(rows.map((r) => r.id), ID_BATCH)) {
     const [{ data: rp }, { data: rt }] = await Promise.all([
-      admin.from("relay_players").select("relay_id, player_id").in("relay_id", batch),
+      admin.from("relay_players").select("relay_id, player_id, is_primary").in("relay_id", batch),
       admin.from("relay_teams").select("relay_id, team_id").in("relay_id", batch),
     ]);
-    for (const r of rp ?? []) playersByRelay.set(r.relay_id, [...(playersByRelay.get(r.relay_id) ?? []), r.player_id]);
+    for (const r of rp ?? []) {
+      playersByRelay.set(r.relay_id, [...(playersByRelay.get(r.relay_id) ?? []), r.player_id]);
+      if (r.is_primary) primaryByRelay.set(r.relay_id, [...(primaryByRelay.get(r.relay_id) ?? []), r.player_id]);
+    }
     for (const r of rt ?? []) teamIdsByRelay.set(r.relay_id, [...(teamIdsByRelay.get(r.relay_id) ?? []), r.team_id]);
   }
   const teamIds = [...new Set([...teamIdsByRelay.values()].flat())];
@@ -237,31 +252,39 @@ async function loadPeriodRelays(admin: Admin, period: EditionPeriod): Promise<Bu
     const { data } = await admin.from("nfl_teams").select("id, abbreviation").in("id", batch);
     for (const t of data ?? []) abbrById.set(t.id, t.abbreviation);
   }
-  return rows.map((r) => ({
-    id: r.id,
-    slug: r.slug,
-    permalink: `/brief/relay/${r.slug}`,
-    kind: r.kind,
-    headline: r.headline,
-    facts: parseRelayFacts(r.facts),
-    timeline: r.timeline,
-    availability: r.availability,
-    relevance_tier: r.relevance_tier,
-    source_handle: r.source_handle,
-    source_url: r.source_url,
-    source_posted_at: r.source_posted_at,
-    players: [...new Set(playersByRelay.get(r.id) ?? [])],
-    teams: [...new Set((teamIdsByRelay.get(r.id) ?? []).map((id) => abbrById.get(id)).filter((a): a is string => Boolean(a)))].sort(),
-    follows_relay_id: r.follows_relay_id,
-    status: r.status === "hidden" ? "hidden" : "published",
-  }));
+  return rows.map((r) => {
+    const players = [...new Set(playersByRelay.get(r.id) ?? [])];
+    return {
+      id: r.id,
+      slug: r.slug,
+      permalink: `/brief/relay/${r.slug}`,
+      kind: r.kind,
+      headline: r.headline,
+      facts: parseRelayFacts(r.facts),
+      timeline: r.timeline,
+      availability: r.availability,
+      relevance_tier: r.relevance_tier,
+      source_handle: r.source_handle,
+      source_url: r.source_url,
+      source_posted_at: r.source_posted_at,
+      players,
+      subject_player_ids: [...new Set(primaryByRelay.get(r.id) ?? (players.length === 1 ? players : []))],
+      teams: [...new Set((teamIdsByRelay.get(r.id) ?? []).map((id) => abbrById.get(id)).filter((a): a is string => Boolean(a)))].sort(),
+      follows_relay_id: r.follows_relay_id,
+      status: r.status === "hidden" ? "hidden" : "published",
+    };
+  });
 }
 
 async function loadPlayers(admin: Admin, ids: string[]): Promise<Map<string, DatasetPlayer>> {
   const out = new Map<string, DatasetPlayer>();
   for (const batch of chunk([...new Set(ids)], ID_BATCH)) {
-    const { data } = await admin.from("players").select("id, slug, full_name, first_name, last_name, position, team").in("id", batch);
-    for (const p of data ?? []) out.set(p.id, { id: p.id, name: playerName(p), slug: p.slug, position: p.position, team: p.team });
+    const { data } = await admin.from("players").select("id, slug, full_name, first_name, last_name, position, team, external_ids").in("id", batch);
+    for (const p of data ?? []) {
+      const sid = (p.external_ids as { sleeper?: unknown } | null)?.sleeper;
+      const sleeperId = typeof sid === "string" || typeof sid === "number" ? String(sid) : null;
+      out.set(p.id, { id: p.id, name: playerName(p), slug: p.slug, position: p.position, team: p.team, sleeper_id: sleeperId });
+    }
   }
   return out;
 }
@@ -280,32 +303,83 @@ async function loadTeams(admin: Admin, abbreviations: string[], results: Map<str
   return out;
 }
 
-/** One format's trend rows on the registry's default source for that format. */
-async function loadFormatTrend(admin: Admin, formatSlug: string): Promise<FormatTrend | null> {
+type TrendInputRow = { player_id: string; current_value: number; change_7d: number | null; change_30d: number | null };
+
+/**
+ * History back from `asOf` far enough for the 30-day window plus its
+ * half-window bookend tolerance (lib/calculate-trends.ts), with margin.
+ */
+const AS_OF_LOOKBACK_DAYS = 50;
+
+/**
+ * One format and source's trend rows AS OF a closed period's end, computed
+ * from player_value_history by the nightly trend calculation itself
+ * (computeTrendRows with its clock set to `asOf`). player_value_trends only
+ * ever holds today's figures, so reading it for a backfilled week would print
+ * this week's movers under that week's heading.
+ */
+async function loadTrendRowsAsOf(admin: Admin, formatConfigId: string, source: string, asOf: string): Promise<TrendInputRow[]> {
+  const asOfMs = new Date(asOf).getTime();
+  const since = new Date(asOfMs - AS_OF_LOOKBACK_DAYS * 86_400_000).toISOString();
+  const [history, cadence] = await Promise.all([
+    fetchAllRows<HistoryRow>("brief desk trends as of", (from, to) =>
+      admin
+        .from("player_value_history")
+        .select("id, player_id, format_config_id, source, value, captured_at, formula_offset")
+        .eq("format_config_id", formatConfigId)
+        .eq("source", source)
+        .gte("captured_at", since)
+        .lte("captured_at", asOf)
+        .order("captured_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
+    admin.from("source_registry").select("update_cadence").eq("slug", source).maybeSingle(),
+  ]);
+  // The nightly calc iterates in id order and its per-day dedup keeps the
+  // first row seen, so the same order gives the same figures.
+  history.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const update = cadence.data?.update_cadence ?? "daily";
+  const intervals = new Map([[source, INTERVAL_DAYS_BY_CADENCE[update] ?? INTERVAL_DAYS_BY_CADENCE.daily]]);
+  const stale = new Map([[source, staleDaysFor(update, FALLBACK_STALE_DAYS)]]);
+  return computeTrendRows(history, asOfMs, intervals, stale)
+    .map((r) => ({ player_id: r.player_id, current_value: r.current_value, change_7d: r.change_7d, change_30d: r.change_30d }))
+    .sort((a, b) => b.current_value - a.current_value || (a.player_id < b.player_id ? -1 : 1));
+}
+
+/**
+ * One format's trend rows on the registry's default source for that format:
+ * today's player_value_trends, or, for a closed past period (`asOf`), the
+ * same figures as they stood at its end.
+ */
+async function loadFormatTrend(admin: Admin, formatSlug: string, asOf: string | null): Promise<FormatTrend | null> {
   const [formats, registry] = await Promise.all([getActiveFormats(admin), getAvailableSources(admin)]);
   const format = formats.find((f) => f.slug === formatSlug);
   if (!format) return null;
   const resolved = resolveSourceForFormat(registry, "player_value_history", formatSlug, null);
   if (!resolved.source) {
-    return { formatSlug, formatDisplay: format.display_name, sourceSlug: null, sourceDisplay: "no source", rows: [] };
+    return { formatSlug, formatDisplay: format.display_name, sourceSlug: null, sourceDisplay: "no source", rows: [], asOf };
   }
   const source = resolved.source;
-  const rows = await pageAll<{ player_id: string; current_value: number; change_7d: number | null; change_30d: number | null }>((from, to) =>
-    admin
-      .from("player_value_trends")
-      .select("player_id, current_value, change_7d, change_30d")
-      .eq("format_config_id", format.id)
-      .eq("source", source)
-      .order("current_value", { ascending: false })
-      .order("player_id", { ascending: true })
-      .range(from, to),
-  );
+  const rows = asOf
+    ? await loadTrendRowsAsOf(admin, format.id, source, asOf)
+    : await pageAll<TrendInputRow>((from, to) =>
+        admin
+          .from("player_value_trends")
+          .select("player_id, current_value, change_7d, change_30d")
+          .eq("format_config_id", format.id)
+          .eq("source", source)
+          .order("current_value", { ascending: false })
+          .order("player_id", { ascending: true })
+          .range(from, to),
+      );
   return {
     formatSlug,
     formatDisplay: format.display_name,
     sourceSlug: source,
     sourceDisplay: describeSource(registry, source),
     rows: rankTrendRows(rows),
+    asOf,
   };
 }
 
@@ -381,7 +455,7 @@ function readExample(): { slug: string; draft_payload: unknown } | null {
   try {
     const raw = readFileSync(path.join(process.cwd(), EXAMPLE_PATH), "utf8");
     const parsed = JSON.parse(raw) as { slug?: unknown };
-    return { slug: typeof parsed.slug === "string" ? parsed.slug : "week-1-fantasy-football-news-injuries-2026", draft_payload: parsed };
+    return { slug: typeof parsed.slug === "string" ? parsed.slug : "week-3-fantasy-football-news-injuries-2026", draft_payload: parsed };
   } catch {
     return null;
   }
@@ -412,6 +486,8 @@ async function assemble(
   settings: BriefDeskSettings,
   state: NflStateLike,
   previousAttempt: Bundle["previous_attempt"],
+  /** A closed past period's end (an override): values are read as of then. */
+  trendsAsOf: string | null,
 ): Promise<Bundle> {
   const computedAt = new Date().toISOString();
   const inSeason = isInSeasonPhase(period.phase);
@@ -419,7 +495,7 @@ async function assemble(
 
   const [relays, trends, faabSettings] = await Promise.all([
     loadPeriodRelays(admin, period),
-    Promise.all(EDITION_FORMAT_SLUGS.map((slug) => loadFormatTrend(admin, slug))),
+    Promise.all(EDITION_FORMAT_SLUGS.map((slug) => loadFormatTrend(admin, slug, trendsAsOf))),
     loadFaabSettings(admin),
   ]);
   const dynasty = trends[0];
@@ -500,7 +576,9 @@ async function assemble(
       season: Number(state.season),
       fromWeek: nextWeek,
       toWeek: nextWeek,
-      scoringSettings: null,
+      // PPR, like every other figure in the edition. null scored the next-week
+      // projection in standard scoring while the prose called it points.
+      scoringSettings: { ...PPR_STORED_SCORING },
       positionByPlayer,
       currentWeek: nextWeek,
     });
@@ -585,6 +663,32 @@ async function assemble(
     (datasets[id]?.rows ?? []).slice(0, 10).map((r) => ({ player_id: String(r.player_id), name: String(r.name), change_7d: Number(r.change_7d ?? 0) }));
 
   const weekResults = hasWeek ? await loadWeekResults(admin, seasonNumber, seasonType, period.week!) : new Map<string, BundleWeekResult>();
+
+  // The premium edition's game cards, awards and projection report (plan
+  // section 20). Only for a real week with box scores; a failure here costs
+  // the edition its cards, never the bundle, and the validator then does not
+  // ask for blocks whose datasets were not built.
+  let gameIndex: Bundle["game_index"] = [];
+  if (hasWeek && lines && lines.length > 0) {
+    try {
+      const games = await loadGameDatasets(admin, {
+        season: seasonNumber,
+        seasonType: seasonType as "regular" | "post",
+        week: period.week!,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        lines,
+        results: weekResults,
+        formatSlugs: EDITION_FORMAT_SLUGS,
+        computedAt,
+      });
+      Object.assign(datasets, games.datasets);
+      gameIndex = games.index;
+    } catch (err) {
+      console.error("[brief-desk/bundle] game datasets failed", err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const [{ data: previousRows }, teams] = await Promise.all([
     admin
       .from("articles")
@@ -632,6 +736,7 @@ async function assemble(
       dvp_notes: [],
     },
     datasets,
+    game_index: gameIndex,
     block_kinds: BLOCK_KIND_META,
     section_icons: SECTION_ICONS,
     example: readExample(),
@@ -660,7 +765,7 @@ function projectionWindow(state: NflStateLike): number | null {
  * Sleeper while the feature is off), so this costs nothing on the cheap
  * due-check path that runs before the memo.
  */
-async function sourceKey(admin: Admin, state: NflStateLike): Promise<string> {
+async function sourceKey(admin: Admin, state: NflStateLike, period: EditionPeriod): Promise<string> {
   const [registry, settings] = await Promise.all([getAvailableSources(admin), loadPowerPulseSettings(admin)]);
   const values = EDITION_FORMAT_SLUGS.map(
     (slug) => resolveSourceForFormat(registry, "player_value_history", slug, null).source ?? "none",
@@ -676,7 +781,19 @@ async function sourceKey(admin: Admin, state: NflStateLike): Promise<string> {
           toWeek: week,
           settings: settings.beaconProjections,
         });
-  return `${values.join(",")}|${projection}`;
+  // The game cards grade weeks 1 to the edition's week (./game-data.ts), a
+  // second window that can resolve to a different engine than next week's.
+  const graded =
+    (period.phase === "regular" || period.phase === "post") && period.week !== null
+      ? await resolveProjectionSourceForWindow({
+          supabase: admin,
+          season: Number(period.season),
+          fromWeek: 1,
+          toWeek: period.week,
+          settings: settings.beaconProjections,
+        })
+      : "none";
+  return `${values.join(",")}|${projection}|${graded}`;
 }
 
 /**
@@ -684,7 +801,17 @@ async function sourceKey(admin: Admin, state: NflStateLike): Promise<string> {
  * names a past week or an off-season close; the route only passes one when
  * the request also carries an admin session.
  */
-export async function buildBundle(admin: Admin, now: Date, override?: BundleOverride | null): Promise<Bundle | BundleNotDue> {
+export async function buildBundle(
+  admin: Admin,
+  now: Date,
+  override?: BundleOverride | null,
+  /**
+   * Backfill only (./backfill.ts): build the bundle for a week that already
+   * has a published edition, so it can be redrafted in the current format.
+   * Requires an override. No route passes this; the backfill script does.
+   */
+  opts?: { ignoreExistingEdition?: boolean },
+): Promise<Bundle | BundleNotDue> {
   const [settings, rawState] = await Promise.all([loadBriefDeskSettings(admin), getNflState()]);
   const state = toStateLike(rawState);
   const cadence = resolveCadence(state, settings, now);
@@ -707,7 +834,7 @@ export async function buildBundle(admin: Admin, now: Date, override?: BundleOver
 
   const editions = await loadPeriodEditions(admin, period);
   const blocking = editions.find((e) => e.status === "in_review" || e.status === "published");
-  if (blocking) {
+  if (blocking && !(opts?.ignoreExistingEdition && override)) {
     return {
       due: false,
       reason: `this period already has an edition ${blocking.status === "published" ? "published" : "in review"}`,
@@ -734,14 +861,17 @@ export async function buildBundle(admin: Admin, now: Date, override?: BundleOver
     ? { notes: rejected.review_notes, rejected_at: rejected.reviewed_at, draft_payload: rejected.draft_payload }
     : null;
 
-  const sources = await sourceKey(admin, state);
+  const sources = await sourceKey(admin, state, period);
   const key = `${BUNDLE_MEMO_PREFIX}${period.periodStart}|${period.periodEnd}|${override ? "override" : "live"}|${sources}`;
   // A bundle is a few hundred kilobytes, and every closed period, source flip
   // or override used to leave its entry referenced for the life of the
   // process. Evict the predecessors under this prefix, keeping the key about
   // to be read, so at most one bundle is held.
   bustMemo(BUNDLE_MEMO_PREFIX, key);
-  const bundle = await memoTtl(key, BUNDLE_TTL_MS, () => assemble(admin, period!, settings, state!, previousAttempt));
+  // An override always names a closed period (checked above), so its values
+  // are read as they stood at its end; the live run reads today's trends.
+  const trendsAsOf = override ? period.periodEnd : null;
+  const bundle = await memoTtl(key, BUNDLE_TTL_MS, () => assemble(admin, period!, settings, state!, previousAttempt, trendsAsOf));
   // The rejected attempt can change inside the memo window; it is cheap and is
   // read fresh above, so the memoised bundle is returned with the live value.
   return { ...bundle, previous_attempt: previousAttempt, instructions: settings.briefInstructions };

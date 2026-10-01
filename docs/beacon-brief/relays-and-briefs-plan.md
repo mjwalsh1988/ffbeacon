@@ -1901,3 +1901,124 @@ above, each deliberate:
 
 What the validator flagged on the first drafts, what the owner changed, and
 how long the review took still go here (BD-T048, BD-T051).
+
+## 23. The game-by-game edition (approved 2026-09-30, built 2026-10-01)
+
+The owner asked for a more premium weekly edition with less filler: a card
+for every NFL game, betting lines, fun stat lines, risers and fallers per
+game, projection beat rates, the bench-points figure from synced leagues, and
+an editor's take in the owner's own words. Betting lines (spread, total,
+moneylines, open and close) are in; game weather is a later addition and is
+not built. This section is the specification; progress.md BD-T096 onward is
+the build record.
+
+### 23.1 What an in-season edition is now
+
+In order: the summary, the editor's take (when written), then six sections.
+
+1. Week N in numbers: a short intro, the week_awards block, the stat tiles
+   and the top scorers table.
+2. Game by game: one or two sentences, then the game_cards block.
+3. How the projections did: the projection_report block.
+4. Injuries and availability: the timeline, the return planner and one line
+   per player, not a paragraph per injury.
+5. Moves and role changes: trades, signings, releases and depth charts as one
+   short list.
+6. What to do this week: the action cards, the value movers and the format
+   toggle, one sentence per action.
+7. Two to four FAQ entries.
+
+In season the edition is 3,000 to 5,500 words counting the recaps; the
+validator's FAQ range is two to four.
+
+### 23.2 The game card
+
+One card per game that has a final and a line. The figures are dataset cells
+(`week_games`, `game_player_lines`, built in `lib/brief-desk/games.ts`); the
+run writes only `draft.games[]`: a headline, a recap of 40 to 170 words and an
+optional fun stat that names one player on that card. Each card shows: both
+logos and the final; the closing spread and where it opened; who covered;
+the total and whether it went over; both moneylines; the score the line
+implied against the score that happened; the recap; the fun stat with the
+named player's real line under it; the top three PPR lines on each side
+against the projection; and the two biggest value risers and fallers among
+the game's players over the edition's period. A jump menu leads the block.
+
+Finals come from `lib/brief-desk/week-results.ts`. That formula changed on
+2026-10-01: a special-teams touchdown is already in the other side's
+`pts_allow`, so only defensive touchdowns and safeties are added. All 96 team
+scores of weeks 1 to 3 of 2026 now match ESPN.
+
+### 23.3 The week in numbers
+
+`week_awards`: the top scorer and the top line at each position, the biggest
+beat and miss of the projection (a miss needs a projection of 10 or more),
+the biggest dynasty value jump and drop among the week's card players, the
+highest-scoring game, the biggest upset by closing moneyline, and three
+bench figures from the Manager Ledger: points left on the bench per team,
+losses a better lineup on the same roster would have won, and the costliest
+single benching, shown as the two players and the swing only (an empty
+starting slot is not a benching and is left out).
+The bench tiles appear only with at least 40 graded teams, and only as
+totals: no league, team or manager is named.
+
+### 23.4 The projection report
+
+`projection_report`: the week by position (graded games, how many beat the
+projection, the average miss and the lean), then the season's most reliable
+players (beat it in at least 75 percent of graded games, projected for 6 or
+more a game) and the furthest below it (projected for 8 or more a game). A
+graded game is a published projection above zero and a game played. The
+figure is the projection engine's own published number before FF Beacon's
+adjustment, read through `loadAdjustedProjections` (`rawPoints`), so the
+source is resolved by the shared read path and named by its display name.
+
+### 23.5 The editor's take
+
+`draft.editor_take`, written by the owner on the review page and shown under
+the summary as "Editor's take, Michael Walsh". The validator refuses a draft
+that arrives carrying one. Saving an empty box removes it.
+
+### 23.6 Backfilling a published week
+
+A week published before this format is redrafted without the pipeline,
+because approval posts to Discord and emails the owner, and a week that was
+announced once is not announced again (`lib/brief-desk/backfill.ts`):
+
+1. `scripts/brief-desk/backfill-edition.ts bundle` writes the week's bundle
+   (built with `ignoreExistingEdition`, which no route can pass).
+2. `... store` validates the redrafted payload against that bundle and keeps
+   it as a private `articles` row with status `draft` and
+   `metadata.backfill_of` naming the live article. One redo per live edition.
+3. The owner reviews it at `/admin/brief-desk/editions/{id}` and its preview at
+   `/brief/preview/{id}`, can add the editor's take, and presses "Apply to the
+   live edition". That rewrites the live article and its `brief_editions` row
+   in place (same id, slug, publish date and Discord history), snapshots a
+   revision and deletes the redo. Nothing is queued anywhere.
+
+The Apply button works only from a production build (applyBackfill refuses
+otherwise), so a local dev server pointed at the production database cannot
+run it early. Apply a backfill only after this code is deployed. The deployed draft schema
+is strict and does not know `games` or `editor_take`, so a new-format payload
+on the live page before the deploy renders the plain-text fallback.
+
+### 23.7 Betting lines
+
+`nfl_game_odds` holds the latest line for an upcoming game and is read by the
+projection engine. Its daily sync used to rewrite games after kickoff, when
+ESPN's scoreboard no longer carries odds, which replaced fifteen of sixteen
+lines with nulls in weeks 2 and 3 of 2026; it now skips any game that has
+kicked off. The settled line lives in `nfl_game_lines` (migration 0333),
+written once per game, four hours after kickoff, from ESPN's per-event odds
+document, at the tail of the same daily cron; a game not captured within 14
+days is given up on so it cannot hold the queue. Weeks 1 to 3 were backfilled
+with `scripts/sync-nfl-game-lines.ts`.
+
+### 23.8 Deploy order
+
+1. Deploy the code.
+2. Apply migration 0334, which moves `bd_brief_instructions` to the new seed
+   only if the row still holds the previous seed byte for byte.
+3. Check that the routine environment's copy of `scripts/brief-desk/prompt.md`
+   matches the repository's (it now mentions `game_index`).
+4. Review and apply the week 3 redo, then redraft weeks 2 and 1 the same way.

@@ -22,6 +22,7 @@ import {
   type EditionTextEdit,
 } from "@/lib/brief-desk/publish";
 import { BRIEF_DESK_MEMO_KEY } from "@/lib/brief-desk/settings";
+import { applyBackfill } from "@/lib/brief-desk/backfill";
 import { mergeReviewTicks } from "@/lib/brief-desk/review-ticks";
 import {
   setRelayStatus,
@@ -56,6 +57,13 @@ const EDITION_TEXT_EDIT = z
     tl_dr: z.string().max(4000).optional(),
     sections: z.record(z.string().max(80), z.string().max(60_000)).optional(),
     blocks: z.record(z.string().max(80), z.object({ caption: z.string().max(400), conclusion: z.string().max(1000) }).strict()).optional(),
+    editor_take: z.string().max(2000).optional(),
+    games: z
+      .record(
+        z.string().regex(/^[A-Z]{2,4}-[A-Z]{2,4}$/),
+        z.object({ headline: z.string().max(100), recap_md: z.string().max(1400), fun_stat_text: z.string().max(240).optional() }).strict(),
+      )
+      .optional(),
   })
   .strict();
 const RELAY_TEXT_EDIT = z
@@ -154,6 +162,26 @@ export async function saveEditionText(
   const res = await updateEditionText(admin, { editionId: id.data, reviewedBy: userId, edit: body.data });
   if (!res.ok) return fail(res.error);
   revalidateEdition(editionId);
+  revalidatePath(`/brief/${res.slug}`);
+  return { ok: true };
+}
+
+/**
+ * Put a backfill redo onto the live edition in place (lib/brief-desk/backfill.ts).
+ * Never posts to Discord and never emails: the week was announced when it
+ * first went out.
+ */
+export async function applyBriefBackfill(editionId: string): Promise<ActionResult> {
+  const { userId } = await requireAdmin(`${BD}/editions/${editionId}`);
+  const id = parse(ID, editionId);
+  if (!id.ok) return fail(id.error);
+  const admin = createAdminClient();
+  const res = await applyBackfill(admin, { editionId: id.data, reviewedBy: userId });
+  if (!res.ok) return fail(res.error);
+  revalidatePath(`${BD}`);
+  revalidatePath(`${BD}/editions`);
+  revalidatePath("/brief");
+  revalidatePath("/brief/editions");
   revalidatePath(`/brief/${res.slug}`);
   return { ok: true };
 }

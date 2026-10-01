@@ -28,9 +28,12 @@ describe("deriveWeekResults", () => {
     expect(r.get("LV")?.points_for).toBe(26);
   });
 
-  it("adds a special-teams touchdown", () => {
-    const r = deriveWeekResults([line("SEA", "ARI", { pts_allow: 7, def_st_td: 1 }), line("ARI", "SEA", { pts_allow: 24 })]);
-    expect(r.get("SEA")?.points_for).toBe(30);
+  it("does NOT add a special-teams touchdown, which the other side's points allowed already counts (Vikings 23, Buccaneers 16, week 3)", () => {
+    // Myles Price's 86-yard punt return is inside Tampa Bay's pts_allow of 23.
+    // Adding def_st_td on top reported 29 to 16.
+    const r = deriveWeekResults([line("MIN", "TB", { pts_allow: 16, def_st_td: 1 }), line("TB", "MIN", { pts_allow: 23 })]);
+    expect(r.get("MIN")).toMatchObject({ points_for: 23, points_against: 16, outcome: "W" });
+    expect(r.get("TB")).toMatchObject({ points_for: 16, points_against: 23 });
   });
 
   it("leaves out a game with one line or no points allowed rather than guessing", () => {

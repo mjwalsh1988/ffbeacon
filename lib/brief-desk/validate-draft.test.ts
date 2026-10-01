@@ -45,9 +45,9 @@ function goodDraft(): Draft {
     tl_dr: para(6),
     format_note: "Values and ranks below are shown for Dynasty Superflex PPR and Redraft PPR (1QB) on KeepTradeCut.",
     sections: [
-      { id: "injuries", heading: "Injuries and availability", icon: "injury", eyebrow: "Week 2, part 1 of 3", body_md: para(70), relay_ids: [R1], block_refs: ["tiles", "timeline"], citations: [{ url: "https://example.com/a", claim: "Barkley placed on IR" }] },
-      { id: "moves", heading: "Trades, signings and releases", icon: "transaction", eyebrow: "Week 2, part 2 of 3", body_md: para(70), relay_ids: [R2], block_refs: ["movers", "toggle"], citations: [] },
-      { id: "actions", heading: "What to do this week", icon: "waiver", eyebrow: "Week 2, part 3 of 3", body_md: para(70), relay_ids: [], block_refs: ["actions", "scorers"], citations: [] },
+      { id: "injuries", heading: "Injuries and availability", icon: "injury", eyebrow: "Week 2, part 1 of 3", body_md: para(115), relay_ids: [R1], block_refs: ["tiles", "timeline"], citations: [{ url: "https://example.com/a", claim: "Barkley placed on IR" }] },
+      { id: "moves", heading: "Trades, signings and releases", icon: "transaction", eyebrow: "Week 2, part 2 of 3", body_md: para(115), relay_ids: [R2], block_refs: ["movers", "toggle"], citations: [] },
+      { id: "actions", heading: "What to do this week", icon: "waiver", eyebrow: "Week 2, part 3 of 3", body_md: para(115), relay_ids: [], block_refs: ["actions", "scorers"], citations: [] },
     ],
     blocks: [
       { id: "tiles", kind: "stat_tiles", dataset_id: "week_stat_tiles", caption: "The week in six numbers", conclusion: "Quiet week." },
@@ -70,7 +70,7 @@ describe("validateDraft", () => {
     const out = validateDraft(goodDraft(), CTX);
     expect(out.errors).toEqual([]);
     expect(out.ok).toBe(true);
-    expect(out.word_count).toBeGreaterThan(1800);
+    expect(out.word_count).toBeGreaterThan(3000);
   });
 
   it("rejects a relay that is not in the bundle and warns about an uncited tier 3", () => {
@@ -149,6 +149,71 @@ describe("validateDraft", () => {
     d.faq = Array.from({ length: 3 }, (_, i) => ({ question: `Question number ${i + 1} about the week?`, answer_md: para(3) }));
     const quiet = validateDraft(d, CTX);
     expect(quiet.warnings.filter((w) => w.includes("search result") || w.startsWith("faq has"))).toEqual([]);
+  });
+
+  describe("game recaps (plan section 23)", () => {
+    const GAME_CTX: ValidationContext = {
+      ...CTX,
+      datasets: { ...CTX.datasets, week_games: "week_games", week_awards: "week_awards", projection_report: "projection_report" },
+      games: [
+        { game_key: "ATL-GB", player_ids: [P1] },
+        { game_key: "NYJ-DET", player_ids: [] },
+      ],
+    };
+    const recap = (game_key: string) => ({
+      game_key,
+      headline: "A headline about the game",
+      recap_md: para(8),
+      fun_stat: null,
+    });
+    function gameDraft(): Draft {
+      const d = goodDraft();
+      d.blocks.push(
+        { id: "cards", kind: "game_cards", dataset_id: "week_games", caption: "Every game", conclusion: "Two games.", options: {} },
+        { id: "awards", kind: "week_awards", dataset_id: "week_awards", caption: "In numbers", conclusion: "One line.", options: {} },
+        { id: "proj", kind: "projection_report", dataset_id: "projection_report", caption: "Projections", conclusion: "Even.", options: {} },
+      );
+      d.sections[0].block_refs.push("cards", "awards", "proj");
+      d.games = [recap("ATL-GB"), recap("NYJ-DET")];
+      return d;
+    }
+
+    it("accepts one recap per carded game", () => {
+      const out = validateDraft(gameDraft(), GAME_CTX);
+      expect(out.errors).toEqual([]);
+    });
+
+    it("rejects a missing recap, an unknown game, a fun stat about a player not on the card, and an editor's take from the run", () => {
+      const d = gameDraft();
+      d.games = [
+        { ...recap("ATL-GB"), fun_stat: { player_id: "55555555-5555-4555-8555-555555555555", text: "A notable line from the game." } },
+        recap("KC-MIA"),
+      ];
+      d.editor_take = "Written by the run.";
+      const out = validateDraft(d, GAME_CTX);
+      expect(out.errors.some((e) => e.includes("NYJ-DET has no recap"))).toBe(true);
+      expect(out.errors.some((e) => e.includes("(KC-MIA) is not a game"))).toBe(true);
+      expect(out.errors.some((e) => e.includes("not on that game's card"))).toBe(true);
+      expect(out.errors.some((e) => e.includes("editor_take is written by the owner"))).toBe(true);
+    });
+
+    it("requires the three premium blocks only when the bundle built their datasets", () => {
+      const d = gameDraft();
+      d.blocks = d.blocks.filter((b) => !["game_cards", "week_awards", "projection_report"].includes(b.kind));
+      d.sections[0].block_refs = ["tiles", "timeline"];
+      const withData = validateDraft(d, GAME_CTX);
+      expect(withData.errors.some((e) => e.includes("missing a game_cards block"))).toBe(true);
+      expect(withData.errors.some((e) => e.includes("missing a projection_report block"))).toBe(true);
+      d.games = [];
+      const without = validateDraft(d, CTX);
+      expect(without.errors.filter((e) => e.includes("game_cards") || e.includes("week_awards") || e.includes("projection_report"))).toEqual([]);
+    });
+
+    it("runs the banned-character check on a recap", () => {
+      const d = gameDraft();
+      d.games[0].recap_md += " a dash \u2014 here";
+      expect(validateDraft(d, GAME_CTX).errors.some((e) => e.includes("(ATL-GB) recap contains an em dash"))).toBe(true);
+    });
   });
 
   it("rejects an edition that does not match the open period", () => {

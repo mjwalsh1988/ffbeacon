@@ -1,0 +1,859 @@
+{
+  "edition": {
+    "week": 3,
+    "season": "2026",
+    "period_end": "2026-09-29T13:00:00.000Z",
+    "period_start": "2026-09-22T13:00:00.000Z"
+  },
+  "title": "Week 3 Fantasy Football News and Injuries (2026): Achane, Dart and Caleb go down",
+  "slug": "week-3-fantasy-football-news-injuries-2026",
+  "meta_description": "Week 3 game by game: every final against its line, the projection report card, Achane's torn ACL, Dart's surgery, and the waiver claims to make.",
+  "tl_dr": "Week 3 was a bad week for favourites and quarterbacks. Seven underdogs won outright, Washington beat Seattle as an 8.5-point underdog on a pick-six, and Jahmyr Gibbs led all players with 41.4 PPR points. De'Von Achane tore his ACL, Jaxson Dart had season-ending knee surgery that sent the Giants trading for J.J. McCarthy, and Caleb Williams and Baker Mayfield each face about three weeks out, while Case Keenum, Sam Darnold and a returning Brock Bowers all posted big lines. Every game has its own card below, with the line it was played under, the best fantasy lines against their projections and whose value moved, then the injuries, the moves and the claims to make in Dynasty PPR SF and Redraft 1QB PPR.",
+  "format_note": "Values and ranks below are shown for Dynasty PPR SF and Redraft 1QB PPR on FF Beacon.",
+  "sections": [
+    {
+      "id": "week-3-in-numbers",
+      "heading": "Week 3 in numbers: Gibbs, seven upsets and 19 points left on the bench",
+      "icon": "scoreboard",
+      "eyebrow": "Week 3, part 1 of 6",
+      "body_md": "[Jahmyr Gibbs](/players/jahmyr-gibbs-9221) had the week's best line at 41.4 PPR points, three touchdowns in a 31 to 24 win over the Jets, and three other players led their positions: [Brock Purdy](/players/brock-purdy-8183) at quarterback with 31.3, [Jaxon Smith-Njigba](/players/jaxon-smith-njigba-9488) at receiver with 35.4 and [Brock Bowers](/players/brock-bowers-11604) at tight end with 27.6 in his season debut.\n\nThe betting market had a harder week than the players. Seven of the sixteen games were won outright by the team the closing moneyline made the underdog, Washington beat Seattle as a 320 underdog, and Arizona and San Francisco finished 17.5 points over their total. Across 318 teams in 23 leagues synced to FF Beacon, managers left 19.8 points a team on the bench, and 41 of them lost a game their own bench would have won. The costliest single call was Brock Bowers on a bench behind Kyle Pitts.",
+      "relay_ids": [],
+      "block_refs": [
+        "awards",
+        "scorers"
+      ],
+      "citations": []
+    },
+    {
+      "id": "game-by-game",
+      "heading": "Game by game: every final, the line it beat, and who scored",
+      "icon": "calendar",
+      "eyebrow": "Week 3, part 2 of 6",
+      "body_md": "Each card below is one game: the final, the line it was played under and whether the favourite covered, the score the line implied against the score that happened, the best fantasy lines on both sides graded against the Sleeper projection, and whose value moved. Seven underdogs won outright, two games landed exactly on the spread, and the totals split evenly, eight over and eight under.\n\nThree reports sit behind the cards: Derrick Henry [passing Marcus Allen on the career rushing touchdown list](/brief/relay/derrick-henry-rushing-touchdowns-milestone), Brock Purdy's [93.7 QBR through three games](/brief/relay/purdy-qbr-first-three-games-elite-company), and Jalen Hurts [cleared after a concussion evaluation](/brief/relay/jalen-hurts-cleared-concussion-evaluation).",
+      "relay_ids": [
+        "22d95b77-6adc-4133-bb9c-720466adc056",
+        "6c578495-20fc-476c-a456-3f0e075fe193",
+        "a1fb0e4a-5254-4238-9512-1348ea7eb55c",
+        "355a258d-d383-401b-86fd-d0b20699ad74",
+        "0ad74b19-026c-448e-9121-1cd8f2db8a69",
+        "709e08d1-567a-4dea-a800-034d4929025e",
+        "74437f34-396a-4bde-bcee-bd090643d2f7",
+        "15e8537f-f4ef-4802-a83d-be1b73aaae4b",
+        "a2642a1e-8dfc-4bc0-bd93-c80552434f28"
+      ],
+      "block_refs": [
+        "cards"
+      ],
+      "citations": []
+    },
+    {
+      "id": "how-the-projections-did",
+      "heading": "How the projections did: a coin flip, and low at tight end",
+      "icon": "values",
+      "eyebrow": "Week 3, part 3 of 6",
+      "body_md": "The Sleeper projection was close to a coin flip in week 3: 144 of 282 graded players beat it, 51 percent, and the average miss was 4.9 PPR points. It ran low at tight end, where 65 percent of graded players beat it and the average tight end outscored his projection by 2.2 points, and slightly high at running back, the only position where fewer than half beat it.\n\nThe season lists are the part to use. A player who beats his projection every week is one the number keeps underrating, and one who falls short every week is one it keeps overrating; both are worth a second look before you set a lineup on the projection alone.",
+      "relay_ids": [],
+      "block_refs": [
+        "projections"
+      ],
+      "citations": []
+    },
+    {
+      "id": "injuries-and-availability",
+      "heading": "Injuries and availability: Achane, Caleb, Jefferson and the IDP losses",
+      "icon": "injury",
+      "eyebrow": "Week 3, part 4 of 6",
+      "body_md": "The timeline below places every reported absence by its expected return. One line per player who matters for fantasy, dynasty first and redraft second:\n\n- [De'Von Achane](/players/devon-achane-9226): [torn ACL, out for the season](/brief/relay/de-von-achane-torn-acl-out-season), on injured reserve. Dynasty value down 542 to 5,561; hold in dynasty, injured reserve slot or drop in redraft. [Ollie Gordon](/players/ollie-gordon-12495) is the claim.\n- [Caleb Williams](/players/caleb-williams-11560): [grade 2 hamstring strain, three to four weeks](/brief/relay/caleb-williams-hamstring-injury-three-four-weeks). Still 15th overall in Dynasty PPR SF at 7,548; hold in both formats.\n- [Justin Jefferson](/players/justin-jefferson-6794): [ankle sprain with a chance to play Sunday](/brief/relay/justin-jefferson-ankle-sprain-dolphins) after 12 percent of the snaps in Tampa. Hold everywhere; check Friday's report.\n- [Puka Nacua](/players/puka-nacua-9493): [doubtful with a possible week 4 return](/brief/relay/puka-nacua-doubtful-groin-injury) after a second missed game with the groin; surgery has not been ruled out. Hold.\n- [Mike Evans](/players/mike-evans-2216): [rib injury](/brief/relay/49ers-mike-evans-ruled-out-rib-injury), called day to day by Kyle Shanahan. Redraft value down 473.\n- [Travis Etienne](/players/travis-etienne-7543): [hamstring, length unknown](/brief/relay/saints-travis-etienne-hamstring-injury), injured reserve not ruled out. Redraft value down 799 to 3,928.\n- [Breece Hall](/players/breece-hall-8155): [thigh, now described as a quad and week to week](/brief/relay/breece-hall-ruled-out-thigh-injury). Redraft down 1,041; dynasty up 218, because a week-to-week tag is noise over a career.\n- [Nico Collins](/players/nico-collins-7569): [a decent chance to return against Dallas](/brief/relay/nico-collins-return-week-4-cowboys), 13.0 projected with a 56 percent beat rate.\n- [Zay Flowers](/players/zay-flowers-9997): [back and active](/brief/relay/zay-flowers-active-ravens-cowboys) for 15.4 PPR points; redraft value up 1,028.\n- Longer absences: [Jonathon Brooks](/players/jonathon-brooks-11583) [at least six weeks after core muscle surgery](/brief/relay/jonathan-brooks-core-muscle-injury-ir), [Alec Pierce](/players/alec-pierce-8142) [on injured reserve with a heel injury](/brief/relay/colts-alec-pierce-injured-reserve-heel), [Andrei Iosivas](/players/andrei-iosivas-10226) [four to six weeks with a thumb](/brief/relay/bengals-iosivas-thumb-injury-four-six-weeks), [David Njoku](/players/david-njoku-4033) [on injured reserve](/brief/relay/chargers-njoku-ir-mvs-triplett-signed), [Jonah Coleman](/players/jonah-coleman-13345) [back in late October](/brief/relay/jonah-coleman-ir-high-ankle-sprain), and [Jayden Reed](/players/jayden-reed-10222), [too early to say whether he plays again this season](/brief/relay/jayden-reed-neck-injury-testing-season-status).\n- IDP: [Brian Burns](/players/brian-burns-5862) [tore his ACL](/brief/relay/giants-brian-burns-acl-tear-season-ending), [Nick Bosa](/players/nick-bosa-5816) [pulled a calf](/brief/relay/nick-bosa-calf-injury-49ers-cardinals) and stays off injured reserve, [Myles Garrett](/players/myles-garrett-3973) faces [six weeks after knee surgery](/brief/relay/myles-garrett-6-week-knee-surgery-recovery), [Leo Chenal](/players/leo-chenal-8362) [had neck surgery](/brief/relay/leo-chenal-neck-surgery) and [Jaycee Horn](/players/jaycee-horn-7642) [tore a quad](/brief/relay/jaycee-horn-torn-quad-out-indefinitely). No value source prices defensive players.",
+      "relay_ids": [
+        "2d85fcd0-4f66-4f58-b36b-93ad75de8d7c",
+        "6a20c69d-a5ff-4200-97e5-86bdef575f58",
+        "1ef4e5d0-2d96-46e3-8e92-52036304a3a4",
+        "43855573-9763-40d8-9cda-80457e84d7ef",
+        "65350646-8456-4e12-bf82-e28be1b97e10",
+        "8b3ee809-b3df-452f-ac34-ad8b847d2c54",
+        "45a406e9-9bad-44ec-a776-14235838157b",
+        "2b161cad-6a0d-46a4-adcc-47135d8d7c12",
+        "bf838d8e-62bf-410d-a79c-b32e5dbff37f",
+        "072dddd6-9129-4596-95ec-6cef331fe541",
+        "2afff7f9-3f78-462b-b286-2e5a091b9e19",
+        "e3637b5a-24cf-4eb5-b951-e5c45ba5e1ef",
+        "fe3108d6-0f05-4ace-bd50-36b1343458db",
+        "deebaa12-4d40-4e52-bda0-b615db56bca7",
+        "31643a1b-05e7-4a35-8789-d72e9cfaa51b",
+        "ad9f10f6-1e30-48d6-8e91-7124d950f896",
+        "704ed28e-0674-43eb-989d-0b90d4ce9392",
+        "4a57462e-a4b7-4476-bca9-0f1b066ce80e",
+        "0842d5b3-7da2-4094-9697-b50cf0bd4d43",
+        "0914ccd6-3f64-43f0-84cc-9c042663b4c9",
+        "18976ef1-cf68-4912-ae51-4c198b0926ee",
+        "45118e83-51d0-4256-b0e5-2bb9aa205318",
+        "1b9cb4e2-a919-47b2-9fbd-b8650ee86e4b",
+        "2f246e30-7d76-40f5-be82-6179c66a8a4f",
+        "c6943be9-35aa-4b81-b460-8f6792e44f8b",
+        "14eeb172-0c74-4167-b7d5-6dbb140b43ba",
+        "b0f05b0c-eb69-48db-8fd1-57cc3e81a663",
+        "3379387f-d1e0-4289-af97-08aeeaf78207",
+        "31ab7201-2a7b-48ae-ae18-c9b4184346c0",
+        "13ac33bc-532a-45f0-ad4e-964c9e5c77a0",
+        "e821a89a-1151-49fa-b06c-9197d925cf87",
+        "911eaa97-719c-48ed-bca7-1bbf345a3f88",
+        "7e2ddf2d-50a9-453b-8889-28d3bfb0fdab",
+        "93a70ac7-fb77-4af6-89da-261b6c99bc91",
+        "4db2f5b2-0be7-48a6-a12e-a51813a0248a",
+        "6296c5a5-6fec-4930-a149-b484f9cda52b",
+        "4cd21f2c-a657-4871-9e71-9038c6b7d00d",
+        "0c28fce0-8255-4f68-b837-4913d53304d4",
+        "6f790577-26de-4dbb-a3c0-fb2a97909f78",
+        "c87aa9b0-b9a2-4150-9342-b03193a607ea",
+        "c31939df-9c6f-407c-9b3e-142b35865238",
+        "0e5d47f3-dc28-4822-a880-2d29eb9e90f4",
+        "3cf232bd-4040-438f-808d-b8d97c6153c9",
+        "644fef68-647f-4d96-858e-11ad8986833f",
+        "14359337-7526-4149-8f5e-21fbf030ebe3",
+        "1e46b262-dbd4-44e5-aa9d-1de47bb612c0",
+        "07b1d865-1e51-40f5-9724-24bae96ea218",
+        "384b0574-c4a8-4ddb-8319-26171eea2619",
+        "43e5526e-49de-41fd-bbb4-5abd0d1399e4",
+        "243ba433-b70b-433b-94e2-a2e4a620315e",
+        "04c6dbbb-5025-448e-8588-55b54c9cba83",
+        "3f8190b2-725e-40cc-a97c-25da8a64c147",
+        "ef2bb2b3-6dac-4aa2-b299-e7f45b4c5fbc",
+        "4584c619-3c8a-45a8-9008-fd5cd5ec7dd9",
+        "68ce4763-f770-4646-87fc-08e7d09cc1e8",
+        "75c5901b-dd04-469c-a810-4926ae0eefd4",
+        "164fb850-a89c-4351-ae5a-8a2e7d3b4bf0",
+        "74021c5c-830a-4407-af3e-5112c995bc8a"
+      ],
+      "block_refs": [
+        "tiles",
+        "timeline",
+        "planner",
+        "achane-quote"
+      ],
+      "citations": [
+        {
+          "url": "https://www.nfl.com/news/dolphins-rb-devon-achane-miss-2026-season-acl-tear",
+          "claim": "Achane tore his ACL against Kansas City and is out for the 2026 season; placed on injured reserve September 28."
+        },
+        {
+          "url": "https://chicago.suntimes.com/bears/2026/09/28/bears-case-keenum-ben-johnson-caleb-williams-tyson-bagent-eagles-soldier-field-nfl",
+          "claim": "Caleb Williams has a grade 2 hamstring strain with a three-to-four-week timeline."
+        },
+        {
+          "url": "https://www.espn.com/nfl/story/_/id/50054067/sources-vikings-jefferson-ankle-sprain-play-week",
+          "claim": "Jefferson has an ankle sprain and could play in week 4."
+        }
+      ]
+    },
+    {
+      "id": "moves-and-role-changes",
+      "heading": "Moves and role changes: Dart, McCarthy, Mayfield and three new starters",
+      "icon": "transaction",
+      "eyebrow": "Week 3, part 5 of 6",
+      "body_md": "- [Jaxson Dart](/players/jaxson-dart-12508) had [knee surgery and is out for the regular season](/brief/relay/jaxson-dart-knee-surgery-out-regular-season). His Dynasty PPR SF value fell 1,393 while his redraft value moved only 121; drop in redraft without an injured reserve slot, hold or buy in dynasty superflex.\n- The Giants [acquired J.J. McCarthy for a 2027 fifth-round pick](/brief/relay/giants-acquire-jj-mccarthy-vikings-trade), and [Jameis Winston](/players/jameis-winston-2306) stays the starter. [J.J. McCarthy](/players/j-j-mccarthy-11565) is a superflex stash only.\n- [Baker Mayfield](/players/baker-mayfield-4892) [misses three weeks](/brief/relay/baker-mayfield-three-weeks-thumb-injury) with the thumb, and undrafted rookie [Jalon Daniels](/players/jalon-daniels-13425) [starts against Green Bay](/brief/relay/jalon-daniels-starting-role-buccaneers), a one-week superflex fill at best.\n- [Jayden Daniels](/players/jayden-daniels-11566) stayed [off injured reserve as week to week](/brief/relay/jayden-daniels-not-ir-week-to-week); Marcus Mariota is the likelier week 4 starter. Hold Daniels everywhere.\n- [Case Keenum](/players/case-keenum-1737) [stays the Bears' starter](/brief/relay/bears-three-qbs-starter-monday) until Caleb Williams returns; a superflex start against the Jets.\n- [Sam Darnold](/players/sam-darnold-4943) was [cleared](/brief/relay/sam-darnold-injury-report-cleared-seahawks-washington) and threw for 379 yards; start him in superflex.\n- Pittsburgh ruled out [Rico Dowdle](/players/rico-dowdle-7021) [with a toe injury](/brief/relay/steelers-dowdle-warren-injury-report-bengals); [Jaylen Warren](/players/jaylen-warren-8228) ran for 127 on 90 percent of the snaps. Start Warren while Dowdle is out.\n- Denver [cleared J.K. Dobbins and RJ Harvey](/brief/relay/broncos-jonah-coleman-ruled-out-rams-dobbins-harvey-cleared) with Coleman on reserve: [RJ Harvey](/players/rj-harvey-12489) is the PPR flex, [J.K. Dobbins](/players/j-k-dobbins-6806) the touchdown-dependent start.\n- Signings: the Eagles [signed Zach Ertz](/brief/relay/eagles-sign-zach-ertz), and Washington is [expected to sign Austin Ekeler](/brief/relay/commanders-sign-austin-ekeler), a deep-league watch only.",
+      "relay_ids": [
+        "7b5b6824-81d7-497d-84a2-ddcc45edf863",
+        "013f4c9f-e854-45ac-bc23-c4d93d02f29e",
+        "85aeb7a3-02c5-43fc-b1d8-67bc1fd410d8",
+        "6262786c-cda1-4e2c-bd50-dd292c355cb9",
+        "2268ab9f-0947-4d49-914b-474eef5bca08",
+        "26407a50-5ac7-4b9b-8d92-b8728b6329ea",
+        "12752953-5886-4f55-b3a1-3f3818315303",
+        "a08bf57b-bf25-4e8c-906e-207dbe733e46",
+        "40eb91d6-6b18-4570-a1b4-b7625489df9d",
+        "7fb6af1c-5553-43b6-ba60-53679deb111d",
+        "773b8a35-009c-416b-ad6c-d3dc2ae42286",
+        "dd45acea-66d6-4d99-9fae-da2c605030ee",
+        "7599c91c-244d-454a-a942-55ab166a4b67",
+        "2ebd0135-465d-46d5-9898-6ba199371b8e",
+        "49f77ec4-993b-4fa9-a540-a40d8cd1ef97",
+        "c7576ec5-e9af-411c-914b-7c2f42b7447f",
+        "0e8fb069-0980-4aec-804f-1ce08164a4b5",
+        "1996b5fa-6bf7-432f-8590-b217ca304231",
+        "afe5fef5-e6e3-4d46-a88d-2710d664918a",
+        "d17eec52-92f6-49d3-a0b7-ee19fbf16a41",
+        "98604057-6c1f-4c3a-9eba-ae4663ee7d8e",
+        "19b42f14-f4e1-473b-ac55-a6ef580eb38e",
+        "70ef19e6-f89e-4d19-8c83-b66fb52d2862",
+        "e2d7e365-53b1-45c3-ace6-21604daedb3a",
+        "8637a63c-ed3b-4318-8372-c56717ab6f28",
+        "2d84abe9-538c-412e-a3ab-c6967e0807b6",
+        "712efa86-8d7b-4186-9307-8f05fe1e5c7f",
+        "9d510665-d1bc-4a53-a60f-886d2fa6cfff",
+        "34103d44-0322-4c65-a2a8-21170b379d6d",
+        "de480b76-a423-4d14-b9d1-189b49208ca9",
+        "c63439c0-53f0-41ca-acb5-af67944b94ac",
+        "f047aeca-d5d7-4115-a180-ad6055dec8d0",
+        "f89c7c51-0fa3-44d2-a026-4d1dda8c69ce",
+        "fbf80477-acae-4c27-8364-70d0c5fdaecb",
+        "554245f0-f87c-44e9-aa44-795e9e23a431",
+        "43c0b9ca-937a-4b8e-8031-414c10df12df",
+        "40860d4a-d574-4070-b612-0efc5c857a4b",
+        "5c15c912-703a-4fe2-8cba-8e0925659576",
+        "6e56ada7-471b-4b98-8998-616e8c816a5b",
+        "8f5a5883-381b-400d-959f-8f34318a3a6d",
+        "4c10df31-1766-47b0-a182-44dd6785d0b1",
+        "02e8d358-1459-47e8-9249-8352acab56ed",
+        "f199bfbe-91b3-4105-8e1f-23f5a25fd6e7",
+        "a2a79ba4-9a27-42ea-bbb0-753bd45b1ca4",
+        "5009a780-9263-4f14-9888-349ecfb773b0",
+        "0a6b905c-0e3d-44d0-a6c6-6aea2d40317f"
+      ],
+      "block_refs": [
+        "lines"
+      ],
+      "citations": [
+        {
+          "url": "https://www.giants.com/news/j-j-mccarthy-trade-details-minnesota-vikings-quarterback-2027-nfl-draft-michigan-wolverines",
+          "claim": "Giants acquired McCarthy for a 2027 fifth-round pick; Winston stays the starter."
+        },
+        {
+          "url": "https://www.buccaneers.com/news/baker-mayfield-three-weeks-minimum-thumb-injury-update",
+          "claim": "Mayfield expected to miss a minimum of three weeks; Jalon Daniels starts."
+        },
+        {
+          "url": "https://chicago.suntimes.com/bears/2026/09/28/bears-case-keenum-ben-johnson-caleb-williams-tyson-bagent-eagles-soldier-field-nfl",
+          "claim": "Keenum led a 27 to 7 win over the Eagles and remains QB1 until Williams returns."
+        }
+      ]
+    },
+    {
+      "id": "what-to-do-this-week",
+      "heading": "What to do this week: claims, holds, buys and sells",
+      "icon": "waiver",
+      "eyebrow": "Week 3, part 6 of 6",
+      "body_md": "Every call is tied to a report above and to a number on the site; the cards below link each one to the tool that runs it.\n\n- Claim [Ollie Gordon](/players/ollie-gordon-12495) everywhere: 14.5 PPR points on 17 carries and an 84 percent snap share the day he took over. Run the bid through the [FAAB calculator](/tools/faab).\n- Claim [Michael Penix](/players/michael-penix-11559) in superflex: a redraft value up 1,335 and a 14.7-point projection against New Orleans.\n- Claim [Case Keenum](/players/case-keenum-1737) in superflex leagues that roster Caleb Williams, and drop him the week Williams practises in full.\n- Start [Jaylen Warren](/players/jaylen-warren-8228) while Dowdle is out; compare him with your flex in [Who Should I Start](/tools/who-should-i-start).\n- Hold Jefferson, Nacua and Caleb Williams everywhere; hold Dart and Achane in dynasty and move them to injured reserve slots in redraft.\n- Buy Dart in dynasty superflex if you can wait: the market charged 1,393 in dynasty and 121 in redraft, which prices this season, not the player. Check the offer in the [trade calculator](/tools/trade-calculator).\n- Sell Baker Mayfield in one-quarterback redraft and Travis Etienne in redraft if a contender needs a back now.",
+      "relay_ids": [
+        "6a20c69d-a5ff-4200-97e5-86bdef575f58",
+        "554245f0-f87c-44e9-aa44-795e9e23a431",
+        "522be190-c84e-4245-9882-8304122d0ee5",
+        "19b42f14-f4e1-473b-ac55-a6ef580eb38e",
+        "43c0b9ca-937a-4b8e-8031-414c10df12df",
+        "2b161cad-6a0d-46a4-adcc-47135d8d7c12",
+        "072dddd6-9129-4596-95ec-6cef331fe541",
+        "7fb6af1c-5553-43b6-ba60-53679deb111d",
+        "fe3108d6-0f05-4ace-bd50-36b1343458db"
+      ],
+      "block_refs": [
+        "actions",
+        "movers",
+        "toggle",
+        "rule"
+      ],
+      "citations": [
+        {
+          "url": "https://www.nbcsports.com/fantasy/football/player-news/2026-09-28/mcvay-hopeful-puka-nacua-will-play-in-week-4",
+          "claim": "McVay hopeful Nacua plays in week 4."
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "awards",
+      "kind": "week_awards",
+      "dataset_id": "week_awards",
+      "caption": "Week 3 in numbers",
+      "conclusion": "Gibbs led the week at 41.4, the underdog won seven of sixteen games, and managers in synced leagues left 19.8 points a team on the bench.",
+      "options": {}
+    },
+    {
+      "id": "cards",
+      "kind": "game_cards",
+      "dataset_id": "week_games",
+      "caption": "Every game of week 3",
+      "conclusion": "Seven underdogs won outright, two games pushed against the spread, and eight of sixteen went over the total.",
+      "options": {}
+    },
+    {
+      "id": "projections",
+      "kind": "projection_report",
+      "dataset_id": "projection_report",
+      "caption": "How the Sleeper projection did in week 3",
+      "conclusion": "Close to a coin flip overall at 51 percent, and low at tight end, where 65 percent of graded players beat it.",
+      "options": {}
+    },
+    {
+      "id": "tiles",
+      "kind": "stat_tiles",
+      "caption": "Week 3 in six numbers",
+      "options": {},
+      "conclusion": "A heavy week: 124 reports, 83 of them injuries, and 31 players ruled out or placed on reserve.",
+      "dataset_id": "week_stat_tiles"
+    },
+    {
+      "id": "scorers",
+      "kind": "top_scorers",
+      "caption": "Week 3 top scorers by position",
+      "options": {
+        "limit": 6,
+        "positions": [
+          "QB",
+          "RB",
+          "WR",
+          "TE"
+        ]
+      },
+      "conclusion": "Jahmyr Gibbs led all players with 41.4 PPR points; Brock Purdy, Jaxon Smith-Njigba and Brock Bowers led their positions.",
+      "dataset_id": "top_scorers_qb"
+    },
+    {
+      "id": "timeline",
+      "kind": "injury_timeline",
+      "caption": "Who is expected back when",
+      "options": {},
+      "conclusion": "Nico Collins is first back in week 4, Baker Mayfield around week 6 and Jonathon Brooks around week 9.",
+      "dataset_id": "injury_timeline"
+    },
+    {
+      "id": "planner",
+      "kind": "return_planner",
+      "caption": "Return planner: who is back for the next month",
+      "options": {
+        "default_weeks": [
+          4,
+          7
+        ]
+      },
+      "conclusion": "Collins and Mayfield are the only offensive starters on this week's list with a stated return inside weeks 4 to 7; Brooks lands just after it.",
+      "dataset_id": "injury_timeline"
+    },
+    {
+      "id": "achane-quote",
+      "kind": "relay_quote",
+      "caption": "The report",
+      "options": {
+        "relay_id": "6a20c69d-a5ff-4200-97e5-86bdef575f58"
+      },
+      "conclusion": "Achane's season ended on his third carry.",
+      "dataset_id": null
+    },
+    {
+      "id": "lines",
+      "kind": "box_score_lines",
+      "caption": "Week 3 lines for the players in this section",
+      "options": {
+        "player_ids": [
+          "3de2c50e-f880-4076-b8a5-95a3007458fb",
+          "012c34e3-fcbd-4638-9a5f-9b0ef0662d8e",
+          "3d238006-b1bb-42af-8be4-d260073f5ae8",
+          "7f32aec4-27d0-471e-aee9-4f272c3d0358",
+          "e7918a7e-7f96-4c4d-a299-7015cb3a7267",
+          "2d021b2f-df9c-4b9c-8340-9e2b1946a6be",
+          "cd249ea6-19a9-44ce-a370-23d2fb717801",
+          "440b9282-e844-420b-9130-9dd98ba8c6bd",
+          "853d0cb3-00a1-4cc8-81c1-9a6a8a8395c2",
+          "1a1d86be-95d6-404a-b48a-c533220977db",
+          "d9221fc3-797e-48e9-aa13-b2a0d03b69a8",
+          "6727f349-e540-4c27-99b7-51856330fd45"
+        ]
+      },
+      "conclusion": "Keenum's 24.5 and Darnold's 29.7 were the quarterback fill-in stories; Bowers' 13 targets were the return of the week.",
+      "dataset_id": "box_score_lines"
+    },
+    {
+      "id": "actions",
+      "kind": "action_list",
+      "caption": "This week's calls, each with the tool that runs it",
+      "options": {
+        "items": [
+          {
+            "note": "Achane is out for the season. 14.5 PPR points on 17 carries and an 84 percent snap share the day he took over.",
+            "tool": "faab",
+            "action": "waiver",
+            "player_id": "6727f349-e540-4c27-99b7-51856330fd45"
+          },
+          {
+            "note": "Superflex claim. Redraft value up 1,335 and a 14.7-point projection against New Orleans.",
+            "tool": "faab",
+            "action": "waiver",
+            "player_id": "3d238006-b1bb-42af-8be4-d260073f5ae8"
+          },
+          {
+            "note": "Superflex fill for three to four weeks while Caleb Williams rests a grade 2 hamstring.",
+            "tool": "faab",
+            "action": "waiver",
+            "player_id": "3de2c50e-f880-4076-b8a5-95a3007458fb"
+          },
+          {
+            "note": "One-week superflex fill. The Giants say he stays the starter after the McCarthy trade.",
+            "tool": "faab",
+            "action": "waiver",
+            "player_id": "1a1d86be-95d6-404a-b48a-c533220977db"
+          },
+          {
+            "note": "20.6 PPR points on 90 percent of the snaps with Dowdle out. Check Friday's report.",
+            "tool": "start-sit",
+            "action": "start",
+            "player_id": "2d021b2f-df9c-4b9c-8340-9e2b1946a6be"
+          },
+          {
+            "note": "13 targets and 27.6 PPR points in his season debut. Start every week.",
+            "tool": "start-sit",
+            "action": "start",
+            "player_id": "cd249ea6-19a9-44ce-a370-23d2fb717801"
+          },
+          {
+            "note": "Ankle sprain with a chance to play Sunday. Not a value event in any format.",
+            "tool": "start-sit",
+            "action": "hold",
+            "player_id": "e43331bb-c7eb-4913-99b3-efadac7cfbf2"
+          },
+          {
+            "note": "Dynasty buy window: down 1,393 in superflex against 121 in redraft. Drop in redraft leagues without IR.",
+            "tool": "trade-calculator",
+            "action": "hold",
+            "player_id": "99e982f6-359a-4c47-9e42-4e069633480e"
+          }
+        ]
+      },
+      "conclusion": "One every-league claim, three superflex quarterback claims, two starts, two holds and one sell.",
+      "dataset_id": "waiver_targets"
+    },
+    {
+      "id": "movers",
+      "kind": "value_movers",
+      "caption": "Biggest Dynasty PPR SF value risers of the week",
+      "options": {
+        "limit": 12,
+        "direction": "both"
+      },
+      "conclusion": "Anthony Richardson rose 1,961, the biggest move of the week, with Parker Washington next at 1,140.",
+      "dataset_id": "value_movers_up"
+    },
+    {
+      "id": "toggle",
+      "kind": "format_toggle",
+      "caption": "The same movers in dynasty and in redraft",
+      "options": {
+        "default": "dynasty-ppr-sflex"
+      },
+      "conclusion": "Switch to Redraft 1QB PPR and Dart's fall shrinks to 121 while Penix and Flowers climb past 1,000, which is the gap between pricing a career and pricing a season.",
+      "dataset_id": "value_movers_by_format"
+    },
+    {
+      "id": "rule",
+      "kind": "callout",
+      "caption": "A rule for reading a season-ending injury",
+      "options": {
+        "icon": "values",
+        "tone": "purple"
+      },
+      "conclusion": "When a young starter's dynasty value falls far more than his redraft value on a season-ending injury, the dynasty market is charging for this season as if it were the career. That is the discount a patient buyer wants.",
+      "dataset_id": null
+    }
+  ],
+  "games": [
+    {
+      "game_key": "ATL-GB",
+      "headline": "Bijan Robinson runs over Green Bay on Thursday night",
+      "recap_md": "Atlanta won by 21 as a 4.5-point underdog, and the game ran through [Bijan Robinson](/players/bijan-robinson-9509): 29 carries, 194 rushing yards and two touchdowns for 35.3 PPR points, the second-best line of the week. Green Bay scored first on a Jordan Love throw to [Christian Watson](/players/christian-watson-8167) and never led again. [Michael Penix](/players/michael-penix-11559) needed only 25 throws for 256 yards, and a late two-point conversion carried the game past its 43.5 total. Love threw 53 times for 312 yards, volume that kept Watson and [Matthew Golden](/players/matthew-golden-12501) above 20 PPR points each.",
+      "fun_stat": {
+        "player_id": "e7918a7e-7f96-4c4d-a299-7015cb3a7267",
+        "text": "Drake London caught nine of ten targets for 194 yards, the same number Bijan Robinson ran for and the most receiving yards of the week, and did not score."
+      }
+    },
+    {
+      "game_key": "LAC-BUF",
+      "headline": "James Cook carries Buffalo past the Chargers in the fourth",
+      "recap_md": "The Chargers led 10 to 0 after a quarter and 13 to 10 going into the fourth, and Buffalo won it on the ground. [James Cook](/players/james-cook-8138) ran 24 times for 154 yards and the clinching 3-yard touchdown with 3:13 left, and [Josh Allen](/players/josh-allen-4984) scored both of Buffalo's other touchdowns from a yard out. The Bills covered the 7-point closing line by a point, and the game finished 10.5 points under its total. [Justin Herbert](/players/justin-herbert-6797) threw for 226 yards and a touchdown to [Keaton Mitchell](/players/keaton-mitchell-9511); his Dynasty PPR SF value fell 1,053, the biggest drop of anyone who played this week.",
+      "fun_stat": {
+        "player_id": "74b2546d-1baf-48bf-9e8c-c1a516b2d7a0",
+        "text": "Josh Allen threw two interceptions, lost a fumble and threw no touchdown passes, and still scored 19.5 PPR points on two 1-yard runs."
+      }
+    },
+    {
+      "game_key": "CAR-CLE",
+      "headline": "Harold Fannin wins it for Cleveland with 1:48 left",
+      "recap_md": "Carolina moved the ball and kept settling: Ryan Fitzgerald kicked four field goals, from 35, 41, 53 and 37 yards, and the Panthers' only touchdown was an 8-yard throw from [Bryce Young](/players/bryce-young-9228) to [John Metchie](/players/john-metchie-8147) with 4:25 left. Cleveland answered with a 14-yard touchdown from Deshaun Watson to [Harold Fannin](/players/harold-fannin-12506) and a two-point conversion, and won 21 to 18 as a small home underdog. Young threw 48 times for 291 yards; Watson passed for only 144 but added 45 on the ground for 20.3 PPR points.",
+      "fun_stat": {
+        "player_id": "c06ab8cb-7407-4e9e-b7b7-43d70673ef28",
+        "text": "Harold Fannin caught both of Cleveland's touchdowns, from 2 and 14 yards, and turned 51 receiving yards into 24.1 PPR points."
+      }
+    },
+    {
+      "game_key": "NYJ-DET",
+      "headline": "Jahmyr Gibbs scores three and the Jets' comeback falls short",
+      "recap_md": "The Jets erased a 24 to 10 deficit in the fourth quarter, tying it on a 23-yard touchdown from Geno Smith to [Garrett Wilson](/players/garrett-wilson-8146) and a two-point conversion with 4:06 left. Detroit answered with an 11-yard catch by [Jahmyr Gibbs](/players/jahmyr-gibbs-9221) with 2:25 to go. Gibbs finished with two rushing scores, the receiving touchdown and 41.4 PPR points, the best line of the week. The Lions won by exactly the 7-point closing spread, a push. [Breece Hall](/players/breece-hall-8155) ran 13 times for 32 yards before leaving with a thigh injury.",
+      "fun_stat": {
+        "player_id": "dc64c3bd-eca8-4183-8978-3ab1766bc5dc",
+        "text": "Geno Smith completed 31 of 37 passes, 84 percent, for 321 yards and three touchdowns, and lost."
+      }
+    },
+    {
+      "game_key": "HOU-IND",
+      "headline": "Spencer Shrader's 53-yarder beats Houston with 16 seconds left",
+      "recap_md": "Houston took its only lead with 1:48 left on a 1-yard [Woody Marks](/players/woody-marks-12474) run, and Indianapolis kicked its way back: Spencer Shrader made four field goals, including a 58-yarder before halftime and the 53-yard winner with 16 seconds to go. [Keenan Allen](/players/keenan-allen-1479) scored the Colts' touchdown and 18.3 PPR points, more than double his 7.7 projection. It was a quiet day for the bigger names: [C.J. Stroud](/players/c-j-stroud-9758) threw for 167 yards, and Nico Collins sat out with a hamstring.",
+      "fun_stat": {
+        "player_id": "b42806b0-b866-439b-947e-25a22c8d34f8",
+        "text": "Jonathan Taylor carried 23 times and none of them went longer than 11 yards: 9.2 PPR points against a 19.9 projection."
+      }
+    },
+    {
+      "game_key": "NE-JAX",
+      "headline": "Trevor Lawrence spreads it around and New England never scores a touchdown",
+      "recap_md": "New England never reached the end zone: two Andy Borregales field goals were its only points, and Drake Maye threw two interceptions on 25 attempts. [Trevor Lawrence](/players/trevor-lawrence-7523) threw three touchdowns to three receivers, Josh Cameron, [Jakobi Meyers](/players/jakobi-meyers-5947) and [Parker Washington](/players/parker-washington-9487), and Chris Rodriguez and [Bhayshul Tuten](/players/bhayshul-tuten-12490) ran in two more. Meyers caught seven of eight targets for 19.4 PPR points on an 8.4 projection. A 3-point favourite won by 29.",
+      "fun_stat": {
+        "player_id": "4dbe1548-cef4-45a1-ab67-4e391a5ef11c",
+        "text": "Parker Washington caught three passes for 40 yards and a touchdown, and his Dynasty PPR SF value rose 1,140, the biggest jump of anyone who played this week."
+      }
+    },
+    {
+      "game_key": "KC-MIA",
+      "headline": "Kansas City covers in Miami on the day Achane's season ends",
+      "recap_md": "[Kenneth Walker](/players/kenneth-walker-8151) scored on a 10-yard run and a 5-yard catch for 21.3 PPR points, and Kansas City covered a 10-point line with a Harrison Butker field goal and a late [Travis Kelce](/players/travis-kelce-1466) touchdown. The fantasy story was on the other side: [De'Von Achane](/players/devon-achane-9226) tore his ACL on his third carry, and [Ollie Gordon](/players/ollie-gordon-12495) took over the backfield, scoring Miami's only touchdown and 14.5 PPR points on a 3.5 projection. Malik Willis threw for 210 yards and an interception.",
+      "fun_stat": {
+        "player_id": "3c6dcb06-89c2-422c-9543-a11f4b05d639",
+        "text": "Patrick Mahomes completed 20 of 24 passes, 83 percent, for 246 yards and two touchdowns."
+      }
+    },
+    {
+      "game_key": "TEN-NYG",
+      "headline": "Four field goals and the lowest-scoring game of the week",
+      "recap_md": "Nineteen points was the lowest total of the week by 15, and it went 18.5 under a closing total that was already the lowest on the board. Dominic Zvada kicked four field goals for every New York point; [Jameis Winston](/players/jameis-winston-2306), starting for the injured Jaxson Dart, threw for 118 yards and scored 6.1 PPR points against a 14.3 projection. [Cam Skattebo](/players/cam-skattebo-12481) carried 20 times for 60 yards, and [Tony Pollard](/players/tony-pollard-5967) ran for 74 on Tennessee's side.",
+      "fun_stat": {
+        "player_id": "a5e28b6b-bcb2-45b2-b1a8-8f3a80f7d888",
+        "text": "Wan'Dale Robinson's 4-yard catch with 5:35 left was the only touchdown of the game, and his 18.7 PPR points led both teams."
+      }
+    },
+    {
+      "game_key": "CIN-PIT",
+      "headline": "Chris Boswell's late kicks beat Cincinnati",
+      "recap_md": "The game was tied 27 to 27 with 8:45 left after a Chris Boswell field goal, and his 33-yarder with 2:15 to go won it for Pittsburgh as a 3.5-point home underdog. [Joe Burrow](/players/joe-burrow-6770) threw three touchdowns, one each to [Ja'Marr Chase](/players/jamarr-chase-7564), [Tee Higgins](/players/tee-higgins-6801) and [Mike Gesicki](/players/mike-gesicki-4993), and Chase's 24.8 PPR points led both teams. [Jaylen Warren](/players/jaylen-warren-8228) ran 17 times for 127 yards with Rico Dowdle out. The 57 points went 14.5 over the total.",
+      "fun_stat": {
+        "player_id": "902b4185-a805-4882-88c6-f7a2d3dce600",
+        "text": "Aaron Rodgers threw touchdowns to three different receivers, Roman Wilson, Ben Skowronek and DK Metcalf, and scored 23.7 PPR points on a 14.3 projection."
+      }
+    },
+    {
+      "game_key": "SEA-WAS",
+      "headline": "Washington wins as an 8.5-point underdog on a pick-six",
+      "recap_md": "[Marcus Mariota](/players/marcus-mariota-2307), starting for Jayden Daniels, threw three touchdowns, and the game turned on a defensive score: with Washington up 27 to 24, linebacker Kain Medrano returned an interception 50 yards with 3:57 left. Seattle got within two on a [Cooper Kupp](/players/cooper-kupp-4039) touchdown and did not score again. [Sam Darnold](/players/sam-darnold-4943) threw for 379 yards, four touchdowns and two interceptions in his return, 29.7 PPR points. The 64 points went 23.5 over a 40.5 total, the widest miss of any total this week.",
+      "fun_stat": {
+        "player_id": "b667f796-de23-4db8-b554-6c4539a58b08",
+        "text": "Jaxon Smith-Njigba scored twice on 128 receiving yards and also completed his only pass for 14 yards: 35.4 PPR points, the best receiver line of the week."
+      }
+    },
+    {
+      "game_key": "ARI-SF",
+      "headline": "Brock Purdy throws four as Arizona covers late",
+      "recap_md": "San Francisco led 23 to 6 in the third quarter and then needed two [George Kittle](/players/george-kittle-4217) touchdowns to hold on; Chad Ryland's field goal with 34 seconds left let Arizona cover a 7.5-point line. [Brock Purdy](/players/brock-purdy-8183) threw for 297 yards and four scores on 27 attempts, 31.3 PPR points, and Kittle caught two of them for 26.2. On the other side [Jacoby Brissett](/players/jacoby-brissett-3257) threw 52 times and [Michael Wilson](/players/michael-wilson-10232) turned 17 targets into 25.9 PPR points. Mike Evans left with a rib injury.",
+      "fun_stat": {
+        "player_id": "dd24d13c-1757-4c22-af16-4502946352d3",
+        "text": "Deebo Samuel scored on an 80-yard play without a catch: Purdy hit Mike Evans for 2 yards and Evans lateraled to Samuel, who took it the rest of the way."
+      }
+    },
+    {
+      "game_key": "MIN-TB",
+      "headline": "A punt return and three long field goals win it in Tampa",
+      "recap_md": "Minnesota's points came from everywhere but a steady offense: Will Reichard made field goals from 54, 56 and 43 yards, Myles Price returned a punt 86 yards for a touchdown, and [Kyler Murray](/players/kyler-murray-5849) threw for 168 yards. Tampa Bay lost more than the game, because [Baker Mayfield](/players/baker-mayfield-4892) dislocated his right thumb and is expected to miss three weeks. [Aaron Jones](/players/aaron-jones-4199) caught five passes and carried 17 times for 14.2 PPR points, and [Bucky Irving](/players/bucky-irving-11584) scored 7.8 against a 14.7 projection.",
+      "fun_stat": {
+        "player_id": "5d95a8da-157c-4b5c-931e-8a3eb2ab3e70",
+        "text": "Jordan Addison's 41-yard catch was Minnesota's only offensive touchdown, and it made his day: 20.0 PPR points on a 9.2 projection."
+      }
+    },
+    {
+      "game_key": "BAL-DAL",
+      "headline": "Tyler Loop's 56-yarder wins it in Rio as time expires",
+      "recap_md": "The game in Rio de Janeiro was tied 31 to 31 with seven seconds left after a Brandon Aubrey field goal, and Tyler Loop made a 56-yarder as time expired. Baltimore won by exactly the 3-point closing spread, a push. [Derrick Henry](/players/derrick-henry-3198) scored twice on 26 carries, [Lamar Jackson](/players/lamar-jackson-4881) completed 15 of 20 for two touchdowns, and [Zay Flowers](/players/zay-flowers-9997) returned from injury for 15.4 PPR points. [CeeDee Lamb](/players/ceedee-lamb-6786) caught seven of eight targets for 112 yards and [Javonte Williams](/players/javonte-williams-7588) ran for 98 and a score.",
+      "fun_stat": {
+        "player_id": "e01dd83c-7db4-4591-b057-ad40fb0b606f",
+        "text": "Derrick Henry's two touchdowns moved him past Marcus Allen into third on the NFL's career rushing touchdown list."
+      }
+    },
+    {
+      "game_key": "LV-NO",
+      "headline": "Brock Bowers returns and Las Vegas scores the last 19 points",
+      "recap_md": "New Orleans led 27 to 16 midway through the third quarter on four Tyler Shough touchdown passes, and Las Vegas scored the last 19 points: a 36-yard run by Mike Washington, then touchdown throws from [Kirk Cousins](/players/kirk-cousins-1166) to [Cody White](/players/cody-white-7039) and [Brock Bowers](/players/brock-bowers-11604). Bowers, in his season debut, caught 10 of 13 targets for 116 yards and 27.6 PPR points, the top tight end line of the week. Shough's 24.8 PPR points came with two lost fumbles. [Ashton Jeanty](/players/ashton-jeanty-12527) ran 19 times for 56 yards.",
+      "fun_stat": {
+        "player_id": "ffc4a35d-841b-4907-9adf-a3ea7aa34fff",
+        "text": "Noah Fant caught four passes for 33 yards and two touchdowns: 19.3 PPR points against a 3.8 projection."
+      }
+    },
+    {
+      "game_key": "LAR-DEN",
+      "headline": "Denver comes back from 16 down and Bo Nix wins it late",
+      "recap_md": "The Rams led 16 to 0 at halftime on a [Tyler Higbee](/players/tyler-higbee-3271) touchdown and three Harrison Mevis field goals. Denver tied it with two [Bo Nix](/players/bo-nix-11563) touchdown passes and two two-point conversions, took the lead on Talanoa Hufanga's 66-yard interception return, lost it on a 48-yard catch by [Konata Mumpfield](/players/konata-mumpfield-12718), and won it on a 1-yard Nix run with 47 seconds left. [Davante Adams](/players/davante-adams-2133) caught seven of 13 targets for 137 yards. Higbee scored 20.2 PPR points on a 1.6 projection, the biggest beat of the week.",
+      "fun_stat": {
+        "player_id": "7d238aaa-1d5c-435a-8f9f-dfdb626531f7",
+        "text": "Matthew Stafford threw 55 passes for 390 yards, the most passing yards of the week, and lost."
+      }
+    },
+    {
+      "game_key": "PHI-CHI",
+      "headline": "Case Keenum steps in and Chicago routs Philadelphia",
+      "recap_md": "Starting for the injured Caleb Williams, [Case Keenum](/players/case-keenum-1737) threw touchdowns to [Luther Burden](/players/luther-burden-12519) and [Kalif Raymond](/players/kalif-raymond-3634) and ran one in himself, 24.5 PPR points on an 11.9 projection, and Chicago won by 20 as a 3-point home underdog. Philadelphia's only score was a Jalen Hurts run before halftime; Hurts threw for 153 yards and an interception and was cleared after a concussion evaluation. [Saquon Barkley](/players/saquon-barkley-4866) ran 15 times for 82 yards and scored 9.0 PPR points against a 15.9 projection.",
+      "fun_stat": {
+        "player_id": "93f60036-f5a0-4644-a4a5-4296b801fb17",
+        "text": "Kalif Raymond scored 21.0 PPR points on a 6.2 projection, with a 41-yard touchdown in the third quarter."
+      }
+    }
+  ],
+  "editor_take": null,
+  "faq": [
+    {
+      "question": "Is De'Von Achane out for the season?",
+      "answer_md": "Yes. He tore his ACL in the 24 to 10 loss to Kansas City on September 27 and the Dolphins placed him on injured reserve on September 28. His Dynasty PPR SF value fell 542 to 5,561 and his Redraft 1QB PPR value fell 468 to 6,580. Ollie Gordon, who scored 14.5 PPR points after taking over, is the waiver claim."
+    },
+    {
+      "question": "How long is Caleb Williams out?",
+      "answer_md": "He has a grade 2 hamstring strain that doctors consider a three-to-four-week injury, reported on September 27. Case Keenum started Monday night, scored 24.5 PPR points in a 27 to 7 win over the Eagles, and is expected to stay the starter until Williams returns. Williams is still 15th overall in Dynasty PPR SF at 7,548."
+    },
+    {
+      "question": "Who is the Giants quarterback after Jaxson Dart's injury?",
+      "answer_md": "Jameis Winston. Dart had knee surgery on September 25 and is out for the regular season. The Giants traded a 2027 fifth-round pick to Minnesota for J.J. McCarthy on September 28, but John Harbaugh says Winston remains the starter. The model projects Winston for 16.0 points against Arizona in week 4."
+    }
+  ],
+  "players": [
+    "82c004e6-68e7-4ab0-9d42-99a7bddb91b1",
+    "6727f349-e540-4c27-99b7-51856330fd45",
+    "c17079b0-354b-4b5c-aeb3-ffee8366590b",
+    "e43331bb-c7eb-4913-99b3-efadac7cfbf2",
+    "12338fbe-ca16-4563-bcda-6adba5930a9a",
+    "e1c462a6-35ca-42b6-9ac4-f4a7e82cceee",
+    "ab232bc7-2bb5-4c5a-86db-d790637357c0",
+    "e053ced8-eb24-4a2e-aeee-6a3b35658cdf",
+    "0c1702c7-4475-4af3-a791-a2429d60f1a1",
+    "d9221fc3-797e-48e9-aa13-b2a0d03b69a8",
+    "b9b0dc30-1196-4c82-9722-8e10fb1cf3b7",
+    "292e6f75-3e85-40e8-b8b1-8838b70349b9",
+    "77750572-424f-4eb0-b3e6-b78d0582f19f",
+    "8af24e30-9874-4843-8c24-be8ad50fe507",
+    "bae8b582-5b99-4c26-8474-f28ef4a3b0c3",
+    "8a787907-79bf-4dad-b592-d2d39456d667",
+    "3b863a8e-4cdd-4574-9ccb-4d1a5248da41",
+    "ec6629cc-2bd0-42d2-bc39-bb1953ea6ecd",
+    "3220d29f-d9f7-4bb5-a819-ff7fc7b6cc4e",
+    "6cf813d4-85fc-4b43-942b-06c94f05c6de",
+    "7a732df7-e7c5-453f-8de1-3ec6378156f0",
+    "04edd880-d1bf-4375-a956-66aa885ba2b5",
+    "99e982f6-359a-4c47-9e42-4e069633480e",
+    "1a1d86be-95d6-404a-b48a-c533220977db",
+    "489559ce-df77-4e37-8d49-0cd1480e215b",
+    "a97ec4f6-cca6-4071-b938-9add9d30ca7d",
+    "f63a0b8a-5d1d-42c7-ab8c-1ef16cc06dcc",
+    "41ebcceb-fac7-4068-9b73-a8c89e8a1d32",
+    "022756c2-2670-4ae5-be3c-2802611f0731",
+    "3c8180ce-5bf7-4cad-b179-53318fe5b5c2",
+    "3de2c50e-f880-4076-b8a5-95a3007458fb",
+    "012c34e3-fcbd-4638-9a5f-9b0ef0662d8e",
+    "3d238006-b1bb-42af-8be4-d260073f5ae8",
+    "7f32aec4-27d0-471e-aee9-4f272c3d0358",
+    "e7918a7e-7f96-4c4d-a299-7015cb3a7267",
+    "e373006f-1dcf-440f-8e1f-31b2fd533a59",
+    "2d021b2f-df9c-4b9c-8340-9e2b1946a6be",
+    "cd249ea6-19a9-44ce-a370-23d2fb717801",
+    "440b9282-e844-420b-9130-9dd98ba8c6bd",
+    "853d0cb3-00a1-4cc8-81c1-9a6a8a8395c2",
+    "e01dd83c-7db4-4591-b057-ad40fb0b606f",
+    "43ae1f09-9fb2-43ae-9ac8-82ba14aa54b5",
+    "e9ddc6e9-c57f-4564-8c31-f0dd448af4ab"
+  ],
+  "teams": [
+    "MIA",
+    "CHI",
+    "MIN",
+    "LAR",
+    "SF",
+    "NO",
+    "NYJ",
+    "HOU",
+    "BAL",
+    "CAR",
+    "IND",
+    "CIN",
+    "LAC",
+    "DEN",
+    "GB",
+    "NYG",
+    "WAS",
+    "ARI",
+    "TB",
+    "SEA",
+    "ATL",
+    "PIT",
+    "LV"
+  ],
+  "research_log": [
+    {
+      "url": "https://www.nfl.com/news/dolphins-rb-devon-achane-miss-2026-season-acl-tear",
+      "kind": "check",
+      "note": "Confirmed torn ACL in the Chiefs game and injured reserve on September 28. Direct page fetches are blocked by this environment's network policy, so this and every check below was made through web search results and their summaries rather than a full page read.",
+      "claim": "Achane torn ACL, season over, injured reserve",
+      "fetched_at": "2026-09-29T13:05:00Z"
+    },
+    {
+      "url": "https://www.buccaneers.com/news/baker-mayfield-three-weeks-minimum-thumb-injury-update",
+      "kind": "check",
+      "note": "Confirmed minimum of three weeks, MRI clean of ligament and tendon damage, Jalon Daniels to start against Green Bay. Also gives the final as 23 to 16.",
+      "claim": "Mayfield thumb, three weeks, Jalon Daniels starting",
+      "fetched_at": "2026-09-29T13:05:00Z"
+    },
+    {
+      "url": "https://chicago.suntimes.com/bears/2026/09/28/bears-case-keenum-ben-johnson-caleb-williams-tyson-bagent-eagles-soldier-field-nfl",
+      "kind": "check",
+      "note": "Grade 2 strain, three to four weeks; Keenum led the 27 to 7 win and stays QB1 until Williams returns.",
+      "claim": "Caleb Williams hamstring and Keenum start",
+      "fetched_at": "2026-09-29T13:05:00Z"
+    },
+    {
+      "url": "https://www.giants.com/news/j-j-mccarthy-trade-details-minnesota-vikings-quarterback-2027-nfl-draft-michigan-wolverines",
+      "kind": "check",
+      "note": "Trade for a 2027 fifth-round pick confirmed; Dart out at least the regular season after surgery; Harbaugh says Winston remains the starter.",
+      "claim": "Dart surgery and McCarthy trade",
+      "fetched_at": "2026-09-29T13:05:00Z"
+    },
+    {
+      "url": "https://www.espn.com/nfl/story/_/id/50054067/sources-vikings-jefferson-ankle-sprain-play-week",
+      "kind": "check",
+      "note": "Ankle sprain on Monday MRI, not long-term, could play against Miami. Several results give the Vikings' win as 23 to 16.",
+      "claim": "Jefferson ankle",
+      "fetched_at": "2026-09-29T13:05:00Z"
+    },
+    {
+      "url": "https://www.nbcsports.com/fantasy/football/player-news/2026-09-28/mcvay-hopeful-puka-nacua-will-play-in-week-4",
+      "kind": "check",
+      "note": "Nacua: McVay hopeful for week 4, surgery not ruled out. Evans: day to day with a rib injury (CBS). Etienne: will miss time, length unstated (ESPN). Hall: quad injury, week to week, likely out week 4 (ESPN). Daniels: expected back in under three weeks, Mariota likelier week 4 starter (RotoWire). Collins: decent chance for week 4 (NBC).",
+      "claim": "Nacua, Evans, Etienne, Hall, Daniels and Collins status",
+      "fetched_at": "2026-09-29T13:06:00Z"
+    },
+    {
+      "url": "https://www.raiders.com/news/brock-bowers-picked-up-right-where-he-left-off-nfl-week-3-raiders-vs-saints-2026",
+      "kind": "check",
+      "note": "Bowers 10 catches for 116 and a touchdown in a 35 to 27 win; Flowers active and 5 for 84 in a 34 to 31 win; Njoku placed on injured reserve by the Chargers.",
+      "claim": "Bowers debut, Flowers active, Njoku on injured reserve",
+      "fetched_at": "2026-09-29T13:06:00Z"
+    },
+    {
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872959/vikings-buccaneers",
+      "kind": "check",
+      "note": "Confirmed through search results: WAS 33 SEA 31, DEN 30 LAR 26, JAX 35 NE 6, BAL 34 DAL 31, ATL 35 GB 14, CLE 21 CAR 18, PIT 30 CIN 27, BUF 24 LAC 16, KC 24 MIA 10, SF 36 ARI 30, NYG 12 TEN 7, CHI 27 PHI 7, LV 35 NO 27, DET 31 NYJ 24, IND 19 HOU 17. The bundle's week_result gives MIN 29 TB 16; ESPN, CBS, FOX and both team sites give 23 to 16, so the edition uses 23 to 16.",
+      "claim": "Week 3 final scores",
+      "fetched_at": "2026-09-29T13:07:00Z"
+    },
+    {
+      "url": "https://x.com/AdamSchefter",
+      "kind": "check",
+      "note": "Jayden Reed's season status, the Ekeler signing, the Ertz signing and the IDP reports (Burns, Bosa, Garrett, Chenal, Horn, Johnson) were not separately checked and are written as reported on their dates or kept to what the relay says.",
+      "claim": "Relays not independently confirmed",
+      "fetched_at": "2026-09-29T13:07:00Z"
+    },
+    {
+      "claim": "Scoring plays and box score for ATL at GB, final ATL 35, GB 14.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872948",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for LAC at BUF, final LAC 16, BUF 24.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872953",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for CAR at CLE, final CAR 18, CLE 21.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872949",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for NYJ at DET, final NYJ 24, DET 31.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872954",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for HOU at IND, final HOU 17, IND 19.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872951",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for NE at JAX, final NE 6, JAX 35.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872957",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for KC at MIA, final KC 24, MIA 10.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872952",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for TEN at NYG, final TEN 7, NYG 12.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872956",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for CIN at PIT, final CIN 27, PIT 30.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872950",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for SEA at WAS, final SEA 31, WAS 33.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872955",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for ARI at SF, final ARI 30, SF 36.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872958",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for MIN at TB, final MIN 23, TB 16.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872959",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for BAL at DAL, final BAL 34, DAL 31.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872960",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for LV at NO, final LV 35, NO 27.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872961",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for LAR at DEN, final LAR 26, DEN 30.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872962",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    },
+    {
+      "claim": "Scoring plays and box score for PHI at CHI, final PHI 7, CHI 27.",
+      "url": "https://www.espn.com/nfl/game/_/gameId/401872963",
+      "fetched_at": "2026-10-01T06:33:12.086Z",
+      "note": "Game recap research for the game card: scoring sequence, quarterbacks, leaders.",
+      "kind": "check"
+    }
+  ],
+  "run": {
+    "source": "manual",
+    "run_id": null,
+    "model": "claude-opus-5-5"
+  }
+}

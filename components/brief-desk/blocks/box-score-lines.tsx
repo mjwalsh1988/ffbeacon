@@ -1,17 +1,23 @@
 /**
- * box_score_lines: the cited players' week lines as one table. The block's
- * options name which players; rows are matched on player_id. Every stat
- * column the dataset carries is shown, and the table scrolls sideways on a
- * phone rather than dropping any of them.
+ * box_score_lines: the cited players' week lines as compact rows (see
+ * ./player-line-row.tsx). The block's options name which players; rows are
+ * matched on player_id. Each row carries every stat column the dataset has,
+ * as one sentence, with the points on the right: PPR for an offensive
+ * player, Sleeper default IDP points for a defender, never both.
  *
  * Server component.
  */
 
-import Link from "next/link";
-import { DataTable, Td, Th } from "@/components/chart-kit";
 import type { BundleDataset } from "@/lib/brief-desk/types";
-import { figureColumns, formatCell, humanizeColumn, readPlayer } from "@/lib/brief-desk/dataset-read";
-import { BLOCK_LINK_CLASS, BlockShell } from "./block-shell";
+import { readPlayer, rowLineText, toNumber } from "@/lib/brief-desk/dataset-read";
+import { BlockShell } from "./block-shell";
+import { PlayerLineRow, rowMeta } from "./player-line-row";
+
+function one(v: unknown): string {
+  const n = toNumber((v ?? null) as string | number | null);
+  // Always one decimal, so "29.0" lines up under "29.8".
+  return n === null ? "n/a" : (Math.round(n * 10) / 10).toFixed(1);
+}
 
 export function BoxScoreLinesBlock({
   id,
@@ -31,51 +37,41 @@ export function BoxScoreLinesBlock({
     const pid = readPlayer(r).id;
     return pid !== null && wanted.has(pid);
   });
-  const statColumns = figureColumns(dataset.columns);
 
   return (
     <BlockShell id={id} caption={caption} conclusion={conclusion} dataset={dataset}>
       {rows.length === 0 ? (
         <p className="text-sm text-ink-muted">No week lines were recorded for the players this block names.</p>
       ) : (
-        <div
-          className="overflow-x-auto"
-          role="region"
-          tabIndex={0}
-          aria-label={`${caption || dataset.title || "Week lines"}: one row per player`}
-        >
-          <DataTable
-            caption={`${caption || dataset.title || "Week lines"}: one row per player`}
-            head={
-              <>
-                <Th>Player</Th>
-                <Th>Pos</Th>
-                <Th>Team</Th>
-                {statColumns.map((c) => (
-                  <Th key={c} numeric>
-                    {humanizeColumn(c)}
-                  </Th>
-                ))}
-              </>
-            }
-          >
-            {rows.map((row, i) => {
-              const p = readPlayer(row);
-              return (
-                <tr key={`${p.id ?? i}`}>
-                  <Td>{p.slug ? <Link href={`/players/${p.slug}`} className={BLOCK_LINK_CLASS}>{p.name}</Link> : p.name}</Td>
-                  <Td>{p.position ?? "n/a"}</Td>
-                  <Td>{p.team ?? "n/a"}</Td>
-                  {statColumns.map((c) => (
-                    <Td key={c} numeric>
-                      {formatCell(row[c] ?? null, c)}
-                    </Td>
-                  ))}
-                </tr>
-              );
-            })}
-          </DataTable>
-        </div>
+        <ol role="list" aria-label={caption || dataset.title || "Week lines"} className="divide-y divide-line/60">
+          {rows.map((row, i) => {
+            const p = readPlayer(row);
+            const defender = row.pts_idp123 !== undefined && row.pts_idp123 !== null;
+            const opponent = typeof row.opponent === "string" ? row.opponent : null;
+            return (
+              <PlayerLineRow
+                key={`${p.id ?? i}`}
+                name={p.name}
+                slug={p.slug}
+                sleeperId={p.sleeperId}
+                meta={rowMeta(p.position, p.team, opponent)}
+                line={rowLineText(row) || null}
+                figure={one(defender ? row.pts_idp123 : row.pts_ppr)}
+                figureLabel={defender ? "IDP" : "PPR"}
+                sub={
+                  defender ? (
+                    "Sleeper IDP scoring"
+                  ) : (
+                    <>
+                      <span className="block">{`Half ${one(row.pts_half_ppr)}`}</span>
+                      <span className="block">{`Standard ${one(row.pts_std)}`}</span>
+                    </>
+                  )
+                }
+              />
+            );
+          })}
+        </ol>
       )}
     </BlockShell>
   );

@@ -16,7 +16,7 @@ import { ArrowRight } from "lucide-react";
 import { ACTION_TOOL_PATHS } from "@/lib/brief-desk/blocks";
 import type { BundleDataset } from "@/lib/brief-desk/types";
 import type { BlockPlayer } from "@/lib/brief-desk/edition-data";
-import { figureColumns, formatCell, humanizeColumn, readPlayer, type DatasetRow } from "@/lib/brief-desk/dataset-read";
+import { readPlayer, type DatasetRow } from "@/lib/brief-desk/dataset-read";
 import { BLOCK_LINK_CLASS, BlockShell } from "./block-shell";
 
 type Action = "waiver" | "hold" | "sell" | "start" | "sit";
@@ -56,7 +56,6 @@ export function ActionListBlock({
     const pid = readPlayer(row).id;
     if (pid) rowById.set(pid, row);
   }
-  const bidColumns = dataset ? figureColumns(dataset.columns) : [];
 
   return (
     <BlockShell id={id} caption={caption} conclusion={conclusion} dataset={dataset}>
@@ -69,9 +68,13 @@ export function ActionListBlock({
           const slug = known?.slug ?? fromRow?.slug ?? null;
           const position = known?.position ?? fromRow?.position ?? null;
           const team = known?.team ?? fromRow?.team ?? null;
-          const figures = row ? bidColumns.filter((c) => row[c] !== null && row[c] !== undefined) : [];
+          // The one figure a reader acts on from this card. The rest of the row
+          // (values, ranks, the bid tier) is the claim's reasoning, which the
+          // note states in words.
+          const bidLow = row && typeof row.bid_low === "number" ? row.bid_low : null;
+          const bidHigh = row && typeof row.bid_high === "number" ? row.bid_high : null;
           return (
-            <li key={`${item.player_id}-${i}`} className="rounded-card border border-line bg-surface/60 p-4">
+            <li key={`${item.player_id}-${i}`} className="flex flex-col rounded-card border border-line bg-surface/60 p-4">
               <p className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex min-h-7 items-center rounded-full border border-brand-purple/40 px-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-purple-light">
                   {ACTION_LABELS[item.action]}
@@ -90,14 +93,14 @@ export function ActionListBlock({
                 )}
               </p>
               {item.note && <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.note}</p>}
-              {figures.length > 0 && row && (
-                <p className="mt-2 text-xs text-ink-subtle">
-                  {figures.map((c) => `${humanizeColumn(c)}: ${formatCell(row[c] ?? null, c)}`).join(". ")}.
+              {bidLow !== null && bidHigh !== null && (
+                <p className="mt-2 text-sm text-ink">
+                  Suggested bid: <span className="font-mono font-semibold tabular-nums">{`${bidLow} to ${bidHigh}`}</span> percent of budget
                 </p>
               )}
               <Link
                 href={ACTION_TOOL_PATHS[item.tool] as Route}
-                className={`${BLOCK_LINK_CLASS} mt-3 inline-flex min-h-11 items-center gap-1 text-sm`}
+                className={`${BLOCK_LINK_CLASS} mt-auto inline-flex min-h-11 items-center gap-1 self-start pt-3 text-sm`}
               >
                 {TOOL_LABELS[item.tool]}
                 <span className="sr-only"> for {name}</span>

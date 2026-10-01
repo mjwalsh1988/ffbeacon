@@ -90,6 +90,8 @@ const relay = (id: string, over: Partial<DatasetRelay>): DatasetRelay => ({
   players: [],
   teams: [],
   ...over,
+  // As the bundle derives it: the flagged primaries, else the only player.
+  subject_player_ids: over.subject_player_ids ?? (over.players?.length === 1 ? over.players : []),
 });
 
 describe("rankTrendRows", () => {
@@ -214,7 +216,9 @@ describe("top scorers and box score lines", () => {
     // A 0 to 1 fraction in the table, a whole percentage under "Defensive snap %".
     expect(lbRow.def_snap_pct).toBe(93);
     expect(d.columns).toContain("pts_idp123");
-    expect(d.source_note).toContain("Sleeper default IDP scoring");
+    expect(d.source_note).toContain("Sleeper's default IDP scoring");
+    // Reader-facing: no column names.
+    expect(d.source_note).not.toContain("pts_idp123");
     // The source note no longer claims a missing row means no stat.
     expect(d.source_note).not.toContain("did not record a stat");
   });
@@ -302,6 +306,35 @@ describe("injury timeline", () => {
     expect(d.rows[0]).toMatchObject({ weeks_max: 6, expected_return_week: null });
     expect(d.source_note).toContain("off-season");
   });
+
+  it("gives a Relay's status to its subjects only", () => {
+    const d = buildInjuryTimelineDataset(
+      [
+        // "p1 had surgery; p2's role expected to grow": p2 is not out.
+        relay("s1", { availability: "out", timeline: "a game or two", players: ["p2", "p1"], subject_player_ids: ["p1"] }),
+        // "p3 off the injury report; p4 ruled out": the active status is p3's,
+        // and it must not clear p4's own earlier report.
+        relay("s2", { availability: "out", timeline: "3 weeks", players: ["p4"], source_posted_at: "2026-09-09T12:00:00.000Z" }),
+        relay("s3", { availability: "active", players: ["p3", "p4"], subject_player_ids: ["p3"], source_posted_at: "2026-09-11T12:00:00.000Z" }),
+        // Several players and no flagged subject: nobody inherits the status.
+        relay("s4", { availability: "out", players: ["p5", "p6"], subject_player_ids: [] }),
+      ],
+      players,
+      2,
+      AT,
+    );
+    expect(d.rows.map((r) => r.player_id).sort()).toEqual(["p1", "p4"]);
+  });
+
+  it("gives a group report's status to every subject in it", () => {
+    const d = buildInjuryTimelineDataset(
+      [relay("g1", { availability: "out", players: ["p1", "p2", "p3"], subject_player_ids: ["p1", "p2"] })],
+      players,
+      2,
+      AT,
+    );
+    expect(d.rows.map((r) => r.player_id).sort()).toEqual(["p1", "p2"]);
+  });
 });
 
 describe("waiver targets", () => {
@@ -354,6 +387,19 @@ describe("week stat tiles", () => {
     expect(d.rows.map((r) => r.value)).toEqual(["6", "3", "2", "2", "Foxtrot Deep, +900", "Bravo Wide, 31.4"]);
     expect(d.rows[4].label).toContain("Dynasty Superflex PPR");
     expect(d.rows[5].label).toBe("Top PPR scorer, week 2");
+  });
+
+  it("counts a ruled-out Relay against its subjects only", () => {
+    const d = buildWeekStatTilesDataset({
+      relays: [relay("t1", { availability: "out", players: ["p1", "p2"], subject_player_ids: ["p1"] })],
+      inSeason: true,
+      dynasty,
+      players,
+      lines,
+      week: 2,
+      computedAt: AT,
+    });
+    expect(d.rows.find((r) => r.id === "ruled_out")?.value).toBe("1");
   });
 
   it("off-season: the last two are the top faller and the most-mentioned team", () => {

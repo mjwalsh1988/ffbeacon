@@ -27,6 +27,14 @@ export interface BundleRelay {
   source_url: string;
   source_posted_at: string;
   players: string[];
+  /**
+   * The players the Relay is about (relay_players.is_primary), or its only
+   * player when none is flagged; empty when neither applies. availability and
+   * timeline describe THESE players. A report can have several ("15 players
+   * ruled out for Sunday"); the rest are named in passing ("Mayer's role
+   * expected to grow") and must not inherit the status.
+   */
+  subject_player_ids: string[];
   teams: string[];
   follows_relay_id: string | null;
   status: "published" | "hidden";
@@ -131,6 +139,13 @@ export interface Bundle {
     dvp_notes: string[];
   };
   datasets: Record<string, BundleDataset>;
+  /**
+   * The week's carded games (plan section 23): one entry per row of the
+   * week_games dataset, with the ESPN game page to research the recap from and
+   * the player ids on the card (a fun_stat must name one of them). Empty when
+   * the period has no week or no game with a final and a line.
+   */
+  game_index: Array<{ game_key: string; away: string; home: string; recap_url: string | null; player_ids: string[] }>;
   block_kinds: BlockKindMeta[];
   section_icons: readonly SectionIcon[];
   example: { slug: string; draft_payload: unknown } | null;

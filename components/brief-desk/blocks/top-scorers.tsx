@@ -1,49 +1,44 @@
 "use client";
 
 /**
- * top_scorers: the period's scorers as a table per position, sortable by
- * column.
+ * top_scorers: the period's scorers per position as ranked rows, sortable.
  *
- * Sorting is a native <button> in each column header carrying aria-sort on
- * its <th>, and the result region under the tables announces the sort. The
- * default state (the dataset's own order, which is rank order) is rendered on
- * the server, so a crawler and a reader without JavaScript see the table.
- * Nothing visible is aria-hidden and no column is dropped at any width: the
- * table scrolls inside its container on a phone.
+ * Each player is one compact row (./player-line-row.tsx): the name on one
+ * line, the whole stat line as a sentence under it, and PPR points large on
+ * the right with the half PPR and standard totals under them. It replaced a
+ * 17-column table whose names wrapped and which scrolled sideways at every
+ * width; every column it carried is still on the row.
+ *
+ * Sorting is one native <select>; the status line under the lists announces
+ * the order. The default state (rank order) is rendered on the server, so a
+ * crawler and a reader without JavaScript see the lists.
  *
  * Client component. Takes plain data only.
  */
 
-import { useState } from "react";
-import Link from "next/link";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { useId, useState } from "react";
 import type { BundleDataset } from "@/lib/brief-desk/types";
-import {
-  figureColumns,
-  formatCell,
-  humanizeColumn,
-  readPlayer,
-  toNumber,
-  type DatasetRow,
-} from "@/lib/brief-desk/dataset-read";
-import { BLOCK_LINK_CLASS } from "./block-shell";
+import { readPlayer, rowLineText, toNumber, type DatasetRow } from "@/lib/brief-desk/dataset-read";
+import { PlayerLineRow, rowMeta } from "./player-line-row";
 
-type SortState = { column: string | null; direction: "asc" | "desc" };
+const SORTS: Array<{ column: string; label: string }> = [
+  { column: "pts_ppr", label: "PPR points" },
+  { column: "pts_half_ppr", label: "Half PPR points" },
+  { column: "pts_std", label: "Standard points" },
+  { column: "pass_yd", label: "Passing yards" },
+  { column: "rush_yd", label: "Rushing yards" },
+  { column: "rec_yd", label: "Receiving yards" },
+  { column: "rec_tgt", label: "Targets" },
+  { column: "snap_pct", label: "Snap share" },
+];
 
-const HEADER_BUTTON =
-  "inline-flex min-h-11 items-center gap-1 rounded-card px-1 text-left font-semibold uppercase tracking-wide text-ink-subtle hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+const SELECT_CLASS =
+  "min-h-11 rounded-card border border-line bg-base px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
-function compare(a: DatasetRow, b: DatasetRow, column: string, direction: "asc" | "desc"): number {
-  const av = a[column] ?? null;
-  const bv = b[column] ?? null;
-  const an = toNumber(av);
-  const bn = toNumber(bv);
-  let cmp: number;
-  if (an !== null && bn !== null) cmp = an - bn;
-  else if (an !== null) cmp = -1;
-  else if (bn !== null) cmp = 1;
-  else cmp = String(av ?? "").localeCompare(String(bv ?? ""));
-  return direction === "asc" ? cmp : -cmp;
+function one(v: unknown): string {
+  const n = toNumber((v ?? null) as string | number | null);
+  // Always one decimal, so "29.0" lines up under "29.8".
+  return n === null ? "n/a" : (Math.round(n * 10) / 10).toFixed(1);
 }
 
 export function TopScorersTable({
@@ -57,15 +52,14 @@ export function TopScorersTable({
   positions: string[];
   limit: number;
 }) {
-  const [sort, setSort] = useState<SortState>({ column: null, direction: "desc" });
-  const statColumns = figureColumns(dataset.columns);
+  const id = useId();
+  const sorts = SORTS.filter((s) => dataset.columns.includes(s.column));
+  const [sortColumn, setSortColumn] = useState<string>("pts_ppr");
   const hasPosition = dataset.columns.some((c) => c === "position" || c === "pos");
 
-  // One table per position when the dataset carries one, else one table.
   const groups: Array<{ label: string | null; rows: DatasetRow[] }> = [];
   if (hasPosition) {
-    const wanted = positions.map((p) => p.toUpperCase());
-    for (const pos of wanted) {
+    for (const pos of positions.map((p) => p.toUpperCase())) {
       const rows = dataset.rows.filter((r) => (readPlayer(r).position ?? "").toUpperCase() === pos);
       if (rows.length > 0) groups.push({ label: pos, rows });
     }
@@ -73,116 +67,71 @@ export function TopScorersTable({
     groups.push({ label: null, rows: dataset.rows });
   }
 
-  const sortedGroups = groups.map((g) => {
-    const rows = sort.column ? [...g.rows].sort((a, b) => compare(a, b, sort.column as string, sort.direction)) : g.rows;
+  const sorted = groups.map((g) => {
+    const rows =
+      sortColumn === "pts_ppr"
+        ? g.rows
+        : [...g.rows].sort((a, b) => (toNumber(b[sortColumn] ?? null) ?? -Infinity) - (toNumber(a[sortColumn] ?? null) ?? -Infinity));
     return { ...g, rows: rows.slice(0, limit) };
   });
-
-  function toggle(column: string) {
-    setSort((prev) => {
-      if (prev.column !== column) return { column, direction: "desc" };
-      return { column, direction: prev.direction === "desc" ? "asc" : "desc" };
-    });
-  }
-
-  const sortLabel = sort.column
-    ? `Sorted by ${humanizeColumn(sort.column)}, ${sort.direction === "desc" ? "highest first" : "lowest first"}.`
-    : "In rank order.";
+  const sortLabel = sorts.find((s) => s.column === sortColumn)?.label ?? "PPR points";
 
   return (
     <div>
-      {sortedGroups.length === 0 ? (
-        <p className="text-sm text-ink-muted">No scorers were recorded for the positions this block names.</p>
+      {sorts.length > 1 && (
+        <label htmlFor={`${id}-sort`} className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+          Sort by
+          <select id={`${id}-sort`} value={sortColumn} onChange={(e) => setSortColumn(e.target.value)} className={SELECT_CLASS}>
+            {sorts.map((s) => (
+              <option key={s.column} value={s.column}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {sorted.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-muted">No scorers were recorded for the positions this block names.</p>
       ) : (
-        sortedGroups.map((g) => (
-          <div key={g.label ?? "all"} className="mt-3 first:mt-0">
-            {g.label && <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle">{g.label}</h4>}
-            {/* Focusable and named, so a keyboard reader can scroll the columns
-                sideways on a narrow window: Chrome does not focus a bare scroll
-                container. */}
-            <div
-              className="overflow-x-auto"
-              role="region"
-              tabIndex={0}
-              aria-label={g.label ? `${g.label} top scorers` : "Top scorers"}
-            >
-              <table className="w-full min-w-[20rem] border-collapse text-left text-xs">
-                <caption className="sr-only">
-                  {g.label ? `${g.label} top scorers` : "Top scorers"}, sortable by column. {sortLabel}
-                </caption>
-                <thead>
-                  <tr className="border-b border-line text-[10px]">
-                    <th scope="col" className="py-1.5 pr-3 font-semibold uppercase tracking-wide text-ink-subtle">
-                      Player
-                    </th>
-                    {statColumns.map((column) => {
-                      const active = sort.column === column;
-                      return (
-                        <th
-                          key={column}
-                          scope="col"
-                          className="py-1 pr-2 text-right"
-                          aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => toggle(column)}
-                            className={`${HEADER_BUTTON} ${active ? "text-brand-cyan" : ""}`}
-                          >
-                            {humanizeColumn(column)}
-                            {active ? (
-                              sort.direction === "asc" ? (
-                                <ArrowUp aria-hidden="true" className="h-3 w-3" />
-                              ) : (
-                                <ArrowDown aria-hidden="true" className="h-3 w-3" />
-                              )
-                            ) : (
-                              <ArrowUpDown aria-hidden="true" className="h-3 w-3 opacity-60" />
-                            )}
-                            <span className="sr-only">
-                              {active ? `, sorted ${sort.direction === "asc" ? "lowest first" : "highest first"}, activate to reverse` : ", activate to sort"}
-                            </span>
-                          </button>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line/60">
-                  {g.rows.map((row, i) => {
-                    const p = readPlayer(row);
-                    return (
-                      <tr key={`${p.id ?? p.slug ?? p.name}-${i}`}>
-                        <th scope="row" className="py-1.5 pr-3 font-normal text-ink">
-                          {p.slug ? (
-                            <Link href={`/players/${p.slug}`} className={BLOCK_LINK_CLASS}>
-                              {p.name}
-                            </Link>
-                          ) : (
-                            p.name
-                          )}
-                          {(p.team || (!hasPosition && p.position)) && (
-                            <span className="ml-1.5 text-[11px] text-ink-subtle">
-                              {[!hasPosition ? p.position : null, p.team].filter(Boolean).join(", ")}
-                            </span>
-                          )}
-                        </th>
-                        {statColumns.map((column) => (
-                          <td key={column} className="py-1.5 pr-2 text-right tabular-nums text-ink-muted">
-                            {formatCell(row[column] ?? null, column)}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        <div className="mt-3">
+          {sorted.map((g) => (
+            <div key={g.label ?? "all"} className="min-w-0">
+              {g.label && (
+                <h4 id={`${id}-${g.label}`} className="border-b border-line pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-brand-cyan">
+                  {g.label}
+                </h4>
+              )}
+              <ol role="list" aria-labelledby={g.label ? `${id}-${g.label}` : undefined} aria-label={g.label ? undefined : "Top scorers"} className="divide-y divide-line/60">
+                {g.rows.map((row, i) => {
+                  const p = readPlayer(row);
+                  const opponent = typeof row.opponent === "string" ? row.opponent : null;
+                  return (
+                    <PlayerLineRow
+                      key={`${p.id ?? p.slug ?? p.name}-${i}`}
+                      rank={i + 1}
+                      name={p.name}
+                      slug={p.slug}
+                      sleeperId={p.sleeperId}
+                      meta={rowMeta(hasPosition ? null : p.position, p.team, opponent)}
+                      line={rowLineText(row) || null}
+                      figure={one(row.pts_ppr)}
+                      figureLabel="PPR"
+                      sub={
+                        <>
+                          <span className="block">{`Half ${one(row.pts_half_ppr)}`}</span>
+                          <span className="block">{`Standard ${one(row.pts_std)}`}</span>
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </ol>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
       <p id={`top-scorers-${blockId}-status`} role="status" className="mt-2 text-xs text-ink-subtle">
-        {sortLabel}
+        {sortColumn === "pts_ppr" ? "In rank order, by PPR points." : `Sorted by ${sortLabel}, highest first.`}
       </p>
     </div>
   );

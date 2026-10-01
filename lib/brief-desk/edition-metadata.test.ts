@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDataset, parseEditionMetadata } from "./edition-metadata";
-import { formatColumnsFor, formatCell, formatSigned, readPlayer } from "./dataset-read";
+import { formatColumnsFor, formatCell, formatSigned, readPlayer, rowLineText } from "./dataset-read";
 import { formatPeriod, formatsPhrase, periodChipLabel } from "./period";
 
 describe("parseEditionMetadata", () => {
@@ -73,6 +73,8 @@ describe("dataset-read", () => {
   it("signs a change and never turns a null into a zero", () => {
     expect(formatSigned(12)).toBe("+12");
     expect(formatSigned(-3.14)).toBe("-3.1");
+    expect(formatSigned(1961)).toBe("+1,961");
+    expect(formatSigned(-1393)).toBe("-1,393");
     expect(formatCell(null)).toBe("n/a");
     expect(formatCell(4.25, "change_7d")).toBe("+4.3");
   });
@@ -84,7 +86,18 @@ describe("dataset-read", () => {
       name: "A B",
       position: "RB",
       team: "PHI",
+      sleeperId: null,
     });
+  });
+
+  it("reads a week line as one sentence, and a defender's line as his defensive stats", () => {
+    expect(
+      rowLineText({ position: "QB", pass_att: 31, pass_cmp: 22, pass_yd: 287, pass_td: 2, pass_int: 0, rush_att: 4, rush_yd: 18, rush_td: 0, rec: 0, rec_tgt: 0, rec_yd: 0, rec_td: 0, fum_lost: 0, snap_pct: 98 }),
+    ).toBe("22 of 31, 287 passing yards, 2 TD; 4 carries, 18 rushing yards; 98% of snaps");
+    expect(rowLineText({ position: "LB", pts_idp123: 17, idp_tkl: 9, idp_tkl_solo: 6, idp_sack: 1, def_snap_pct: 100 })).toBe(
+      "9 tackles (6 solo), 1 sack, 100% of defensive snaps",
+    );
+    expect(rowLineText({ position: "K", pts_ppr: 12 })).toBe("");
   });
 });
 
