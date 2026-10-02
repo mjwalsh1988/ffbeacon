@@ -94,7 +94,7 @@ export function SaveHandleForm({
           placeholder="your-handle"
           aria-describedby={error ? errorId : undefined}
           aria-invalid={error ? true : undefined}
-          className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus:border-brand-purple focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          className="mt-2 min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus:border-brand-purple focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         />
       </div>
 

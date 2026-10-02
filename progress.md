@@ -16768,3 +16768,7 @@ OPS-T001 | completed | Nightly recalculate-derived: rebuild_player_roster_exposu
      | files: supabase/migrations/0335_player_roster_exposure_safeupdate.sql
      | depends on: none
      | verified: yes (applied to prod; called through PostgREST with the secret key: rebuilt 2,746 players over 14,547 rosters; no other public function holds an unqualified DELETE or UPDATE). Function signature unchanged, so no type regen.
+T737 | completed | Free Agent Finder page rebuilt so the tool runs on its own page: sign-in card with setup steps for guests, inline username form for members with none saved, the working search for members with one; interactive sample against invented leagues, results legend, before-and-after visual, ToolExplainer with FAQ; availability meter on results; My Beacon side panel reuses the same body and links to the page
+     | files: app/tools/free-agent-finder/page.tsx, components/free-agent-finder-panel.tsx, components/free-agent-finder-demo.tsx, components/free-agent-finder-connect-form.tsx, lib/free-agent-finder.ts (countSyncedLeagues), components/sleeper-handle/save-handle-form.tsx (input min-h-11)
+     | depends on: none
+     | verified: yes (typecheck, lint, tests, build; desktop and 500 px phone layout checked in Chrome for the signed-out, no-username and signed-in states with real searches; accessibility and implementation/security review sub-agents run and their findings fixed). Not committed.

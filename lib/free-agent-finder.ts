@@ -263,6 +263,49 @@ export async function findFreeAgentLeagues(
 }
 
 /**
+ * How many of these Sleeper leagues the finder can answer for right now.
+ *
+ * Same definition of "synced" the search uses: a league row with at least one
+ * stored roster. The tool page needs this before any search is run, so the
+ * reader is told the scope above the search box rather than under an answer.
+ * My Beacon gets the same number from its exposure read; this page has no
+ * reason to build a whole exposure table to learn one count.
+ *
+ * Never throws. A failed read reports zero, which the page renders as "nothing
+ * synced yet" with the way to fix it, never as an answer about a player.
+ */
+export async function countSyncedLeagues(
+  supabase: AnySupabase,
+  sleeperLeagueIds: string[],
+): Promise<number> {
+  const wanted = sleeperLeagueIds.slice(0, MAX_SEARCHED_LEAGUES);
+  if (wanted.length === 0) return 0;
+  try {
+    const { data: leagueRows } = await supabase
+      .from("leagues")
+      .select("id")
+      .in("sleeper_league_id", wanted);
+    const rowIds = (leagueRows ?? []).map((l) => l.id);
+    if (rowIds.length === 0) return 0;
+    const probeRows = await fetchAllRowsInChunks(
+      "free agent synced count",
+      rowIds,
+      (chunk, from, to) =>
+        supabase
+          .from("rosters")
+          .select("league_id")
+          .in("league_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+    );
+    return new Set(probeRows.map((r) => r.league_id)).size;
+  } catch (err) {
+    console.warn("[free-agent-finder] synced count failed:", (err as Error).message);
+    return 0;
+  }
+}
+
+/**
  * The manager holding him, per league, by league row id.
  *
  * Only for the leagues where he was actually found, so this reads a handful of

@@ -39,16 +39,7 @@ import { NO_ACTIVE_OPTION, nextComboboxIndex } from "@/lib/keyboard-navigation";
  * unanswered, never folded in with the real yeses. The notice above the form
  * says how many are in that state before a search is run, not after.
  */
-export function FreeAgentFinderPanel({
-  open,
-  onClose,
-  sleeperLeagueIds,
-  sleeperUserId,
-  syncedLeagueCount,
-  sleeperUsername,
-}: {
-  open: boolean;
-  onClose: () => void;
+type FinderProps = {
   /** Every league Sleeper reports for this reader, synced or not. */
   sleeperLeagueIds: string[];
   /** The reader's own Sleeper id, so their own roster reads as theirs. */
@@ -57,7 +48,58 @@ export function FreeAgentFinderPanel({
   syncedLeagueCount: number;
   /** Forwarded on the league links so a deep view lands on this roster. */
   sleeperUsername: string | null;
-}) {
+};
+
+/**
+ * Where the finder is mounted changes one thing: where the reader goes to sync
+ * a league. In My Beacon the Sync all button is on the page behind the panel;
+ * on the tool page it is one link away.
+ */
+type FinderPlacement = "panel" | "page";
+
+export function FreeAgentFinderPanel({
+  open,
+  onClose,
+  ...props
+}: FinderProps & { open: boolean; onClose: () => void }) {
+  const { syncedLeagueCount } = props;
+  return (
+    <SidePanel
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Free Agent Finder"
+      subtitle={
+        syncedLeagueCount > 0
+          ? `Searching ${syncedLeagueCount} synced ${syncedLeagueCount === 1 ? "league" : "leagues"}`
+          : "No synced leagues yet"
+      }
+    >
+      <FreeAgentFinder {...props} placement="panel" />
+      <p className="mt-6 text-xs text-ink-subtle">
+        <Link
+          href="/tools/free-agent-finder"
+          className="font-medium text-brand-cyan underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          Open the Free Agent Finder on its own page
+        </Link>
+      </p>
+    </SidePanel>
+  );
+}
+
+/**
+ * The working finder, without a container. The tool page renders this inline so
+ * a signed-in reader can search the moment the page loads; My Beacon wraps it in
+ * the side panel above.
+ */
+export function FreeAgentFinder({
+  sleeperLeagueIds,
+  sleeperUserId,
+  syncedLeagueCount,
+  sleeperUsername,
+  placement = "page",
+}: FinderProps & { placement?: FinderPlacement }) {
   const [player, setPlayer] = useState<SearchablePlayer | null>(null);
   const [report, setReport] = useState<FreeAgentReport | null>(null);
   const [pending, setPending] = useState(false);
@@ -102,21 +144,15 @@ export function FreeAgentFinderPanel({
   }
 
   return (
-    <SidePanel
-      open={open}
-      onClose={onClose}
-      size="lg"
-      title="Free Agent Finder"
-      subtitle={
-        syncedLeagueCount > 0
-          ? `Searching ${syncedLeagueCount} synced ${syncedLeagueCount === 1 ? "league" : "leagues"}`
-          : "No synced leagues yet"
-      }
-    >
-      <SyncNotice synced={syncedLeagueCount} total={totalLeagues} />
+    <div>
+      <SyncNotice
+        synced={syncedLeagueCount}
+        total={totalLeagues}
+        placement={placement}
+      />
 
       {syncedLeagueCount === 0 ? (
-        <EmptyState />
+        <EmptyState placement={placement} />
       ) : (
         <>
           <PlayerCombobox onSelect={runSearch} />
@@ -131,7 +167,6 @@ export function FreeAgentFinderPanel({
           <div
             role="status"
             aria-live="polite"
-            aria-busy={pending}
             className="mt-4"
           >
             {pending ? (
@@ -156,7 +191,25 @@ export function FreeAgentFinderPanel({
           )}
         </>
       )}
-    </SidePanel>
+    </div>
+  );
+}
+
+/** Where to send a reader who needs to sync a league, by placement. */
+function SyncHint({ placement }: { placement: FinderPlacement }) {
+  if (placement === "panel") {
+    return <>Press Sync all, or open a league, and it joins the next search.</>;
+  }
+  return (
+    <>
+      <Link
+        href="/my-beacon/sleeper-leagues"
+        className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        Press Sync all in My Beacon
+      </Link>
+      , or open a league, and it joins the next search.
+    </>
   );
 }
 
@@ -169,8 +222,17 @@ export function FreeAgentFinderPanel({
  * sentence above the question is a scope, and it is the only thing standing
  * between a reader and the assumption that "no results" means "nobody has him".
  */
-function SyncNotice({ synced, total }: { synced: number; total: number }) {
+function SyncNotice({
+  synced,
+  total,
+  placement,
+}: {
+  synced: number;
+  total: number;
+  placement: FinderPlacement;
+}) {
   const missing = Math.max(0, total - synced);
+  const share = total > 0 ? Math.min(100, Math.round((synced / total) * 100)) : 0;
   return (
     <div
       role="note"
@@ -182,11 +244,21 @@ function SyncNotice({ synced, total }: { synced: number; total: number }) {
       >
         <Info className="h-4 w-4" />
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-ink">
           This searches your synced leagues only.
         </p>
-        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+        {/* The bar repeats the "N of M" sentence beside it, so it is decorative. */}
+        <div
+          aria-hidden="true"
+          className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line"
+        >
+          <div
+            className="h-full rounded-full bg-beacon"
+            style={{ width: `${share}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-ink-muted">
           <span className="font-mono font-semibold tabular-nums text-brand-cyan">
             {synced} of {total}
           </span>{" "}
@@ -195,13 +267,12 @@ function SyncNotice({ synced, total }: { synced: number; total: number }) {
             <>
               {" "}
               The other {missing} {missing === 1 ? "one has" : "ones have"} no
-              rosters stored, so this cannot say who is on them. Press Sync all,
-              or open a league, and it joins the next search.
+              rosters stored, so this cannot say who is on them.{" "}
+              <SyncHint placement={placement} />
             </>
           ) : (
             " Every league you are in can be answered."
-          )}{" "}
-          Nothing on this panel starts a sync.
+          )}
         </p>
       </div>
     </div>
@@ -209,6 +280,9 @@ function SyncNotice({ synced, total }: { synced: number; total: number }) {
 }
 
 /* ---------- combobox ---------- */
+
+/** Set by the tool page's save form, read once by the search box. */
+export const FOCUS_AFTER_SAVE_KEY = "ffbeacon.faf.focus-search";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
 const MIN_QUERY = 2;
@@ -239,6 +313,21 @@ function PlayerCombobox({
   // No option is active until the reader presses Down (lib/keyboard-navigation).
   const [activeIdx, setActiveIdx] = useState(NO_ACTIVE_OPTION);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // A reader who just saved their Sleeper username on the tool page lands here
+  // after a refresh that unmounted the form they were typing in. Put them in the
+  // search box rather than leaving focus on the page body.
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem(FOCUS_AFTER_SAVE_KEY)) {
+        window.sessionStorage.removeItem(FOCUS_AFTER_SAVE_KEY);
+        inputRef.current?.focus();
+      }
+    } catch {
+      // Storage blocked: focus simply stays where the browser put it.
+    }
+  }, []);
 
   const trimmed = query.trim();
   const longEnough = trimmed.length >= MIN_QUERY;
@@ -346,6 +435,7 @@ function PlayerCombobox({
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle"
         />
         <input
+          ref={inputRef}
           id={inputId}
           type="text"
           role="combobox"
@@ -491,18 +581,69 @@ function ReportSummary({
   }
 
   return (
-    <p className="text-sm leading-relaxed text-ink">
-      <span className="font-bold">{playerName}</span> is a free agent in{" "}
-      <span className="font-mono font-bold tabular-nums text-signal-success">
-        {freeCount}
-      </span>{" "}
-      of your {leagues.length} searched{" "}
-      {leagues.length === 1 ? "league" : "leagues"}, and rostered in{" "}
-      <span className="font-mono font-bold tabular-nums text-ink">
-        {rosteredCount}
-      </span>
-      .
-    </p>
+    <AvailabilityMeter
+      playerName={playerName}
+      freeCount={freeCount}
+      rosteredCount={rosteredCount}
+      total={leagues.length}
+    />
+  );
+}
+
+/**
+ * The answer as one sentence and one bar. Exported so the tool page's sample
+ * demo draws exactly the card a real search draws.
+ *
+ * The sentence is the meaning; the segmented bar under it says the same thing
+ * with one cell per league and is aria-hidden. Free cells are filled and
+ * rostered cells are outlined, so the split reads without colour.
+ */
+export function AvailabilityMeter({
+  playerName,
+  freeCount,
+  rosteredCount,
+  total,
+}: {
+  playerName: string;
+  freeCount: number;
+  rosteredCount: number;
+  total: number;
+}) {
+  const cells = Math.min(total, 40);
+  // Rounded to the cell count, but never so far that a real free league draws
+  // no filled cell, or a real rostered one draws no outlined cell.
+  let freeCells = total > 0 ? Math.round((freeCount / total) * cells) : 0;
+  if (freeCount > 0) freeCells = Math.max(1, freeCells);
+  if (rosteredCount > 0) freeCells = Math.min(cells - 1, freeCells);
+  return (
+    <div className="rounded-card border border-line-accent bg-surface p-4">
+      <p className="text-sm leading-relaxed text-ink">
+        <span className="font-bold">{playerName}</span> is a free agent in{" "}
+        <span className="font-mono text-lg font-bold tabular-nums text-signal-success">
+          {freeCount}
+        </span>{" "}
+        of your {total} searched {total === 1 ? "league" : "leagues"}, and
+        rostered in{" "}
+        <span className="font-mono font-bold tabular-nums text-ink">
+          {rosteredCount}
+        </span>
+        .
+      </p>
+      {cells > 0 && (
+        <div aria-hidden="true" className="mt-3 flex gap-1">
+          {Array.from({ length: cells }, (_, i) => (
+            <span
+              key={i}
+              className={`h-2.5 min-w-0 flex-1 rounded-sm ${
+                i < freeCells
+                  ? "bg-signal-success"
+                  : "border border-line-accent bg-transparent"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -618,7 +759,7 @@ function LeagueRow({
             {league.leagueName}
           </span>
           <span
-            className={`mt-0.5 block truncate text-[11px] ${
+            className={`mt-0.5 block text-[11px] sm:truncate ${
               league.isFreeAgent
                 ? "font-semibold text-signal-success"
                 : "text-ink-subtle"
@@ -632,15 +773,14 @@ function LeagueRow({
   );
 }
 
-function EmptyState() {
+function EmptyState({ placement }: { placement: FinderPlacement }) {
   return (
     <div className="rounded-card border border-dashed border-line bg-base/40 p-5">
       <p className="text-sm font-semibold text-ink">Nothing to search yet.</p>
       <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
         Availability is worked out from the rosters we have already stored, so a
-        league has to be synced before it can be searched. Press Sync all, or
-        open a league, and it shows up here. Nothing on this panel starts a sync
-        on its own.
+        league has to be synced before it can be searched.{" "}
+        <SyncHint placement={placement} />
       </p>
     </div>
   );
