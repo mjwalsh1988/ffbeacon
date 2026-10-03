@@ -740,6 +740,25 @@ Consequence: FantasyCalc trend data accumulates from launch date
 as `-` until ~30 days of FC syncs have run. KTC trends, by contrast,
 render from the first post-backfill rankings page load.
 
+### NFL game weather (`nfl_game_weather`): no forecast history exists
+
+Added 2026-10-03 for Season Pulse (`docs/season-pulse/season-pulse-plan.md`).
+Forecast snapshots come from the National Weather Service for games in the
+United States and MET Norway for games abroad, through `lib/nfl-weather.ts`,
+written by `lib/sync-nfl-weather.ts` (`npm run sync:weather`, and
+`/api/cron/sync-nfl-weather` nightly plus three game-day runs).
+
+Neither provider serves a forecast it issued in the past, so there is nothing
+to backfill: the snapshot history starts on the day the sync first ran, and the
+table is append-only precisely so that it accumulates from there. What CAN be
+backfilled is the weather that actually happened at past games (NOAA station
+observations), which is a different dataset with a different purpose (fitting
+weather effects for the projection engine). That is task PE2-T035 in
+`docs/projection-engine/projection-engine-v2-plan.md` and has not been built.
+
+Stadium coordinates and roof classes are a seed (`nfl_stadiums`, migration
+0336), not a sync. A new venue is a new row in a migration.
+
 ### Running the backfill
 
 ```

@@ -521,6 +521,19 @@ added.
 
 ## Part 2. Data acquisition: what we add and where it comes from
 
+> **Built early, 2026-10-03, for Season Pulse** (`docs/season-pulse/season-pulse-plan.md`).
+> Sections 2.1 and 2.4 exist as data and display only: `nfl_stadiums`
+> (migration 0336, the 38 venues on the 2026 schedule), `nfl_game_weather`
+> (migration 0337), `lib/nfl-weather.ts`, `lib/sync-nfl-weather.ts` and
+> `/api/cron/sync-nfl-weather`. Differences from what is written below, all
+> because `nfl_games` does not exist yet: `nfl_game_weather.game_key` is the
+> nflverse id but carries no foreign key, and the row also stores season,
+> week and both teams; there is no `latest_weather_id`; `conditions` (text)
+> stands in for `weather_code`; `surface` is not on `nfl_stadiums`; a game
+> finds its stadium through the ESPN venue id on `nfl_game_odds.metadata`;
+> station observations and the ISD backfill are not built. No projection
+> reads this table. Tasks T036 onward are untouched.
+
 ### 2.1 Stadium and venue master: `nfl_stadiums`
 
 A seed table, not a sync. About 45 rows: the 30 active NFL venues (two teams

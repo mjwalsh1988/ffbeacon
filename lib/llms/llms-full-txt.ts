@@ -247,6 +247,16 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   }
 
   /* ---------------------------------------------------------------- */
+  h2("Season Pulse");
+  source("/season");
+  p(
+    "The current NFL season as a fantasy manager sees it. Fantasy points leaders with every player's rank at his position, the best and worst performances of the latest week, how often players have beaten their projections, target and carry leaders, fantasy points allowed by each defense to each position, NFL results and team records. Scoring follows the reader's selected format: PPR, half PPR or standard.",
+  );
+  p(
+    "Three pages sit under it: /season/leaders (the full leaders board, searchable by player), /season/stats (NFL stat and usage leaders) and /season/weather (the forecast at kickoff for every game of the week from the National Weather Service, with what it means for a fantasy lineup). Each week of the season has its own page at /season/week-N.",
+  );
+
+  /* ---------------------------------------------------------------- */
   h2("Games");
   source("/games");
   p(

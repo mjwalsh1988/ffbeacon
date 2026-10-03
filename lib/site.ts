@@ -252,6 +252,30 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     ],
   },
   {
+    label: "Season Pulse",
+    href: "/season",
+    description: "This season in fantasy: leaders, ranks, results and weather",
+    keywords: ["season", "stats", "leaders", "points", "positional rank", "results", "scores", "recap", "pulse"],
+  },
+  {
+    label: "Fantasy Leaders",
+    href: "/season/leaders",
+    description: "Every player's fantasy points and rank at his position",
+    keywords: ["leaders", "points leaders", "rank", "positional rank", "top scorers", "scoring leaders"],
+  },
+  {
+    label: "NFL Stat Leaders",
+    href: "/season/stats",
+    description: "Yards, touchdowns, targets, carries and snap share",
+    keywords: ["stats", "stat leaders", "targets", "carries", "snaps", "snap share", "target share", "yards", "touchdowns", "points allowed"],
+  },
+  {
+    label: "NFL Weather",
+    href: "/season/weather",
+    description: "This week's forecast for every game, read for fantasy",
+    keywords: ["weather", "forecast", "wind", "rain", "snow", "dome", "roof"],
+  },
+  {
     label: "Free Agent Finder",
     href: "/tools/free-agent-finder",
     description: "Is he free in any of your leagues?",
@@ -522,6 +546,9 @@ export const FOOTER_COLUMNS: Array<{
       // Rankings Board moved here from Tools: it is something you read rather
       // than something you run against your own league.
       { label: "Rankings Board", href: "/rankings" },
+      // The season hub and its weather page: both are read, not run.
+      { label: "Season Pulse", href: "/season" },
+      { label: "NFL Weather", href: "/season/weather" },
     ],
     guidesAt: 1,
   },

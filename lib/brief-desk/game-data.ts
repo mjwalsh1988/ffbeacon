@@ -75,7 +75,8 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function loadGameLines(admin: Admin, season: number, seasonType: string, week: number): Promise<GameLineInput[]> {
+/** Exported for Season Pulse (lib/season-pulse/load.ts), which draws the same finals against the same lines. */
+export async function loadGameLines(admin: Admin, season: number, seasonType: string, week: number): Promise<GameLineInput[]> {
   const [{ data: settled }, { data: odds }] = await Promise.all([
     admin
       .from("nfl_game_lines")

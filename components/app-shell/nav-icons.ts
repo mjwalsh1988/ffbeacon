@@ -56,6 +56,7 @@ import {
   User,
   Shield,
   Hourglass,
+  CloudSun,
   type LucideIcon,
 } from "lucide-react";
 
@@ -110,6 +111,8 @@ export const NAV_ICONS = {
   league: Shield,
   // The dynasty strategy guide: a roster measured in seasons.
   hourglass: Hourglass,
+  // Season Pulse: the weather page.
+  cloudSun: CloudSun,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

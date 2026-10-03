@@ -128,6 +128,46 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/waiver-wire",
     badge: "Waiver Wire",
   },
+  season: {
+    eyebrow: "Fantasy football stats this season",
+    headlineTop: "The whole season,",
+    headlineBottom: "one page",
+    subhead:
+      "Who is scoring, where every player ranks at his position, last week's results, and this week's games with the forecast for each.",
+    facts: ["Free", "No signup", "Updated every morning"],
+    path: "/season",
+    badge: "Season Pulse",
+  },
+  "season-leaders": {
+    eyebrow: "Fantasy football leaders",
+    headlineTop: "Where does he rank",
+    headlineBottom: "at his position?",
+    subhead:
+      "Every player's fantasy points this season, his rank at his position, and how each week went. Type a name to find him.",
+    facts: ["PPR, half PPR and standard", "Week by week", "Free"],
+    path: "/season/leaders",
+    badge: "Season Pulse",
+  },
+  "season-stats": {
+    eyebrow: "NFL stat leaders",
+    headlineTop: "Yards, touchdowns,",
+    headlineBottom: "targets and snaps",
+    subhead:
+      "The season's leaders in passing, rushing and receiving, who is getting the targets and carries, and what every defense gives up.",
+    facts: ["Updated every morning", "Free"],
+    path: "/season/stats",
+    badge: "Season Pulse",
+  },
+  "season-weather": {
+    eyebrow: "NFL weather this week",
+    headlineTop: "Wind, rain, or",
+    headlineBottom: "a roof over it",
+    subhead:
+      "The forecast for every game this week, read for fantasy: which ones to downgrade, which to ignore, and which are indoors.",
+    facts: ["Every game", "National Weather Service", "Free"],
+    path: "/season/weather",
+    badge: "Season Pulse",
+  },
   "custom-rankings": {
     eyebrow: "Custom fantasy football rankings",
     headlineTop: "Build your own",

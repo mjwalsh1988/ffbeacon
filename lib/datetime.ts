@@ -44,6 +44,16 @@ const EASTERN_SHORT_DATE = new Intl.DateTimeFormat("en-US", {
   timeZone: SITE_TIME_ZONE,
 });
 
+const EASTERN_KICKOFF = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: SITE_TIME_ZONE,
+  timeZoneName: "short",
+});
+
 const RELATIVE = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
 
 /** "Jun 12, 2026, 7:30 AM EDT" in America/New_York, or n/a. */
@@ -52,6 +62,18 @@ export function formatEastern(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return NA;
   return EASTERN_DATE_TIME.format(d);
+}
+
+/**
+ * "Sunday, Oct 4, 1:00 PM EDT" in America/New_York, or n/a. For a game's
+ * kickoff, where the day of the week is the thing a reader plans around and
+ * the year is already on the page.
+ */
+export function formatEasternKickoff(iso: string | null | undefined): string {
+  if (!iso) return NA;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return NA;
+  return EASTERN_KICKOFF.format(d);
 }
 
 /** "Jun 12, 2026" in America/New_York, or n/a. Date only, no time-of-day, so

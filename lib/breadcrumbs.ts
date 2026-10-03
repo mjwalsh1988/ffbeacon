@@ -86,6 +86,10 @@ const ROUTE_LABELS: Record<string, string> = {
   "/tools/trade-calculator/v": "Shared Verdict",
   "/tools/who-should-i-start": "Start / Sit",
   "/u": "Profiles",
+  "/season": "Season Pulse",
+  "/season/leaders": "Fantasy Leaders",
+  "/season/stats": "NFL Stat Leaders",
+  "/season/weather": "NFL Weather",
   "/waiver-wire": "Waiver Wire",
 };
 

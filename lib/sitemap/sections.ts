@@ -76,6 +76,7 @@ import { SITE } from "@/lib/site";
 import { PUBLISHED_GUIDES } from "@/lib/guides/published";
 import { resolveSeasonClock } from "@/lib/start-sit/clock";
 import { boardWeeks, weekPath } from "@/lib/waiver-wire/weeks";
+import { publishedWeeks, weekPath as seasonWeekPath } from "@/lib/season-pulse/weeks";
 import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -421,6 +422,18 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
       urls.push({ loc: `${SITE.url}/waiver-wire`, priority: 0.8 });
       for (const week of boardWeeks(clock.currentWeek)) {
         urls.push({ loc: `${SITE.url}${weekPath(week)}`, priority: 0.7 });
+      }
+
+      // Season Pulse: the hub, its three pages, and one page per week the
+      // season has reached. A week further out is a 404 on the route itself
+      // (lib/season-pulse/weeks.ts isPublishableWeek), so it is not listed
+      // here either (rule 1). No lastModified, for the reason given above.
+      urls.push({ loc: `${SITE.url}/season`, priority: 0.8 });
+      urls.push({ loc: `${SITE.url}/season/leaders`, priority: 0.8 });
+      urls.push({ loc: `${SITE.url}/season/weather`, priority: 0.8 });
+      urls.push({ loc: `${SITE.url}/season/stats`, priority: 0.7 });
+      for (const week of publishedWeeks(clock.currentWeek)) {
+        urls.push({ loc: `${SITE.url}${seasonWeekPath(week)}`, priority: 0.6 });
       }
     }
   }

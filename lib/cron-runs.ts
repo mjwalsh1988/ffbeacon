@@ -99,6 +99,7 @@ export type CronJobName =
   | "sync-sleeper-market"
   | "sync-weekly-projections"
   | "sync-nfl-odds"
+  | "sync-nfl-weather"
   | "build-beacon-projections"
   | "beacon-brief-curate"
   | "beacon-brief-worker"
@@ -129,12 +130,14 @@ export type CronRunStatus = "running" | "success" | "error" | "skipped";
  *
  * `schedule` is the job's one DAILY (or sub-hourly) run, the one cron-health
  * measures a gap against and the admin panels describe. `extraSchedules` are
- * the additional vercel.json entries for the same path, today only the game-day
- * refreshes of the player and projection syncs. They restrict the day of week,
- * so cron-health deliberately does not model them (a missed game-day run is
- * covered by the daily one landing within its window). lib/cron-schedule-sync
- * .test.ts fails when this registry and vercel.json disagree in either
- * direction.
+ * the additional vercel.json entries for the same path: the game-day refreshes
+ * of the player and projection syncs, and the weather sync's three game-day
+ * passes (the same route with ?scope=gameday). The first two restrict the day
+ * of week and the third skips itself on a day without a game, so cron-health
+ * deliberately does not model any of them (a missed game-day run is covered by
+ * the daily one landing within its window). lib/cron-schedule-sync.test.ts
+ * fails when this registry and vercel.json disagree in either direction; it
+ * compares the route and ignores a query string.
  */
 export type CronJobEntry = {
   name: CronJobName;
@@ -185,6 +188,36 @@ export const PROJECTIONS_GAME_DAY_SCHEDULES: readonly string[] = [
   `55 19 * ${GAME_DAY_MONTHS} 0,1,4`,
   `55 23 * ${GAME_DAY_MONTHS} 0,1,4`,
   `25 5 * ${GAME_DAY_MONTHS} 1`,
+];
+
+/**
+ * The weather sync's schedule.
+ *
+ * The nightly pass at 13:45 UTC sits between the odds sync (13:15), whose
+ * kickoff times it reads, and the projection build (14:30). It covers every
+ * game of the next seven days.
+ *
+ * The three game-day passes hit /api/cron/sync-nfl-weather?scope=gameday and
+ * refresh only games kicking off within 24 hours, which is where a forecast is
+ * materially better than it was at five days. They fire every day rather than
+ * on named days of the week, because the route skips itself before any
+ * provider request when no game is that close, and a Saturday or Christmas
+ * game then needs no schedule change.
+ *
+ *   UTC    EDT (UTC-4)  EST (UTC-5)  covers
+ *   12:15  8:15 AM      7:15 AM      a 9:30 AM game abroad
+ *   15:00  11:00 AM     10:00 AM     the 1:00 PM games
+ *   21:00  5:00 PM      4:00 PM      the night game
+ *
+ * August through February, the months sync-sleeper-stats runs in. In August
+ * every pass is a clean skip until week 1 is inside its window.
+ */
+export const WEATHER_MONTHS = "1,2,8,9,10,11,12";
+export const WEATHER_NIGHTLY_SCHEDULE = `45 13 * ${WEATHER_MONTHS} *`;
+export const WEATHER_GAME_DAY_SCHEDULES: readonly string[] = [
+  `15 12 * ${WEATHER_MONTHS} *`,
+  `0 15 * ${WEATHER_MONTHS} *`,
+  `0 21 * ${WEATHER_MONTHS} *`,
 ];
 
 /** Every schedule a job fires on: its daily run first, then any extras. */
@@ -284,6 +317,14 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     schedule: "15 13 * * *",
     description:
       "Refreshes ESPN's published game total and spread for the current week plus the next two into nfl_game_odds (overwrite in place), the game-environment signal the projection engine's volume and script adjustments read. Lines move through the week, so a once-daily pull is the right cadence for a table whose only consumer is a weekly projection. Skips cleanly when ESPN has nothing published yet for every targeted week; a week whose fetch failed outright is never mistaken for a week with no games.",
+  },
+  {
+    name: "sync-nfl-weather",
+    label: "Game weather sync",
+    schedule: WEATHER_NIGHTLY_SCHEDULE,
+    extraSchedules: WEATHER_GAME_DAY_SCHEDULES,
+    description:
+      "Appends a weather forecast snapshot to nfl_game_weather for every regular-season game kicking off in the next seven days: the National Weather Service for open-air US venues, MET Norway for games abroad, and a single indoor row with no provider request for a venue with a roof. Runs after the odds sync, whose kickoff times it reads. Three more passes a day refresh only games kicking off within 24 hours and skip cleanly on a day without one. A failed provider request leaves the previous snapshot as the newest; the run is recorded as failed only when no forecast came back at all.",
   },
   {
     name: "build-beacon-projections",

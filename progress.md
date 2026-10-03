@@ -16772,3 +16772,47 @@ T737 | completed | Free Agent Finder page rebuilt so the tool runs on its own pa
      | files: app/tools/free-agent-finder/page.tsx, components/free-agent-finder-panel.tsx, components/free-agent-finder-demo.tsx, components/free-agent-finder-connect-form.tsx, lib/free-agent-finder.ts (countSyncedLeagues), components/sleeper-handle/save-handle-form.tsx (input min-h-11)
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; desktop and 500 px phone layout checked in Chrome for the signed-out, no-username and signed-in states with real searches; accessibility and implementation/security review sub-agents run and their findings fixed). Not committed.
+SP-T001 | completed | Season Pulse plan: name chosen with the owner (Season Pulse, /season, before Games), Keyword Planner research, routes, sections, data, weather, accessibility and screen-size checks
+     | files: docs/season-pulse/season-pulse-plan.md
+     | depends on: none
+     | verified: yes (owner picked the name; fantasy first, NFL second, positional rank finder and the Chrome screen-size pass added at the owner's request)
+SP-T002 | completed | nfl_stadiums: seed of the 38 venues on the 2026 schedule with coordinates, roof class, time zone and the ESPN venue id
+     | files: supabase/migrations/0336_nfl_stadiums.sql, lib/database.types.ts
+     | depends on: SP-T001
+     | verified: yes (applied to prod; RLS verified: pg_policies shows select_public and service_role_all, anon reads 38 rows, anon insert and update blocked)
+SP-T003 | completed | nfl_game_weather: append-only forecast snapshots per game, indoor rows, no foreign key until nfl_games exists
+     | files: supabase/migrations/0337_nfl_game_weather.sql, lib/database.types.ts
+     | depends on: SP-T002
+     | verified: yes (applied to prod; RLS verified the same way; types regenerated, 167 added lines)
+SP-T004 | completed | Weather adapter: National Weather Service and MET Norway behind one interface, the only file naming either host, with a host guard test
+     | files: lib/nfl-weather.ts, lib/nfl-weather.test.ts, lib/nfl-weather-host-guard.test.ts, lib/__fixtures__/nfl-weather/*
+     | depends on: SP-T003
+     | verified: yes (parsers tested against real saved responses; typecheck, lint, tests)
+SP-T005 | completed | Weather sync, script and cron: nightly at 13:45 UTC and three game-day runs, indoor rows without a provider call, failed requests write nothing
+     | files: lib/sync-nfl-weather.ts, lib/sync-nfl-weather.test.ts, scripts/sync-nfl-weather.ts, app/api/cron/sync-nfl-weather/route.ts, vercel.json, lib/cron-runs.ts, lib/cache-tags.ts, package.json, app/terms/page.tsx
+     | depends on: SP-T004
+     | verified: yes (ran once against prod 2026-10-03: 16 games targeted, 10 NWS snapshots, 1 MET Norway snapshot for the London game, 5 indoor rows, none failed)
+SP-T006 | completed | Weather read for fantasy: bands, forecast sentence and advice, a missing forecast or a missing wind figure never read as calm
+     | files: lib/nfl-weather-impact.ts, lib/nfl-weather-impact.test.ts
+     | depends on: SP-T003
+     | verified: yes (unit tested at every threshold)
+SP-T007 | completed | Season Pulse data layer: season board with positional ranks, week report and spotlights, projection report, results, upcoming games and previews, leader lists, cached reads
+     | files: lib/season-pulse/types.ts, board.ts, week-report.ts, games.ts, weeks.ts, leader-groups.ts, load.ts, data.ts and their tests; lib/brief-desk/game-data.ts (loadGameLines exported); lib/datetime.ts (formatEasternKickoff)
+     | depends on: SP-T001
+     | verified: yes (88 unit tests; format resolved through resolveFormatSlug; projection source in every cache key that holds a projection)
+SP-T008 | completed | Season Pulse components: leaders board with search, tabs, sort and week by week grid; spotlights; projection report; leader tabs; points allowed grid; result and upcoming game cards with weather; team records; section nav; week links
+     | files: components/season-pulse/*
+     | depends on: SP-T007
+     | verified: yes (accessibility review sub-agent run, seven findings fixed)
+SP-T009 | completed | Season Pulse routes: /season, /season/leaders, /season/stats, /season/weather, /season/week-N
+     | files: app/season/page.tsx, app/season/leaders/page.tsx, app/season/stats/page.tsx, app/season/weather/page.tsx, app/season/[week]/page.tsx
+     | depends on: SP-T008
+     | verified: yes (typecheck, lint, tests, build; Chrome at 500, 768, 1024, 1440 and 1568 px plus a 360 px constrained check, no sideways overflow; an unreached week is a real 404)
+SP-T010 | completed | Registries for the new top-level section: menu (before Games, with three children), stored menu order, footer, header search, breadcrumbs, sitemap with weekly pages, share cards, llms-full.txt, reserved handle
+     | files: lib/nav-tree.ts, components/app-shell/nav-icons.ts, lib/site-layout/default-settings.ts, lib/site-layout/parse.test.ts, lib/site.ts, lib/breadcrumbs.ts, lib/sitemap/sections.ts, lib/llms/llms-full-txt.ts, app/api/og/page/[key]/route.tsx, lib/signal/reserved-routes.ts, supabase/migrations/0338_site_layout_season_pulse_section.sql, supabase/migrations/0339_reserve_season_handle.sql
+     | depends on: SP-T009
+     | verified: yes (both migrations applied to prod; 0338 dry-run in a rolled-back transaction first; nobody held the handle)
+SP-T011 | completed | Review fixes. Implementation: the live week no longer earns positional finishes or starter weeks; the live week's projections are read on their own window; a forecast with no wind figure is unknown, snow is read from the conditions when no amount is published, a gust lifts one band; stat lines keep a trick-play pass; tied stingiest defenses; recap teaser shown; forecast source credited on every card; dead helpers removed. Accessibility: show more moves focus to the first new row, the status line is debounced, team codes carry the name for a screen reader, tinted cells use full ink, tables scroll in a labelled region instead of clipping, selected buttons carry a check mark
+     | files: lib/season-pulse/*, lib/nfl-weather-impact.ts, components/season-pulse/*, app/season/**
+     | depends on: SP-T009
+     | verified: yes (typecheck, lint, tests, build). Not committed.

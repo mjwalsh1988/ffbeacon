@@ -69,6 +69,9 @@ const LAYOUT_2026_09_14 = {
  *   orders and as a one-column "New tool" homepage card. A stored row that
  *   predates it gets exactly this from normalizeOrder and mergeCards.
  *
+ *   2026-10-03: the Season Pulse section, a new top level between Waiver Wire
+ *   and Games. The stored row is migrated to match (migration 0338).
+ *
  *   2026-09-29: the Free Agent Finder (/tools/free-agent-finder), which had a
  *   page but no menu or catalog entry. Last in both tool orders and a plain
  *   one-column homepage card, which is again what a stored row gets.
@@ -91,6 +94,7 @@ const LAYOUT_TODAY = {
       "tools",
       "rankings",
       "waiver-wire",
+      "season",
       "games",
       "brief",
       "guides",
@@ -162,10 +166,10 @@ describe("the defaults", () => {
     // documented behaviour and it is the safe one: a stored order is somebody's
     // deliberate arrangement, so a new entry goes at the end rather than
     // pushing their choices around. The consequence is cosmetic and is why
-    // migration 0293 updates the stored row to put Waiver Wire where the code
-    // default has it.
+    // migrations 0293 and 0338 update the stored row to put Waiver Wire and
+    // Season Pulse where the code default has them.
     expect([...merged.menu.sectionOrder].sort()).toEqual([...NAV_SECTION_IDS].sort());
-    expect(merged.menu.sectionOrder.at(-1)).toBe("waiver-wire");
+    expect(merged.menu.sectionOrder.slice(-2)).toEqual(["waiver-wire", "season"]);
     expect(validateSiteLayout(merged).ok).toBe(true);
   });
 

@@ -1,0 +1,46 @@
+{
+  "id": "https://api.weather.gov/points/40.8135,-74.0743",
+  "type": "Feature",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [-74.0743, 40.8135]
+  },
+  "properties": {
+    "@id": "https://api.weather.gov/points/40.8135,-74.0743",
+    "@type": "wx:Point",
+    "cwa": "OKX",
+    "type": "land",
+    "forecastOffice": "https://api.weather.gov/offices/OKX",
+    "gridId": "OKX",
+    "gridX": 30,
+    "gridY": 46,
+    "forecast": "https://api.weather.gov/gridpoints/OKX/30,46/forecast",
+    "forecastHourly": "https://api.weather.gov/gridpoints/OKX/30,46/forecast/hourly",
+    "forecastGridData": "https://api.weather.gov/gridpoints/OKX/30,46",
+    "observationStations": "https://api.weather.gov/gridpoints/OKX/30,46/stations",
+    "relativeLocation": {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.0850235, 40.8170966]
+      },
+      "properties": {
+        "city": "East Rutherford",
+        "state": "NJ",
+        "distance": {
+          "unitCode": "wmoUnit:m",
+          "value": 0
+        },
+        "bearing": {
+          "unitCode": "wmoUnit:degree_(angle)",
+          "value": 0
+        }
+      }
+    },
+    "forecastZone": "https://api.weather.gov/zones/forecast/NJZ104",
+    "county": "https://api.weather.gov/zones/county/NJC003",
+    "fireWeatherZone": "https://api.weather.gov/zones/fire/NJZ104",
+    "timeZone": "America/New_York",
+    "radarStation": "KDIX"
+  }
+}

@@ -34,6 +34,8 @@ export const CACHE_TAGS = {
   /** player_market_latest reads (Sleeper ADP), refreshed by the nightly
    *  sync-sleeper-market cron, which busts this tag when it writes. */
   marketAdp: "market-adp",
+  /** nfl_game_weather reads; the sync-nfl-weather cron busts this tag whenever it writes a row. */
+  nflWeather: "nfl-weather",
 } as const;
 
 export const CACHE_TTL = {

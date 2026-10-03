@@ -45,6 +45,7 @@ export const RESERVED_ROUTE_SEGMENTS = [
   "players",
   "privacy",
   "rankings",
+  "season",
   // app/sitemap.xml/route.ts and app/sitemaps/*/route.ts. The sitemap moved from
   // Next's sitemap.ts convention (a file, and therefore not a segment) to an index
   // plus four per-section files, because the convention cannot emit a sitemap index.

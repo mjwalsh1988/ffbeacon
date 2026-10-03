@@ -114,6 +114,41 @@ const ALL_SECTIONS: SiteNavNode[] = [
     icon: "listChecks",
   },
   {
+    // The current season as a fantasy manager sees it: a content area with a
+    // hub, three pages under it and one page per week, so a top-level section
+    // like Waiver Wire rather than a child of Tools. The weekly pages are
+    // reached from the hub and from each other.
+    id: "season",
+    label: "Season Pulse",
+    href: "/season",
+    hint: "This season's stats, ranks, results and weather",
+    icon: "activity",
+    indexLabel: "Season overview",
+    children: [
+      {
+        id: "/season/leaders",
+        label: "Fantasy Leaders",
+        href: "/season/leaders",
+        hint: "Every player's rank at his position",
+        icon: "trophy",
+      },
+      {
+        id: "/season/stats",
+        label: "NFL Stat Leaders",
+        href: "/season/stats",
+        hint: "Yards, touchdowns, targets and snaps",
+        icon: "barChart",
+      },
+      {
+        id: "/season/weather",
+        label: "NFL Weather",
+        href: "/season/weather",
+        hint: "This week's forecast for every game",
+        icon: "cloudSun",
+      },
+    ],
+  },
+  {
     id: "games",
     label: "Games",
     href: "/games",

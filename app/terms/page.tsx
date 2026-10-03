@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import {
+  MET_NORWAY_ATTRIBUTION,
+  MET_NORWAY_ATTRIBUTION_URL,
+  NWS_ATTRIBUTION_URL,
+} from "@/lib/nfl-weather";
 import { pageShareMetadata } from "@/lib/page-og";
 import { SITE } from "@/lib/site";
 
@@ -305,6 +310,33 @@ export default function TermsPage() {
               cannot guarantee it is accurate or available, and a provider changing or
               withdrawing an interface may change or remove features here without
               notice.
+            </p>
+            {/* MET Norway's licence (NLOD 2.0 and CC BY 4.0) requires this credit.
+                The wording and both addresses live in lib/nfl-weather.ts, the
+                one file allowed to name a weather provider's host. */}
+            <p className="mt-3">
+              Game weather forecasts come from two public services.{" "}
+              <a
+                href={MET_NORWAY_ATTRIBUTION_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={LINK}
+              >
+                {MET_NORWAY_ATTRIBUTION}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>{" "}
+              covers games played outside the United States. Forecasts for games in the
+              United States are from the{" "}
+              <a
+                href={NWS_ATTRIBUTION_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={LINK}
+              >
+                National Weather Service
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+              .
             </p>
             <p className="mt-3">
               {SITE.name} is an independent project. It is not affiliated with,
