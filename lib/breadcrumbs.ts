@@ -88,8 +88,8 @@ const ROUTE_LABELS: Record<string, string> = {
   "/u": "Profiles",
   "/season": "Season Pulse",
   "/season/leaders": "Fantasy Leaders",
-  "/season/stats": "NFL Stat Leaders",
-  "/season/weather": "NFL Weather",
+  "/season/stats": "Season Stat Leaders",
+  "/season/weather": "Game Day Weather",
   "/waiver-wire": "Waiver Wire",
 };
 

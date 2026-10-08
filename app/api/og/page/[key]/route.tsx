@@ -149,7 +149,7 @@ const PAGE_CARDS: Record<string, PageCard> = {
     badge: "Season Pulse",
   },
   "season-stats": {
-    eyebrow: "NFL stat leaders",
+    eyebrow: "Season stat leaders",
     headlineTop: "Yards, touchdowns,",
     headlineBottom: "targets and snaps",
     subhead:
@@ -159,7 +159,7 @@ const PAGE_CARDS: Record<string, PageCard> = {
     badge: "Season Pulse",
   },
   "season-weather": {
-    eyebrow: "NFL weather this week",
+    eyebrow: "Game day weather this week",
     headlineTop: "Wind, rain, or",
     headlineBottom: "a roof over it",
     subhead:

@@ -58,12 +58,12 @@ export const dynamic = "force-dynamic";
 
 function titleFor(week: number | null, season: number | null): string {
   return week
-    ? `NFL Weather Week ${week}${season ? ` ${season}` : ""}: Forecast for Every Game and Fantasy Impact`
-    : "NFL Weather This Week: Forecast for Every Game and Fantasy Impact";
+    ? `Game Day Weather, Week ${week}${season ? ` ${season}` : ""}: Forecast for Every Game and Fantasy Impact`
+    : "Game Day Weather This Week: Forecast for Every Game and Fantasy Impact";
 }
 
 const DESCRIPTION =
-  "NFL weather forecasts for every game this week: temperature, wind, gusts and rain at kickoff from the National Weather Service, which games are in a dome, and what each forecast means for your fantasy football lineup.";
+  "Game day weather forecasts for every game this week: temperature, wind, gusts and rain at kickoff from the National Weather Service, which games are in a dome, and what each forecast means for your fantasy football lineup.";
 
 export async function generateMetadata(): Promise<Metadata> {
   const clock = await resolveSeasonClock(await createClient());
@@ -223,7 +223,7 @@ export default async function SeasonWeatherPage({
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
         { "@type": "ListItem", position: 2, name: "Season Pulse", item: `${SITE.url}/season` },
-        { "@type": "ListItem", position: 3, name: "NFL weather", item: canonical },
+        { "@type": "ListItem", position: 3, name: "Game day weather", item: canonical },
       ],
     },
   ];
@@ -239,7 +239,7 @@ export default async function SeasonWeatherPage({
       <PageBody flush>
         <PageMasthead
           eyebrow="Season Pulse"
-          title={week ? `NFL weather, week ${week}` : "NFL weather this week"}
+          title={week ? `Game day weather, week ${week}` : "Game day weather this week"}
           chips={chips}
           stats={stats}
           description="The forecast at kickoff for every game still to be played, and what it means for a fantasy lineup: which games to downgrade, which to ignore, and which have a roof."
@@ -250,7 +250,7 @@ export default async function SeasonWeatherPage({
         railLabel="Sections of this page and the other Season Pulse pages"
         rail={
           <>
-            <SectionNav items={sections} variant="rail" label="NFL weather sections" />
+            <SectionNav items={sections} variant="rail" label="Game day weather sections" />
             <Panel eyebrow="Season Pulse" title="More of the season" headingLevel={2}>
               <PulsePages current="weather" />
             </Panel>
@@ -282,7 +282,7 @@ export default async function SeasonWeatherPage({
           </>
         }
       >
-        <SectionNav items={sections} variant="bar" label="NFL weather sections" />
+        <SectionNav items={sections} variant="bar" label="Game day weather sections" />
 
         {games.length === 0 ? (
           <Panel eyebrow="This week" title={week ? `No games left to play in week ${week}` : "The regular season is over"}>
@@ -508,7 +508,7 @@ export default async function SeasonWeatherPage({
           </p>
         </Panel>
 
-        <Panel id="faq" className={SECTION} eyebrow="FAQ" title="NFL weather questions, answered">
+        <Panel id="faq" className={SECTION} eyebrow="FAQ" title="Game day weather questions, answered">
           <FaqAccordion items={FAQ} />
         </Panel>
       </PageColumns>

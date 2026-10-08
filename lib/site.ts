@@ -264,13 +264,13 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["leaders", "points leaders", "rank", "positional rank", "top scorers", "scoring leaders"],
   },
   {
-    label: "NFL Stat Leaders",
+    label: "Season Stat Leaders",
     href: "/season/stats",
     description: "Yards, touchdowns, targets, carries and snap share",
     keywords: ["stats", "stat leaders", "targets", "carries", "snaps", "snap share", "target share", "yards", "touchdowns", "points allowed"],
   },
   {
-    label: "NFL Weather",
+    label: "Game Day Weather",
     href: "/season/weather",
     description: "This week's forecast for every game, read for fantasy",
     keywords: ["weather", "forecast", "wind", "rain", "snow", "dome", "roof"],
@@ -548,7 +548,7 @@ export const FOOTER_COLUMNS: Array<{
       { label: "Rankings Board", href: "/rankings" },
       // The season hub and its weather page: both are read, not run.
       { label: "Season Pulse", href: "/season" },
-      { label: "NFL Weather", href: "/season/weather" },
+      { label: "Game Day Weather", href: "/season/weather" },
     ],
     guidesAt: 1,
   },

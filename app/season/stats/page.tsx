@@ -47,10 +47,10 @@ import { SectionNav, type SectionNavItem } from "@/components/season-pulse/secti
 export const dynamic = "force-dynamic";
 
 const DESCRIPTION =
-  "NFL stat leaders for the current season: passing, rushing and receiving yards, receptions and touchdowns, target, carry and snap share leaders, every team's record and scoring, and fantasy points allowed by each defense to each position.";
+  "Stat leaders for the current season: passing, rushing and receiving yards, receptions and touchdowns, target, carry and snap share leaders, every team's record and scoring, and fantasy points allowed by each defense to each position.";
 
 function titleFor(season: number | null): string {
-  return `NFL Stat Leaders${season ? ` ${season}` : ""}: Yards, Touchdowns, Targets and Snap Share`;
+  return `Season Stat Leaders${season ? ` ${season}` : ""}: Yards, Touchdowns, Targets and Snap Share`;
 }
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -137,7 +137,7 @@ export default async function SeasonStatsPage({
   ];
 
   const sections: SectionNavItem[] = [
-    ...(hasBoard ? [{ id: "stat-leaders", title: "NFL stat leaders", short: "Leaders" }] : []),
+    ...(hasBoard ? [{ id: "stat-leaders", title: "Season stat leaders", short: "Leaders" }] : []),
     ...(hasBoard ? [{ id: "usage", title: "Targets, carries and snap share", short: "Usage" }] : []),
     ...(records.length > 0 ? [{ id: "teams", title: "Team records and scoring", short: "Teams" }] : []),
     ...(grid.length > 0 ? [{ id: "matchups", title: "Points allowed by position", short: "Matchups" }] : []),
@@ -165,7 +165,7 @@ export default async function SeasonStatsPage({
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
         { "@type": "ListItem", position: 2, name: "Season Pulse", item: `${SITE.url}/season` },
-        { "@type": "ListItem", position: 3, name: "NFL stat leaders", item: canonical },
+        { "@type": "ListItem", position: 3, name: "Season stat leaders", item: canonical },
       ],
     },
   ];
@@ -181,7 +181,7 @@ export default async function SeasonStatsPage({
       <PageBody flush>
         <PageMasthead
           eyebrow="Season Pulse"
-          title="NFL stat leaders"
+          title="Season stat leaders"
           chips={chips}
           description="The season's leaders in yards, catches and touchdowns, who is getting the targets and carries, every team's record, and what each defense gives up."
         />
@@ -191,7 +191,7 @@ export default async function SeasonStatsPage({
         railLabel="Sections of this page and the other Season Pulse pages"
         rail={
           <>
-            <SectionNav items={sections} variant="rail" label="NFL stat leaders sections" />
+            <SectionNav items={sections} variant="rail" label="Season stat leaders sections" />
             <Panel eyebrow="Season Pulse" title="More of the season" headingLevel={2}>
               <PulsePages current="stats" />
             </Panel>
@@ -213,7 +213,7 @@ export default async function SeasonStatsPage({
           </>
         }
       >
-        <SectionNav items={sections} variant="bar" label="NFL stat leaders sections" />
+        <SectionNav items={sections} variant="bar" label="Season stat leaders sections" />
 
         {!hasBoard && (
           <Panel eyebrow="Around the NFL" title="No box scores yet this season">

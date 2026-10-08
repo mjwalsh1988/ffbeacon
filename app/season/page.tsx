@@ -244,7 +244,7 @@ export default async function SeasonPulsePage({
     ...(grid.length > 0 ? [{ id: "matchups", title: "Points allowed by position", short: "Matchups" }] : []),
     ...(upcoming.length > 0 ? [{ id: "upcoming", title: `Week ${context.currentWeek} games and weather`, short: "This week" }] : []),
     ...(results.length > 0 ? [{ id: "results", title: `Week ${spotlightWeek} results`, short: "Results" }] : []),
-    ...(hasBoard ? [{ id: "nfl-leaders", title: "NFL stat leaders", short: "NFL leaders" }] : []),
+    ...(hasBoard ? [{ id: "nfl-leaders", title: "Season stat leaders", short: "Stat leaders" }] : []),
     ...(records.length > 0 ? [{ id: "teams", title: "Team records", short: "Teams" }] : []),
     { id: "faq", title: "Questions, answered", short: "FAQ" },
   ];
@@ -527,7 +527,7 @@ export default async function SeasonPulsePage({
             id="nfl-leaders"
             className={SECTION}
             eyebrow="Around the NFL"
-            title="NFL stat leaders"
+            title="Season stat leaders"
             helper="The season's leaders in yards, catches and touchdowns."
             action={
               <Link

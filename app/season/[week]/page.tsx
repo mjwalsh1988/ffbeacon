@@ -64,8 +64,8 @@ type RouteParams = { week: string };
 function titleFor(week: number, season: number | null, live: boolean): string {
   const year = season ? ` ${season}` : "";
   return live
-    ? `NFL Week ${week}${year}: Game Previews, Weather and Fantasy Projections`
-    : `Week ${week} Fantasy Football Recap${year}: Top Scorers, Busts and NFL Results`;
+    ? `Week ${week}${year} Game Previews, Weather and Fantasy Projections`
+    : `Week ${week} Fantasy Football Recap${year}: Top Scorers, Busts and Final Scores`;
 }
 
 function descriptionFor(week: number, live: boolean): string {
@@ -204,7 +204,7 @@ export default async function SeasonWeekPage({
       <PageBody flush>
         <PageMasthead
           eyebrow="Season Pulse"
-          title={live ? `NFL week ${week}: previews and results` : `Week ${week} fantasy football recap`}
+          title={live ? `Week ${week}: previews and results` : `Week ${week} fantasy football recap`}
           chips={chips}
           stats={stats}
           description={

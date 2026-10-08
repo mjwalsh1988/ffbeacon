@@ -134,14 +134,14 @@ const ALL_SECTIONS: SiteNavNode[] = [
       },
       {
         id: "/season/stats",
-        label: "NFL Stat Leaders",
+        label: "Season Stat Leaders",
         href: "/season/stats",
         hint: "Yards, touchdowns, targets and snaps",
         icon: "barChart",
       },
       {
         id: "/season/weather",
-        label: "NFL Weather",
+        label: "Game Day Weather",
         href: "/season/weather",
         hint: "This week's forecast for every game",
         icon: "cloudSun",
