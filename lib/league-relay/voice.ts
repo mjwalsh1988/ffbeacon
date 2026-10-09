@@ -387,6 +387,13 @@ export const TRADE_OPENERS: Line[] = [
   { heat: 0.7, text: "The league chat is about to get busy." },
   { heat: 0.7, text: "Somewhere a commissioner is rereading the collusion rule." },
   { heat: 0.8, text: "Everybody stop what you are doing." },
+  { heat: 0, text: "Trade news." },
+  { heat: 0.2, text: "Big news out of the trade block." },
+  { heat: 0.3, text: "Phones have been buzzing." },
+  { heat: 0.4, text: "Somebody finally answered a trade offer." },
+  { heat: 0.5, text: "Two managers got bored at the same time." },
+  { heat: 0.6, text: "Somebody blinked." },
+  { heat: 0.7, text: "Grab a seat, this one is going to cause arguments." },
 ];
 
 /** How a lopsided verdict can be introduced. */
@@ -426,6 +433,15 @@ export const PREVIEW_CLOSERS: Line[] = [
   { heat: 0.6, text: "One of these managers will blame the projections by Monday." },
   { heat: 0.7, text: "Whatever happens here, somebody is going to call it variance." },
   { heat: 0.8, text: "Good luck to one of you." },
+  { heat: 0, text: "Set those lineups." },
+  { heat: 0, text: "Kickoff is not far off." },
+  { heat: 0.2, text: "Get your picks in." },
+  { heat: 0.3, text: "Check the injury report before you lock anything in." },
+  { heat: 0.4, text: "Somebody is going to regret a flex decision." },
+  { heat: 0.5, text: "Whoever loses this is not allowed to blame the schedule." },
+  { heat: 0.6, text: "The trash talk can start now." },
+  { heat: 0.7, text: "May the better lineup win, and may the other one at least be funny." },
+  { heat: 0.9, text: "One of you is about to have a very long week." },
 ];
 
 /** Closers for a matchup recap. */
@@ -440,4 +456,12 @@ export const RECAP_CLOSERS: Line[] = [
   { heat: 0.6, text: "Explanations are welcome in the chat and will not be believed." },
   { heat: 0.7, text: "Screenshot it, frame it, never speak of it again." },
   { heat: 0.8, text: "Someone is going to blame their kicker for this all week." },
+  { heat: 0, text: "Next week is already on the schedule." },
+  { heat: 0.2, text: "Moving on." },
+  { heat: 0.3, text: "Back at it next week." },
+  { heat: 0.4, text: "The chat is open for excuses." },
+  { heat: 0.5, text: "Somebody owes somebody a drink." },
+  { heat: 0.6, text: "Waivers are open, for anybody who needs them. Somebody does." },
+  { heat: 0.7, text: "Delete the app for a day if you need to. Nobody will judge. Much." },
+  { heat: 0.9, text: "Some losses build character. This was not one of them." },
 ];

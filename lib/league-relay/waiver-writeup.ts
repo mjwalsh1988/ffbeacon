@@ -98,6 +98,11 @@ const ADD_OPENERS: Line[] = [
   { heat: 0.6, text: "A decision was made. We are here to examine it." },
   { heat: 0.7, text: "Alert the group chat." },
   { heat: 0.8, text: "Somebody has decided this is the week it turns around." },
+  { heat: 0, text: "Wire news." },
+  { heat: 0.2, text: "Fresh face on a roster." },
+  { heat: 0.3, text: "Somebody went shopping." },
+  { heat: 0.4, text: "Somebody read the injury report before everybody else." },
+  { heat: 0.6, text: "A bold claim, in more ways than one." },
 ];
 
 const CUT_OPENERS: Line[] = [
@@ -109,6 +114,9 @@ const CUT_OPENERS: Line[] = [
   { heat: 0.6, text: "A quiet cut, made without ceremony." },
   { heat: 0.7, text: "A player has been released into the wild, unloved and unclaimed." },
   { heat: 0.8, text: "Somebody finally admitted it was not going to happen." },
+  { heat: 0, text: "A cut." },
+  { heat: 0.3, text: "One less name on a roster." },
+  { heat: 0.5, text: "It was fun while it lasted. It was not that fun." },
 ];
 
 /** Lines about a bid that is large relative to the budget. */
@@ -232,11 +240,31 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
       ]) ?? "";
     return `${proj}${tail}.${jab ? ` ${jab}` : ""}`;
   }
-  if (pts < 9) return `${proj}, which is bye-week cover and not much more${tail}.`;
-  if (pts < 14) {
-    return `${proj}, which is a real flex play rather than a lottery ticket${tail}.`;
+  if (pts < 9) {
+    return `${proj}${voice.pickPlain([
+      ", which is bye-week cover and not much more",
+      ", so think of him as insurance rather than an answer",
+      ", which fills a hole for a week or two",
+      ", a depth add more than a difference maker",
+    ])}${tail}.`;
   }
-  return `${proj}${tail}. Whoever let him reach the wire should be asked about it publicly.`;
+  if (pts < 14) {
+    return `${proj}${voice.pickPlain([
+      ", which is a real flex play rather than a lottery ticket",
+      ", so he can start right away",
+      ", which is a genuine lineup upgrade for a lot of teams",
+      ", startable in most weeks",
+    ])}${tail}.`;
+  }
+  const praise =
+    voice.pick([
+      { heat: 0, text: "That is a starter, and a good pickup." },
+      { heat: 0.3, text: "Good pickup. Very good pickup." },
+      { heat: 0.4, text: "Whoever let him reach the wire should be asked about it publicly." },
+      { heat: 0.5, text: "The rest of the league is going to pretend they were about to claim him." },
+      { heat: 0.7, text: "Somebody in this league was asleep at the wheel, and it was not this manager." },
+    ]) ?? "";
+  return `${proj}${tail}.${praise ? ` ${praise}` : ""}`;
 }
 
 /** The drop, folded into prose rather than stacked on its own line. */

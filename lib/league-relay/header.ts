@@ -14,10 +14,10 @@
  *   small, above the title. That is the line a reader's eye lands on first when
  *   scanning a channel, and it costs the writeup no room.
  *
- *   THE FORMAT LINE opens the description: how many teams, what kind of league,
- *   what the starting lineup is, and how it scores. One line, four facts, and
- *   every one of them read from the league's OWN Sleeper settings rather than
- *   from the format we happened to price it in.
+ *   THE FORMAT LINE: how many teams, what kind of league, what the starting
+ *   lineup is, and how it scores, read from the league's OWN Sleeper settings.
+ *   It is still built, but render.ts no longer prints it at the top of the
+ *   description; the owner asked for messages that open like writing.
  *
  * IT IS BUILT ONCE PER LEAGUE PER RUN, not once per message. A busy Wednesday
  * is a dozen messages from one league, and the header is identical on all of

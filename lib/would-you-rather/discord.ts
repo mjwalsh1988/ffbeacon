@@ -144,50 +144,66 @@ function pollAssets(round: WyrRound, side: WyrSide): PollAsset[] {
 }
 
 /**
- * The full asset list for the message body, ONE LINE PER ASSET.
+ * The league format as one plain sentence: "Dynasty, 12 teams, Superflex, PPR,
+ * TE premium (plus 0.75 per catch). Starts 1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX, 1 SF."
  *
- * The poll buttons condense; this does not. It is the place a reader checks
- * what actually moved, so every asset gets its own line with its position, its
- * team and, for a startup pick, the seat it came from.
+ * The season is left out: the poll is posted in that season, so saying it adds
+ * a number and no information. Null when nothing about the format was recorded,
+ * so the message carries no line rather than one saying it knows nothing.
  */
-function sideLines(round: WyrRound, side: WyrSide): string {
-  const assets = round.sides[side];
-  if (assets.length === 0) return "- nothing";
-  return assets
-    .map((a) => {
-      const via = a.startupPick
-        ? `, via ${a.startupPick.label}${a.startupPick.simulated ? ", projected" : ""}`
-        : "";
-      // A pick's own detail reads "Draft pick (early)", which next to a name
-      // that already says "2027 1st" nests one bracket inside another and adds
-      // nothing. The slot is the part worth keeping, so it is read off the
-      // asset rather than out of a sentence built for another surface.
-      const detail =
-        a.kind === "pick"
-          ? a.pickSlot
-            ? ` (${a.pickSlot})`
-            : ""
-          : a.detail
-            ? ` (${a.detail})`
-            : "";
-      return `- ${a.name}${detail}${via}`;
-    })
-    .join("\n");
+function formatSentence(bullets: string[]): string | null {
+  let lineup: string | null = null;
+  const facts: string[] = [];
+  for (const b of bullets) {
+    if (b === "Format not recorded" || /^\d{4} season$/.test(b)) continue;
+    if (b.startsWith("Starting lineup: ")) {
+      lineup = b.slice("Starting lineup: ".length);
+      continue;
+    }
+    facts.push(b.replace(/^TE premium, (plus .+)$/, "TE premium ($1)"));
+  }
+  const parts = [
+    facts.length > 0 ? `${facts.join(", ")}.` : null,
+    lineup ? `Starts ${lineup}.` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+/**
+ * The closing line. A few wordings, chosen by the trade id, so a channel that
+ * gets three of these a day does not read the same sentence three times. The
+ * id rather than a clock, so a retried post says exactly what the first try
+ * said.
+ */
+const CLOSERS = [
+  "Pick a side. Breakdown is here once you've voted:",
+  "Vote, then see how Signal Check scored it:",
+  "Cast your vote. The full breakdown lives here:",
+  "Make the call, then check the numbers:",
+  "Who's taking it? Breakdown after you vote:",
+];
+
+function closerFor(tradeId: string): string {
+  let h = 0;
+  for (let i = 0; i < tradeId.length; i += 1) h = (h * 31 + tradeId.charCodeAt(i)) >>> 0;
+  return CLOSERS[h % CLOSERS.length];
 }
 
 /**
  * The message and its poll.
  *
- * Everything is in `content` rather than an embed: Discord renders a poll
- * beneath the message body, and a plain markdown body reads the same in the
- * client, in a notification, and to a screen reader using Discord's own
- * accessibility layer. No manager is named anywhere in it.
+ * Deliberately short. The poll buttons already name every asset on both sides,
+ * so the body does not list them again: it says what kind of league the trade
+ * came from, because a 1st in a 10-team redraft is not a 1st in a 12-team
+ * superflex dynasty, and links to the breakdown. Everything is in `content`
+ * rather than an embed so it reads the same in the client, in a notification,
+ * and to a screen reader. No manager is named anywhere in it.
  */
 export function buildPollMessage(
   round: WyrRound,
   opts: { siteUrl: string; mentionRoleIds: string[] },
 ): DiscordMessageInput | null {
-  const kindLabel = round.kind === "startup" ? "Startup draft trade" : "Trade";
+  const kindLabel = round.kind === "startup" ? " (startup draft trade)" : "";
 
   // The buttons first, because either one failing means this trade cannot be
   // posted at all and there is no point building the body. 55 characters is a
@@ -199,26 +215,14 @@ export function buildPollMessage(
 
   const mentions = opts.mentionRoleIds.map((id) => `<@&${id}>`).join(" ");
   const body = [
-  // null for the absent mentions line, NOT "". The empty strings below are
-  // deliberate paragraph breaks between the header, the format, the two sides
-  // and the call to action, and a filter on "" removed all of them along with
-  // the one it was aimed at, posting every section run together on consecutive
-  // lines.
+    // null for an absent line, NOT "": the one "" after the mentions is a
+    // deliberate paragraph break, and a filter on "" would remove it too.
     mentions ? `${mentions}\n` : null,
-    `**Would You Rather? ${kindLabel}**`,
-    "",
-    "**League format**",
-    round.formatBullets.map((b) => `- ${b}`).join("\n"),
-    "",
-    "**Team A receives**",
-    sideLines(round, "a"),
-    "",
-    "**Team B receives**",
-    sideLines(round, "b"),
-    "",
+    `**Would you rather?**${kindLabel}`,
+    formatSentence(round.formatBullets),
     // Angle brackets suppress Discord's link preview. Without them the embed
-    // card is taller than the trade above it and pushes the poll off screen.
-    `Vote below, then see the full Signal Check breakdown: <${opts.siteUrl}/games/would-you-rather>`,
+    // card is taller than the message and pushes the poll off screen.
+    `${closerFor(round.tradeId)} <${opts.siteUrl}/games/would-you-rather>`,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");

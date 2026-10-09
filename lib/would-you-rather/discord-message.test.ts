@@ -90,26 +90,42 @@ function busyRound() {
 }
 
 describe("buildPollMessage", () => {
-  it("sets out the format as bullets, and never the league's name", () => {
+  it("states the format in one sentence, without the season, and never the league's name", () => {
     const msg = mustBuild(round(), OPTS);
-    expect(msg.content).toContain("**League format**");
-    expect(msg.content).toContain("- Dynasty");
-    expect(msg.content).toContain("- 12 teams");
-    expect(msg.content).toContain("- Starting lineup: 1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX, 1 SF");
+    expect(msg.content).toContain(
+      "Dynasty, 12 teams, Superflex, PPR, TE premium (plus 0.75 per catch). Starts 1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX, 1 SF.",
+    );
+    expect(msg.content).not.toContain("2026 season");
     // The league name identifies the room the trade came out of. This game
     // names nobody, and that now includes the league.
     expect(msg.content).not.toContain("The Dynasty League");
   });
 
-  it("puts each asset on its own line under its team heading", () => {
+  it("leaves the assets to the poll buttons rather than listing them again", () => {
+    const msg = mustBuild(busyRound(), OPTS);
+    for (const name of ["Ja'Marr Chase", "Bijan Robinson", "Puka Nacua", "Drake London"]) {
+      expect(msg.content).not.toContain(name);
+    }
+    expect(msg.content).not.toContain("receives");
+  });
+
+  it("is three lines: the heading, the format and the link", () => {
     const msg = mustBuild(round(), OPTS);
     const lines = (msg.content ?? "").split("\n");
-    const a = lines.indexOf("**Team A receives**");
-    const b = lines.indexOf("**Team B receives**");
-    expect(a).toBeGreaterThan(-1);
-    expect(b).toBeGreaterThan(a);
-    expect(lines[a + 1]).toBe("- Ja'Marr Chase (WR, CIN)");
-    expect(lines[b + 1]).toBe("- Bijan Robinson (RB, ATL)");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe("**Would you rather?**");
+    expect(lines[2]).toMatch(/<https:\/\/ffbeacon\.com\/games\/would-you-rather>$/);
+  });
+
+  it("drops the format line rather than printing an empty one when nothing was recorded", () => {
+    const msg = mustBuild(round({ formatBullets: ["Format not recorded"] }), OPTS);
+    const lines = (msg.content ?? "").split("\n");
+    expect(lines).toHaveLength(2);
+    expect(msg.content).not.toContain("Format not recorded");
+  });
+
+  it("words the closing line the same way every time for the same trade", () => {
+    expect(mustBuild(round(), OPTS).content).toBe(mustBuild(round(), OPTS).content);
   });
 
   it("links back to the game inside angle brackets, so Discord shows no preview", () => {
@@ -143,32 +159,7 @@ describe("buildPollMessage", () => {
       round({ kind: "startup", startupSeason: 2026 }),
       OPTS,
     );
-    expect(msg.content).toContain("Startup draft trade");
-  });
-
-  it("shows the seat a startup pick came from", () => {
-    const msg = mustBuild(
-      round({
-        kind: "startup",
-        startupSeason: 2026,
-        sides: {
-          a: [
-            asset("Josh Allen", {
-              startupPick: { label: "1.02", simulated: false },
-            }),
-          ],
-          b: [
-            asset("Bijan Robinson", {
-              key: "b-0",
-              startupPick: { label: "1.03", simulated: true },
-            }),
-          ],
-        },
-      }),
-      OPTS,
-    );
-    expect(msg.content).toContain(", via 1.02");
-    expect(msg.content).toContain(", via 1.03, projected");
+    expect(msg.content).toContain("**Would you rather?** (startup draft trade)");
   });
 
   it("keeps every answer inside Discord's 55 character cap", () => {
@@ -212,27 +203,12 @@ describe("buildPollMessage", () => {
     expect(msg.content).not.toContain("@here");
   });
 
-  it("says 'nothing' rather than printing an empty list for a bare side", () => {
+  it("says 'nothing' on the button for a bare side", () => {
     const msg = mustBuild(round({ sides: { a: [asset("Ja'Marr Chase")], b: [] } }), OPTS);
-    expect(msg.content).toContain("- nothing");
     expect(msg.poll?.answers[1]).toContain("nothing");
   });
 
-  it("keeps the paragraph breaks between the header, the format, the sides and the link", () => {
-    // A filter written to drop the absent mentions slot was dropping every
-    // deliberate blank line with it, and the posted message ran all four
-    // sections together on consecutive lines. `toContain` assertions could not
-    // see that, so the shape is asserted directly.
-    const msg = mustBuild(round(), OPTS);
-    const lines = (msg.content ?? "").split("\n");
-    expect(lines.filter((l: string) => l === "").length).toBe(4);
-    expect(lines[0]).toContain("Would You Rather?");
-    expect(lines[1]).toBe("");
-    expect(lines[2]).toBe("**League format**");
-    expect(lines[3]).toBe("- Dynasty");
-  });
-
-  it("puts the mentions on their own line without eating the breaks", () => {
+  it("puts the mentions on their own line, followed by one blank line", () => {
     const msg = mustBuild(round(), {
       ...OPTS,
       mentionRoleIds: ["123456789012345678"],
@@ -240,17 +216,16 @@ describe("buildPollMessage", () => {
     const lines = (msg.content ?? "").split("\n");
     expect(lines[0]).toBe("<@&123456789012345678>");
     expect(lines[1]).toBe("");
-    expect(lines[2]).toContain("Would You Rather?");
-    // Still four section breaks, plus the one after the mentions.
-    expect(lines.filter((l: string) => l === "").length).toBe(5);
+    expect(lines[2]).toBe("**Would you rather?**");
+    expect(lines.filter((l: string) => l === "").length).toBe(1);
   });
 
   it("carries no manager identity of any kind", () => {
     const msg = mustBuild(round(), OPTS);
     const all = [msg.content ?? "", ...(msg.poll?.answers ?? [])].join("\n");
-    // The only names the two parties ever get.
-    expect(all).toContain("Team A");
-    expect(all).toContain("Team B");
+    // The only names the two parties ever get: the A and B on the buttons.
+    expect(msg.poll?.answers[0].startsWith("A: ")).toBe(true);
+    expect(msg.poll?.answers[1].startsWith("B: ")).toBe(true);
     // The DTO carries no owner handle or team name to leak, so this is a guard
     // against a future field being added to WyrRound and rendered here.
     expect(all.toLowerCase()).not.toContain("sleeper.app");

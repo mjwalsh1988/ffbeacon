@@ -69,14 +69,12 @@ export function renderWriteup(
   const footer = writeup.footer ?? undefined;
   const author = writeup.header.leagueName.slice(0, EMBED_AUTHOR_MAX);
 
-  // THE HEADER IS PREPENDED HERE, not by the builders, so no builder can ship
-  // without one. It is priority 0: a message that cannot say which league it
-  // belongs to is unidentifiable in a channel carrying several, and dropping it
-  // to save a hundred characters would be the wrong trade every time.
-  const sections = [
-    { key: "header", text: writeup.header.contextLine, priority: 0 },
-    ...writeup.sections,
-  ];
+  // The league is named by the author line above the title, set here rather
+  // than by the builders so no builder can ship without it. The format and
+  // scoring line that used to open the description is no longer printed: the
+  // owner wanted these to read as a short piece of writing, and a row of
+  // league settings at the top made every message open like a form.
+  const sections = writeup.sections;
 
   // Fields, most important first, priced against the overall embed budget.
   const fields = [...writeup.fields].sort((a, b) => a.priority - b.priority);
