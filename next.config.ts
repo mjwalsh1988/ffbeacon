@@ -3,15 +3,16 @@ import { securityHeadersForNextConfig } from "./lib/security-headers";
 import { HTML_LIMITED_BOTS } from "./lib/seo/html-limited-bots";
 
 /**
- * Beacon Brief slugs that no longer resolve, all sent to the Brief index.
+ * Beacon Brief slugs that no longer resolve and have no Relay carrying the same
+ * report, all sent to the homepage with a 301.
  *
- * Thirty-one of these were removed on 2026-07-30 as news with no fantasy
- * bearing (docs/beacon-brief/beacon-brief-removals-2026-07-30.md). The last one,
- * hunter-henry-patriots-extension, was archived without a merged survivor, so
- * there is no article to point it at either.
+ * Every one was removed on 2026-07-30 as news with no fantasy bearing
+ * (docs/beacon-brief/beacon-brief-removals-2026-07-30.md). The relays table was
+ * searched for each on 2026-10-09 and none has a published Relay.
  *
- * laremy-tunsil-torn-triceps-commanders is deliberately absent: it has a real
- * replacement and gets its own entry in redirects() below.
+ * laremy-tunsil-torn-triceps-commanders and hunter-henry-patriots-extension are
+ * deliberately absent: each has a published Relay for the same report and gets
+ * its own entry in redirects() below.
  *
  * Nothing here should ever come back as a published slug. If one does, delete
  * its line: a redirect would shadow the article and the article would never be
@@ -57,8 +58,6 @@ const RETIRED_BRIEF_SLUGS = [
   "caleb-williams-iceman-trademark-refused",
   // Wrong sport: a basketball recruit.
   "marcus-spears-jr-commits-texas-reclassifies-2026",
-  // Archived with no merged survivor, so there is nothing to redirect to.
-  "hunter-henry-patriots-extension",
 ] as const;
 
 const nextConfig: NextConfig = {
@@ -243,7 +242,7 @@ const nextConfig: NextConfig = {
       // pointing at a deleted page. A permanent redirect to a 404 is worse for
       // both readers and crawlers than the 404 itself, so the pair came out with
       // the articles. Both slugs now land in RETIRED_BRIEF_SLUGS below, which
-      // sends them to the Brief index rather than to a page that is not there.
+      // sends them to the homepage rather than to a page that is not there.
       {
         source: "/brief/jacoby-brissett-new-deal-cardinals-2026-starter",
         destination: "/brief/jacoby-brissett-cardinals-reworked-contract-2026",
@@ -450,33 +449,50 @@ const nextConfig: NextConfig = {
         destination: "/games/signal-scout",
         permanent: true,
       },
-      // The 2026-07-30 removal list, plus the two articles that were archived
-      // without a survivor. Google Search Console was reporting all 33 as 404s.
+      // The 2026-07-30 removal list. Google Search Console was still reporting
+      // these as 404s on 2026-10-09, so they now answer an explicit 301 rather
+      // than the 308 `permanent: true` sends.
       //
       // A reader arriving on one of these is not lost, they are early: the
       // Discord posts announcing every removed article were deliberately left
       // in place (see the removals doc), so those links are still live in a
-      // chat somewhere and will be for years. Landing them on the Brief index
-      // is a better answer than a dead end.
+      // chat somewhere and will be for years. Landing them on the homepage is a
+      // better answer than a dead end.
       //
       // What this is NOT is an attempt to keep the ranking. These articles were
       // deleted because they were not fantasy football, and Google is entitled
-      // to treat a redirect to a section index as a soft 404 and drop the URL,
+      // to treat a redirect to the homepage as a soft 404 and drop the URL,
       // which is the correct outcome. The redirect is for the person, not the
       // crawler.
       ...RETIRED_BRIEF_SLUGS.map((slug) => ({
         source: `/brief/${slug}`,
-        destination: "/brief",
-        permanent: true,
+        destination: "/",
+        statusCode: 301 as const,
       })),
-      // The one retired slug with a real replacement. The Tunsil triceps
-      // article was archived; the Commanders IR article covers the same injury
-      // to the same player and is published, so this one goes to the article
-      // rather than to the index.
+      // The retired slugs that DO have a published Relay for the same report go
+      // straight to it. The Tunsil entry used to point at the Commanders IR
+      // article, which has since been archived itself and forwards to its own
+      // Relay, so the old URL took two hops; this is one.
       {
         source: "/brief/laremy-tunsil-torn-triceps-commanders",
-        destination: "/brief/commanders-newton-tunsil-injured-reserve",
-        permanent: true,
+        destination: "/brief/relay/laremy-tunsil-torn-triceps-commanders",
+        statusCode: 301,
+      },
+      {
+        source: "/brief/hunter-henry-patriots-extension",
+        destination: "/brief/relay/hunter-henry-patriots-extension",
+        statusCode: 301,
+      },
+      // The share image of an archived article. The article itself already
+      // forwards to its Relay through legacy_article_redirects, but the image
+      // route has no such fallback and answers 404, which Search Console picked
+      // up. An image URL goes to the Relay's own share image so anything that
+      // embedded it still gets a picture of the same report.
+      {
+        source: "/api/og/brief/packers-kaleb-johnson-josh-jacobs-exempt",
+        destination:
+          "/api/og/relay/packers-jacobs-commissioners-exempt-johnson-traded-steelers-mccord-dolphins",
+        statusCode: 301,
       },
     ];
   },
