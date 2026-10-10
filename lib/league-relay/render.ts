@@ -39,6 +39,14 @@ export const RELAY_ACCENT: Record<string, number> = {
 
 export interface RenderResult {
   message: DiscordMessageInput;
+  /**
+   * The poll, as its own message, sent straight after `message`.
+   *
+   * Discord draws a poll ABOVE any embed on the same message, so a poll riding
+   * on the writeup put the question in front of the story it asks about. A
+   * second message is the only way to have the poll land after the text.
+   */
+  pollMessage: DiscordMessageInput | null;
   /** Section keys dropped to fit. Recorded on the ledger row. */
   dropped: string[];
 }
@@ -137,15 +145,22 @@ export function renderWriteup(
     embeds: [embed],
     allowedRoleIds: opts.mentionRoleIds,
   };
-  if (writeup.poll && opts.pollHours !== null) {
-    message.poll = {
-      question: writeup.poll.question,
-      answers: writeup.poll.answers,
-      durationHours: opts.pollHours,
-    };
-  }
+  // No mentions on the poll: the writeup above it already pinged the role, and
+  // a second ping for the same story is noise.
+  const pollMessage: DiscordMessageInput | null =
+    writeup.poll && opts.pollHours !== null
+      ? {
+          content: "",
+          allowedRoleIds: [],
+          poll: {
+            question: writeup.poll.question,
+            answers: writeup.poll.answers,
+            durationHours: opts.pollHours,
+          },
+        }
+      : null;
 
-  return { message, dropped: composed.dropped };
+  return { message, pollMessage, dropped: composed.dropped };
 }
 
 /**

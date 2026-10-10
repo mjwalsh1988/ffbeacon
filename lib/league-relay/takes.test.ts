@@ -156,3 +156,23 @@ describe("the format line", () => {
     expect(renderPlainText(writeup)).toContain("### Gridiron Degenerates");
   });
 });
+
+describe("the poll", () => {
+  const withPoll = () =>
+    ({ ...(recap(120, 100, 0, "poll") as Writeup), poll: { question: "Who wins?", answers: ["winner", "loser"] } }) as Writeup;
+
+  it("goes out as its own message so it lands under the writeup", () => {
+    const rendered = renderWriteup(withPoll(), { mentionRoleIds: ["123"], pollHours: 24 });
+    expect(rendered?.message.poll).toBeUndefined();
+    expect(rendered?.pollMessage?.poll?.question).toBe("Who wins?");
+    expect(rendered?.pollMessage?.poll?.durationHours).toBe(24);
+    // The role is pinged once, on the writeup, not again on the poll.
+    expect(rendered?.message.content).toContain("<@&123>");
+    expect(rendered?.pollMessage?.content).toBe("");
+    expect(rendered?.pollMessage?.allowedRoleIds).toEqual([]);
+  });
+
+  it("is left off when the channel has polls switched off", () => {
+    expect(renderWriteup(withPoll(), { mentionRoleIds: [], pollHours: null })?.pollMessage).toBeNull();
+  });
+});

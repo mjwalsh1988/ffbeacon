@@ -4,12 +4,13 @@ import type { Database } from "@/lib/database.types";
 
 vi.mock("@/lib/discord", () => ({ postWebhookMessage: vi.fn() }));
 vi.mock("./render", () => ({
-  renderWriteup: vi.fn(() => ({ message: { content: "hi" }, dropped: [] })),
+  renderWriteup: vi.fn(() => ({ message: { content: "hi" }, pollMessage: null, dropped: [] })),
   renderPlainText: vi.fn(() => "hi"),
 }));
 
 import { postWebhookMessage } from "@/lib/discord";
 import { claimAndSend, releaseStaleClaims, STALE_CLAIM_MS } from "./post";
+import { renderWriteup } from "./render";
 
 type Op = { op: string; payload?: unknown; filters: Array<[string, unknown[]]> };
 
@@ -110,6 +111,44 @@ describe("claimAndSend send lease", () => {
     const out = await claimAndSend(admin, params);
     expect(out.status).toBe("posted");
     expect(postWebhookMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("claimAndSend poll order", () => {
+  const poll = { content: "", poll: { question: "Who won?", answers: ["A", "B"], durationHours: 24 } };
+
+  it("sends the writeup first and the poll after it", async () => {
+    vi.mocked(renderWriteup).mockReturnValueOnce({
+      message: { content: "story" },
+      pollMessage: poll,
+      dropped: [],
+    } as never);
+    const { admin } = fakeAdmin(baseRespond(1));
+    const out = await claimAndSend(admin, params);
+    expect(out.status).toBe("posted");
+    const calls = vi.mocked(postWebhookMessage).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][1]).toEqual({ content: "story" });
+    expect(calls[0][1].poll).toBeUndefined();
+    expect(calls[1][1]).toBe(poll);
+  });
+
+  it("keeps the post as posted, with a note, when only the poll fails", async () => {
+    vi.mocked(renderWriteup).mockReturnValueOnce({
+      message: { content: "story" },
+      pollMessage: poll,
+      dropped: [],
+    } as never);
+    vi.mocked(postWebhookMessage)
+      .mockResolvedValueOnce({ ok: true, id: "msg", channelId: "ch" } as never)
+      .mockResolvedValueOnce({ ok: false, status: 400, retryAfterMs: null, error: "Discord post 400" });
+    const { admin, ops } = fakeAdmin(baseRespond(1));
+    const out = await claimAndSend(admin, params);
+    expect(out.status).toBe("posted");
+    const record = ops.find(
+      (o) => o.op === "league_relay_posts.update" && (o.payload as { status?: string }).status === "posted",
+    )!;
+    expect((record.payload as { error?: string }).error).toContain("poll did not");
   });
 });
 

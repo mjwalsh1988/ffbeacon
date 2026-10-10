@@ -184,6 +184,17 @@ export async function claimAndSend(admin: Admin, params: SendParams): Promise<Se
   const sent = await postWebhookMessage(webhookUrl, rendered.message);
   if (!sent.ok) return fail("error", sent.error);
 
+  // The poll goes second, as its own message, so it lands under the writeup
+  // rather than above it. The writeup is already in the channel by now, so a
+  // poll that fails does not turn the post into an error; the row stays
+  // 'posted' and the note says the poll is missing. Nothing reads relay poll
+  // results back, so the poll's own message id is not kept.
+  let pollNote: string | null = null;
+  if (rendered.pollMessage) {
+    const pollSent = await postWebhookMessage(webhookUrl, rendered.pollMessage);
+    if (!pollSent.ok) pollNote = `The writeup posted but the poll did not: ${pollSent.error}`;
+  }
+
   // 4. RECORD.
   await admin
     .from("league_relay_posts")
@@ -192,6 +203,7 @@ export async function claimAndSend(admin: Admin, params: SendParams): Promise<Se
       discord_message_id: sent.id,
       discord_channel_id: sent.channelId,
       posted_at: new Date().toISOString(),
+      ...(pollNote ? { error: pollNote.slice(0, 500) } : {}),
     })
     .eq("id", claimed.id);
 
