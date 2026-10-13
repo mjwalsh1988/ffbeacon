@@ -74,6 +74,16 @@ export type RosterSwapResult = {
   /** Weeks each incoming player actually starts. */
   incomingStartWeeks: Record<string, number>;
   /**
+   * Weeks each OUTGOING player starts in the BEFORE lineup, keyed the same way.
+   *
+   * The mirror of incomingStartWeeks. The League Relay evaluates an executed
+   * trade as its un-trade (lib/league-relay/trade-impact.ts), and from that side
+   * the players a manager actually RECEIVED are the outgoing ones, so this is
+   * the only place "how often does what they got actually start" can be read
+   * without building every lineup a second time.
+   */
+  outgoingStartWeeks: Record<string, number>;
+  /**
    * Mean points per week from each starting slot, before and after, aligned by
    * index with `slots`.
    *
@@ -105,6 +115,7 @@ export function computeRosterSwap(input: RosterSwapInput): RosterSwapResult {
   // Every arriving player we have at least one projection for. Seeded to zero so
   // a player who is projected but never starts is reported honestly as zero.
   const incomingStartWeeks: Record<string, number> = {};
+  const outgoingStartWeeks: Record<string, number> = {};
   for (const arrivals of incomingByWeek.values()) {
     for (const candidate of arrivals) {
       if (incomingStartWeeks[candidate.playerId] === undefined) {
@@ -152,6 +163,22 @@ export function computeRosterSwap(input: RosterSwapInput): RosterSwapResult {
       slotSumAfter[i] += slot.points;
     });
 
+    // Each departing player is counted once per week, from the lineup he was
+    // part of before the swap. Seeded to zero once he has a projection, for the
+    // same reason as the incoming side.
+    for (const candidate of roster) {
+      if (leaving.has(candidate.playerId) && outgoingStartWeeks[candidate.playerId] === undefined) {
+        outgoingStartWeeks[candidate.playerId] = 0;
+      }
+    }
+    const departedCounted = new Set<string>();
+    for (const slot of before.slots) {
+      const id = slot.playerId;
+      if (!id || !leaving.has(id) || departedCounted.has(id)) continue;
+      departedCounted.add(id);
+      outgoingStartWeeks[id] = (outgoingStartWeeks[id] ?? 0) + 1;
+    }
+
     const startingIncoming: string[] = [];
     const counted = new Set<string>();
     for (const slot of after.slots) {
@@ -190,6 +217,7 @@ export function computeRosterSwap(input: RosterSwapInput): RosterSwapResult {
     weeksImproved,
     weeksWorsened,
     incomingStartWeeks,
+    outgoingStartWeeks,
     // Averaged over the weeks considered, so a slot's figure is a per-week rate
     // and comparable with meanBefore / meanAfter. An empty week list would make
     // this a division by zero, so it falls to zeros rather than NaN.

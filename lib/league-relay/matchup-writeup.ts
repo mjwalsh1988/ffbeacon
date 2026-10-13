@@ -8,17 +8,22 @@
  * would drift apart within a week, and a reader who checked would rightly stop
  * trusting both. One source, two renderings.
  *
- * Both read like a short newspaper piece rather than a report: a one-sentence
- * lede, the odds or the score, a line for each manager pointing the way the
- * numbers point (./takes.ts), the players who matter, and a sign-off.
+ * Both read as COMMENTARY on the game rather than a report of it. The score,
+ * the winner and the numbers are there, and the rest is jokes about what the
+ * players did and what the managers decided, drawn from ./commentary.ts and
+ * pointed the way the result points by ./takes.ts. The first rewrite of these
+ * posts read as a newspaper box score with adjectives; the numbers belong in
+ * the setup of a joke, not in a sentence of their own.
  *
  * THE PREVIEW is written three days out, when lineups are still movable, so it
- * talks about what a manager can still do: who they are projected to start, how
- * close the game is, what leaving points on the bench would cost them.
+ * talks about what a manager can still do: who their week rests on, the
+ * questionable starter, the empty slot, the points sitting on the bench.
  *
- * THE RECAP is written on Tuesday, when nothing can be changed, so it talks
- * about what happened and, more usefully, about what did not: the bench points,
- * the busted projection, the manager who won by starting the wrong quarterback.
+ * THE RECAP is written on Tuesday, when nothing can be changed. It opens on the
+ * score, then gives each team a paragraph built around its over-performer and
+ * its under-performer, then the lineup decisions that cost (or nearly cost) the
+ * game, then whatever was strange: a kicker as top scorer, a defense below
+ * zero, an empty slot.
  *
  * A NULL PROJECTION IS NEVER A ZERO. Sleeper publishes projections for six
  * positions only, so an IDP slot arrives here as null. It is named and excluded
@@ -36,6 +41,14 @@ import type { MatchupSide, MatchupView } from "@/lib/league-schedule/types";
 import type { RelayLeague, RelayTeam, Writeup, WriteupField } from "./types";
 import { fitPollAnswer } from "./limits";
 import {
+  RESULT_LINES,
+  decisionLines,
+  oddityLines,
+  playerLines,
+  previewTeamLines,
+  say,
+} from "./commentary";
+import {
   COIN_FLIP_TAKES,
   FAVOURITE_TAKES,
   LOSS_TAKES,
@@ -43,7 +56,7 @@ import {
   WIN_TAKES,
   take,
 } from "./takes";
-import { PREVIEW_CLOSERS, RECAP_CLOSERS, Voice, listOf, ordinal, pct, type Line } from "./voice";
+import { PREVIEW_CLOSERS, RECAP_CLOSERS, Voice, ordinal, pct, type Line } from "./voice";
 import type { MatchupSlot } from "./select-matchup";
 
 export interface MatchupWriteupInput {
@@ -92,25 +105,6 @@ const UNDERCARD_OPENERS: Line[] = [
   { heat: 0.9, text: "Two teams enter. One team wins. Both should feel a bit bad about it." },
 ];
 
-const BLOWOUT_LINES: Line[] = [
-  { heat: 0.3, text: "This was over early." },
-  { heat: 0.4, text: "Nobody needed the late games for this one." },
-  { heat: 0.5, text: "It stopped being a contest some time on Sunday morning." },
-  { heat: 0.6, text: "Somebody should run a wellness check on the losing side." },
-  { heat: 0.8, text: "The scoreboard has asked for it to stop." },
-  { heat: 0.9, text: "There is video of this. There should not be." },
-];
-
-const NAILBITER_LINES: Line[] = [
-  { heat: 0.2, text: "That went to the wire." },
-  { heat: 0.3, text: "Decided by less than a single carry." },
-  { heat: 0.4, text: "That is the kind of margin people remember in December." },
-  { heat: 0.5, text: "Two managers watched the same Monday night game for very different reasons." },
-  { heat: 0.6, text: "One catch. That is the whole story." },
-  { heat: 0.7, text: "Somebody is going to recount this by hand." },
-  { heat: 0.8, text: "A rounding error decided somebody's week. Enjoy it." },
-];
-
 /**
  * What a matchup writeup calls a manager: their SLEEPER USERNAME.
  *
@@ -143,53 +137,6 @@ function nameWithContext(
   const standing = teams.get(side.sleeperRosterId)?.standingsRank ?? null;
   const rank = standing !== null ? `, ${ordinal(standing)} of ${league.totalRosters}` : "";
   return `**${sideName(side)}** (${record(side)}${rank})`;
-}
-
-/** The two or three players carrying a side, by projection. */
-function topStarters(side: MatchupSide, count = 3): string[] {
-  return side.slots
-    .map((s) => s.player)
-    .filter((p): p is NonNullable<typeof p> => p !== null && p.projected !== null)
-    .sort((a, b) => (b.projected ?? 0) - (a.projected ?? 0))
-    .slice(0, count)
-    .map((p) => `${p.name} (${(p.projected ?? 0).toFixed(1)})`);
-}
-
-/** The players who actually decided a finished game. */
-function topScorers(side: MatchupSide, count = 3): string[] {
-  return side.slots
-    .map((s) => s.player)
-    .filter((p): p is NonNullable<typeof p> => p !== null && p.actual !== null)
-    .sort((a, b) => (b.actual ?? 0) - (a.actual ?? 0))
-    .slice(0, count)
-    .map((p) => `${p.name} (${(p.actual ?? 0).toFixed(1)})`);
-}
-
-/** The starter who most spectacularly failed to show up. */
-function biggestBust(voice: Voice, side: MatchupSide): string | null {
-  let worst: { name: string; miss: number; actual: number; projected: number } | null = null;
-  for (const slot of side.slots) {
-    const p = slot.player;
-    if (!p || p.projected === null || p.actual === null) continue;
-    if (p.projected < 8) continue; // Nobody was counting on him anyway.
-    const miss = p.projected - p.actual;
-    if (miss <= 0) continue;
-    if (!worst || miss > worst.miss) {
-      worst = { name: p.name, miss, actual: p.actual, projected: p.projected };
-    }
-  }
-  if (!worst || worst.miss < 5) return null;
-  // The team is named, always. Both lineups are on the same screen and a bare
-  // player name leaves a reader working out whose he was.
-  const team = sideName(side);
-  const proj = worst.projected.toFixed(1);
-  const got = worst.actual.toFixed(1);
-  return voice.pickPlain([
-    `${team}'s ${worst.name} was projected for ${proj} and gave them ${got}.`,
-    `${worst.name} was supposed to be good for ${proj}. ${team} got ${got}.`,
-    `${team} counted on ${proj} from ${worst.name} and got ${got} back.`,
-    `${worst.name} put up ${got} for ${team}, against a projection of ${proj}.`,
-  ]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -259,23 +206,11 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
   }
 
   /* --------------------------------------------------------- who matters */
-  const startersLines: string[] = [];
-  for (const side of [away, home]) {
-    const top = topStarters(side);
-    if (top.length === 0) continue;
-    const name = sideName(side);
-    const list = listOf(top);
-    startersLines.push(
-      voice.pickPlain([
-        `${name} will lean on ${list}.`,
-        `For ${name} it is ${list} carrying the load.`,
-        `${name} needs ${list} to show up.`,
-        `${name}'s week runs through ${list}.`,
-        `Most of ${name}'s hopes sit with ${list}.`,
-      ]),
-    );
-  }
-  const starters = startersLines.join(" ");
+  // One player each that the week rests on, plus anything shaky about the
+  // lineup as set: an empty slot, or a starter carrying an injury designation.
+  const starters = [away, home]
+    .flatMap((side) => previewTeamLines(voice, side, sideName(side)))
+    .join(" ");
 
   /* ------------------------------------------------------------ the bench */
   const benchLines: string[] = [];
@@ -392,116 +327,55 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
   const wp = Math.max(homePts, awayPts).toFixed(1);
   const lp = Math.min(homePts, awayPts).toFixed(1);
 
-  /* --------------------------------------------------------------- lede */
-  const verb = voice.pickPlain(
-    kind === "big"
-      ? ["rolled over", "buried", "ran away from", "flattened", "had no trouble with", "blew out"]
-      : kind === "close"
-        ? ["edged", "held off", "squeaked past", "just got past", "outlasted"]
-        : ["beat", "got past", "took care of", "handled", "saw off"],
-  );
-  const lede = tied
-    ? voice.pickPlain([
-        `**${sideName(away)}** and **${sideName(home)}** tied at ${awayPts.toFixed(1)}.`,
-        `It finished level: **${sideName(away)}** ${awayPts.toFixed(1)}, **${sideName(home)}** ${homePts.toFixed(1)}.`,
-      ])
-    : voice.pickPlain([
-        `**${W}** ${verb} **${L}**, ${wp} to ${lp}.`,
-        `**${W}** ${verb} **${L}** ${wp} to ${lp} in week ${view.week}.`,
-        `${wp} to ${lp}: **${W}** ${verb} **${L}**.`,
-        `Final score, **${W}** ${wp}, **${L}** ${lp}.`,
-      ]);
-  const colour = tied
-    ? voice.pick([
-        { heat: 0.2, text: "A tie. Nobody wanted this." },
-        { heat: 0.3, text: "A tie, the one result nobody prepares a speech for." },
-        { heat: 0.5, text: "Half a win each, and two managers who would rather have lost." },
-        { heat: 0.8, text: "Three hours of football for half a point in the standings." },
-      ])
-    : kind === "close"
-      ? voice.pick(NAILBITER_LINES)
-      : kind === "big"
-        ? voice.pick(BLOWOUT_LINES)
-        : null;
-  const hook = [lede, colour].filter((s): s is string => Boolean(s)).join(" ");
+  /* --------------------------------------------------------------- hook */
+  // The score and the winner, always in the first sentence, with the joke on
+  // the margin riding along in the same line.
+  const hook =
+    (tied
+      ? say(voice, RESULT_LINES.tie, {
+          W: sideName(away),
+          L: sideName(home),
+          wp: awayPts.toFixed(1),
+          lp: homePts.toFixed(1),
+          margin: margin.toFixed(1),
+        })
+      : say(voice, RESULT_LINES[kind], { W, L, wp, lp, margin: margin.toFixed(1) })) ??
+    `**${W}** ${wp}, **${L}** ${lp}.`;
 
-  /* -------------------------------------------------------------- takes */
-  // One line each, in the direction the score points: the winner gets credit
-  // sized to the margin, the loser gets the bill. When the loser left more on
-  // the bench than they lost by, that is the roast, with the number attached.
-  const takes: string[] = [];
-  if (!tied) {
-    const praise = take(voice, WIN_TAKES[kind], W);
-    if (praise) takes.push(praise);
+  /* --------------------------------------------------------- the teams */
+  // A paragraph each. The manager gets a take pointed the way the result
+  // points (./takes.ts), then the players do the talking: the winner's hero
+  // and passenger, the loser's bust and the one player who showed up.
+  const paragraph = (side: MatchupSide, name: string, result: "won" | "lost" | "tied"): string => {
+    const opening =
+      result === "won"
+        ? take(voice, WIN_TAKES[kind], name)
+        : result === "lost"
+          ? take(voice, LOSS_TAKES[kind], name)
+          : null;
+    return [opening, ...playerLines(voice, side, name, result, margin)]
+      .filter((s): s is string => Boolean(s))
+      .join(" ");
+  };
+  const first = tied ? paragraph(away, sideName(away), "tied") : paragraph(winner, W, "won");
+  const second = tied ? paragraph(home, sideName(home), "tied") : paragraph(loser, L, "lost");
 
-    const benched = loser.pointsLeftOnBench;
-    if (benched !== null && benched > 0 && benched >= margin) {
-      const jab = voice.pick([
-        { heat: 0.3, text: "The right lineup wins this game." },
-        { heat: 0.4, text: "The roster was good enough. The Sunday morning was not." },
-        { heat: 0.5, text: "This one was lost before kickoff." },
-        { heat: 0.6, text: "The lineup screen did more damage than the opponent." },
-        { heat: 0.7, text: "The opponent did not beat them. The bench did." },
-        { heat: 0.8, text: "No variance excuse available here, which is the cruel part." },
-        { heat: 0.9, text: "Print this out. Frame it. Live with it." },
-      ]);
-      takes.push(
-        `${voice.pickPlain([
-          `${L} left ${benched.toFixed(1)} points on the bench, more than the ${margin.toFixed(1)} they lost by.`,
-          `${L} had ${benched.toFixed(1)} points sitting on the bench and lost by ${margin.toFixed(1)}.`,
-          `The bench outscored the margin: ${benched.toFixed(1)} points unused by ${L}, beaten by ${margin.toFixed(1)}.`,
-        ])}${jab ? ` ${jab}` : ""}`,
-      );
-    } else {
-      const roast = take(voice, LOSS_TAKES[kind], L);
-      if (roast) takes.push(roast);
-    }
-  }
+  /* --------------------------------------------------------- decisions */
+  const decisions = decisionLines(voice, winner, loser, W, L, margin, tied).join(" ");
 
-  /* ---------------------------------------------------------- who did it */
-  const scorerLines: string[] = [];
-  for (const side of tied ? [away, home] : [winner, loser]) {
-    const top = topScorers(side);
-    if (top.length === 0) continue;
-    const name = sideName(side);
-    const list = listOf(top);
-    scorerLines.push(
-      voice.pickPlain([
-        `${list} did the scoring for ${name}.`,
-        `${name} got ${list}.`,
-        `For ${name} it was ${list}.`,
-        `${name}'s points came from ${list}.`,
-      ]),
-    );
-  }
-  const scorers = scorerLines.join(" ");
-
-  /* ------------------------------------------------------- what went wrong */
-  const wrongLines: string[] = [];
-  const loserBust = biggestBust(voice, loser);
-  if (loserBust) wrongLines.push(loserBust);
-  if (
-    !tied &&
-    winner.pointsLeftOnBench !== null &&
-    loser.pointsLeftOnBench !== null &&
-    winner.pointsLeftOnBench > loser.pointsLeftOnBench &&
-    winner.pointsLeftOnBench >= 5
-  ) {
-    const jab = voice.pick([
-      { heat: 0.3, text: "Winning is winning." },
-      { heat: 0.4, text: "Nobody checks the bench of the team that won." },
-      { heat: 0.6, text: "Setting the worse lineup and winning anyway is its own kind of talent." },
-      { heat: 0.8, text: "Two managers set two bad lineups and only one of them has to answer for it." },
-    ]);
-    wrongLines.push(
-      `${W} left ${winner.pointsLeftOnBench.toFixed(1)} on their own bench, more than ${L} did, and won anyway.${
-        jab ? ` ${jab}` : ""
-      }`,
-    );
-  }
-  const winnerBust = biggestBust(voice, winner);
-  if (winnerBust && wrongLines.length < 2) wrongLines.push(winnerBust);
-  const wrong = wrongLines.join(" ");
+  /* ---------------------------------------------------------- oddities */
+  const oddities = oddityLines(
+    voice,
+    tied
+      ? [
+          { side: away, name: sideName(away), result: "tied" },
+          { side: home, name: sideName(home), result: "tied" },
+        ]
+      : [
+          { side: winner, name: W, result: "won" },
+          { side: loser, name: L, result: "lost" },
+        ],
+  ).join(" ");
 
   /* ------------------------------------------------------------ standings */
   // Records only, and the table position a reader can check in Sleeper.
@@ -551,11 +425,12 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
     ).slice(0, 256),
     sections: [
       { key: "hook", text: hook, priority: 0 },
-      { key: "takes", text: takes.join(" "), priority: 1 },
-      { key: "scorers", text: scorers, priority: 2 },
-      { key: "autopsy", text: wrong, priority: 2 },
+      { key: "winner", text: first, priority: 1 },
+      { key: "loser", text: second, priority: 1 },
+      { key: "decisions", text: decisions, priority: 2 },
+      { key: "oddities", text: oddities, priority: 3 },
       { key: "standings", text: standings, priority: 3 },
-      { key: "closer", text: closer, priority: 3 },
+      { key: "closer", text: closer, priority: 4 },
     ],
     fields,
     footer: `Week ${view.week} recap`,

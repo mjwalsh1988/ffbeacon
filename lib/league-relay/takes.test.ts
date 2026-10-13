@@ -141,7 +141,8 @@ describe("recap takes", () => {
 
   it("blames the bench when the loser left more on it than the margin", () => {
     const text = (recap(110, 104, 12, "bench")?.sections ?? []).map((s) => s.text).join("\n");
-    expect(text).toMatch(/12\.0 points/);
+    expect(text).toMatch(/12\.0/);
+    expect(text).toMatch(/6\.0/);
   });
 });
 

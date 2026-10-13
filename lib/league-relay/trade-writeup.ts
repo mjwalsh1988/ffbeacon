@@ -2,18 +2,21 @@
  * The trade writeup.
  *
  * A trade is the one thing that happens in a fantasy league where everybody has
- * an opinion and nobody has the numbers. The writeup reads like a short piece
- * in a league newspaper: who sent what, who won it, a line of praise for the
- * manager who did well and a roast for the one who did not, what it does to
- * each team's season, and a sign-off. It is assembled from three sources, all
- * of which the site already computes for its own pages:
+ * an opinion and nobody has the numbers. The writeup is commentary with the
+ * numbers in it: one paragraph of facts (who sent what, and who Signal Check
+ * says won it), then a paragraph per manager that praises or roasts them and
+ * backs the take up with what the deal actually does to their team, and a
+ * sign-off. The jokes live in ./trade-commentary.ts. Everything is assembled
+ * from three sources, all of which the site already computes for its own pages:
  *
  *   SIGNAL CHECK      who won on value, by how much, and how sure it is.
  *                     lib/league-signal-check.ts, the same pipeline behind
  *                     /tools/trade-calculator and the League Pulse feed.
- *   TRADE IMPACT      what it does to each team's remaining season: optimal
- *                     lineup points per week, projected wins, playoff odds,
- *                     title odds. lib/league-relay/trade-impact.ts.
+ *   TRADE IMPACT      what it does to each team's remaining season: how many
+ *                     weeks each player received will start and each player
+ *                     sent would have, optimal lineup points per week,
+ *                     projected wins, playoff odds, title odds.
+ *                     lib/league-relay/trade-impact.ts.
  *   THE LEAGUE ITSELF where each team sits, and whether this is a dynasty
  *                     league where age and picks are currency or a one-year
  *                     league where only the next nine weeks exist.
@@ -36,6 +39,7 @@ import type { ExecutedTeamImpact, ExecutedTradeImpact } from "./trade-impact";
 import type { RelayLeague, RelayTeam, Writeup, WriteupField } from "./types";
 import { fitPollAnswer } from "./limits";
 import { TRADE_CLOSERS, TRADE_TAKES, gradeFromScore, take, type Grade } from "./takes";
+import { tradeTeamLines } from "./trade-commentary";
 import {
   EVEN_LINES,
   TRADE_OPENERS,
@@ -146,41 +150,6 @@ function tradeScore(
   return value + fit;
 }
 
-/**
- * The single figure that best says what the deal did to one team's season,
- * as one sentence. Playoff odds when they moved, the weekly lineup when they
- * did not. A null figure is left out rather than printed as a zero.
- */
-function seasonLine(voice: Voice, team: ExecutedTeamImpact, name: string): string | null {
-  const playoff = ppChange(team.playoffOddsBefore, team.playoffOddsAfter);
-  const from = pct(team.playoffOddsBefore);
-  const to = pct(team.playoffOddsAfter);
-  if (playoff && playoff.delta !== 0 && from && to) {
-    return voice.pickPlain([
-      `${name}'s playoff odds go from ${from} to ${to}.`,
-      `It moves ${name} from ${from} to ${to} to make the playoffs.`,
-      `${name} goes from a ${from} playoff shot to ${to}.`,
-      `For ${name}, the playoff odds move from ${from} to ${to}.`,
-      `${name} now makes the playoffs ${to} of the time, from ${from}.`,
-    ]);
-  }
-  if (team.lineupDelta !== null && Math.abs(team.lineupDelta) >= 0.3) {
-    const pts = Math.abs(team.lineupDelta).toFixed(1);
-    return team.lineupDelta > 0
-      ? voice.pickPlain([
-          `${name}'s best lineup picks up about ${pts} points a week.`,
-          `It is worth roughly ${pts} more points a week to ${name}'s starters.`,
-          `${name} gets about ${pts} points a week stronger.`,
-        ])
-      : voice.pickPlain([
-          `${name}'s best lineup gets about ${pts} points a week weaker.`,
-          `It costs ${name}'s starters roughly ${pts} points a week.`,
-          `${name} is about ${pts} points a week lighter.`,
-        ]);
-  }
-  return null;
-}
-
 /** Value, age and picks for a dynasty side, in one short sentence. */
 function dynastyLine(voice: Voice, team: ExecutedTeamImpact, name: string): string | null {
   const bits: string[] = [];
@@ -233,45 +202,6 @@ function fitLine(
     return `Giving up points from ${pulse} in a league with no next year is a bold read on the cushion.`;
   }
   return null;
-}
-
-/**
- * "The player you sold would still have started" fact, with how many weeks it
- * rests on, so the caller can pick the more striking of the two.
- */
-function departedFact(
-  team: ExecutedTeamImpact,
-  teamName: string,
-  weeksLeft: number,
-): { text: string; weeks: number } | null {
-  let best: { name: string; weeks: number } | null = null;
-  for (const asset of team.sent) {
-    if (asset.kind !== "player") continue;
-    const weeks = team.departedStartWeeks[asset.playerId] ?? 0;
-    if (!best || weeks > best.weeks) best = { name: asset.name, weeks };
-  }
-  if (!best || best.weeks === 0 || weeksLeft === 0) return null;
-
-  if (best.weeks >= weeksLeft) {
-    return {
-      weeks: best.weeks,
-      text: `${best.name} would have started every one of ${teamName}'s remaining ${weeksLeft} week${
-        weeksLeft === 1 ? "" : "s"
-      }.`,
-    };
-  }
-  if (best.weeks / weeksLeft >= 0.5) {
-    return {
-      weeks: best.weeks,
-      text: `${best.name} would have started for ${teamName} in ${best.weeks} of the ${weeksLeft} weeks left.`,
-    };
-  }
-  return {
-    weeks: best.weeks,
-    text: `${best.name} would only have cracked ${teamName}'s lineup ${best.weeks} time${
-      best.weeks === 1 ? "" : "s"
-    } in ${weeksLeft} weeks, which is the best argument for this deal.`,
-  };
 }
 
 /** The stat block. Dropped whole if the embed is tight; never trimmed. */
@@ -380,6 +310,9 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
   const hook = [opener, lede].filter((s): s is string => Boolean(s)).join(" ");
 
   /* ------------------------------------------------------------- verdict */
+  // The last fact in the opening paragraph: who Signal Check says won it. It
+  // sits with the assets because it is a number, not an opinion, and the rest
+  // of the post is the opinion.
   const ungraded = view.graded === false;
   const m = `${view.marginPct.toFixed(1)}%`;
   const fmt = view.formatDisplay;
@@ -399,49 +332,50 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
           `Signal Check cannot split them: ${m} apart on ${fmt} values${conf}.`,
         ]);
   const partial = !ungraded && view.partial ? partialGradeNote(view.unpricedCount) : null;
+  const even = !ungraded && view.isNeutral ? voice.pick(EVEN_LINES) : null;
+  const facts = [hook, verdict, partial, even].filter((s): s is string => Boolean(s)).join(" ");
 
-  // The takes. The better-graded side first, so the paragraph reads as praise
-  // and then the bill. Two even grades get one line about the pair instead.
-  const graded: Array<{ name: string; grade: Grade; score: number }> = [
-    { name: A, score: tradeScore(view, "a", impact?.a ?? null, isDynasty, league), grade: "even" },
-    { name: B, score: tradeScore(view, "b", impact?.b ?? null, isDynasty, league), grade: "even" },
+  /* ------------------------------------------------------------ the teams */
+  // One paragraph per manager, the better-graded side first so the post reads
+  // as the praise and then the bill. Each opens with the take for that grade
+  // and then backs it up from the impact model: who actually starts, what was
+  // given away, what the season looks like now. An even grade gets no take, but
+  // still gets the numbers, because "nothing much changes" is itself the joke.
+  const graded: Array<{ name: string; side: "a" | "b"; score: number; grade: Grade }> = [
+    { name: A, side: "a" as const, score: tradeScore(view, "a", impact?.a ?? null, isDynasty, league) },
+    { name: B, side: "b" as const, score: tradeScore(view, "b", impact?.b ?? null, isDynasty, league) },
   ]
     .map((g) => ({ ...g, grade: gradeFromScore(g.score) }))
     .sort((x, y) => y.score - x.score);
-  const takes: string[] = [];
-  for (const g of graded) {
-    if (g.grade === "even") continue;
-    const line = take(voice, TRADE_TAKES[g.grade], g.name);
-    if (line) takes.push(line);
-  }
-  if (takes.length === 0 && !ungraded && view.isNeutral) {
-    const even = voice.pick(EVEN_LINES);
-    if (even) takes.push(even);
-  }
-  const verdictSection = [verdict, partial, ...takes]
-    .filter((s): s is string => Boolean(s))
-    .join(" ");
 
-  /* -------------------------------------------------------------- season */
-  const seasonParts: string[] = [];
-  if (impact) {
-    for (const [team, name] of [
-      [impact.a, A],
-      [impact.b, B],
-    ] as const) {
-      const line = isDynasty
-        ? (dynastyLine(voice, team, name) ?? seasonLine(voice, team, name))
-        : seasonLine(voice, team, name);
-      if (line) seasonParts.push(line);
-      const fit = fitLine(team, name, league, isDynasty);
-      if (fit) seasonParts.push(fit);
+  const teamSections = graded.map((g, i) => {
+    const team = impact ? impact[g.side] : null;
+    const parts: string[] = [];
+    if (g.grade !== "even") {
+      const line = take(voice, TRADE_TAKES[g.grade], g.name);
+      if (line) parts.push(line);
     }
-    const departed = [departedFact(impact.a, A, weeksLeft), departedFact(impact.b, B, weeksLeft)]
-      .filter((d): d is { text: string; weeks: number } => d !== null)
-      .sort((x, y) => y.weeks - x.weeks);
-    if (departed.length > 0) seasonParts.push(departed[0].text);
-  }
-  const seasonSection = seasonParts.join(" ");
+    if (team && impact) {
+      parts.push(
+        ...tradeTeamLines(voice, {
+          team,
+          name: g.name,
+          weeksLeft,
+          isDynasty,
+          noLineup: impact.gaps.lineup,
+          noOdds: impact.gaps.simulation,
+          grade: g.grade,
+        }),
+      );
+      const fit = fitLine(team, g.name, league, isDynasty);
+      if (fit) parts.push(fit);
+      if (isDynasty) {
+        const dyn = dynastyLine(voice, team, g.name);
+        if (dyn) parts.push(dyn);
+      }
+    }
+    return { key: `team-${i + 1}`, text: parts.join(" "), priority: 1 };
+  });
 
   /* -------------------------------------------------------------- caveat */
   const caveats: string[] = [];
@@ -488,9 +422,8 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
     sections: [
       // The lede is essential: it is the only place the assets are named, and
       // a trade writeup that dropped it would be an opinion about nothing.
-      { key: "hook", text: hook, priority: 0 },
-      { key: "verdict", text: verdictSection, priority: 1 },
-      { key: "season", text: seasonSection, priority: 2 },
+      { key: "hook", text: facts, priority: 0 },
+      ...teamSections,
       { key: "closer", text: closer, priority: 3 },
       { key: "caveats", text: caveatSection, priority: 4 },
     ],

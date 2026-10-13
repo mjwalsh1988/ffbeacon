@@ -141,6 +141,13 @@ export type TeamImpact = {
   weeksWorsened: number;
   /** Weeks an incoming player actually cracks the lineup, keyed by player id. */
   incomingStartWeeks: Record<string, number>;
+  /**
+   * Weeks an outgoing player started in the lineup BEFORE the trade, keyed by
+   * player id. Optional so hand-built fixtures keep compiling; the evaluator
+   * always fills it. The League Relay reads it to say how often what a manager
+   * actually received will start (see lib/league-relay/trade-impact.ts).
+   */
+  outgoingStartWeeks?: Record<string, number>;
 
   projectedWinsBefore: number | null;
   projectedWinsAfter: number | null;

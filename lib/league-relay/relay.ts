@@ -20,10 +20,12 @@ import {
   loadRelayLeague,
   loadRelayTeams,
   loadWaiverPlayers,
+  loadWireFitContext,
   readFaabBid,
   readFaabBudget,
   resolveRelayContext,
 } from "./load";
+import { fitForMove, type WireFitContext } from "./waiver-fit";
 import { claimAndSend, claimHour, releaseStaleClaims, type SendOutcome } from "./post";
 import { buildTradeWriteup } from "./trade-writeup";
 import {
@@ -279,6 +281,7 @@ async function relayOneLeague(
       pulseRanks,
       context,
       currentWeek,
+      playoffWeekStart,
       sleeperLeague,
       url,
       now,
@@ -367,6 +370,8 @@ export interface TxParams {
   pulseRanks: Map<number, number>;
   context: Awaited<ReturnType<typeof resolveRelayContext>>;
   currentWeek: number;
+  /** The first playoff week, so the waiver roster comparison stops at the regular season. */
+  playoffWeekStart: number;
   sleeperLeague: SleeperLeague;
   url: string | null;
   now: Date;
@@ -462,34 +467,8 @@ async function relayTransactions(admin: Admin, p: TxParams): Promise<SendOutcome
     for (const row of data ?? []) digestedAlready.add(row.dedupe_key);
   }
 
-  // Player facts for every wire move in the tick, read ONCE. See load.ts.
-  const playerIds = new Set<string>();
-  for (const t of wireMoves) {
-    for (const id of Object.keys((t.adds ?? {}) as Record<string, unknown>)) playerIds.add(id);
-    for (const id of Object.keys((t.drops ?? {}) as Record<string, unknown>)) playerIds.add(id);
-  }
-  const weeks = Array.from({ length: WAIVER_PROJECTION_WEEKS }, (_, i) => p.currentWeek + i).filter(
-    (w) => w >= 1 && w <= 18,
-  );
-
-  const [players, faabMedian] = await Promise.all([
-    playerIds.size > 0
-      ? loadWaiverPlayers(admin, {
-          sleeperPlayerIds: Array.from(playerIds),
-          season: p.league.season,
-          weeks,
-          scoring:
-            (p.sleeperLeague as { scoring_settings?: Record<string, number> })?.scoring_settings ??
-            null,
-          formatConfigId: p.context.formatConfigId,
-          sourceSlug: p.context.sourceSlug,
-        })
-      : Promise.resolve(new Map()),
-    wireMoves.length > 0
-      ? loadFaabMedian(admin, p.league.id, p.league.season)
-      : Promise.resolve(null),
-  ]);
-  const faabBudget = readFaabBudget(p.sleeperLeague);
+  // Player and roster facts for every wire move in the tick, read ONCE.
+  const { players, faabMedian, faabBudget, fitContext } = await loadWireFacts(admin, p, wireMoves);
   const waiverChannel = p.settings.channels.waiver;
 
   let budget = p.budget;
@@ -518,7 +497,7 @@ async function relayTransactions(admin: Admin, p: TxParams): Promise<SendOutcome
             week: tx.week,
             channel: waiverChannel,
             build: async () =>
-              buildWaiverFor(p, tx, players, faabBudget, faabMedian, dedupeKey),
+              buildWaiverFor(p, tx, players, faabBudget, faabMedian, dedupeKey, fitContext),
           }),
         );
         budget -= 1;
@@ -545,7 +524,7 @@ async function relayTransactions(admin: Admin, p: TxParams): Promise<SendOutcome
             buildWaiverDigest({
               league: p.league,
               moves: rows
-                .map((tx) => toWaiverMove(p, tx, players))
+                .map((tx) => toWaiverMove(p, tx, players, fitContext))
                 .filter((m): m is WaiverMove => m !== null),
               kind: run.type,
               week: run.week,
@@ -757,10 +736,87 @@ function buildAssetsFor(meta: Array<{ kind: string; playerId?: string | null; se
  * about who moved what. Null when the row is not a wire move this feature knows
  * how to describe.
  */
+/**
+ * Every fact the wire writeups need for a batch of moves, read once.
+ *
+ * Shared by the live tick and the admin preview so the two build the same
+ * message from the same reads. The roster comparison (./waiver-fit.ts) covers
+ * the regular season only: after it there is no lineup to improve, and the
+ * review falls back to judging the player alone.
+ */
+export async function loadWireFacts(
+  admin: Admin,
+  p: TxParams,
+  wireMoves: TxRow[],
+): Promise<{
+  players: Map<string, WaiverPlayer>;
+  faabMedian: number | null;
+  faabBudget: number | null;
+  fitContext: WireFitContext | null;
+}> {
+  const playerIds = new Set<string>();
+  const rosterIds = new Set<number>();
+  for (const t of wireMoves) {
+    const adds = (t.adds ?? {}) as Record<string, unknown>;
+    const drops = (t.drops ?? {}) as Record<string, unknown>;
+    for (const id of Object.keys(adds)) playerIds.add(id);
+    for (const id of Object.keys(drops)) playerIds.add(id);
+    for (const rid of [...Object.values(adds), ...Object.values(drops)]) {
+      const n = Number(rid);
+      if (Number.isFinite(n)) rosterIds.add(n);
+    }
+  }
+  const weeks = Array.from({ length: WAIVER_PROJECTION_WEEKS }, (_, i) => p.currentWeek + i).filter(
+    (w) => w >= 1 && w <= 18,
+  );
+  // The roster comparison only runs inside the regular season. A playoff week
+  // is a lineup for the teams still playing, and a claim by an eliminated team
+  // would be graded against games it is not in.
+  const fitWeeks = weeks.filter((w) => w < p.playoffWeekStart);
+  const scoring =
+    (p.sleeperLeague as { scoring_settings?: Record<string, number> })?.scoring_settings ?? null;
+
+  const [players, faabMedian, fitContext] = await Promise.all([
+    playerIds.size > 0
+      ? loadWaiverPlayers(admin, {
+          sleeperPlayerIds: Array.from(playerIds),
+          season: p.league.season,
+          weeks,
+          scoring,
+          formatConfigId: p.context.formatConfigId,
+          sourceSlug: p.context.sourceSlug,
+        })
+      : Promise.resolve(new Map<string, WaiverPlayer>()),
+    wireMoves.length > 0
+      ? loadFaabMedian(admin, p.league.id, p.league.season)
+      : Promise.resolve(null),
+    // Never fatal. A post without roster context is still a post; one that
+    // failed because a projection read did is not.
+    loadWireFitContext(admin, {
+      leagueRowId: p.league.id,
+      season: p.league.season,
+      rosterPositions: p.league.rosterPositions,
+      scoring,
+      weeks: fitWeeks,
+      rosterIds: Array.from(rosterIds),
+      extraSleeperIds: Array.from(playerIds),
+    }).catch((err) => {
+      console.warn(
+        `[league-relay] roster context unavailable for ${p.league.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }),
+  ]);
+  return { players, faabMedian, faabBudget: readFaabBudget(p.sleeperLeague), fitContext };
+}
+
 export function toWaiverMove(
   p: TxParams,
   tx: TxRow,
   players: Map<string, WaiverPlayer>,
+  fitContext: WireFitContext | null = null,
 ): WaiverMove | null {
   const adds = (tx.adds ?? {}) as Record<string, number>;
   const drops = (tx.drops ?? {}) as Record<string, number>;
@@ -784,6 +840,8 @@ export function toWaiverMove(
     .map((id) => players.get(id))
     .filter((x): x is WaiverPlayer => Boolean(x));
 
+  const { fit, parked } = fitForMove(fitContext, rosterId, Object.keys(adds), Object.keys(drops));
+
   return {
     team,
     pulseRank: p.pulseRanks.get(rosterId) ?? null,
@@ -793,6 +851,8 @@ export function toWaiverMove(
     faabSpent: readFaabBid(tx.metadata as never, tx.waiver_budget as never),
     week: tx.week,
     seedKey: dedupeKeyFor(tx.type, p.league.id, tx.sleeper_transaction_id),
+    fit,
+    parked,
   };
 }
 
@@ -803,8 +863,9 @@ export function buildWaiverFor(
   faabBudget: number | null,
   faabMedian: number | null,
   seedKey: string,
+  fitContext: WireFitContext | null = null,
 ) {
-  const move = toWaiverMove(p, tx, players);
+  const move = toWaiverMove(p, tx, players, fitContext);
   if (!move) return null;
 
   // A move that drops somebody and adds nobody. Settings decide whether that is
@@ -817,8 +878,11 @@ export function buildWaiverFor(
     league: p.league,
     faabBudget,
     faabMedian,
-    // Filled by a later pass when the positional board is loaded; naming a
-    // weakest position we have not measured would be an invented fact.
+    isDynasty: p.context.isDynasty,
+    // Not measured here. The roster comparison in `move.fit` says whether the
+    // claim actually changes the lineup, which is the question this field was
+    // standing in for; naming a weakest position we have not measured would be
+    // an invented fact.
     weakestPosition: null,
     snark: p.settings.voice.snark,
     showNumbers: p.settings.voice.show_numbers,

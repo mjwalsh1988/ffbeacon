@@ -86,6 +86,13 @@ export interface ExecutedTeamImpact {
    * the most quoted number in the whole writeup.
    */
   departedStartWeeks: Record<string, number>;
+  /**
+   * For each player this team RECEIVED, how many of the remaining weeks he
+   * starts for them now. `outgoingStartWeeks` from the un-trade, for the same
+   * reason as above. A player with no projection at all is absent rather than
+   * zero: we had nothing to check him with.
+   */
+  receivedStartWeeks: Record<string, number>;
 }
 
 export interface ExecutedTradeImpact {
@@ -136,6 +143,7 @@ function flip(team: TeamImpact): ExecutedTeamImpact {
     received: team.outgoing,
     sent: team.incoming,
     departedStartWeeks: team.incomingStartWeeks,
+    receivedStartWeeks: team.outgoingStartWeeks ?? {},
   };
 }
 

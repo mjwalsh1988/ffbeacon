@@ -6,16 +6,11 @@ import { loadScheduleBoard, loadMatchupDetail } from "@/lib/league-schedule/data
 import { renderPlainText } from "./render";
 import { loadLeagueRelaySettings } from "./settings";
 import {
-  loadFaabMedian,
-  loadWaiverPlayers,
-  readFaabBid,
-  readFaabBudget,
-} from "./load";
-import {
   buildTradeFor,
   buildWaiverFor,
   dedupeKeyFor,
   gatherLeagueFacts,
+  loadWireFacts,
   toWaiverMove,
   type TxParams,
   type TxRow,
@@ -25,7 +20,6 @@ import { groupIntoRuns, runDigestKey, runIsDigest } from "./waiver-run";
 import { buildMatchupPreview, buildMatchupRecap } from "./matchup-writeup";
 import { orderRecaps, pickMatchups, recapKeyPart } from "./select-matchup";
 import type { LeagueRelaySettings, RelayMessageType } from "./default-settings";
-import type { WaiverPlayer } from "./waiver-writeup";
 
 type Admin = SupabaseClient<Database>;
 
@@ -173,6 +167,7 @@ export async function previewRelayMessages(
       pulseRanks,
       context,
       currentWeek,
+      playoffWeekStart,
       sleeperLeague,
       url,
       now: new Date(),
@@ -200,29 +195,13 @@ export async function previewRelayMessages(
     if (wantTrade && trades.length === 0) notes.push("This league has no trades stored.");
 
     if (waivers.length > 0) {
-      const playerIds = new Set<string>();
-      for (const t of waivers) {
-        for (const id of Object.keys((t.adds ?? {}) as Record<string, unknown>)) playerIds.add(id);
-        for (const id of Object.keys((t.drops ?? {}) as Record<string, unknown>)) playerIds.add(id);
-      }
-      const weeks = [currentWeek, currentWeek + 1, currentWeek + 2].filter(
-        (w) => w >= 1 && w <= 18,
+      // The same reads the live tick makes, through the same function, so the
+      // preview and the channel judge a claim against the same roster facts.
+      const { players, faabMedian, faabBudget, fitContext } = await loadWireFacts(
+        admin,
+        txParams,
+        waivers,
       );
-      const [players, faabMedian] = await Promise.all([
-        loadWaiverPlayers(admin, {
-          sleeperPlayerIds: Array.from(playerIds),
-          season: league.season,
-          weeks,
-          scoring:
-            (sleeperLeague as { scoring_settings?: Record<string, number> })?.scoring_settings ??
-            null,
-          formatConfigId: context.formatConfigId,
-          sourceSlug: context.sourceSlug,
-        }),
-        loadFaabMedian(admin, league.id, league.season),
-      ]);
-      const faabBudget = readFaabBudget(sleeperLeague);
-      void readFaabBid;
 
       // Each run takes the shape the live path would give it: reviews when it
       // is quiet, one digest when it is busy.
@@ -236,7 +215,7 @@ export async function previewRelayMessages(
           const writeup = buildWaiverDigest({
             league,
             moves: rows
-              .map((tx) => toWaiverMove(txParams, tx, players as Map<string, WaiverPlayer>))
+              .map((tx) => toWaiverMove(txParams, tx, players, fitContext))
               .filter((m): m is NonNullable<typeof m> => m !== null),
             kind: run.type,
             week: run.week,
@@ -266,10 +245,11 @@ export async function previewRelayMessages(
           const writeup = buildWaiverFor(
             txParams,
             tx,
-            players as Map<string, WaiverPlayer>,
+            players,
             faabBudget,
             faabMedian,
             dedupeKey,
+            fitContext,
           );
           const text = writeup ? renderPlainText(writeup) : null;
           if (text) {

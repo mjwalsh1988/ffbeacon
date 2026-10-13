@@ -4,10 +4,17 @@ import type { Database, Json } from "@/lib/database.types";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import type { ScoringSettings } from "@/lib/league-scoring";
+import { closestScoringBase } from "@/lib/league-scoring";
 import { loadAdjustedProjections, type AdjustedProjectionSummary } from "@/lib/projections/read";
+import { loadPlayers, loadRosters } from "@/lib/power-pulse/load";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
+import { idpReadsFor } from "@/lib/power-pulse/idp-reads";
+import { pulseEligibility, startingSlots } from "@/lib/power-pulse/lineup";
 import { buildRelayHeader } from "./header";
 import type { RelayLeague, RelayTeam } from "./types";
 import type { WaiverPlayer } from "./waiver-writeup";
+import type { FitPlayer, WireFitContext } from "./waiver-fit";
 
 type Admin = SupabaseClient<Database>;
 
@@ -311,6 +318,114 @@ export async function loadWaiverPlayers(
 }
 
 /**
+ * The rosters behind a batch of wire moves, projected for the next few weeks.
+ *
+ * Read ONCE per tick for every roster that moved, for the same reason as
+ * loadWaiverPlayers. The projections come through loadAdjustedProjections, the
+ * shared read path Power Pulse, the FAAB tool and Trade Ideas use, so "starts
+ * for them this week" in a Discord post is the same claim the Lineups page
+ * would make about the same roster.
+ *
+ * The IDP switch is read here, once, and only its outcome travels on: the slot
+ * map and whether defenders are candidates. Off, a defensive slot is simply not
+ * a slot this comparison fills, exactly as on every other League Pulse model.
+ *
+ * Null when there is no window left (the regular season is over) or no slot the
+ * model can fill. The review then runs without roster context and says nothing
+ * it cannot back up.
+ */
+export async function loadWireFitContext(
+  admin: Admin,
+  params: {
+    leagueRowId: string;
+    season: number;
+    rosterPositions: string[];
+    scoring: ScoringSettings | null;
+    weeks: number[];
+    rosterIds: number[];
+    /** Players who moved, so a dropped player is projected too. */
+    extraSleeperIds: string[];
+  },
+): Promise<WireFitContext | null> {
+  if (params.weeks.length === 0 || params.rosterIds.length === 0) return null;
+
+  const pulseSettings = await loadPowerPulseSettings(admin);
+  const reads = idpReadsFor(
+    idpEnabledFrom(pulseSettings),
+    params.rosterPositions,
+    closestScoringBase(params.scoring),
+  );
+  const slots = startingSlots(params.rosterPositions, reads.slotMap);
+  if (slots.length === 0) return null;
+
+  const wanted = new Set(params.rosterIds);
+  const rosterRows = (await loadRosters(admin, params.leagueRowId)).filter((r) =>
+    wanted.has(r.sleeperRosterId),
+  );
+
+  const rosters = new Map<number, { startable: string[]; parked: Set<string> }>();
+  const sleeperIds = new Set<string>(params.extraSleeperIds.filter((id) => id && id !== "0"));
+  for (const r of rosterRows) {
+    // Injured reserve and the taxi squad cannot start without a roster move,
+    // so a lineup that seats one of them is not a lineup the manager can set.
+    const parked = new Set([...r.reserveSleeperIds, ...r.taxiSleeperIds]);
+    const startable = r.playerSleeperIds.filter((id) => id && id !== "0" && !parked.has(id));
+    rosters.set(r.sleeperRosterId, { startable, parked });
+    for (const id of startable) sleeperIds.add(id);
+  }
+
+  const playerRows = await loadPlayers(admin, Array.from(sleeperIds), {
+    positions: reads.candidatePositions,
+  });
+  const positionByPlayer = new Map<string, string>();
+  const injuryByPlayer = new Map<string, string | null>();
+  for (const p of playerRows.values()) {
+    positionByPlayer.set(p.playerId, p.position);
+    injuryByPlayer.set(p.playerId, p.injuryStatus);
+  }
+
+  const fromWeek = params.weeks[0];
+  const toWeek = params.weeks[params.weeks.length - 1];
+  const { byPlayer } =
+    positionByPlayer.size > 0
+      ? await loadAdjustedProjections({
+          supabase: admin,
+          playerIds: Array.from(positionByPlayer.keys()),
+          season: params.season,
+          fromWeek,
+          toWeek,
+          scoringSettings: params.scoring,
+          positionByPlayer,
+          injuryByPlayer,
+          currentWeek: fromWeek,
+          includeDefenders: reads.loadsDefenders,
+        })
+      : { byPlayer: new Map<string, AdjustedProjectionSummary>() };
+
+  const players = new Map<string, FitPlayer>();
+  for (const [sleeperId, p] of playerRows) {
+    const summary = byPlayer.get(p.playerId);
+    const byWeek = new Map<number, { points: number; sigma: number }>();
+    for (const [week, proj] of summary?.byWeek ?? []) {
+      if (week >= fromWeek && week <= toWeek) {
+        byWeek.set(week, { points: proj.points, sigma: proj.sigma });
+      }
+    }
+    players.set(sleeperId, {
+      sleeperId,
+      playerId: p.playerId,
+      name: p.name,
+      position: p.position,
+      ...(reads.idpEnabled ? { eligible: pulseEligibility(p.position, p.eligible) } : {}),
+      injuryStatus: p.injuryStatus,
+      byWeek,
+    });
+  }
+
+  return { slots, slotMap: reads.slotMap, weeks: params.weeks, rosters, players };
+}
+
+/**
  * The league's format and value source, resolved the way every league view
  * resolves it.
  *
@@ -329,10 +444,19 @@ export async function resolveRelayContext(
   formatDisplay: string | null;
   sourceSlug: string | null;
   sourceDisplay: string | null;
+  /**
+   * True when rosters carry into next season (dynasty from the derived format,
+   * or a Sleeper keeper league), so a player who does not start yet can still
+   * be a plan. Read from the derived format first rather than from Sleeper's
+   * settings.type alone, which is missing on some captured leagues.
+   */
+  isDynasty: boolean;
 }> {
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
+  const keeper = Number((sleeperLeague as { settings?: { type?: unknown } })?.settings?.type) === 1;
   try {
     const context = await resolveLeagueContext(admin, sleeperLeague, null);
+    const isDynasty = context.derived?.league_type === "dynasty" || keeper;
     // `coverage: "none"` is the empty variant, which carries no format at all.
     // Narrowed rather than optional-chained so a future field on either variant
     // cannot be read off the wrong one.
@@ -342,6 +466,7 @@ export async function resolveRelayContext(
         formatDisplay: null,
         sourceSlug: context.sourceSlug,
         sourceDisplay: context.sourceDisplay,
+        isDynasty,
       };
     }
     return {
@@ -349,6 +474,7 @@ export async function resolveRelayContext(
       formatDisplay: context.formatDisplay,
       sourceSlug: context.sourceSlug,
       sourceDisplay: context.sourceDisplay,
+      isDynasty,
     };
   } catch {
     return {
@@ -356,6 +482,7 @@ export async function resolveRelayContext(
       formatDisplay: null,
       sourceSlug: null,
       sourceDisplay: null,
+      isDynasty: keeper,
     };
   }
 }

@@ -14,6 +14,13 @@
  * Every one of those is a single indexed read, and together they say more about
  * a waiver claim than a simulation would.
  *
+ * THE COMMENTARY IS ABOUT THE TEAM, NOT JUST THE PLAYER. On top of those figures
+ * ./waiver-fit.ts rebuilds the claiming roster's best lineup for the next few
+ * weeks with and without the move, which is what says whether the pickup starts,
+ * covers a bye or an injury, sits on the bench, or leaves the team worse. The
+ * praise and the roast follow that, through ./wire-commentary.ts. The facts
+ * (who, what, for how much) open the post; the rest is the take.
+ *
  * TWO SHAPES, AND THE RUN SIZE PICKS ONE. A quiet run gets a real review per
  * claim. A busy one gets a single digest that lists every move, because eleven
  * separate embeds is a wall and the one claim worth reading about is buried in
@@ -29,7 +36,25 @@
  */
 
 import { isDefender } from "@/lib/site";
+import { say } from "./commentary";
 import type { RelayLeague, RelayTeam, Writeup, WriteupField } from "./types";
+import type { WaiverFit } from "./waiver-fit";
+import {
+  BEST_MOVE,
+  BIG_BID_BENCH,
+  BIG_BID_COVER,
+  CHEAP_COVER,
+  BIG_BID_STARTER,
+  REAL_GAIN,
+  REAL_LOSS,
+  STEAL,
+  WORST_BID,
+  WORST_LOSS,
+  benchDropLine,
+  digestTag,
+  fitKind,
+  wireFitLines,
+} from "./wire-commentary";
 import {
   Voice,
   bandFromRank,
@@ -71,6 +96,14 @@ export interface WaiverMove {
   week: number | null;
   /** Seeds this move's own voice, so a review reads the same on every render. */
   seedKey: string;
+  /**
+   * What the move did to this roster's best lineup over the next few weeks, from
+   * ./waiver-fit.ts. Null or absent when the roster could not be projected; the
+   * review then judges the player alone and makes no claim about the team.
+   */
+  fit?: WaiverFit | null;
+  /** Arrivals who went straight onto injured reserve or the taxi squad. */
+  parked?: string[];
 }
 
 export interface WaiverWriteupInput extends WaiverMove {
@@ -79,6 +112,12 @@ export interface WaiverWriteupInput extends WaiverMove {
   faabBudget: number | null;
   /** What the median winning bid in this league has been this season. Null with no history. */
   faabMedian: number | null;
+  /**
+   * True when rosters carry into next season, from the league's derived format
+   * (see resolveRelayContext). A player who does not start yet is then a stash
+   * rather than a wasted roster spot.
+   */
+  isDynasty?: boolean;
   /** The weakest starting position on this roster by projected output. Null without projections. */
   weakestPosition: string | null;
   snark: number;
@@ -136,8 +175,9 @@ const FREEBIE_LINES: Line[] = [
   { heat: 0.2, text: "Free, which is exactly the right price if this does not work out." },
   { heat: 0.2, text: "No budget spent, so the downside here is a roster spot." },
   { heat: 0.4, text: "Costless, and therefore hard to criticise, which is annoying." },
-  { heat: 0.5, text: "Nobody else wanted him, which is either an edge or a warning." },
-  { heat: 0.6, text: "Unclaimed by eleven other managers, which is data of a sort." },
+  { heat: 0, text: "No budget spent." },
+  { heat: 0.5, text: "Nobody else bid, which is either an edge or a warning." },
+  { heat: 0.6, text: "Unclaimed by every other manager in the league, which is data of a sort." },
   { heat: 0.7, text: "The price was nothing, which happens to be the going rate." },
 ];
 
@@ -197,16 +237,25 @@ function bestByValue(players: WaiverPlayer[]): WaiverPlayer | null {
  * Sunday, the market is what everybody else thinks of him, and the interesting
  * claims are the ones where those two disagree.
  */
-function playerVerdict(voice: Voice, p: WaiverPlayer): string {
+function playerVerdict(
+  voice: Voice,
+  p: WaiverPlayer,
+  /**
+   * False when ./waiver-fit.ts has already said what the player does for THIS
+   * roster. The judgements below are about the player in general ("startable in
+   * most weeks"), and printed beside a roster verdict they can contradict it: a
+   * 12-point back is startable for most teams and still a bench piece on one
+   * with three better backs. With a fit in hand only the facts are kept.
+   */
+  judge = true,
+): string {
   const market = (() => {
     if (p.value === null) return null;
-    const rank = p.positionRank ? `, the ${ordinal(p.positionRank)} ${p.position} by value` : "";
+    const rank = p.positionRank ? ` (the ${ordinal(p.positionRank)} ${p.position} by value)` : "";
     if (p.change30dPct === null || Math.abs(p.change30dPct) < 3) {
-      return `the market has him at ${Math.round(
-        p.value,
-      )}${rank} and has not changed its mind in a month`;
+      return `a market value of ${Math.round(p.value)}${rank} that has not moved in a month`;
     }
-    return `the market has him at ${Math.round(p.value)}${rank}, ${
+    return `a market value of ${Math.round(p.value)}${rank}, ${
       p.change30dPct > 0 ? "up" : "down"
     } ${Math.abs(p.change30dPct).toFixed(0)}% over thirty days`;
   })();
@@ -220,12 +269,13 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
       return `${p.name} plays a position no value source prices, so there is no number to hold this claim against.`;
     }
     const base = `${p.name} has no projection this week`;
-    return market ? `${base}, though ${market}.` : `${base}.`;
+    return market ? `${base}, though still carries ${market}.` : `${base}.`;
   }
 
   const pts = p.projectedPoints;
   const proj = `${p.name} projects at ${pts.toFixed(1)} points a week under this league's scoring`;
-  const tail = market ? `, and ${market}` : "";
+  const tail = market ? `, with ${market}` : "";
+  if (!judge) return `${proj}${tail}.`;
 
   if (pts < 4) {
     const jab =
@@ -243,7 +293,7 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
   if (pts < 9) {
     return `${proj}${voice.pickPlain([
       ", which is bye-week cover and not much more",
-      ", so think of him as insurance rather than an answer",
+      ", which is insurance rather than an answer",
       ", which fills a hole for a week or two",
       ", a depth add more than a difference maker",
     ])}${tail}.`;
@@ -251,7 +301,7 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
   if (pts < 14) {
     return `${proj}${voice.pickPlain([
       ", which is a real flex play rather than a lottery ticket",
-      ", so he can start right away",
+      ", which is startable right away",
       ", which is a genuine lineup upgrade for a lot of teams",
       ", startable in most weeks",
     ])}${tail}.`;
@@ -260,48 +310,41 @@ function playerVerdict(voice: Voice, p: WaiverPlayer): string {
     voice.pick([
       { heat: 0, text: "That is a starter, and a good pickup." },
       { heat: 0.3, text: "Good pickup. Very good pickup." },
-      { heat: 0.4, text: "Whoever let him reach the wire should be asked about it publicly." },
-      { heat: 0.5, text: "The rest of the league is going to pretend they were about to claim him." },
+      { heat: 0.4, text: "Whoever let that reach the wire should be asked about it publicly." },
+      { heat: 0.5, text: "The rest of the league is going to pretend they were about to make that claim." },
       { heat: 0.7, text: "Somebody in this league was asleep at the wheel, and it was not this manager." },
     ]) ?? "";
   return `${proj}${tail}.${praise ? ` ${praise}` : ""}`;
 }
 
-/** The drop, folded into prose rather than stacked on its own line. */
+/**
+ * The market's view of a drop, when it disagrees with the move.
+ *
+ * The headline already names who left, so this only speaks when the player cut
+ * is priced above the player added, which is the one drop fact the roster
+ * comparison cannot see: it measures the next few weeks, and the market prices
+ * the rest of the career.
+ */
 function dropClause(voice: Voice, input: WaiverWriteupInput): string | null {
-  if (input.dropped.length === 0) return null;
-  const names = listOf(input.dropped.map(playerLabel));
   const worstOut = bestByValue(input.dropped);
   const bestIn = bestByValue(input.added);
-
-  if (worstOut?.value != null && bestIn?.value != null && worstOut.value > bestIn.value) {
-    const jab =
-      voice.pick([
-        { heat: 0.3, text: "The market disagrees with this one." },
-        { heat: 0.4, text: "That is a downgrade on paper." },
-        { heat: 0.5, text: "There may be a reason for this. It is not a price reason." },
-        {
-          heat: 0.6,
-          text: "Somebody has information the market does not, or somebody has a hunch.",
-        },
-        {
-          heat: 0.7,
-          text: "Cutting the better player to make room for the worse one is a bold genre of move.",
-        },
-        {
-          heat: 0.8,
-          text: "Eleven other managers are now refreshing the wire.",
-        },
-        {
-          heat: 0.9,
-          text: "This is the fantasy equivalent of selling the car to buy a bus ticket.",
-        },
-      ]) ?? "";
-    return `Out went ${names}, and that is the awkward part: ${worstOut.name} is priced at ${Math.round(
-      worstOut.value,
-    )} against ${bestIn.name}'s ${Math.round(bestIn.value)}.${jab ? ` ${jab}` : ""}`;
+  if (worstOut?.value == null || bestIn?.value == null || worstOut.value <= bestIn.value) {
+    return null;
   }
-  return `Out went ${names}.`;
+  const jab =
+    voice.pick([
+      { heat: 0.3, text: "The market disagrees with this one." },
+      { heat: 0.4, text: "That is a downgrade on paper." },
+      { heat: 0.5, text: "There may be a reason for this. It is not a price reason." },
+      { heat: 0.6, text: "Somebody has information the market does not, or somebody has a hunch." },
+      { heat: 0.7, text: "Cutting the better player to make room for the worse one is a bold genre of move." },
+      { heat: 0.8, text: "The rest of the league is now refreshing the wire." },
+      { heat: 0.9, text: "This is the fantasy equivalent of selling the car to buy a bus ticket." },
+    ]) ?? "";
+  const priced = `The awkward part: ${worstOut.name} is priced at ${Math.round(
+    worstOut.value,
+  )} against ${bestIn.name}'s ${Math.round(bestIn.value)}.`;
+  return jab ? `${priced} ${jab}` : priced;
 }
 
 /**
@@ -372,56 +415,106 @@ export function buildWaiverWriteup(input: WaiverWriteupInput): Writeup | null {
   const voice = new Voice(input.seedKey, input.snark);
   const isCut = input.added.length === 0;
 
-  /* ------------------------------------------------------------- the move */
-  const opener = voice.pick(isCut ? CUT_OPENERS : ADD_OPENERS) ?? "A move on the wire.";
-  const bid = bidPhrase(input.faabSpent, input.faabBudget);
+  const name = input.team.name;
+  const fit = input.fit ?? null;
+  const parked = input.parked ?? [];
+  const kind = fitKind(fit, parked);
+  // "Helped" and "bench" are kept narrow on purpose. A move that made the
+  // lineup worse may still bring in a starter, so it never gets the "not
+  // starting" roast; it gets the general overpay line instead.
+  const helped = kind === "starter" || kind === "cover";
+  const benchBuy = kind === "bench" || kind === "parked";
 
-  const headline = isCut
-    ? `${opener} **${input.team.name}** have released ${listOf(input.dropped.map(playerLabel))}.`
-    : `${opener} **${input.team.name}** have ${
-        input.kind === "waiver" ? "won" : "picked up"
-      } ${listOf(input.added.map(playerLabel))}${bid ? ` ${bid}` : ""}.`;
+  /* ------------------------------------------------------------- the move */
+  // The facts, once, up front: who, what, for how much, and who left. Every
+  // sentence after this one is the take.
+  const opener = voice.next() < 0.5 ? voice.pick(isCut ? CUT_OPENERS : ADD_OPENERS) : null;
+  const bid = bidPhrase(input.faabSpent, input.faabBudget);
+  const dropping =
+    !isCut && input.dropped.length > 0
+      ? `, dropping ${listOf(input.dropped.map((p) => p.name))}`
+      : "";
+
+  const fact = isCut
+    ? `**${name}** have released ${listOf(input.dropped.map(playerLabel))}.`
+    : `**${name}** have ${input.kind === "waiver" ? "won" : "picked up"} ${listOf(
+        input.added.map(playerLabel),
+      )}${bid ? ` ${bid}` : ""}${dropping}.`;
+  const headline = [opener, fact].filter((s): s is string => Boolean(s)).join(" ");
 
   /* -------------------------------------------------------- what they got */
-  const verdicts = input.added.map((p) => playerVerdict(voice, p)).join(" ");
+  // With a roster verdict in hand the player line keeps only its facts, so the
+  // general "startable in most weeks" never sits beside a specific "does not
+  // start for this team". See playerVerdict.
+  const lines = wireFitLines(voice, {
+    name,
+    fit,
+    parked,
+    isDynasty: input.isDynasty ?? false,
+  });
+  const verdicts = [
+    ...input.added.map((p) => playerVerdict(voice, p, !fit?.lead)),
+    ...lines.arrival,
+  ].join(" ");
 
   /* ------------------------------------------------------------- the cost */
   const cost = (() => {
-    if (input.faabSpent === null) {
-      return isCut
-        ? null
-        : "No bid, no waiver, no cost: straight off the wire before anybody else looked.";
-    }
-    if (input.faabSpent === 0) {
-      const jab = voice.pick(FREEBIE_LINES);
-      return `Won for nothing.${jab ? ` ${jab}` : ""}`;
+    if (isCut) return null;
+    const amount = input.faabSpent;
+    if (amount === null || amount === 0) {
+      const price = amount === null ? "for free" : "for nothing";
+      if (helped) return say(voice, kind === "cover" ? CHEAP_COVER : STEAL, { name, bid: price });
+      if (amount === 0) {
+        const jab = voice.pick(FREEBIE_LINES);
+        return `Won for nothing.${jab ? ` ${jab}` : ""}`;
+      }
+      // Only a free agent pickup is "no waiver". A claim in a league without
+      // FAAB also has no bid, and was still a waiver.
+      return kind === "unknown" && input.kind === "free_agent"
+        ? "No bid, no waiver, no cost: straight off the wire before anybody else looked."
+        : null;
     }
 
     const sentences: string[] = [];
-    if (input.faabMedian !== null && input.faabMedian > 0) {
-      const ratio = input.faabSpent / input.faabMedian;
-      if (ratio >= 3) {
-        sentences.push(
-          `The median winning bid in this league is ${input.faabMedian}, so that is more than three times the going rate.`,
-        );
-      } else if (ratio <= 0.34) {
-        sentences.push(
-          `The median winning bid here is ${input.faabMedian}, so this was a bargain hunt.`,
-        );
-      }
+    const ratio =
+      input.faabMedian !== null && input.faabMedian > 0 ? amount / input.faabMedian : null;
+    if (ratio !== null && ratio >= 3) {
+      sentences.push(
+        `The median winning bid in this league is ${input.faabMedian}, so that is more than three times the going rate.`,
+      );
+    } else if (ratio !== null && ratio <= 0.34) {
+      sentences.push(`The median winning bid here is ${input.faabMedian}, so this was a bargain hunt.`);
     }
-    const heavy = input.faabBudget
-      ? input.faabSpent / input.faabBudget >= 0.25
-      : input.faabSpent >= 25;
-    if (heavy) {
-      const jab = voice.pick(OVERPAY_LINES);
+    const heavy = input.faabBudget ? amount / input.faabBudget >= 0.25 : amount >= 25;
+    const vars = { name, bid: `${amount} FAAB` };
+    if (heavy || (ratio !== null && ratio >= 3)) {
+      const jab =
+        kind === "starter"
+          ? say(voice, BIG_BID_STARTER, vars)
+          : kind === "cover"
+            ? say(voice, BIG_BID_COVER, vars)
+            : benchBuy
+              ? say(voice, BIG_BID_BENCH, vars)
+              : voice.pick(OVERPAY_LINES);
+      if (jab) sentences.push(jab);
+    } else if (helped && ratio !== null && ratio <= 0.34) {
+      const jab = say(voice, kind === "cover" ? CHEAP_COVER : STEAL, { name, bid: `for ${amount} FAAB` });
       if (jab) sentences.push(jab);
     }
     return sentences.length > 0 ? sentences.join(" ") : null;
   })();
 
   /* -------------------------------------------------- the drop, the stakes */
-  const closing = [dropClause(voice, input), teamStandingClause(voice, input)]
+  // The roster verdict on the drop when there is one: a starter cut is the
+  // story, and a bench cut gets one line. A player with no projection at all is
+  // not described as "not starting", because nothing was checked.
+  const departure = (() => {
+    if (lines.departure) return lines.departure;
+    const benchCut = fit?.droppedBench[0];
+    if (fit && benchCut) return benchDropLine(voice, name, benchCut, fit.weeksConsidered);
+    return null;
+  })();
+  const closing = [departure, dropClause(voice, input), teamStandingClause(voice, input)]
     .filter((s): s is string => Boolean(s))
     .join(" ");
 
@@ -505,6 +598,7 @@ const BUSY_FA_OPENERS: Line[] = [
  * before, and it named the same event twice while saying neither half properly.
  */
 function digestLine(
+  voice: Voice,
   move: WaiverMove,
   faabBudget: number | null,
   /** False when the intro has already said every move came from one manager. */
@@ -520,7 +614,11 @@ function digestLine(
   }`;
   const outPart =
     move.dropped.length > 0 ? `, dropping ${listOf(move.dropped.map((p) => p.name))}` : "";
-  return `- ${inPart}${outPart}.`;
+  // A few words of verdict on the end of each line, from the same roster
+  // comparison the single review uses, so a long list still reads as a take
+  // rather than a ledger.
+  const tag = digestTag(voice, move.fit, move.parked);
+  return `- ${inPart}${outPart}.${tag ? ` ${tag}` : ""}`;
 }
 
 /**
@@ -554,7 +652,9 @@ export function buildWaiverDigest(input: WaiverDigestInput): Writeup | null {
   const intro = `${opener} ${count} ${noun} went through${week}, ${spread}. Too many to write up one at a time, so here is the whole board.`;
 
   /* ---------------------------------------------------------------- list */
-  const list = input.moves.map((m) => digestLine(m, input.faabBudget, teams > 1)).join("\n");
+  const list = input.moves
+    .map((m) => digestLine(voice, m, input.faabBudget, teams > 1))
+    .join("\n");
 
   /* ------------------------------------------------------- the standouts */
   const notes: string[] = [];
@@ -590,18 +690,56 @@ export function buildWaiverDigest(input: WaiverDigestInput): Writeup | null {
     );
   }
 
-  // The best player ADDED, by projection, because that is the move most likely
-  // to change somebody's lineup on Sunday.
-  const bestAdd = input.moves
-    .flatMap((m) => m.added.map((p) => ({ move: m, player: p })))
-    .filter((x) => x.player.projectedPoints !== null)
-    .sort((a, b) => (b.player.projectedPoints ?? 0) - (a.player.projectedPoints ?? 0))[0];
-  if (bestAdd && (bestAdd.player.projectedPoints ?? 0) >= 9) {
-    notes.push(
-      `The one that might actually matter is ${bestAdd.player.name} to ${
-        bestAdd.move.team.name
-      }, at ${(bestAdd.player.projectedPoints ?? 0).toFixed(1)} points a week.`,
-    );
+  // The best move, by what it did to the claiming team's lineup, when the
+  // rosters could be projected. Otherwise the best player added by projection,
+  // which is the next best guess at the move that changes a Sunday.
+  const bestFit = input.moves
+    .filter((m) => m.fit?.lead && m.fit.lineupDelta >= REAL_GAIN)
+    .sort((a, b) => (b.fit?.lineupDelta ?? 0) - (a.fit?.lineupDelta ?? 0))[0];
+  if (bestFit?.fit?.lead) {
+    const line = say(voice, BEST_MOVE, {
+      name: bestFit.team.name,
+      player: bestFit.fit.lead.name,
+      gain: bestFit.fit.lineupDelta.toFixed(1),
+    });
+    if (line) notes.push(line);
+  } else {
+    const bestAdd = input.moves
+      .flatMap((m) => m.added.map((p) => ({ move: m, player: p })))
+      .filter((x) => x.player.projectedPoints !== null)
+      .sort((a, b) => (b.player.projectedPoints ?? 0) - (a.player.projectedPoints ?? 0))[0];
+    if (bestAdd && (bestAdd.player.projectedPoints ?? 0) >= 9) {
+      notes.push(
+        `The one that might actually matter is ${bestAdd.player.name} to ${
+          bestAdd.move.team.name
+        }, at ${(bestAdd.player.projectedPoints ?? 0).toFixed(1)} points a week.`,
+      );
+    }
+  }
+
+  // The worst move: a move that left a lineup weaker beats money spent on a
+  // player who will not start, because losing points is worse than wasting
+  // budget. Only ever claimed from the roster comparison, never guessed.
+  const worstLoss = input.moves
+    .filter((m) => m.fit && m.fit.lineupDelta <= -REAL_LOSS)
+    .sort((a, b) => (a.fit?.lineupDelta ?? 0) - (b.fit?.lineupDelta ?? 0))[0];
+  const worstBid = input.moves
+    .filter((m) => fitKind(m.fit, m.parked) === "bench" && (m.faabSpent ?? 0) > 0)
+    .sort((a, b) => (b.faabSpent ?? 0) - (a.faabSpent ?? 0))[0];
+  if (worstLoss?.fit) {
+    const line = say(voice, WORST_LOSS, {
+      name: worstLoss.team.name,
+      loss: Math.abs(worstLoss.fit.lineupDelta).toFixed(1),
+    });
+    if (line) notes.push(line);
+  } else if (worstBid?.fit?.lead) {
+    const line = say(voice, WORST_BID, {
+      name: worstBid.team.name,
+      player: worstBid.fit.lead.name,
+      bid: `${worstBid.faabSpent} FAAB`,
+      weeks: String(worstBid.fit.weeksConsidered),
+    });
+    if (line) notes.push(line);
   }
 
   // The best player DROPPED. Where somebody cuts a real asset that is the story
@@ -615,12 +753,12 @@ export function buildWaiverDigest(input: WaiverDigestInput): Writeup | null {
     .reduce((max, p) => Math.max(max, p.value ?? 0), 0);
   if (bestDrop && (bestDrop.player.value ?? 0) > bestAddValue) {
     const jab = voice.pick([
-      { heat: 0.3, text: "He is available, for anyone who reads this far." },
+      { heat: 0.3, text: "Available now, for anyone who reads this far." },
       { heat: 0.4, text: "Somebody should probably have claimed him." },
       { heat: 0.5, text: "Eleven managers had the chance and eleven managers passed." },
       {
         heat: 0.7,
-        text: "He is the most valuable thing that moved today, and he moved to nowhere.",
+        text: "The most valuable thing that moved today, and it moved to nowhere.",
       },
       { heat: 0.8, text: "The wire is now holding the best asset of the morning." },
     ]);
