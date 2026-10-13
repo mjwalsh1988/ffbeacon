@@ -146,6 +146,31 @@ describe("recap takes", () => {
   });
 });
 
+describe("the title link", () => {
+  function recapWithUrl(url: string | null) {
+    const view = {
+      week: 6,
+      isFinal: true,
+      homeWinProb: 0.5,
+      hasUnprojectableSlots: false,
+      home: side("winner", 1, 120, 0),
+      away: side("loser", 2, 100, 0),
+    } as unknown as MatchupView;
+    return buildMatchupRecap({ league, view, teams: new Map(), slot: null, snark: 0.8, showNumbers: false, url, seedKey: "link" });
+  }
+
+  it("points at the game on the Schedules tab, not the league overview", () => {
+    const writeup = recapWithUrl("https://ffbeacon.com/leagues/123") as Writeup;
+    expect(writeup.url).toBe("https://ffbeacon.com/leagues/123/schedules/6/1");
+    const rendered = renderWriteup(writeup, { mentionRoleIds: [], pollHours: null });
+    expect(rendered?.message.embeds?.[0]?.url).toBe("https://ffbeacon.com/leagues/123/schedules/6/1");
+  });
+
+  it("stays off when linking back is switched off", () => {
+    expect((recapWithUrl(null) as Writeup).url).toBeNull();
+  });
+});
+
 describe("the format line", () => {
   it("is never printed in a relay post", () => {
     const writeup = recap(120, 100, 0, "fmt") as Writeup;

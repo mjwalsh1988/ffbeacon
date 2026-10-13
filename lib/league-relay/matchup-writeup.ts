@@ -76,8 +76,25 @@ export interface MatchupWriteupInput {
   slot: MatchupSlot | null;
   snark: number;
   showNumbers: boolean;
+  /**
+   * The league's League Pulse page, or null when linking back is switched off.
+   * A matchup post does not link here directly: see matchupUrl.
+   */
   url: string | null;
   seedKey: string;
+}
+
+/**
+ * The link a matchup post's title carries: this game on the Schedules tab,
+ * with both starting lineups and how every point was scored, rather than the
+ * league overview a reader would then have to dig through. Same path the
+ * matchup page's own Copy link button publishes, keyed on week and the home
+ * roster (`matchup_id` can be null when Sleeper leaves a roster unpaired).
+ * Null stays null, so switching link-back off still removes the link.
+ */
+export function matchupUrl(leagueUrl: string | null, view: MatchupView): string | null {
+  if (!leagueUrl) return null;
+  return `${leagueUrl}/schedules/${view.week}/${view.home.sleeperRosterId}`;
 }
 
 const PREVIEW_OPENERS: Line[] = [
@@ -289,7 +306,7 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
     ],
     fields,
     footer: `Week ${view.week} preview`,
-    url: input.url,
+    url: matchupUrl(input.url, input.view),
     poll,
   };
 }
@@ -434,7 +451,7 @@ export function buildMatchupRecap(input: MatchupWriteupInput): Writeup | null {
     ],
     fields,
     footer: `Week ${view.week} recap`,
-    url: input.url,
+    url: matchupUrl(input.url, input.view),
     // No poll on a recap. The game is over; there is nothing left to predict,
     // and a poll on a settled result is just an invitation to pile on.
     poll: null,
