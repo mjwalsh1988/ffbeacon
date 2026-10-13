@@ -10,7 +10,10 @@ audit of the plan against production, against the live nflverse, Sleeper and
 DynastyProcess files, and against the published research; Part 10 lists every
 hole that audit found and where in the plan each one is closed. Revised once
 more on 2026-09-28 when the owner decided that The Odds API's free tier
-replaces every use of ESPN's scoreboard (0.8, 2.7). PLAN ONLY:
+replaces every use of ESPN's scoreboard (0.8, 2.7). Revised again on
+2026-10-13 after a review of five graded weeks of the 2026 season; 0.9 records
+what was measured, Phase 1 gains tasks T019 to T019e, and Part 10 item 20
+lists every section the review changed. PLAN ONLY:
 nothing in this document has been built. Task prefix in `progress.md` will be
 `PE2-T###`.
 
@@ -455,6 +458,85 @@ A fourth was answered on 2026-09-28:
   engine reads, and no per-surface credit line is added anywhere else.
   The section is also where ffopportunity and FTN are credited (the bullet
   above), so every licence the engine touches is discharged on one page.
+
+### 0.9 Five weeks in: the 2026 review of 2026-10-13
+
+Measured on 2026-10-13 against production, with 2026 weeks 1 to 5 settled.
+Two readings were taken: the stored rows graded directly (the same figures the
+admin scoreboard shows), and a walk-forward run of
+`scripts/backtest-projections.ts --season 2026`, which grades the pe-1 model
+alone at full weight on the rows it actually produced, with 2024 and 2025 as
+history and no game environment.
+
+**The stored FF Beacon row against Sleeper**, PPR, played weeks only, mean
+absolute error, with Sleeper's calibration slope (actual regressed on
+projected) beside it:
+
+| Position | n | Sleeper MAE | FF Beacon MAE | Sleeper bias | Sleeper slope |
+| --- | --- | --- | --- | --- | --- |
+| QB | 157 | 6.213 | 6.233 | +0.46 | 0.97 |
+| RB | 488 | 3.833 | 3.875 | -0.27 | 1.00 |
+| WR | 762 | 4.068 | 4.078 | +0.16 | 0.97 |
+| TE | 480 | 3.211 | 3.208 | +0.11 | 0.99 |
+| K | 158 | 3.800 | 3.800 | +1.10 | 0.80 |
+| DEF | 158 | 4.172 | 4.172 | -0.03 | 0.80 |
+
+Sleeper's weekly line is spread almost exactly right this season at every
+skill position. The published seasonal slopes (0.67 QB, 0.79 RB) therefore
+over-compress it: the calibrated copy's slope at QB is 1.05 against Sleeper's
+0.97, and the FF Beacon row is a little worse than Sleeper in four of the
+five weeks and better in none. Together with the three September weeks in
+0.2 that is eight graded weeks pointing the same way, which is why the 1.0
+default in 3.8 ships in Phase 1 (T019) rather than waiting for Phase 6.
+
+**The pe-1 model alone**, same weeks, graded on modelled rows only, Sleeper
+restated on the same rows:
+
+| Position | n | Sleeper MAE | Model MAE | Model bias | Model corr | Sleeper corr |
+| --- | --- | --- | --- | --- | --- | --- |
+| QB | 119 | 6.21 | 6.77 | +2.79 | 0.06 | 0.34 |
+| RB | 360 | 3.83 | 5.81 | -0.51 | 0.66 | 0.75 |
+| WR | 536 | 4.09 | 5.78 | -0.49 | 0.51 | 0.65 |
+| TE | 365 | 3.20 | 4.59 | -1.25 | 0.58 | 0.64 |
+| Pooled | 1,380 | 3.97 | 5.56 | -0.41 | 0.63 | 0.72 |
+
+By week the gap was 2.1 points in week 1 and 1.5 in week 5, and it is not
+closing further. Two conclusions are new.
+
+1. **The quarterback lead from 2025 did not hold.** 0.2 and 0.3 cite QB as the
+   one position the model won. On 2026 the model projects quarterbacks about
+   2.8 points too low with a correlation near zero. Nothing in this plan may
+   lean on QB as the position our model is already good at; 3.7's expectation
+   that the matrix gives our model real weight at QB from the first window is
+   a hypothesis the fit has to earn, not a result. T014's error decomposition
+   runs on 2026 as well as 2025, and QB is where it looks first.
+2. **The model's own number is not stored anywhere.** The nightly build
+   models about 4,700 player-weeks and discards every one at the blend, so
+   five settled weeks exist and the only way to grade the model on them is to
+   re-run the backtest. T019b writes the pe-1 output to the `ffbeacon-model`
+   source from Phase 1, so grading accumulates nightly on the scoreboard and
+   v2 has a live baseline to beat from the day it lands.
+
+Two smaller patterns in Sleeper's own numbers, from a breakdown of bias by
+projected-points band that the scoreboard does not yet show (T019c): receivers
+projected at 15 or more came in 1.8 points HIGH on average (59 weeks), and
+backs and receivers projected 10 to 15 came in about 1.15 points LOW (74 and
+132 weeks). That is the opposite of uniform over-spreading, and a slope alone
+hides it. Kickers ran 1.1 points low, after 1.5 low in September; T019e is the
+interim correction if Phase 3's kicker module is far off.
+
+One data fact that cost an hour and is now a rule (T019d): a played game with
+no fantasy points stores NULL in `player_stats.pts_ppr`, `pts_half_ppr` and
+`pts_std`, not 0, because Sleeper omits zero-valued stats and the sync stores
+what it received. On 2026 weeks 1 to 5 that is 106 of 488 played RB weeks,
+187 of 480 TE weeks and 215 of 762 WR weeks. The accuracy calc and the
+backtest both treat the null as zero and are right; a plain SQL average skips
+the row and overstates WR MAE as 4.90 against the true 4.07. Any grading
+written outside those two files coalesces to zero, and 6.1 says so.
+
+What the review did NOT change: the diagnosis in 0.3 (the gap is structural
+and no half-life or prior will close 1.5 points), the blend at 0, the phase
+order after Phase 1, and the promotion gate.
 
 ---
 
@@ -1692,9 +1774,13 @@ sum to one, renormalised over the sources actually present for a row), and
 stored in settings as numbers an admin can read and edit. Blending is key by
 key on the stat line; the totals are recomputed from the blended line (3.0).
 
-The fitted matrix is expected to give our model real weight at QB from the
-first window and less at RB and WR until the vacated-share and pbp signals
-prove out. That is the correct shape and the point of a matrix. With
+The first draft expected the fitted matrix to give our model real weight at
+QB from the first window, on the strength of the 2025 walk-forward. The 2026
+review (0.9) found the pe-1 model 2.8 points low at QB with a correlation near
+zero, so that expectation is withdrawn: every cell, QB included, starts at the
+weight the fit gives it and nothing is assumed about which position our model
+wins first. Less weight at RB and WR until the vacated-share and pbp signals
+prove out is still the likely shape, and a matrix is the point. With
 `useSleeper` off the matrix has one column and the `ffbeacon` source is our
 model alone; the switch exists so the site can run without Sleeper, and so the
 scoreboard can show what that would cost.
@@ -1730,12 +1816,27 @@ WR and TE slightly worse. The default until our own slopes have 200 graded
 weeks behind them is therefore 1.0, and the calibration module is a
 measured correction, not an inherited one.
 
+The 1.0 default does not wait for Phase 6. Eight graded weeks of 2026 (0.2
+and 0.9) show the published slopes making the stored row a little worse at
+every skill position and better at none, and Sleeper's own weekly slope this
+season sits between 0.97 and 1.00. T019 in Phase 1 sets every slope to 1.0 in
+`default-settings.ts`, bumps `modelVersion`, and leaves the module's mechanics
+in place for T084 to refit. Until then the stored `ffbeacon` row is
+byte-identical to Sleeper's, which is the honest state of a source whose
+model is at weight zero.
+
 ### 3.9 Which source a reader gets
 
 Unchanged in shape: `resolveProjectionSource` and `read.ts`. The resolver's
 allowlist stays exactly `sleeper` and `ffbeacon`; the new `ffbeacon-model`
 source exists for grading and the scoreboard and is never handed to a reader,
-and `source-guard.test.ts` gains that assertion. The feature still ships with
+and `source-guard.test.ts` gains that assertion. The source is created in
+Phase 1 (T019b), not Phase 4: from that night the builder writes the pe-1
+model's own line and totals under it for every modelled row, so the scoreboard
+grades the model that exists today and v2 inherits a live baseline rather
+than a backtest. A mirrored row (one the model could not produce) is NOT
+written under `ffbeacon-model`, for the same reason the backtest grades
+modelled rows only. The feature still ships with
 `enabled: false` and the scoreboard still promotes it. What changes is that
 the scoreboard will finally have a model worth promoting, and it will show
 that model alone beside the ensemble.
@@ -2145,14 +2246,59 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
   squared error into the part explained by volume (projected minus actual
   targets and carries at actual efficiency) and the part explained by
   efficiency (actual volume at projected minus actual rates). Report by
-  position. This tells Phase 4 where to spend.
+  position, on 2025 AND on the settled weeks of 2026. QB is read first: the
+  2026 review (0.9) found the model 2.8 points low there, and whether that
+  is attempts, passing touchdowns or rushing is the question Phase 4 needs
+  answered before it touches the QB path. This tells Phase 4 where to spend.
 - T015 Per-position, per-window blend evaluation on the 2025 walk-forward:
   fit the constrained weights described in 3.7 with the current model as the
   only extra source, report them, and DO NOT ship them; the report is the
-  baseline the v2 model must beat.
+  baseline the v2 model must beat. Run the same fit on 2026 weeks 1 to 5 and
+  report both; the 2025 QB cell is expected to be the one that disagrees.
 - T016 Record the Phase 1 measurements in this document's Part 7.
 - T017 (retired). The optional ESPN-to-Odds-API swap became required on
   2026-09-28 and is T012. The number is kept so earlier references resolve.
+- T019 Calibration to 1.0 now, per 3.8: every slope in
+  `DEFAULT_PROJECTION_SETTINGS.calibration.slope` set to 1.0, `modelVersion`
+  bumped to `pe-2`, the module and its tests left in place for T084, and the
+  comment on the setting citing the eight graded weeks (0.2, 0.9). The next
+  nightly build rewrites every unplayed week; played weeks are never
+  rebuilt, so the scoreboard keeps grading the calibrated rows it already
+  has for weeks 1 to 5 and the version column says which is which. Depends on
+  nothing. Ships alone, the same day as T010.
+- T019b The `ffbeacon-model` source from Phase 1, per 3.9: the builder writes
+  the pe-1 model's own stat line and totals under `source = 'ffbeacon-model'`
+  for every MODELLED row and nothing for a mirrored one; `modelled`,
+  `blend_weight` and the mirrored reason go on the row's metadata as they do
+  for `ffbeacon`. The resolver allowlist is unchanged and
+  `source-guard.test.ts` asserts the new source is never resolvable. The
+  accuracy calc grades it the first night it appears with no schema change
+  (3.9), the scoreboard label map and `projectionSourceDisplay` learn it
+  (the T062g work, pulled forward), and `lib/data-freshness.ts` gains the
+  per-source check (T062h, pulled forward) so a stalled model build is not
+  hidden by a healthy mirror. Depends on T019 only for the version string.
+- T019c Bias by projected-points band on the scoreboard: for each source and
+  position, bands of under 5, 5 to 10, 10 to 15 and 15 and over projected
+  PPR points, with n, mean projected, mean actual, bias and MAE. A few more
+  figures in `summarizeSource`, and the per-position table on
+  `/admin/projections` gains the breakdown under a disclosure. Motivated by
+  0.9: the top receiver band ran 1.8 high and the 10 to 15 band 1.15 low in
+  the same five weeks, a shape that both a slope and a pooled bias conceal.
+  The band figures are display only; nothing reads them to adjust a row.
+- T019d The null-is-zero rule, per 6.1: a test in
+  `lib/calculate-projection-accuracy.test.ts` that feeds a played row with
+  null points and asserts it grades as zero, a matching test on the backtest
+  grader, and a comment on `ACTUAL_SELECT` stating the rule and its measured
+  size. Any future scoreboard figure computed in SQL coalesces the three
+  columns, and the review of that code cites this task.
+- T019e (optional) Interim kicker bias term: one additive, per-source K
+  figure measured nightly by the accuracy calc as the trailing mean error
+  over the current season, applied in `projectPlayerWeek` behind
+  `kicker.interimBias.enabled` (default off), capped at 2 points, and
+  retired by T040 when `kicker.ts` lands. Sleeper has run 1.1 to 1.5 points
+  low on kickers for eight weeks (0.2, 0.9). Only worth doing if Phase 3 is
+  more than a month away when Phase 1 ships; otherwise skip it and record the
+  decision.
 
 ### Phase 2: Games and venues (PE2-T020 to T029)
 
@@ -2410,7 +2556,10 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
   weights outside the interval (3.7); stored in settings with sample sizes;
   the fit report is the promotion evidence.
 - T084 `calibrate.ts` on our slopes per 3.8, refit nightly, `minGraded` floor,
-  default 1.0 (the seasonal slopes are retired, not refit).
+  default 1.0. The seasonal slopes are already gone by this point (T019 set
+  every slope to 1.0 in Phase 1); this task adds the fitting, the per-window
+  matrix and the sample sizes, and nothing here reintroduces a published
+  number.
 - T085a `/admin/projections` shows the three-column scoreboard, the matrices
   and the new metrics.
 - T085b Projection settings, their server action and validator move from
@@ -2479,6 +2628,12 @@ switches Phase 1 adds. Rules it enforces:
   `ifActive` figure over played weeks only; the report shows both. Grading
   only played weeks flatters any availability model and made one open
   model's error 12 percent worse when it was corrected.
+- A null is a zero on a played row. `player_stats` stores NULL, not 0, in
+  `pts_ppr`, `pts_half_ppr` and `pts_std` for a played game with no points
+  (0.9: roughly a quarter of played RB, TE and WR weeks). Every grader,
+  including any ad hoc SQL behind a scoreboard figure, coalesces those to
+  zero on rows with `gp > 0`; skipping them overstates MAE by close to a
+  point at the three positions. T019d holds this with a test.
 - Weeks 1 to 17 are the grading set and week 18 is reported separately,
   because resting starters make week 18 a different question (Part 3.5's
   play probability, not the line).
@@ -2533,8 +2688,22 @@ the numbers.
 
 ## Part 7. Measurements recorded during the build
 
-Empty until Phase 1 runs. Each task that says "Record" appends here: date,
-command, sample, result, decision.
+Each task that says "Record" appends here: date, command, sample, result,
+decision. The first entry predates the build.
+
+**2026-10-13, pre-build review of 2026 weeks 1 to 5.** Stored rows graded by
+SQL (played weeks, PPR, nulls coalesced to zero) and
+`npx tsx --env-file=.env.local scripts/backtest-projections.ts --season 2026`
+(walk-forward, 2024 and 2025 as history, no environment). Sample: 1,887
+graded skill-position weeks for the stored rows; 1,380 modelled rows for the
+pure model. Result: the full tables are in 0.9. Stored FF Beacon row worse
+than Sleeper in four of five weeks by 0.02 to 0.05 MAE and better in none;
+Sleeper's slope 0.97 to 1.00 at every skill position; pure model 1.5 points
+worse pooled, 2.8 points low at QB with correlation 0.06; kickers 1.1 low;
+about a quarter of played RB, TE and WR weeks carry NULL points. Decisions:
+calibration to 1.0 in Phase 1 (T019); the `ffbeacon-model` source from Phase
+1 (T019b); the band breakdown (T019c); the null rule (T019d); the kicker
+term optional (T019e); the QB lead withdrawn from 3.7; blend stays 0.
 
 ---
 
@@ -2841,6 +3010,18 @@ fix. Items are ordered by how much of the build they would have broken.
     `lib/nfl-odds.ts` is deleted, an ESPN-host lint rule is added, and the
     credit budget (about 370 of 500, hard stop 450, nothing else recurring)
     is written into 2.7 as a constraint on future work.
+
+20. **The five-week review of 2026 (2026-10-13).** Recorded in 0.9 and Part
+    7. What it changed: the 1.0 calibration default moves from Phase 6 to
+    Phase 1 (3.8, T019, T084 reworded); the `ffbeacon-model` source is
+    created in Phase 1 carrying the pe-1 output, with the label and
+    freshness fixes pulled forward (3.9, T019b); the scoreboard gains bias
+    by projected-points band (T019c); the null-is-zero rule is written into
+    6.1 with a test (T019d); an optional interim kicker term is added
+    (T019e); T014 and T015 run on 2026 as well as 2025; and the expectation
+    in 3.7 that our model wins QB first is withdrawn, because on 2026 it
+    does not. What it did not change: the structural diagnosis in 0.3, the
+    blend at 0, the phase order after Phase 1, and the promotion gate.
 
 What the audit did NOT change: the decision that the engine stands on its
 own with Sleeper as an optional ingredient, the zero-cost rule, the weather
