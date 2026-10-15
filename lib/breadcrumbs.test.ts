@@ -56,4 +56,18 @@ describe("ordinary trails", () => {
   it("keep every step in the structured data when each has a page", () => {
     expect(items("/tools/faab").map((i) => i.name)).toEqual(["Home", "Tools", "FAAB Calculator"]);
   });
+
+  it("put the guillotine calculator under the FAAB calculator", () => {
+    expect(buildBreadcrumbs("/tools/faab/guillotine")).toEqual([
+      { label: "Tools", href: "/tools" },
+      { label: "FAAB Calculator", href: "/tools/faab" },
+      { label: "Guillotine Calculator", href: undefined },
+    ]);
+    expect(items("/tools/faab/guillotine").map((i) => i.name)).toEqual([
+      "Home",
+      "Tools",
+      "FAAB Calculator",
+      "Guillotine Calculator",
+    ]);
+  });
 });

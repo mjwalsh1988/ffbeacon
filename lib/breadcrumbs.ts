@@ -79,6 +79,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/tools": "Tools",
   "/tools/custom-rankings": "Rankings Builder",
   "/tools/faab": "FAAB Calculator",
+  "/tools/faab/guillotine": "Guillotine Calculator",
   "/tools/free-agent-finder": "Free Agent Finder",
   "/tools/league-pulse": "League Pulse",
   "/tools/on-the-clock": "On The Clock",

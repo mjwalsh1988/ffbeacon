@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { communityRankingPaths, idpPlayerSlugs } from "./sections";
+import { communityRankingPaths, idpPlayerSlugs, staticSitemapPaths } from "./sections";
 import { bustMemo } from "@/lib/memo-ttl";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -61,6 +61,14 @@ describe("llms-full.txt player paragraph", () => {
     const src = readFileSync(join(process.cwd(), "lib/llms/llms-full-txt.ts"), "utf8");
     expect(src).toContain("has no trade value, because no value source prices defenders");
     expect(src).toContain("snap share");
+  });
+});
+
+describe("staticSitemapPaths", () => {
+  it("lists the guillotine calculator beside the FAAB calculator", () => {
+    const paths = staticSitemapPaths().map((entry) => entry.path);
+    expect(paths).toContain("/tools/faab/guillotine");
+    expect(paths.indexOf("/tools/faab/guillotine")).toBe(paths.indexOf("/tools/faab") + 1);
   });
 });
 

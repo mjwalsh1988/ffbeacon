@@ -114,6 +114,7 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/tools/who-should-i-start", priority: 0.7 },
   { path: "/tools/league-pulse", priority: 0.6 },
   { path: "/tools/faab", priority: 0.6 },
+  { path: "/tools/faab/guillotine", priority: 0.6 },
   { path: "/tools/on-the-clock", priority: 0.6 },
   { path: "/tools/manager-pulse", priority: 0.6 },
   { path: "/tools/trade-calculator", priority: 0.6 },
@@ -130,6 +131,14 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/privacy", priority: 0.2 },
   { path: "/terms", priority: 0.2 },
 ];
+
+/**
+ * The static pages the core section lists, with their priorities. Exported so
+ * a test reads the same list coreSection does and the two cannot drift.
+ */
+export function staticSitemapPaths(): Array<{ path: string; priority: number }> {
+  return STATIC_PATHS.map((entry) => ({ ...entry }));
+}
 
 /**
  * The community rankings URLs worth listing, matching the page's own canonical
@@ -365,7 +374,7 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
     // articles) and would later have frozen on the day an edition was approved.
     // Rule 2: a lastmod is true or it is absent.
     { loc: `${SITE.url}/brief`, lastModified: newestRelayAt, priority: 0.7 },
-    ...STATIC_PATHS.map(({ path, priority }) => ({
+    ...staticSitemapPaths().map(({ path, priority }) => ({
       loc: `${SITE.url}${path}`,
       priority,
     })),

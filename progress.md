@@ -16841,10 +16841,10 @@ GROW-T05 | completed | Guillotine page chopped market table and platform table
      | depends on: GROW-T02, GROW-T03
      | verified: yes (typecheck, lint, tests, build; p25 added to the shared market read so the table shows median, 25th and 75th; three reviews passed; accessibility fixes: percentile headers reworded to wrap at 360 px, platform link made a plain anchor, heading carries scroll-mt-24; written sections and market table mounted on the page in this commit)
 
-GROW-T06 | pending | Guillotine page share card, breadcrumb label, sitemap entry, llms text, with tests
+GROW-T06 | completed | Guillotine page share card, breadcrumb label, sitemap entry, llms text, with tests
      | files: app/api/og/page/[key]/route.tsx, lib/breadcrumbs.ts, lib/breadcrumbs.test.ts, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, lib/llms/llms-full-txt.ts
      | depends on: GROW-T03
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; the llms sentence is emitted for the /tools/faab catalog entry because that paragraph comes from TOOL_CATALOG, which section 2 forbids editing)
 
 GROW-T07 | pending | Inbound links to the guillotine page from the FAAB tool, the form, the chopped guide and the FAAB guide; bump guide dates
      | files: app/tools/faab/page.tsx, app/tools/faab/faab-form.tsx, app/guides/chopped-league-strategy/page.tsx, app/guides/faab-strategy/page.tsx, lib/guides/published.ts

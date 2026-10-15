@@ -118,6 +118,16 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/tools/faab",
     badge: "FAAB Calculator",
   },
+  "faab-guillotine": {
+    eyebrow: "Guillotine and chopped league FAAB calculator",
+    headlineTop: "Bid enough to",
+    headlineBottom: "survive the week",
+    subhead:
+      "Priced against your odds of being chopped, how many teams are left, and what chopped leagues have actually been paying.",
+    facts: ["Free", "No signup", "Sleeper, Yahoo, ESPN, FFPC"],
+    path: "/tools/faab/guillotine",
+    badge: "Chopped FAAB",
+  },
   "waiver-wire": {
     eyebrow: "Fantasy football waiver wire",
     headlineTop: "Who to add,",

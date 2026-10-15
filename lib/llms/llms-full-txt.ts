@@ -110,6 +110,13 @@ export function buildLlmsFullTxt(data: LlmsData): string {
     h3(tool.title);
     source(tool.href);
     p(tool.pitch);
+    // The guillotine page is a second front door to the FAAB calculator, not a
+    // tool of its own, so it is not in TOOL_CATALOG and is named here instead.
+    if (tool.href === "/tools/faab") {
+      p(
+        `Chopped and guillotine leagues have their own front door at ${u("/tools/faab/guillotine")}: the same calculator, opened on its chopped mode, with chopped-league notes and what chopped leagues have actually paid.`,
+      );
+    }
     p("What it gives you:");
     for (const bullet of tool.bullets) out.push(`- ${bullet}`);
     out.push("");
