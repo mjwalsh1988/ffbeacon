@@ -12,6 +12,9 @@ import { FaabForm } from "../faab-form";
 import { parseManualSeed } from "../manual-setup";
 import { loadFaabCalculatorData } from "../calculator-data";
 import { seasonOptions } from "../season-options";
+import { loadChoppedMarket } from "@/lib/faab/chopped-market";
+import { GuillotineWrittenSections } from "./written-sections";
+import { ChoppedMarketTable } from "./chopped-market-table";
 
 /**
  * /tools/faab/guillotine
@@ -70,7 +73,10 @@ export default async function GuillotineFaabPage({
   // The spread first and `kind` last, so the URL can never set a different
   // league type on this page.
   const seed = parseManualSeed({ ...params, kind: "chopped" });
-  const data = await loadFaabCalculatorData(params);
+  const [data, choppedMarket] = await Promise.all([
+    loadFaabCalculatorData(params),
+    loadChoppedMarket(),
+  ]);
   const {
     settings,
     players,
@@ -167,6 +173,8 @@ export default async function GuillotineFaabPage({
           </Link>{" "}
           prices redraft and dynasty claims.
         </p>
+        <GuillotineWrittenSections />
+        <ChoppedMarketTable market={choppedMarket} />
       </PageBody>
       <DiscordCtaSection
         eyebrow="One bad week and you are out"

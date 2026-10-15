@@ -36,7 +36,11 @@ export type MarketRead = {
   builtAt: string;
   /** Share of auctions that cleared for nothing, 0 to 1. */
   zeroShare: number;
-  /** Winning bid as a share of the league's whole budget, 0 to 100. */
+  /**
+   * Winning bid as a share of the league's whole budget, 0 to 100, at the
+   * 25th, 50th, 75th, 90th and 95th percentiles.
+   */
+  p25: number;
   p50: number;
   p75: number;
   p90: number;
@@ -68,6 +72,7 @@ export function readCell(
     seasons: cell.seasons,
     builtAt: cell.builtAt,
     zeroShare: cell.zeroShare,
+    p25: cell.p25,
     p50: cell.p50,
     p75: cell.p75,
     p90: cell.p90,

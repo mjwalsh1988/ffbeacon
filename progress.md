@@ -16836,10 +16836,10 @@ GROW-T04 | completed | Guillotine page written sections and FAQ
      | depends on: GROW-T03
      | verified: yes (typecheck, lint, tests, build; about 740 words, no prose 8-word run shared with the general page or the chopped guide beyond the plan's own FAQ questions; three reviews passed; four accuracy points and two wording nits from the implementation review fixed; the page mount is committed with GROW-T05)
 
-GROW-T05 | pending | Guillotine page chopped market table and platform table
+GROW-T05 | completed | Guillotine page chopped market table and platform table
      | files: app/tools/faab/guillotine/chopped-market-table.tsx
      | depends on: GROW-T02, GROW-T03
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; p25 added to the shared market read so the table shows median, 25th and 75th; three reviews passed; accessibility fixes: percentile headers reworded to wrap at 360 px, platform link made a plain anchor, heading carries scroll-mt-24; written sections and market table mounted on the page in this commit)
 
 GROW-T06 | pending | Guillotine page share card, breadcrumb label, sitemap entry, llms text, with tests
      | files: app/api/og/page/[key]/route.tsx, lib/breadcrumbs.ts, lib/breadcrumbs.test.ts, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, lib/llms/llms-full-txt.ts

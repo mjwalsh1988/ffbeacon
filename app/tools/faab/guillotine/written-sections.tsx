@@ -145,9 +145,11 @@ export function GuillotineWrittenSections() {
           body: (
             <>
               The{" "}
-              <Link href={`#${PLATFORM_TABLE_ID}`} className={LINK_CLASS}>
+              {/* A plain anchor, not next/link: native fragment navigation moves
+                  the reading position with the scroll in every screen reader. */}
+              <a href={`#${PLATFORM_TABLE_ID}`} className={LINK_CLASS}>
                 platform table
-              </Link>{" "}
+              </a>{" "}
               under the market figures lists the two rules that differ: the smallest claim each
               platform accepts, which sets the floor of a bid, and the last week a chopped roster
               goes back to waivers, after which the wire stops refilling.

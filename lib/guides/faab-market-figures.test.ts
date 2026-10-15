@@ -43,6 +43,7 @@ describe("readCell", () => {
     const read = readCell([cell()], "chopped|any|any|alive_50p|any", 30);
     expect(read?.enough).toBe(true);
     expect(read?.p90).toBe(20);
+    expect(read?.p25).toBe(0);
   });
 
   it("marks a thin cell unpublishable rather than hiding it", () => {
