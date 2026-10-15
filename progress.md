@@ -16861,10 +16861,10 @@ GROW-T09 | completed | Site search entry for the guillotine page (approved D3)
      | depends on: GROW-T03
      | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; only SEARCHABLE_TOOLS touched in lib/site.ts)
 
-GROW-T10 | pending | Week-stamped "this week's wire" block on /tools/faab, server rendered, under Suspense
+GROW-T10 | completed | Week-stamped "this week's wire" block on /tools/faab, server rendered, under Suspense
      | files: app/tools/faab/this-week.tsx, app/tools/faab/page.tsx
      | depends on: GROW-T01
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; dev render showed week 6 with five rows; three reviews passed; accessibility fixes: position and team spelled out visibly, a visible rank number on each row; the bid uses the waiver page's BidFigure, whose hyphen is aria-hidden with a spoken 'to', kept as the house helper the plan names; about 3 kB more first-load JS on /tools/faab from that import)
 
 GROW-T11 | pending | Anchor-text pass: "FAAB calculator" on waiver week pages and four guides; bump guide dates once
      | files: app/waiver-wire/[week]/page.tsx, app/guides/faab-strategy/page.tsx, app/guides/faab-settings-by-platform/page.tsx, app/guides/fantasy-football-playoffs/page.tsx, lib/guides/published.ts

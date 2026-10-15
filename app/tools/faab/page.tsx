@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { pageShareMetadata } from "@/lib/page-og";
 import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
@@ -6,6 +7,7 @@ import { ArrowRight } from "lucide-react";
 import { FormatFallbackBanner } from "@/components/format-fallback-banner";
 import { FaabForm } from "./faab-form";
 import { loadFaabCalculatorData } from "./calculator-data";
+import { ThisWeekWireForReader } from "./this-week";
 import { parseManualSeed } from "./manual-setup";
 import { seasonOptions } from "./season-options";
 import { WrittenSections } from "./written-sections";
@@ -160,6 +162,12 @@ export default async function FaabPage({
           </Link>{" "}
           prices every claim against your odds of being chopped this week.
         </p>
+        {/* Server rendered on first paint, so the page changes every waiver week
+            without touching the title above. Suspense so a slow board read can
+            never hold up the calculator. */}
+        <Suspense fallback={null}>
+          <ThisWeekWireForReader params={{ format: params.format, source: params.source }} />
+        </Suspense>
         <p className="mt-8 text-sm leading-relaxed text-ink-muted">
           Curious what these bids are actually built from?{" "}
           <Link
