@@ -16876,10 +16876,10 @@ GROW-T12 | completed | lib/idp/rankings.ts data module on exported loadDefenderR
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; points guard passes; production check: 981 idp123 finishes and 981 regular IDP seasons for 2025, snap share stored 0 to 1 so converted and capped at 100; three reviews passed; fixes: public tables read with the cached publishable client, a finish shown only at the position it was earned at, the uncached loader passes its flag through, a singular basis sentence for one unprojected defender)
 
-GROW-T13 | pending | /rankings/idp page: metadata, masthead, method panel, three tables, FAQ, JSON-LD
+GROW-T13 | completed | /rankings/idp page: metadata, masthead, method panel, three tables, FAQ, JSON-LD
      | files: app/rankings/idp/page.tsx
      | depends on: GROW-T12
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; dev render: exact title, one h1, three captioned tables of 60 rows, Projected by Sleeper; three reviews passed; fixes: a rail panel so the rail is never empty below xl, jump-bar chips and the last-season finish spell the position out, the player cell is a row header, the projection chip needs a real engine name; the stacked-cell classes came from components/rankings-table.tsx, the table rankings-view.tsx renders)
 
 GROW-T14 | pending | IDP route plumbing: redirect exclusion, breadcrumb, sitemap, share card, llms text, with tests
      | files: lib/rankings-format-redirect.ts, lib/rankings-format-redirect.test.ts, lib/breadcrumbs.ts, lib/breadcrumbs.test.ts, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, app/api/og/page/[key]/route.tsx, lib/llms/llms-full-txt.ts
