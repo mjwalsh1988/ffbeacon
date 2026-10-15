@@ -16871,10 +16871,10 @@ GROW-T11 | completed | Anchor-text pass: "FAAB calculator" on waiver week pages 
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; three reviews passed; the FAAB strategy and playoffs guides already read FAAB calculator, so only the waiver week page and the settings guide anchor changed; no guide wording changed, so no date bumped)
 
-GROW-T12 | pending | lib/idp/rankings.ts data module on exported loadDefenderRows, with pure rankDefenders test
+GROW-T12 | completed | lib/idp/rankings.ts data module on exported loadDefenderRows, with pure rankDefenders test
      | files: lib/ranking-boards/seed.ts, lib/idp/rankings.ts, lib/idp/rankings.test.ts
      | depends on: none
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; points guard passes; production check: 981 idp123 finishes and 981 regular IDP seasons for 2025, snap share stored 0 to 1 so converted and capped at 100; three reviews passed; fixes: public tables read with the cached publishable client, a finish shown only at the position it was earned at, the uncached loader passes its flag through, a singular basis sentence for one unprojected defender)
 
 GROW-T13 | pending | /rankings/idp page: metadata, masthead, method panel, three tables, FAQ, JSON-LD
      | files: app/rankings/idp/page.tsx

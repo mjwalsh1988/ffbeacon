@@ -174,9 +174,9 @@ export type DefenderSeed = {
   basisText: string;
 };
 
-type DefenderRow = SeedPlayer & { projected: number | null; lastSeasonPoints: number | null };
+export type DefenderRow = SeedPlayer & { projected: number | null; lastSeasonPoints: number | null };
 
-type DefenderRows = { rows: DefenderRow[]; lastSeason: number; projectedWindow: boolean };
+export type DefenderRows = { rows: DefenderRow[]; lastSeason: number; projectedWindow: boolean };
 
 /** Where the season is and which projection engine covers the rest of it.
  * Resolved OUTSIDE the cached read and put in its key, so a new week, a new
@@ -283,7 +283,7 @@ async function readDefenderRows(clock: DefenderSeedKey): Promise<DefenderRows> {
 
 /** The cached read. `uncached` is for code that runs outside a Next request,
  * where unstable_cache has no cache to use (the community rankings script). */
-async function loadDefenderRows(uncached = false): Promise<DefenderRows> {
+export async function loadDefenderRows(uncached = false): Promise<DefenderRows> {
   const key = await resolveDefenderSeedKey();
   if (uncached) return readDefenderRows(key);
   return unstable_cache(
