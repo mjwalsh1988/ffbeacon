@@ -16831,10 +16831,10 @@ GROW-T03 | completed | Create /tools/faab/guillotine page (metadata, masthead, f
      | depends on: GROW-T01, GROW-T02
      | verified: yes (typecheck, lint, tests, build; dev render checked: title, self canonical, one h1, WebApplication JSON-LD, seed forced to chopped; three reviews run; accessibility review found the sign-in and clear-handle links hardcoded to /tools/faab, fixed with a pagePath prop through FaabForm and LeaguePanel; written sections, market table and the chopped market read land in T04 and T05)
 
-GROW-T04 | pending | Guillotine page written sections and FAQ
+GROW-T04 | completed | Guillotine page written sections and FAQ
      | files: app/tools/faab/guillotine/written-sections.tsx
      | depends on: GROW-T03
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; about 740 words, no prose 8-word run shared with the general page or the chopped guide beyond the plan's own FAQ questions; three reviews passed; four accuracy points and two wording nits from the implementation review fixed; the page mount is committed with GROW-T05)
 
 GROW-T05 | pending | Guillotine page chopped market table and platform table
      | files: app/tools/faab/guillotine/chopped-market-table.tsx
