@@ -17,6 +17,7 @@
  * Async server components.
  */
 
+import { Suspense } from "react";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -26,6 +27,7 @@ import { Panel } from "@/components/dashboard-panel";
 import { QuickNews } from "@/components/player-profile/quick-news";
 import { InjuryStatus } from "@/components/player-profile/injury-status";
 import { PlayerBioOverview } from "@/components/player-profile/player-bio-overview";
+import { IdpRankLine } from "@/components/player-profile/idp-rank-line";
 import { DepthChartCard } from "@/components/player-profile/depth-chart-card";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
 import {
@@ -178,6 +180,10 @@ export async function DefenderOverviewTab({
           <div className="min-w-0 space-y-6">
             <QuickNews article={article} playerName={playerName} />
             <InjuryStatus player={player} playerName={playerName} />
+            {/* Under Suspense so the rankings read can never hold up the profile. */}
+            <Suspense fallback={null}>
+              <IdpRankLine playerId={player.id} position={player.position ?? ""} />
+            </Suspense>
             <PlayerBioOverview player={player} />
             {depthChart && (
               <DepthChartCard

@@ -16886,10 +16886,10 @@ GROW-T14 | completed | IDP route plumbing: redirect exclusion, breadcrumb, sitem
      | depends on: GROW-T13
      | verified: yes (typecheck, lint, tests, build; three reviews passed; the IDP path sits in STATIC_PATHS at 0.8, the placement the plan allows, tested through staticSitemapPaths; review follow-ups: comment on why the IDP page skips the format redirect, a test that its Rankings crumb goes to the hub; the page's own BreadcrumbList duplicates the shell's, as the weather page does, and is the plan's spec)
 
-GROW-T15 | pending | IdpRankLine on every defender profile overview
+GROW-T15 | completed | IdpRankLine on every defender profile overview
      | files: components/player-profile/idp-rank-line.tsx, components/player-profile/defender-tabs.tsx
      | depends on: GROW-T12, GROW-T13
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; fix: the not-found line renders nothing when a position lists fewer than 60, so it never claims a cut-off that does not exist)
 
 GROW-T16 | pending | IDP guide links to the rankings; bump guide date
      | files: app/guides/idp-fantasy-football/page.tsx, lib/guides/published.ts
