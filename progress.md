@@ -16846,10 +16846,10 @@ GROW-T06 | completed | Guillotine page share card, breadcrumb label, sitemap ent
      | depends on: GROW-T03
      | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; the llms sentence is emitted for the /tools/faab catalog entry because that paragraph comes from TOOL_CATALOG, which section 2 forbids editing)
 
-GROW-T07 | pending | Inbound links to the guillotine page from the FAAB tool, the form, the chopped guide and the FAAB guide; bump guide dates
+GROW-T07 | completed | Inbound links to the guillotine page from the FAAB tool, the form, the chopped guide and the FAAB guide; bump guide dates
      | files: app/tools/faab/page.tsx, app/tools/faab/faab-form.tsx, app/guides/chopped-league-strategy/page.tsx, app/guides/faab-strategy/page.tsx, lib/guides/published.ts
      | depends on: GROW-T03
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed with only cosmetic notes; guide line numbers were about 40 lower than the plan says because GROW-T02 moved the market loader out)
 
 GROW-T08 | completed | Tests for parseManualSeed and biddersFor
      | files: app/tools/faab/manual-setup.test.ts

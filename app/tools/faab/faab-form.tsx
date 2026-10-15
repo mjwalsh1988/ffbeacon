@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Armchair,
   BarChart3,
@@ -75,6 +76,7 @@ export function FaabForm({
   urlViewer,
   seed = EMPTY_MANUAL_SEED,
   pagePath = "/tools/faab",
+  onGuillotinePage = false,
 }: {
   /**
    * The page hero, rendered on the server and handed in so this component can
@@ -117,6 +119,11 @@ export function FaabForm({
   seed?: ManualSeed;
   /** The page this form sits on, for links that should return to it. */
   pagePath?: string;
+  /**
+   * True on /tools/faab/guillotine, where the chopped block does not need to
+   * point a reader at the page they are already on.
+   */
+  onGuillotinePage?: boolean;
 }) {
   const { userDefaults } = settings;
   const [query, setQuery] = useState("");
@@ -459,6 +466,18 @@ export function FaabForm({
           </fieldset>
           {isChopped && (
             <div className="space-y-5 rounded-card border border-line bg-surface/40 p-4">
+              {!onGuillotinePage && (
+                <p className="text-sm leading-relaxed text-ink-muted">
+                  This mode has its own page:{" "}
+                  <Link
+                    href="/tools/faab/guillotine"
+                    className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    the guillotine FAAB calculator
+                  </Link>
+                  , with chopped-league notes and what chopped leagues actually pay.
+                </p>
+              )}
               <p className="text-sm font-semibold text-ink">
                 Your chopped league, this week
               </p>

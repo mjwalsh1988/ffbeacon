@@ -148,7 +148,18 @@ export default async function FaabPage({
           handleGate={handleGate}
           urlViewer={urlViewer}
           seed={manualSeed}
+          onGuillotinePage={false}
         />
+        <p className="mt-8 text-sm leading-relaxed text-ink-muted">
+          Playing in a chopped or guillotine league? The{" "}
+          <Link
+            href="/tools/faab/guillotine"
+            className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
+          >
+            guillotine FAAB calculator
+          </Link>{" "}
+          prices every claim against your odds of being chopped this week.
+        </p>
         <p className="mt-8 text-sm leading-relaxed text-ink-muted">
           Curious what these bids are actually built from?{" "}
           <Link

@@ -1183,7 +1183,11 @@ function ChoppedSection({ market }: { market: FaabMarket }) {
         </Link>{" "}
         guide covers drafting, survival and bid sizes week by week, and the FAAB
         calculator has a chopped mode that prices a claim against the teams still
-        alive.
+        alive. That mode has a page of its own, the{" "}
+        <Link href="/tools/faab/guillotine" className={LINK_CLASS}>
+          guillotine FAAB calculator
+        </Link>
+        , which opens with the league type already set.
       </Para>
       <KeyIdea>
         The wire refills with a whole roster every week and the budget never comes

@@ -344,7 +344,7 @@ export default async function ChoppedLeagueStrategyGuide() {
         isMember={isMember}
         memberHeading="You know the format. Now price the claim."
         memberBody="You're already in the crew, so we'll skip the invite. The FAAB calculator prices a waiver claim against your real roster and what your rivals have left."
-        memberCtaHref="/tools/faab"
+        memberCtaHref="/tools/faab/guillotine"
         memberCtaLabel="Open the FAAB calculator"
       />
     </main>
@@ -1238,9 +1238,10 @@ const FIELD_INPUT =
 /**
  * The danger check (task FB-G04).
  *
- * A native GET form pointed straight at the calculator, which parses
- * kind, start, alive and danger in app/tools/faab/manual-setup.ts and seeds
- * its manual chopped mode from them. No JavaScript, no state, and nothing
+ * A native GET form pointed straight at the guillotine calculator, which
+ * parses start, alive and danger in app/tools/faab/manual-setup.ts and seeds
+ * its manual mode from them. That page is always chopped, so no league type
+ * travels in the link. No JavaScript, no state, and nothing
  * priced here: the guide has no business putting a number on a bid, and a
  * form that submits to a URL is both the simplest thing that works and the
  * one that still works with scripting off.
@@ -1252,7 +1253,7 @@ const FIELD_INPUT =
 function DangerCheck() {
   return (
     <form
-      action="/tools/faab"
+      action="/tools/faab/guillotine"
       method="get"
       aria-labelledby="danger-check-heading"
       className="mt-6 rounded-card border border-brand-cyan/40 bg-brand-cyan/5 p-4 sm:p-5"
@@ -1261,11 +1262,10 @@ function DangerCheck() {
         Check where you stand
       </h4>
       <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-        Three answers, and the calculator opens on its chopped mode with them already filled in.
+        Three answers, and the guillotine calculator opens with them already filled in.
         It asks for your budget and your starting lineup there, because those do not travel in a
         link.
       </p>
-      <input type="hidden" name="kind" value="chopped" />
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <div>
           <label htmlFor="danger-start" className={FIELD_LABEL}>
@@ -1446,8 +1446,8 @@ function HowMuchSection() {
       </Para>
       <Para>
         The{" "}
-        <Link href="/tools/faab" className={LINK_CLASS}>
-          chopped FAAB calculator
+        <Link href="/tools/faab/guillotine" className={LINK_CLASS}>
+          guillotine FAAB calculator
         </Link>{" "}
         weighs this the same way. It simulates the rest of your season, works out your odds of
         being chopped this week with the player and without him, and prices the claim higher when
@@ -1518,7 +1518,7 @@ function HowMuchSection() {
         Spend on the players who start for you until the end, and on the weeks you might not
         survive. Everything else is a reason to wait for next Tuesday.
       </KeyIdea>
-      <TryIt href="/tools/faab" label="Price a chopped claim">
+      <TryIt href="/tools/faab/guillotine" label="Price a chopped claim">
         Connect your Sleeper chopped league and the calculator reads who is still alive, what
         they have left to spend, and your own odds of being chopped this week with the player and
         without him.
@@ -1707,8 +1707,8 @@ function ClosingSection() {
       />
       <Para>
         When a roster is chopped and you have to put a number on somebody, the{" "}
-        <Link href="/tools/faab" className={LINK_CLASS}>
-          FAAB calculator
+        <Link href="/tools/faab/guillotine" className={LINK_CLASS}>
+          guillotine FAAB calculator
         </Link>{" "}
         prices the claim against your actual lineup and what your rivals have left to spend, and
         gives you a walk-away line. The{" "}
@@ -1731,7 +1731,7 @@ function ClosingSection() {
         </Link>
         .
       </Para>
-      <TryIt href="/tools/faab" label="Price a claim">
+      <TryIt href="/tools/faab/guillotine" label="Price a claim">
         A whole roster just hit your wire. Enter your league size, starters and remaining budget, or
         connect Sleeper, and the calculator tells you where to stop.
       </TryIt>

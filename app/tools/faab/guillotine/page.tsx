@@ -162,6 +162,7 @@ export default async function GuillotineFaabPage({
           urlViewer={urlViewer}
           seed={seed}
           pagePath="/tools/faab/guillotine"
+          onGuillotinePage
         />
         <p className="mt-8 text-sm leading-relaxed text-ink-muted">
           Not in a chopped league? The{" "}

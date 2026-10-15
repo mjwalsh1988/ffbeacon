@@ -96,7 +96,8 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // a pre-bid checklist.
     // 2026-09-19: a ninth lesson on chopped and guillotine leagues, and two
     // more questions in the FAQ. New prose, so the date moves.
-    updatedAt: "2026-09-19T09:00:00-04:00",
+    // 2026-10-15: the chopped lesson links the new guillotine calculator page.
+    updatedAt: "2026-10-15T18:00:00-04:00",
     priority: 0.8,
   },
   {
@@ -174,7 +175,8 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // commissioner picks, and the team-count arithmetic that sets the season
     // length). A new lesson is a real change, so the modified date moves with
     // it rather than staying at first publish.
-    updatedAt: "2026-09-22T17:00:00-04:00",
+    // 2026-10-15: the calculator links moved to the guillotine calculator page.
+    updatedAt: "2026-10-15T18:00:00-04:00",
     priority: 0.8,
   },
   {
