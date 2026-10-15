@@ -96,4 +96,8 @@ describe("rankingsFormatRedirect", () => {
       redirectFor("/rankings/community?format=dynasty-ppr-sflex&pos=QB"),
     ).toBeNull();
   });
+
+  it("leaves the IDP rankings alone, which have no format to move to", () => {
+    expect(redirectFor("/rankings/idp?format=dynasty-ppr-sflex")).toBeNull();
+  });
 });

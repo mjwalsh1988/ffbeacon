@@ -118,6 +118,16 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/tools/faab",
     badge: "FAAB Calculator",
   },
+  "rankings-idp": {
+    eyebrow: "IDP fantasy football rankings",
+    headlineTop: "Every defender ranked,",
+    headlineBottom: "rest of season",
+    subhead:
+      "Defensive linemen, linebackers and defensive backs by projected points under Sleeper's default IDP scoring, with last season's finish and snap share.",
+    facts: ["DL, LB and DB", "Updated daily", "Free"],
+    path: "/rankings/idp",
+    badge: "IDP Rankings",
+  },
   "faab-guillotine": {
     eyebrow: "Guillotine and chopped league FAAB calculator",
     headlineTop: "Bid enough to",

@@ -126,7 +126,7 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   source("/rankings");
   p(
     "The reference boards rather than a tool you run against your own league: for each league format, every ranked player and, in dynasty formats, every draft pick, for the selected value source, with tiers, positional rank and the seven-day move beside each one. The rankings page itself is a directory of those boards; a reader who has already picked a format is taken straight to that board.",
-    `Each format also has its own page at ${u("/rankings/{format-slug}")}, listed under "League formats" below.`,
+    `Each format also has its own page at ${u("/rankings/{format-slug}")}, listed under "League formats" below. Defenders have their own board at ${u("/rankings/idp")}: every defensive lineman, linebacker and defensive back ranked by projected rest-of-season points under Sleeper's default IDP scoring, with no value column because no value source prices a defender.`,
   );
 
   h3("Player profiles");

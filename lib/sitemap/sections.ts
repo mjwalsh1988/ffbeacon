@@ -108,6 +108,9 @@ export function sectionPath(section: SitemapSection): string {
 
 /** Core public pages that are not data-driven. */
 const STATIC_PATHS: Array<{ path: string; priority: number }> = [
+  // A static board beside the per-format ones; no lastModified, because the
+  // projections behind it refresh daily. Rule 2: a lastmod is true or absent.
+  { path: "/rankings/idp", priority: 0.8 },
   { path: "/tools", priority: 0.7 },
   // The start/sit tool is a head-term landing page, one notch above the
   // other tools (plan 2.3).

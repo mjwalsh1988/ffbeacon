@@ -54,9 +54,11 @@ const RANKINGS_BOARD_PATH = /^\/rankings(?:\/[^/]+)?$/;
  * Literal pages under /rankings that are not format boards. The community page
  * (app/rankings/community) takes its format FROM `?format=`, one page serving
  * every format, so redirecting it to /rankings/<slug> would make it unreachable
- * for any format but the default.
+ * for any format but the default. The IDP rankings (app/rankings/idp) have no
+ * format at all, because no value source prices a defender, so a `?format=` on
+ * them has nothing to move to.
  */
-const NON_BOARD_RANKINGS_PATHS = new Set(["/rankings/community"]);
+const NON_BOARD_RANKINGS_PATHS = new Set(["/rankings/community", "/rankings/idp"]);
 
 export function rankingsFormatRedirect(
   request: NextRequest,

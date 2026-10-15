@@ -16881,10 +16881,10 @@ GROW-T13 | completed | /rankings/idp page: metadata, masthead, method panel, thr
      | depends on: GROW-T12
      | verified: yes (typecheck, lint, tests, build; dev render: exact title, one h1, three captioned tables of 60 rows, Projected by Sleeper; three reviews passed; fixes: a rail panel so the rail is never empty below xl, jump-bar chips and the last-season finish spell the position out, the player cell is a row header, the projection chip needs a real engine name; the stacked-cell classes came from components/rankings-table.tsx, the table rankings-view.tsx renders)
 
-GROW-T14 | pending | IDP route plumbing: redirect exclusion, breadcrumb, sitemap, share card, llms text, with tests
+GROW-T14 | completed | IDP route plumbing: redirect exclusion, breadcrumb, sitemap, share card, llms text, with tests
      | files: lib/rankings-format-redirect.ts, lib/rankings-format-redirect.test.ts, lib/breadcrumbs.ts, lib/breadcrumbs.test.ts, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, app/api/og/page/[key]/route.tsx, lib/llms/llms-full-txt.ts
      | depends on: GROW-T13
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; the IDP path sits in STATIC_PATHS at 0.8, the placement the plan allows, tested through staticSitemapPaths; review follow-ups: comment on why the IDP page skips the format redirect, a test that its Rankings crumb goes to the hub; the page's own BreadcrumbList duplicates the shell's, as the weather page does, and is the plan's spec)
 
 GROW-T15 | pending | IdpRankLine on every defender profile overview
      | files: components/player-profile/idp-rank-line.tsx, components/player-profile/defender-tabs.tsx

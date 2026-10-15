@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { breadcrumbJsonLd, buildBreadcrumbs } from "./breadcrumbs";
+import { RANKINGS_HUB_HREF } from "@/lib/rankings-hub";
 
 const SITE = "https://ffbeacon.com";
 
@@ -55,6 +56,13 @@ describe("ordinary trails", () => {
 
   it("keep every step in the structured data when each has a page", () => {
     expect(items("/tools/faab").map((i) => i.name)).toEqual(["Home", "Tools", "FAAB Calculator"]);
+  });
+
+  it("name the IDP rankings under Rankings", () => {
+    expect(items("/rankings/idp").map((i) => i.name)).toEqual(["Home", "Rankings", "IDP Rankings"]);
+    expect(buildBreadcrumbs("/rankings/idp").at(-1)).toEqual({ label: "IDP Rankings", href: undefined });
+    // The Rankings step goes to the hub, never through to a saved format's board.
+    expect(buildBreadcrumbs("/rankings/idp")[0].href).toBe(RANKINGS_HUB_HREF);
   });
 
   it("put the guillotine calculator under the FAAB calculator", () => {

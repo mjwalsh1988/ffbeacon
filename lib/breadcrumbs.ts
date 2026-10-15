@@ -75,6 +75,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/privacy": "Privacy Policy",
   "/rankings": "Rankings",
   "/rankings/community": "Community",
+  "/rankings/idp": "IDP Rankings",
   "/terms": "Terms of Service",
   "/tools": "Tools",
   "/tools/custom-rankings": "Rankings Builder",

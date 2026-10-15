@@ -70,6 +70,10 @@ describe("staticSitemapPaths", () => {
     expect(paths).toContain("/tools/faab/guillotine");
     expect(paths.indexOf("/tools/faab/guillotine")).toBe(paths.indexOf("/tools/faab") + 1);
   });
+
+  it("lists the IDP rankings at the format boards' priority", () => {
+    expect(staticSitemapPaths()).toContainEqual({ path: "/rankings/idp", priority: 0.8 });
+  });
 });
 
 describe("communityRankingPaths", () => {
