@@ -16851,10 +16851,10 @@ GROW-T07 | pending | Inbound links to the guillotine page from the FAAB tool, th
      | depends on: GROW-T03
      | verified: no
 
-GROW-T08 | pending | Tests for parseManualSeed and biddersFor
+GROW-T08 | completed | Tests for parseManualSeed and biddersFor
      | files: app/tools/faab/manual-setup.test.ts
      | depends on: none
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews run; the security review found parseManualSeed read danger values off Object.prototype, fixed with an own-key check, and a teams-alive figure with no starting field is now dropped; tests added for both, for repeated parameters and for count bounds)
 
 GROW-T09 | pending | Site search entry for the guillotine page (approved D3)
      | files: lib/site.ts

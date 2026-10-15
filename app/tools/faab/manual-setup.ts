@@ -147,7 +147,9 @@ function readCount(raw: string | string[] | undefined): number | null {
  * the form opens on their situation rather than on a default they have to
  * retype. Anything unexpected is ignored rather than guessed at, and a
  * teams-alive figure above the starting field is dropped: it describes no
- * league that exists.
+ * league that exists. A teams-alive figure with no starting field is dropped
+ * too, because the form would otherwise compare it against a default the
+ * link never stated.
  */
 export function parseManualSeed(params: {
   kind?: string | string[];
@@ -164,10 +166,16 @@ export function parseManualSeed(params: {
   const startCount = readCount(params.start);
   const aliveRaw = readCount(params.alive);
   const aliveCount =
-    aliveRaw !== null && startCount !== null && aliveRaw > startCount ? null : aliveRaw;
+    aliveRaw === null || startCount === null || aliveRaw > startCount ? null : aliveRaw;
 
   const dangerRaw = typeof params.danger === "string" ? params.danger : null;
-  const danger = dangerRaw ? (DANGER_FROM_PARAM[dangerRaw] ?? null) : null;
+  // Own keys only: a plain object inherits "constructor", "toString" and
+  // "__proto__", and any of those reaching the form would be a function or an
+  // object where a danger answer belongs.
+  const danger =
+    dangerRaw && Object.hasOwn(DANGER_FROM_PARAM, dangerRaw)
+      ? DANGER_FROM_PARAM[dangerRaw]
+      : null;
 
   return { leagueType, startCount, aliveCount, danger };
 }
