@@ -16821,10 +16821,10 @@ GROW-T01 | completed | Extract /tools/faab data loading into app/tools/faab/calc
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; /tools/faab main element identical before and after with numbers masked; implementation, accessibility and security reviews passed; server-only import added on the security review's advice)
 
-GROW-T02 | in_progress | Move the chopped market read into lib/faab/chopped-market.ts with a test
+GROW-T02 | completed | Move the chopped market read into lib/faab/chopped-market.ts with a test
      | files: lib/faab/chopped-market.ts, lib/faab/chopped-market.test.ts, app/guides/chopped-league-strategy/page.tsx
      | depends on: none
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; implementation, accessibility and security reviews passed; server-only import added on the security review's advice)
 
 GROW-T03 | pending | Create /tools/faab/guillotine page (metadata, masthead, form seeded chopped, reverse link)
      | files: app/tools/faab/guillotine/page.tsx, app/tools/faab/season-options.ts, app/tools/faab/page.tsx

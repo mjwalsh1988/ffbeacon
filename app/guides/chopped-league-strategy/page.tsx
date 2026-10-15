@@ -13,14 +13,10 @@ import { FaqAccordion, type FaqAccordionItem } from "@/components/faq-accordion"
 import { faqPageJsonLd } from "@/components/tool-explainer";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { createAdminClient } from "@/lib/supabase/server";
-import { loadPriorCellsCached } from "@/lib/faab/priors-read";
-import { loadFaabSettings } from "@/lib/faab/settings";
+import { loadChoppedMarket, type ChoppedMarket } from "@/lib/faab/chopped-market";
 import {
   NOT_ENOUGH,
   moneyPctText,
-  newestBuiltAt,
-  readCell,
   sampleText,
   shareText,
   type MarketRead,
@@ -241,43 +237,6 @@ const FAQ: FaqAccordionItem[] = [
       "Only if your league starts them. Several chopped formats do not: the FFPC Chop Classic lineup is a quarterback, two backs, two receivers, a tight end and two flexes. When a league does start them, stream both and spend as close to nothing as your minimum bid allows.",
   },
 ];
-
-/**
- * The measured half of lessons 4 and 5, read once and handed down.
- *
- * `bands` keeps a row for every teams-alive band even when the cell is thin,
- * because a missing row would quietly shorten the table and leave a reader
- * thinking we only measured the part that suited us.
- */
-type ChoppedMarket = {
-  bands: { label: string; read: MarketRead | null }[];
-  overall: MarketRead | null;
-  updatedAt: string | null;
-};
-
-const BAND_LABELS: { key: string; label: string }[] = [
-  { key: "chopped|any|any|alive_50p|any", label: "Half the field or more still in" },
-  { key: "chopped|any|any|alive_30_50|any", label: "Between 30 and 50 percent left" },
-  { key: "chopped|any|any|alive_lt30|any", label: "Under 30 percent left" },
-];
-
-async function loadChoppedMarket(): Promise<ChoppedMarket> {
-  const [cells, settings] = await Promise.all([
-    loadPriorCellsCached(),
-    loadFaabSettings(createAdminClient()),
-  ]);
-  const minSamples = settings.priors.minCellSamples;
-  const bands = BAND_LABELS.map((band) => ({
-    label: band.label,
-    read: readCell(cells, band.key, minSamples),
-  }));
-  const overall = readCell(cells, "chopped|any|any|any|any", minSamples);
-  return {
-    bands,
-    overall,
-    updatedAt: newestBuiltAt([overall, ...bands.map((b) => b.read)]),
-  };
-}
 
 export default async function ChoppedLeagueStrategyGuide() {
   const [isMember, market] = await Promise.all([isDiscordMember(), loadChoppedMarket()]);
