@@ -16856,10 +16856,10 @@ GROW-T08 | completed | Tests for parseManualSeed and biddersFor
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; three reviews run; the security review found parseManualSeed read danger values off Object.prototype, fixed with an own-key check, and a teams-alive figure with no starting field is now dropped; tests added for both, for repeated parameters and for count bounds)
 
-GROW-T09 | pending | Site search entry for the guillotine page (approved D3)
+GROW-T09 | completed | Site search entry for the guillotine page (approved D3)
      | files: lib/site.ts
      | depends on: GROW-T03
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; only SEARCHABLE_TOOLS touched in lib/site.ts)
 
 GROW-T10 | pending | Week-stamped "this week's wire" block on /tools/faab, server rendered, under Suspense
      | files: app/tools/faab/this-week.tsx, app/tools/faab/page.tsx

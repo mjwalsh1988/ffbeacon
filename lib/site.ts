@@ -236,6 +236,12 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["faab", "waiver", "bid", "budget", "add"],
   },
   {
+    label: "Guillotine FAAB Calculator",
+    href: "/tools/faab/guillotine",
+    description: "What to bid in a chopped or guillotine league",
+    keywords: ["guillotine", "chopped", "chop", "death league", "knockout", "survive"],
+  },
+  {
     label: "Waiver Wire",
     href: "/waiver-wire",
     description: "Who to add this week, and what to bid",
