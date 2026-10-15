@@ -16816,3 +16816,112 @@ SP-T011 | completed | Review fixes. Implementation: the live week no longer earn
      | files: lib/season-pulse/*, lib/nfl-weather-impact.ts, components/season-pulse/*, app/season/**
      | depends on: SP-T009
      | verified: yes (typecheck, lint, tests, build). Not committed.
+GROW-T01 | completed | Extract /tools/faab data loading into app/tools/faab/calculator-data.ts, no behaviour change
+     | files: app/tools/faab/calculator-data.ts, app/tools/faab/page.tsx
+     | depends on: none
+     | verified: yes (typecheck, lint, tests, build; /tools/faab main element identical before and after with numbers masked; implementation, accessibility and security reviews passed; server-only import added on the security review's advice)
+
+GROW-T02 | in_progress | Move the chopped market read into lib/faab/chopped-market.ts with a test
+     | files: lib/faab/chopped-market.ts, lib/faab/chopped-market.test.ts, app/guides/chopped-league-strategy/page.tsx
+     | depends on: none
+     | verified: no
+
+GROW-T03 | pending | Create /tools/faab/guillotine page (metadata, masthead, form seeded chopped, reverse link)
+     | files: app/tools/faab/guillotine/page.tsx, app/tools/faab/season-options.ts, app/tools/faab/page.tsx
+     | depends on: GROW-T01, GROW-T02
+     | verified: no
+
+GROW-T04 | pending | Guillotine page written sections and FAQ
+     | files: app/tools/faab/guillotine/written-sections.tsx
+     | depends on: GROW-T03
+     | verified: no
+
+GROW-T05 | pending | Guillotine page chopped market table and platform table
+     | files: app/tools/faab/guillotine/chopped-market-table.tsx
+     | depends on: GROW-T02, GROW-T03
+     | verified: no
+
+GROW-T06 | pending | Guillotine page share card, breadcrumb label, sitemap entry, llms text, with tests
+     | files: app/api/og/page/[key]/route.tsx, lib/breadcrumbs.ts, lib/breadcrumbs.test.ts, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, lib/llms/llms-full-txt.ts
+     | depends on: GROW-T03
+     | verified: no
+
+GROW-T07 | pending | Inbound links to the guillotine page from the FAAB tool, the form, the chopped guide and the FAAB guide; bump guide dates
+     | files: app/tools/faab/page.tsx, app/tools/faab/faab-form.tsx, app/guides/chopped-league-strategy/page.tsx, app/guides/faab-strategy/page.tsx, lib/guides/published.ts
+     | depends on: GROW-T03
+     | verified: no
+
+GROW-T08 | pending | Tests for parseManualSeed and biddersFor
+     | files: app/tools/faab/manual-setup.test.ts
+     | depends on: none
+     | verified: no
+
+GROW-T09 | pending | Site search entry for the guillotine page (approved D3)
+     | files: lib/site.ts
+     | depends on: GROW-T03
+     | verified: no
+
+GROW-T10 | pending | Week-stamped "this week's wire" block on /tools/faab, server rendered, under Suspense
+     | files: app/tools/faab/this-week.tsx, app/tools/faab/page.tsx
+     | depends on: GROW-T01
+     | verified: no
+
+GROW-T11 | pending | Anchor-text pass: "FAAB calculator" on waiver week pages and four guides; bump guide dates once
+     | files: app/waiver-wire/[week]/page.tsx, app/guides/faab-strategy/page.tsx, app/guides/faab-settings-by-platform/page.tsx, app/guides/fantasy-football-playoffs/page.tsx, lib/guides/published.ts
+     | depends on: none
+     | verified: no
+
+GROW-T12 | pending | lib/idp/rankings.ts data module on exported loadDefenderRows, with pure rankDefenders test
+     | files: lib/ranking-boards/seed.ts, lib/idp/rankings.ts, lib/idp/rankings.test.ts
+     | depends on: none
+     | verified: no
+
+GROW-T13 | pending | /rankings/idp page: metadata, masthead, method panel, three tables, FAQ, JSON-LD
+     | files: app/rankings/idp/page.tsx
+     | depends on: GROW-T12
+     | verified: no
+
+GROW-T14 | pending | IDP route plumbing: redirect exclusion, breadcrumb, sitemap, share card, llms text, with tests
+     | files: lib/rankings-format-redirect.ts, lib/rankings-format-redirect.test.ts, lib/breadcrumbs.ts, lib/breadcrumbs.test.ts, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, app/api/og/page/[key]/route.tsx, lib/llms/llms-full-txt.ts
+     | depends on: GROW-T13
+     | verified: no
+
+GROW-T15 | pending | IdpRankLine on every defender profile overview
+     | files: components/player-profile/idp-rank-line.tsx, components/player-profile/defender-tabs.tsx
+     | depends on: GROW-T12, GROW-T13
+     | verified: no
+
+GROW-T16 | pending | IDP guide links to the rankings; bump guide date
+     | files: app/guides/idp-fantasy-football/page.tsx, lib/guides/published.ts
+     | depends on: GROW-T13
+     | verified: no
+
+GROW-T17 | pending | Rankings hub entry for IDP rankings (approved D2)
+     | files: app/rankings/page.tsx
+     | depends on: GROW-T13
+     | verified: no
+
+GROW-T18 | pending | FAAB manual mode: defender note links to IDP rankings
+     | files: app/tools/faab/faab-form.tsx
+     | depends on: GROW-T13
+     | verified: no
+
+GROW-T19 | pending | Site search entry for IDP rankings (approved D3)
+     | files: lib/site.ts
+     | depends on: GROW-T13
+     | verified: no
+
+GROW-T20 | pending | Weather links from waiver week pages and the start/sit tool
+     | files: app/waiver-wire/[week]/page.tsx, app/tools/who-should-i-start/page.tsx
+     | depends on: none
+     | verified: no
+
+GROW-T21 | pending | True lastmod on /season/weather from nfl_game_weather.fetched_at, with test
+     | files: lib/sitemap/sections.ts, lib/sitemap/sections.test.ts
+     | depends on: none
+     | verified: no
+
+GROW-T22 | pending | "NFL" back in the weather page title and h1 only (approved D1)
+     | files: app/season/weather/page.tsx
+     | depends on: none
+     | verified: no

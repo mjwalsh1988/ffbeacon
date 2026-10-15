@@ -3,37 +3,18 @@ import { pageShareMetadata } from "@/lib/page-og";
 import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
-import {
-  resolveSourceForFormat,
-  getActiveFormats,
-  getAvailableSources,
-  describeSource,
-  reconcileFormatWithSource,
-} from "@/lib/source";
 import { FormatFallbackBanner } from "@/components/format-fallback-banner";
-import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
-import { loadFaabSettings } from "@/lib/faab/settings";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
-import {
-  resolveHandleGate,
-  resolveSleeperViewer,
-} from "@/lib/sleeper-handle/resolve";
-import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
-import { loadManualDefendersCached } from "@/lib/faab/manual-defenders";
-import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
-import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
-import { currentNflSeason } from "@/lib/nfl-season";
-import { FaabForm, type FaabPlayer } from "./faab-form";
+import { FaabForm } from "./faab-form";
+import { loadFaabCalculatorData } from "./calculator-data";
 import { parseManualSeed } from "./manual-setup";
 import { WrittenSections } from "./written-sections";
-import { MarketStats, loadMarketFacts } from "./market-stats";
+import { MarketStats } from "./market-stats";
 import { DynastySection } from "./dynasty-section";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { PageBody } from "@/components/app-shell/page-body";
-import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-masthead";
-import { isDiscordMember } from "@/lib/discord-membership";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 const META_TITLE = "FAAB Calculator for Fantasy Football: What to Bid";
 // The title is left alone deliberately: it is what ranks today and a rewrite
@@ -97,116 +78,24 @@ export default async function FaabPage({
 }) {
   const params = await searchParams;
   const manualSeed = parseManualSeed(params);
-  const supabase = await createClient();
-  // Settings are service-role-only (RLS); read them server-side with the admin
-  // client, same as Signal Check. loadFaabSettings never throws and falls back
-  // to safe code defaults, so the calculator renders even if the row is absent.
-  // The three are independent, so resolve them in parallel.
-  const [settings, formatResolution, sourceResolution] = await Promise.all([
-    loadFaabSettings(createAdminClient()),
-    resolveFormatSlug(supabase, params.format),
-    resolveSourceSlug(supabase, params.source),
-  ]);
-  const requestedSourceSlug = sourceResolution.slug;
-
-  // These are independent of each other, so they go together rather than in a
-  // waterfall: the source registry and formats, who the league panel is
-  // acting for, the reader's Discord membership, and the market cells behind
-  // the "what leagues actually pay" section. The market read is cached daily
-  // and shared with the FAQ, which quotes it.
-  const [registry, allFormats, handleGate, urlViewer, isMember, marketFacts] =
-    await Promise.all([
-    getAvailableSources(supabase),
-    getActiveFormats(supabase),
-    resolveHandleGate(supabase, params.username),
-    // The gate answers "guest" for a signed-out reader without ever consulting
-    // the URL, so on its own a shared `?username=` link would do nothing for
-    // the readers most likely to be following one. This is the same
-    // fall-through League Pulse uses, and both reads are memoized per request.
-    resolveSleeperViewer(supabase, params.username),
-    isDiscordMember(),
-    loadMarketFacts(settings.priors.minCellSamples),
-  ]);
-
-  // Keep the reader's source and move the FORMAT when that source does not
-  // cover it, with a banner. A read-time correction only: nothing is written
-  // to the cookie or the saved preference.
-  const reconciled = reconcileFormatWithSource(
-    registry,
-    allFormats,
+  const data = await loadFaabCalculatorData(params);
+  const {
+    settings,
+    players,
+    format,
+    formatSlug,
     requestedSourceSlug,
-    formatResolution.slug,
-  );
-  const formatSlug = reconciled.formatSlug;
-  const format = allFormats.find((f) => f.slug === formatSlug) ?? null;
-
-  let players: FaabPlayer[] = [];
-  let fallbackBanner: { requested: string | null; actual: string } | null = null;
-  let rankingsSourceName: string | null = null;
-  let valueSourceName: string | null = null;
-  let valueSourceIsBeacon = false;
-  if (format) {
-    const rankingsResolution = resolveSourceForFormat(
-      registry,
-      "rankings",
-      format.slug,
-      requestedSourceSlug,
-    );
-    const valueHistoryResolution = resolveSourceForFormat(
-      registry,
-      "player_value_history",
-      format.slug,
-      requestedSourceSlug,
-    );
-    if (rankingsResolution.source) {
-      rankingsSourceName = describeSource(registry, rankingsResolution.source);
-    }
-    if (valueHistoryResolution.source) {
-      valueSourceName = describeSource(registry, valueHistoryResolution.source);
-      valueSourceIsBeacon = valueHistoryResolution.source === "ffbeacon";
-    }
-    if (rankingsResolution.fellBack && rankingsResolution.source) {
-      fallbackBanner = {
-        requested: describeSource(registry, rankingsResolution.requested),
-        actual: describeSource(registry, rankingsResolution.source),
-      };
-    }
-
-    if (rankingsResolution.source) {
-      // One cached read for the whole list. The result is identical for every
-      // visitor on this (format, rankings source, value source) and the data
-      // behind it changes at most nightly.
-      players = await loadFaabPlayerListCached({
-        formatConfigId: format.id,
-        rankingsSource: rankingsResolution.source,
-        valueSource: valueHistoryResolution.source ?? null,
-      });
-    }
-  }
-
-  // Defenders for the manual calculator, after every ranked player and marked
-  // "not ranked": no value source ranks one. Only while the IDP switch is on,
-  // like every other IDP surface; the switch is read from memoised settings,
-  // so with it off this costs nothing.
-  if (players.length > 0 && idpEnabledFrom(await loadPowerPulseSettings(createAdminClient()))) {
-    try {
-      const defenders = await loadManualDefendersCached(Number(currentNflSeason()));
-      players = [...players, ...defenders.map((d) => ({ ...d, unranked: true }))];
-    } catch (error) {
-      // The offensive list still works; the defenders are an addition to it.
-      console.error("[faab] manual defender list failed", error);
-    }
-  }
-
-  // Masthead context, all of it resolved above: the format these bids are
-  // priced in, the value source behind them, and the size of the player pool.
-  const mastheadChips: MastheadChip[] = [];
-  if (format?.display_name) {
-    mastheadChips.push({ label: format.display_name, tone: "cyan" });
-  }
-  if (valueSourceName) {
-    mastheadChips.push({ label: `Values via ${valueSourceName}`, tone: "purple" });
-  }
+    reconciled,
+    fallbackBanner,
+    rankingsSourceName,
+    valueSourceName,
+    valueSourceIsBeacon,
+    handleGate,
+    urlViewer,
+    isMember,
+    marketFacts,
+    mastheadChips,
+  } = data;
   const webApplicationLd = webApplicationJsonLd({
     name: META_TITLE,
     description: META_DESCRIPTION,
