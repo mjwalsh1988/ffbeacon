@@ -760,8 +760,9 @@ function CommissionerSection() {
             if your league also starts defensive players.
           </li>
           <li>
+            The{" "}
             <Link href="/tools/faab" className={LINK_CLASS}>
-              The FAAB calculator
+              FAAB calculator
             </Link>{" "}
             to price a claim against your own roster.
           </li>

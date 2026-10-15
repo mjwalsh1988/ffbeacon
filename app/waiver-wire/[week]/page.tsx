@@ -425,7 +425,7 @@ export default async function WaiverWeekPage({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 py-3 sm:w-auto text-sm font-semibold text-[#07070D] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <Calculator aria-hidden="true" className="h-4 w-4" />
-                Price a bid for your league
+                FAAB calculator: price a bid for your league
               </Link>
               <Link
                 href="/waiver-wire"
@@ -570,7 +570,7 @@ export default async function WaiverWeekPage({
                   {[
                     {
                       href: "/tools/faab",
-                      title: "Price it for your roster",
+                      title: "FAAB calculator",
                       body: "The calculator prices the claim against who you would drop and what your rivals can still spend.",
                       icon: Calculator,
                     },
