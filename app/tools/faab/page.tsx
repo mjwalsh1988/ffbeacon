@@ -4,10 +4,10 @@ import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { FormatFallbackBanner } from "@/components/format-fallback-banner";
-import { SITE_TIME_ZONE } from "@/lib/datetime";
 import { FaabForm } from "./faab-form";
 import { loadFaabCalculatorData } from "./calculator-data";
 import { parseManualSeed } from "./manual-setup";
+import { seasonOptions } from "./season-options";
 import { WrittenSections } from "./written-sections";
 import { MarketStats } from "./market-stats";
 import { DynastySection } from "./dynasty-section";
@@ -37,24 +37,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-/**
- * Seasons the optional league panel offers.
- *
- * Derived here rather than in the browser so the list is identical in the
- * server render and the client one. Read in America/New_York, per the site-wide
- * time rule, so a January 1st visitor in Hawaii and the UTC server agree on
- * which season it is.
- */
-function seasonOptions(): string[] {
-  const year = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: SITE_TIME_ZONE,
-      year: "numeric",
-    }).format(new Date()),
-  );
-  return [String(year), String(year - 1)];
-}
 
 export default async function FaabPage({
   searchParams,

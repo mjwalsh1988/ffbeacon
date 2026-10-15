@@ -74,6 +74,7 @@ export function FaabForm({
   handleGate,
   urlViewer,
   seed = EMPTY_MANUAL_SEED,
+  pagePath = "/tools/faab",
 }: {
   /**
    * The page hero, rendered on the server and handed in so this component can
@@ -114,6 +115,8 @@ export function FaabForm({
    * their own situation. Parsed and validated on the server.
    */
   seed?: ManualSeed;
+  /** The page this form sits on, for links that should return to it. */
+  pagePath?: string;
 }) {
   const { userDefaults } = settings;
   const [query, setQuery] = useState("");
@@ -227,6 +230,7 @@ export function FaabForm({
         urlViewer={urlViewer}
         formatSlug={formatSlug}
         sourceSlug={readerSourceSlug}
+        pagePath={pagePath}
       />
 
       <OrDivider />

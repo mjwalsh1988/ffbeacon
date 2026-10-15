@@ -104,6 +104,12 @@ type Props = {
    * resolves it against each league's own format.
    */
   sourceSlug: string | null;
+  /**
+   * The page this panel sits on, so signing in and clearing a shared handle
+   * bring the reader back to the same front door: /tools/faab or
+   * /tools/faab/guillotine.
+   */
+  pagePath?: string;
 };
 
 /** Who a lookup should run for, decided by the gate rather than by a form. */
@@ -119,6 +125,7 @@ export function LeaguePanel({
   urlViewer,
   formatSlug,
   sourceSlug,
+  pagePath = "/tools/faab",
 }: Props) {
   const ids = useId();
   const router = useRouter();
@@ -658,12 +665,12 @@ export function LeaguePanel({
         <SleeperHandleGate
           state={gate}
           toolName="the FAAB Calculator"
-          nextPath="/tools/faab"
+          nextPath={pagePath}
           headingLevel={3}
           status={cardStatus}
           statusMessage={cardMessage}
           onRetry={retryAutoLookup}
-          clearHref="/tools/faab"
+          clearHref={pagePath}
           compact={savedIdentity}
           className="max-w-3xl"
           renderForm={() => (
