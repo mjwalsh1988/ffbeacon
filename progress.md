@@ -16891,10 +16891,10 @@ GROW-T15 | completed | IdpRankLine on every defender profile overview
      | depends on: GROW-T12, GROW-T13
      | verified: yes (typecheck, lint, tests, build; three reviews passed; fix: the not-found line renders nothing when a position lists fewer than 60, so it never claims a cut-off that does not exist)
 
-GROW-T16 | pending | IDP guide links to the rankings; bump guide date
+GROW-T16 | completed | IDP guide links to the rankings; bump guide date
      | files: app/guides/idp-fantasy-football/page.tsx, lib/guides/published.ts
      | depends on: GROW-T13
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; idp-fantasy-football updatedAt bumped to 2026-10-15)
 
 GROW-T17 | pending | Rankings hub entry for IDP rankings (approved D2)
      | files: app/rankings/page.tsx

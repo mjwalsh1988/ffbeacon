@@ -447,7 +447,11 @@ export default async function IdpFantasyFootballGuide() {
               When you do draft defenders, draft roles: a linebacker who stays on the field on third
               down, a safety who plays near the line of scrimmage, an edge rusher who plays every
               down rather than only on passing downs. Box safeties usually outscore free safeties and
-              cornerbacks.
+              cornerbacks. The{" "}
+              <Link href="/rankings/idp" className={LINK}>
+                IDP rankings
+              </Link>{" "}
+              show who holds those roles today.
             </Para>
           </Lesson>
 
@@ -465,7 +469,13 @@ export default async function IdpFantasyFootballGuide() {
                   </Link>{" "}
                   is one to start with.
                 </>
-              ) : null}
+              ) : null}{" "}
+              Our{" "}
+              <Link href="/rankings/idp" className={LINK}>
+                IDP rankings
+              </Link>{" "}
+              list every defensive lineman, linebacker and defensive back by projected points for
+              the rest of the season, with last season&apos;s finish beside each name.
             </Para>
             <Para>
               In a Sleeper IDP league, League Pulse projects your defenders under your league&apos;s

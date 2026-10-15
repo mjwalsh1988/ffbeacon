@@ -188,7 +188,8 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // Plan docs/idp/idp-guide-and-data-plan.md section 7.3. Built 2026-09-24,
     // published after the owner's review (IDP-224).
     publishedAt: "2026-09-24T09:00:00-04:00",
-    updatedAt: "2026-09-24T09:00:00-04:00",
+    // 2026-10-15: the draft and in-season lessons link the new IDP rankings page.
+    updatedAt: "2026-10-15T18:00:00-04:00",
     priority: 0.8,
   },
 ];
