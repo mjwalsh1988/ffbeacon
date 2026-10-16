@@ -16911,10 +16911,10 @@ GROW-T19 | completed | Site search entry for IDP rankings (approved D3)
      | depends on: GROW-T13
      | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; only SEARCHABLE_TOOLS touched in lib/site.ts; noted, not changed: the Rankings Builder entry carries the keyword "idp rankings" and sits earlier, so that query lists the builder first)
 
-GROW-T20 | pending | Weather links from waiver week pages and the start/sit tool
+GROW-T20 | completed | Weather links from waiver week pages and the start/sit tool
      | files: app/waiver-wire/[week]/page.tsx, app/tools/who-should-i-start/page.tsx
      | depends on: none
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; the intro sentence now says "Four things"; the start/sit /rankings link is a masthead button with no paragraph, so the sentence sits under the verdict board, outside the hasPlayers branch so the empty state carries it; accessibility fix: the waiver aside, now four cards tall, is sticky only on screens at least 800 px tall, so its last card is never stuck below the fold; noted, not changed: "above 15" against the code's 15-or-more wind band, and "this week's" weather from a future-week start/sit board, both the plan's exact words)
 
 GROW-T21 | pending | True lastmod on /season/weather from nfl_game_weather.fetched_at, with test
      | files: lib/sitemap/sections.ts, lib/sitemap/sections.test.ts

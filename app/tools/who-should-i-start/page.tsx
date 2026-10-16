@@ -562,6 +562,19 @@ export default async function WhoShouldIStartPage({
                 </Suspense>
               </div>
             )}
+
+            {/* Outside the hasPlayers branch so the indexed empty state links
+                the weather page too. */}
+            <p className="mx-auto mt-4 max-w-5xl text-sm leading-relaxed text-ink-muted">
+              Before you lock in a kicker or a quarterback, check{" "}
+              <Link
+                href="/season/weather"
+                className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                this week&apos;s game day weather
+              </Link>
+              .
+            </p>
           </div>
         </section>
 

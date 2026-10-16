@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   ArrowRight,
   Calculator,
+  CloudRain,
   GraduationCap,
   ListChecks,
   MessageCircleQuestion,
@@ -557,16 +558,18 @@ export default async function WaiverWeekPage({
           </div>
 
           <aside aria-labelledby="week-next-heading" className="min-w-0">
-            <div className="space-y-4 xl:sticky xl:top-[5.5rem]">
+            {/* Pinned only on a screen tall enough to show all four cards: a
+                sticky block taller than the viewport hides its last card. */}
+            <div className="space-y-4 xl:top-[5.5rem] xl:[@media(min-height:800px)]:sticky">
               <section className="rounded-3xl border border-line bg-surface/50 p-4 sm:p-5">
                 <h2 id="week-next-heading" className="text-lg font-bold tracking-tight text-ink">
                   Before you put the claim in
                 </h2>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
                   This board prices what it takes to win each player, not what he is worth to
-                  your roster. Three things take it the rest of the way to yours.
+                  your roster. Four things take it the rest of the way to yours.
                 </p>
-                <ul role="list" className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                <ul role="list" className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                   {[
                     {
                       href: "/tools/faab",
@@ -585,6 +588,12 @@ export default async function WaiverWeekPage({
                       title: "Then set the lineup",
                       body: "Whether he beats the player already in the slot.",
                       icon: ListChecks,
+                    },
+                    {
+                      href: "/season/weather",
+                      title: "Check the weather",
+                      body: "Wind above 15 miles per hour is the one forecast that moves a lineup. Every game's kickoff forecast, worst first.",
+                      icon: CloudRain,
                     },
                   ].map((link) => {
                     const Icon = link.icon;
