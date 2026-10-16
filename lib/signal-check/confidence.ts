@@ -64,7 +64,7 @@ export function computeConfidence(
   if (inputs.hasEstimatedPicks) add("estimated_picks", -4, "A pick's slot was estimated from projected standings");
   if (inputs.formatAutoDetected) add("format_detected", 5, "Format auto-detected cleanly from Sleeper");
   if (inputs.pileOnFired) add("pile_on", -10, "Pile-on materially changed a side total");
-  // A consolidation credit is a modelled number rather than a measured one, so
+  // A consolidation credit is a modeled number rather than a measured one, so
   // a verdict that leans on one is a shade less certain than a verdict where
   // the raw values already agreed.
   if (inputs.consolidationApplied) add("consolidation", -6, "A consolidation adjustment shaped the verdict");

@@ -5,7 +5,7 @@
  * The whole point of this function is what it does NOT run: trade-value
  * power rankings, Power Pulse, Positional WAR and the Manager Ledger are all
  * mocked here so a call into any of them fails the test, the same way
- * lib/league-positional-war.test.ts mocks its neighbours to isolate one
+ * lib/league-positional-war.test.ts mocks its neighbors to isolate one
  * orchestrator's own branches.
  *
  * Mirrors the fake-Supabase-client pattern in lib/league-positional-war.test.ts:

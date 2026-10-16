@@ -131,7 +131,7 @@ function asArray<T>(value: Json | null): T[] {
  *
  * `waiver_points_on_roster` is deliberately absent: the view has no field for
  * it and nothing renders it. `graded_weeks`, `gradable_slots` and
- * `ungradable_slots` are denormalised onto every row and only the first is
+ * `ungradable_slots` are denormalized onto every row and only the first is
  * read, but they are small and asking for row zero's copy would mean a second
  * query, so they stay.
  */

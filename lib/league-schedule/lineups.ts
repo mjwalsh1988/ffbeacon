@@ -68,7 +68,7 @@ function asFinite(value: unknown): number | null {
 
 /**
  * The starters array we trust, plus the points array that belongs with it.
- * Exported behaviour lives in `readSetLineup` and `rawStarterIds`; this is the
+ * Exported behavior lives in `readSetLineup` and `rawStarterIds`; this is the
  * one place that decides which copy wins.
  */
 function pickStarterArrays(row: RawMatchupRow): { ids: unknown[]; points: unknown[] } {

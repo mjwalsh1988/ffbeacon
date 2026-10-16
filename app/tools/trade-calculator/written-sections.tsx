@@ -101,7 +101,7 @@ export function WrittenSections({ settings }: { settings: WrittenSectionsSetting
   return (
     // No width of its own, matching ToolExplainer: it fills the page's column
     // so its left edge lines up with the builder above it and the methodology
-    // line below it. It used to cap itself at max-w-5xl and centre, which left
+    // line below it. It used to cap itself at max-w-5xl and center, which left
     // this page with three edges once the page took over the measure.
     <div className="mt-20 space-y-16 sm:space-y-20">
       <HowGradedSection settings={settings} />
@@ -199,7 +199,7 @@ function HowGradedSection({ settings }: { settings: WrittenSectionsSettings }) {
  * thresholds. The top of the scale is one and a half times the blowout line,
  * so the blowout band always has visible width. The bar is aria-hidden; the
  * list under it states every band in words, with a swatch beside each one so
- * identity never rests on colour alone.
+ * identity never rests on color alone.
  */
 function MarginScale({ settings }: { settings: WrittenSectionsSettings }) {
   const neutral = Math.max(0, settings.neutralThresholdPct);

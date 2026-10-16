@@ -5,7 +5,7 @@
  * sits, and it used to answer only the first one:
  *
  *   BEFORE THE WEEK   "am I starting the right nine people" -- a projection,
- *                     an optimiser, a waiver wire, a cut list. Advice.
+ *                     an optimizer, a waiver wire, a cut list. Advice.
  *   AFTER THE WEEK    "how did that go, and what did it cost me" -- a result,
  *                     the best lineup that was available, the games it swung,
  *                     and where the season stands now. A report.
@@ -38,7 +38,7 @@ export type WeekStatus = {
   blurb: string;
   /** True when actual points should be the headline figure on every row. */
   showsResults: boolean;
-  /** True when the page is advice: the optimiser, the wire, the cut list. */
+  /** True when the page is advice: the optimizer, the wire, the cut list. */
   showsAdvice: boolean;
 };
 
@@ -103,7 +103,7 @@ export function weekStatus(input: {
 /**
  * True when any player scored anything.
  *
- * A SUM OF ABSOLUTE VALUES, because a defence can score negative points and a
+ * A SUM OF ABSOLUTE VALUES, because a defense can score negative points and a
  * plain sum of a week where one team scored -2 and everybody else scored
  * nothing would come to a negative number that is not zero but is also not
  * evidence of a game being played. Any non-zero entry is.

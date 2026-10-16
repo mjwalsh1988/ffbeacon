@@ -85,7 +85,7 @@ export function BookmarksLauncher({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Open your saved bookmarks"
-        // The visible box is 36px to match its neighbours in the header row,
+        // The visible box is 36px to match its neighbors in the header row,
         // and the `before` pseudo-element takes the actual target to 44 by 44.
         // Same trick, for the same rule, as the My Beacon shortcut and the
         // donate launcher on either side of it.
@@ -187,8 +187,8 @@ function SheetBody({
               <li
                 key={bookmark.id}
                 aria-busy={busy || undefined}
-                // Colour is never the only channel: the current row also carries
-                // a solid left edge and a heavier label than its neighbours.
+                // Color is never the only channel: the current row also carries
+                // a solid left edge and a heavier label than its neighbors.
                 className={`flex items-stretch gap-1 rounded-card border bg-base/50 ${
                   isCurrent
                     ? "border-brand-cyan/50 border-l-4 border-l-brand-cyan"

@@ -134,7 +134,7 @@ export const WIZARD_STORAGE_KEY = "ffbeacon.draft-tracker.setup";
  * Every field is checked rather than cast. This is the one input to the wizard
  * that did not come from the wizard: it can be old, hand-edited, or written by a
  * version of this code that asked different questions, and none of those should
- * put the reader in front of a broken form. Anything unrecognised falls back to
+ * put the reader in front of a broken form. Anything unrecognized falls back to
  * the default for that field, and a format that no longer exists falls back to
  * the caller's default rather than leaving the board pointed at nothing.
  */

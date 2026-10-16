@@ -16,7 +16,7 @@
  * The trade list is deliberately the last thing on the tab. It is evidence, and
  * evidence belongs after the claim it supports.
  *
- * Generalised from a fixed pair to two-to-eight players (MIN/MAX_START_SIT_
+ * Generalized from a fixed pair to two-to-eight players (MIN/MAX_START_SIT_
  * PLAYERS). Two things changed shape because of that:
  *
  *   - The value overlay draws one line per side, styled from POSITION_SERIES

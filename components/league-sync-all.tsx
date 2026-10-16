@@ -94,7 +94,7 @@ export function LeagueSyncAll({
   // nothing and makes no requests.
   useEffect(() => {
     if (!state.active) return;
-    let cancelled = false;
+    let canceled = false;
 
     const tick = async () => {
       try {
@@ -103,7 +103,7 @@ export function LeagueSyncAll({
         });
         if (!res.ok) return;
         const body = (await res.json()) as { state?: BulkSyncState };
-        if (cancelled || !body.state) return;
+        if (canceled || !body.state) return;
         const next = body.state;
         publish(next);
 
@@ -128,7 +128,7 @@ export function LeagueSyncAll({
 
     const id = setInterval(tick, pollIntervalMs);
     return () => {
-      cancelled = true;
+      canceled = true;
       clearInterval(id);
     };
   }, [state.active, publish, router, pollIntervalMs]);

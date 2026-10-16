@@ -22,10 +22,10 @@
  *
  * Every sentence names the measure it quotes ("by expected wins", "by roster
  * value"). The tag's own explanation quotes Power Pulse, and a hard schedule
- * pulls the two apart, so an unlabelled pair of ordinals in one breath reads as
+ * pulls the two apart, so an unlabeled pair of ordinals in one breath reads as
  * a contradiction.
  *
- * Pure. The rendering, including which trophy colour a top-three finish gets,
+ * Pure. The rendering, including which trophy color a top-three finish gets,
  * lives in components/team-standing-figure.tsx. Same split as
  * lib/league-team-status.ts and components/team-status-badge.tsx.
  */

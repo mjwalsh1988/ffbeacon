@@ -154,7 +154,7 @@ depends on how deep our board happens to run.
 
 Even with the scarcity ladder, a points-above-replacement model wants elite
 quarterbacks earlier than a one-QB room takes them. That is the long-running
-argument between value-over-replacement models and real draft behaviour, not a
+argument between value-over-replacement models and real draft behavior, not a
 bug, and it is the wrong thing for a steal list to relay: "the market is late on
 this player" has to mean late relative to COMPARABLE players. A uniform +20 on
 every quarterback is a strategy claim, and it belongs in the guide's prose.
@@ -420,7 +420,7 @@ The product of four factors, each a setting:
    our rooms also let him fall, and falls toward 0.85 when our rooms take him
    much earlier than the public market.
 
-A player below `minConfidence` (default 0.35) is stored but never categorised as
+A player below `minConfidence` (default 0.35) is stored but never categorized as
 a steal.
 
 ### Steal score, 0 to 100
@@ -449,7 +449,7 @@ letting them top the board.
 | `fair` | everything else |
 
 `swing` is deliberately the loose bucket. A late-round dart is allowed to be
-uncertain; that is what makes it a dart. It is labelled as such in the copy.
+uncertain; that is what makes it a dart. It is labeled as such in the copy.
 
 ### The verdict sentence
 
@@ -544,7 +544,7 @@ Settings editor for every weight, threshold, and league shape above, mirroring
   wins, per the League Pulse Format Resolution rule.
 - **Source.** The value side is forced to `ffbeacon`, matching On The Clock and
   Signal Check, because the whole feature is our opinion against the market. The
-  market side is labelled by display name, never a raw slug.
+  market side is labeled by display name, never a raw slug.
 - **Mobile-first.** No data hidden at any breakpoint. The guide lists use a
   stacked two-line row rather than a wide table that sheds columns.
 - **Accessibility.** The verdict sentence is the primary output and the numbers

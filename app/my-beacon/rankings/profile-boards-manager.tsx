@@ -140,7 +140,7 @@ export function ProfileBoardsManager({
   );
 
   // Reorder a secondary up or down; the server swaps sort values with its
-  // neighbour.
+  // neighbor.
   const moveSecondary = useCallback(
     (board: ProfileBoard, direction: "up" | "down") => {
       void run(

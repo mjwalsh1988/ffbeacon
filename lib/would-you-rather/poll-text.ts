@@ -77,7 +77,7 @@ const SLOT_LETTER: Record<"early" | "mid" | "late", string> = {
 
 /**
  * Roster slots nobody starts. Everything else is a starting spot, KICKER AND
- * DEFENCE INCLUDED.
+ * DEFENSE INCLUDED.
  *
  * The site's own "Start N" chip excludes K and DEF (lib/league-format-tags.ts).
  * This surface does not, because it also PRINTS the lineup, and a body listing

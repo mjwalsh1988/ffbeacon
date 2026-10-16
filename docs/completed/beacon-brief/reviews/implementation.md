@@ -31,7 +31,7 @@ reporting. A model that changes "2nd round pick" to "1st round pick" from memory
 is exactly the failure the owner named in plan 4.3, and the check does not see
 it.
 
-Fix: allow an ordinal suffix in the alternation and normalise it to a multiplier
+Fix: allow an ordinal suffix in the alternation and normalize it to a multiplier
 of 1, for example
 `/\$?(\d[\d,]*(?:\.\d+)?)\s*(million|billion|thousand|mil|bil|mm|st|nd|rd|th|[mbk])?(?![a-z])/gi`,
 keeping st/nd/rd/th out of `SUFFIX_MULTIPLIER`. Add a test for 2nd against 1st.
@@ -49,7 +49,7 @@ Resolution: fixed in lib/relays/grounding.ts. NUMBER_RE carries the ordinal endi
 lib/relays/grounding.ts:287-289
 
 `checkNames` runs on `fact.value` only. Plan 4.6 bullet 2 says "every
-capitalised token of two or more characters in the headline and facts". Labels
+capitalized token of two or more characters in the headline and facts". Labels
 are model-written up to 24 characters and render in the card's `<dt>` and in the
 Discord text as "Label: value" (lib/relays/render.ts:85).
 
@@ -372,7 +372,7 @@ Resolution: fixed in lib/brief-desk/validate-draft.ts; every string in a block's
 ### M17. IndexNow fires through a floating promise instead of after()
 lib/brief-desk/publish.ts:137 and 245
 
-`void submitIndexNow(...)` can be cancelled when the server action's response is
+`void submitIndexNow(...)` can be canceled when the server action's response is
 sent. The repo's convention is `after(() => submitIndexNow(urls))`, used at
 lib/beacon-brief/worker.ts:1050, app/api/cron/recalculate-derived/route.ts:77
 and app/api/cron/sync-weekly-projections/route.ts:50, each with a comment
@@ -450,7 +450,7 @@ Brief desk
   edition can come back with zero week lines and an empty required block.
 - m13. lib/brief-desk/bundle.ts:456: `next_week` is the live Sleeper week with
   no check that it is later than the period being written about, so a week that
-  has not rolled over gets labelled "next week" in a sentence instruction 3 asks
+  has not rolled over gets labeled "next week" in a sentence instruction 3 asks
   the run to write.
 - m14. lib/brief-desk/bundle.ts:566 with lib/source.ts:163: when neither edition
   format resolves a source, `source_display` becomes the literal "this source",
@@ -511,7 +511,7 @@ Reader surfaces and SEO
   (lib/brief-desk/edition-data.ts:105-108) returns null only when the article is
   missing or not a brief, so the two agree today. It is still two predicates for
   one decision, and the head would claim index:true with a person byline over the
-  legacy layout's organisation byline if they ever diverged. Line 137 also omits
+  legacy layout's organization byline if they ever diverged. Line 137 also omits
   `status`, so `isArticleIndexable`'s status guard is nominal on its only caller.
 - m26. components/brief-desk/edition-page.tsx:147-151: sections render the whole
   `body_md` and then append every referenced block after it. Plan 11.2 says
@@ -524,7 +524,7 @@ Reader surfaces and SEO
   resolve leaves the filter null and renders the entire unfiltered feed as
   though it were the hub. `?team=PHIL` looks like a working page showing every
   report. Render the empty state with a line saying the value was not
-  recognised, or notFound().
+  recognized, or notFound().
 - m29. app/brief/[slug]/page.tsx:294 with lib/relays/legacy-redirect.ts:23: the
   redirect target is interpolated from `relay_slug` without re-validating it, so
   a malformed row starting "//" would redirect off site. The table is
@@ -665,7 +665,7 @@ Recorded so a re-review does not repeat the work.
   `citations` and `validation_report` never reach the page, the RSS feeds, the OG
   image or the Discord post.
 - The OG route whitelists exactly 4x3 and 1x1 and falls back to 16x9 for anything
-  else; colours are brand only, no gold and no #0c0c18.
+  else; colors are brand only, no gold and no #0c0c18.
 - Legacy redirect ordering is correct: the published-article lookup runs first
   and only a miss reaches `legacy_article_redirects`.
 - No bare `toLocale*` and no `Intl.DateTimeFormat` without a timeZone anywhere in

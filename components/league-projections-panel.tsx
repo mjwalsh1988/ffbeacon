@@ -156,7 +156,7 @@ const MEDAL_TONE: Record<string, string> = {
 /**
  * One podium count.
  *
- * The trophy takes its colour from the tile's own tone class through
+ * The trophy takes its color from the tile's own tone class through
  * currentColor, so gold, silver, and bronze cannot drift apart from the boxes
  * around them: there is one place a tone is defined and both the border and the
  * icon read it.

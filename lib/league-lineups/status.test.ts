@@ -11,7 +11,7 @@ describe("hasLivePoints", () => {
     expect(hasLivePoints(new Map([["a", 0], ["b", 4.2]]))).toBe(true);
   });
 
-  it("counts a negative score, because a defence having a bad day is still a game being played", () => {
+  it("counts a negative score, because a defense having a bad day is still a game being played", () => {
     expect(hasLivePoints(new Map([["def", -2]]))).toBe(true);
   });
 
@@ -33,7 +33,7 @@ describe("weekStatus", () => {
     expect(s.phase).toBe("live");
     expect(s.label).toBe("In progress");
     expect(s.showsResults).toBe(true);
-    // The optimiser is graded on projections until a week settles, so a live
+    // The optimizer is graded on projections until a week settles, so a live
     // week must not offer "changes worth making" for games already played.
     expect(s.showsAdvice).toBe(false);
   });

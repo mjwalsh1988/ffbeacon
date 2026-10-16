@@ -374,7 +374,7 @@ describe("classifyPowerPulseResult", () => {
     });
   }
 
-  it("degrades an unrecognised skipped reason to 'skipped' rather than 'settled'", () => {
+  it("degrades an unrecognized skipped reason to 'skipped' rather than 'settled'", () => {
     const result: PowerPulseResult = {
       ok: true,
       teams: 0,

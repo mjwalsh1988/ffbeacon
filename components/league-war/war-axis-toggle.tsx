@@ -12,7 +12,7 @@ import type { WarAxisMode } from "@/lib/positional-war/chart-geometry";
  * and relative depth (where every position's replacement boundary lands at the
  * same point, so positions with different starting counts compare directly).
  *
- * Modelled directly on components/power-pulse/rank-mode-toggle.tsx: real
+ * Modeled directly on components/power-pulse/rank-mode-toggle.tsx: real
  * radio semantics, a useTransition push that does not scroll, 44px minimum
  * targets, and an aria-label on each option carrying the hint rather than a
  * tooltip.

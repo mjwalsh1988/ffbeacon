@@ -15,7 +15,7 @@ import { usePathname } from "next/navigation";
  * that is shorter than the one they left. It reads as "the page did not load",
  * and a manual refresh appears to fix it because a refresh always starts at the
  * top. components/scroll-to-top.tsx documented the same failure for the league
- * routes; this generalises the fix instead of repeating it per route.
+ * routes; this generalizes the fix instead of repeating it per route.
  *
  * Deliberately NOT solved with a root app/loading.tsx. A loading boundary at the
  * root makes every invalid URL answer 200 while rendering a 404 body, which

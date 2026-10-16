@@ -8,7 +8,7 @@
  * a 6-point one and a waste of budget for a team with three better backs.
  *
  * So this answers it the way the FAAB tool and Trade Ideas do, with the same
- * optimiser (lib/power-pulse/lineup.ts buildOptimalLineup): build the best
+ * optimizer (lib/power-pulse/lineup.ts buildOptimalLineup): build the best
  * lineup for each of the next few weeks without the move, build it again with
  * it, and compare. From the two builds come every fact the review is allowed to
  * use:
@@ -38,7 +38,7 @@ import type { PulsePosition } from "@/lib/power-pulse/types";
 /** One player, projected for each week of the window. */
 export interface FitPlayer {
   sleeperId: string;
-  /** FF Beacon player id, which is what the optimiser keys on. */
+  /** FF Beacon player id, which is what the optimizer keys on. */
   playerId: string;
   name: string;
   position: PulsePosition;

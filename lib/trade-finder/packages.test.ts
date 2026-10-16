@@ -463,7 +463,7 @@ describe("balancePackages does not trust the caller's ordering", () => {
   });
 });
 
-describe("balancePackages honours maxAssets", () => {
+describe("balancePackages honors maxAssets", () => {
   it("stops at one asset even when a required piece is pinned", () => {
     // Only the two- and three-asset scans consulted maxAssets, so the "required
     // plus one more" loop returned two-asset packages under maxAssets: 1 and the

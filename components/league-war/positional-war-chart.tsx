@@ -6,7 +6,7 @@
  *
  * Built entirely on top of buildChartGeometry from
  * lib/positional-war/chart-geometry.ts. This component does not own the path
- * maths: the same geometry function draws the OG social card
+ * math: the same geometry function draws the OG social card
  * (app/api/og/war/[league_id]/route.tsx), so the two can never disagree about
  * the same league.
  *
@@ -210,7 +210,7 @@ export function PositionalWarChart({
    * The x-axis labels that actually fit. "Replacement level" is the priority
    * label: it is the one sentence on the axis and it is far wider than the
    * decimals either side of it, so it claims its space first and its
-   * neighbours give way. Nothing is hidden by this: every plotted value is in
+   * neighbors give way. Nothing is hidden by this: every plotted value is in
    * the data table the panel renders under the chart.
    */
   const xLabels = useMemo(
@@ -513,7 +513,7 @@ export function PositionalWarChart({
         onBlur={() => setActiveId(null)}
       >
         {/* pointer-events-none, so hovering anywhere on the graphic hit-tests
-            to the labelled group above rather than to an aria-hidden <svg> a
+            to the labeled group above rather than to an aria-hidden <svg> a
             screen reader cannot name. The pointer handlers all sit on that
             group and measure through getBoundingClientRect, so none of them
             needs the svg to receive events. */}
@@ -539,7 +539,7 @@ export function PositionalWarChart({
               one horizontal on the chart that means something: at it, a player
               is worth exactly what a freely available one is worth.
 
-              DELIBERATELY UNLABELLED IN THE SVG. A label here sits exactly
+              DELIBERATELY UNLABELED IN THE SVG. A label here sits exactly
               where every series ends up, so it lands on top of the very points
               it is describing. The caption below the chart names it instead,
               as real text a screen reader reaches. */}
@@ -674,7 +674,7 @@ export function PositionalWarChart({
         contents CHANGE, so clicking the same dot twice, or pressing Enter to
         hear the current one again, would be silent: the text is identical.
         Bumping the key remounts the paragraph inside the region, which is a
-        mutation, so the request is honoured.
+        mutation, so the request is honored.
       */}
       <div aria-live="polite" className="sr-only">
         <p key={announceNonce}>{spokenReadout}</p>

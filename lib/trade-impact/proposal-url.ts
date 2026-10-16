@@ -21,7 +21,7 @@
  *
  *   Three-part tokens still decode. Every link written before that field existed
  *   is one, and they resolve by season and round exactly as they used to, which
- *   is the old behaviour rather than a broken one.
+ *   is the old behavior rather than a broken one.
  *
  *   Underscore is the separator for a specific reason, and it was arrived at by
  *   being wrong first. The obvious pick is a comma or a tilde. A comma is what
@@ -201,7 +201,7 @@ function firstValue(value: string | string[] | undefined): string | null {
  * it. The page derives `myRosterId` from `?roster=` (through
  * `loadTradeFinderLeague`'s identity resolution), and `encodeProposalQuery`
  * writes `roster` into the shareable link. So a link CAN name whose team gets
- * evaluated. That is a product behaviour, not a leak: every figure the
+ * evaluated. That is a product behavior, not a leak: every figure the
  * evaluation produces (team names, player values, projections, playoff odds,
  * Power Pulse rank) is already on the Overview and Power Pulse tabs of the same
  * league for any visitor, with no auth and no write anywhere. There is nothing

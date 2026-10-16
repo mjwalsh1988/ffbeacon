@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * Whether the bookmark bar is minimised, and how that survives a reload.
+ * Whether the bookmark bar is minimized, and how that survives a reload.
  *
  * SAME SHAPE AS THE NAVIGATION RAIL, and for the same reason
  * (components/app-shell/sidebar-state.tsx): React cannot know the remembered
  * value until it has hydrated, so a React-driven height would paint the bar
  * open and then visibly snap shut on every page load for anyone who had
- * minimised it. A blocking script in <head> stamps `data-bookmark-bar` on
+ * minimized it. A blocking script in <head> stamps `data-bookmark-bar` on
  * <html> before the first paint, CSS selects on that attribute, and the React
  * state that mirrors it is only ever used for `aria-expanded` and the tab's
  * label.
  *
- * WHY LOCAL STORAGE RATHER THAN THE DATABASE. Minimised is a per-device answer:
+ * WHY LOCAL STORAGE RATHER THAN THE DATABASE. Minimized is a per-device answer:
  * a reader on a laptop with a short viewport wants the bar out of the way, and
  * the same reader on a large monitor does not. Whether the bar EXISTS at all is
  * a different question, is a real preference, and does live in the database
@@ -27,7 +27,7 @@ const STORAGE_KEY = "ffbeacon:bookmark-bar-collapsed";
  * The blocking script that re-applies the remembered state before the first
  * paint. Rendered once, in <head>, by app/layout.tsx.
  *
- * The bar starts OPEN. Only an explicit "1" minimises it, so a reader who has
+ * The bar starts OPEN. Only an explicit "1" minimizes it, so a reader who has
  * never touched the tab sees their bookmarks rather than a closed strip they
  * have to discover.
  */

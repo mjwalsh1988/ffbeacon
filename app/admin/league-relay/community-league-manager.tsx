@@ -17,7 +17,7 @@
  *
  * Accessibility: the search results are a list with a live region announcing
  * how many were found, every row action is a button, the preview output is in a
- * labelled region, and destructive actions say what survives them.
+ * labeled region, and destructive actions say what survives them.
  */
 
 import { useId, useState, useTransition } from "react";

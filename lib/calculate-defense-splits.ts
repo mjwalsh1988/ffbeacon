@@ -472,7 +472,7 @@ export function computeSeasonSplits(rows: StatRow[], scoring: ScoringBase): Defe
     byDefense.set(defenseKey, accum);
 
     // A bucket with no offense on it cannot take part in the adjustment: we
-    // would be normalising by an unknown opponent. It still counts toward the
+    // would be normalizing by an unknown opponent. It still counts toward the
     // RAW allowance above, because "how many points did this defense give up"
     // is answerable without knowing who scored them. Measured 2026-09-01, this
     // path is empty for every season from 2021 on, but a future ingestion gap

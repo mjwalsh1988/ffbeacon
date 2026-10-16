@@ -274,7 +274,7 @@ describe("displayName", () => {
     expect(displayName("Christian McCaffrey", 14)).toBe("C. McCaffrey");
   });
 
-  it("gives a team defence the name people actually use", () => {
+  it("gives a team defense the name people actually use", () => {
     // "N. England Pat..." is a string naming nobody. The row already says
     // DEF, NE underneath, so the last word carries it on its own.
     expect(displayName("New England Patriots", 14)).toBe("Patriots");

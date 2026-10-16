@@ -217,7 +217,7 @@ queries at once. The head terms come later, if they come, from accumulated
 topical authority and Discover eligibility.
 
 Second, a Brief that is only the week's forty headlines rewritten in order is
-the stitching pattern Google names, in a longer coat. The defence is a hard
+the stitching pattern Google names, in a longer coat. The defense is a hard
 rule, stated in section 8.4 and enforced by the draft validator: every section
 carries at least one figure the site computed, and every claim not in a Relay
 or in the bundle carries a citation to a URL fetched during the run. A section
@@ -442,9 +442,9 @@ guarantee rather than a request:
 
 - Every number in the headline, the facts and the timeline (integers,
   decimals, dollar amounts, week numbers, years) must appear in the post
-  text after normalising separators ("$54M" matches "54 million" and
+  text after normalizing separators ("$54M" matches "54 million" and
   "$54,000,000"; "4-6 weeks" matches "4 to 6 weeks" and "four to six").
-- Every capitalised token of two or more characters in the headline and
+- Every capitalized token of two or more characters in the headline and
   facts (player names, team names, city names, positions written as
   abbreviations) must appear in the post text, in the quoted post, or in
   the resolved player and team names the matcher produced for this post
@@ -842,7 +842,7 @@ a published edition are edits through the review page, never a redraft.
 
 A new env var `BRIEF_DESK_TOKEN`, distinct from `CRON_SECRET`, so revoking the
 desk's access affects nothing else. Checked with `timingSafeEqual` in
-`lib/brief-desk/auth.ts verifyBriefDeskRequest(req)`, modelled on
+`lib/brief-desk/auth.ts verifyBriefDeskRequest(req)`, modeled on
 lib/cron-auth.ts: fails closed with 500 when the var is unset, 401 otherwise.
 Both routes are under /api, which app/robots.ts already disallows. Both are
 rate limited through `claimRateLimitSlot` at 10 per hour per token, which is
@@ -1238,7 +1238,7 @@ Discord post. The only outward attribution anywhere in the feature is the
 Relay card's "Original report" line and the Discord "via" line, which credit
 the reporter of a single report, as the legacy Discord cards already do.
 
-The SEO audit's C01 moved the legacy articles to an organisation byline
+The SEO audit's C01 moved the legacy articles to an organization byline
 because nobody reviewed them. An edition that a person edits and signs is
 the case that audit reserved the personal byline for, so this is consistent
 with it.
@@ -1274,7 +1274,7 @@ the trust signal the owner asked for.
 ### 11.5 Images
 
 `/api/og/brief/[slug]` gains a branch for editions: the edition title, the
-period, three headline stats from the figures, brand colours, 1200 by 630.
+period, three headline stats from the figures, brand colors, 1200 by 630.
 Two more variants, `?ratio=4x3` and `?ratio=1x1`, at 1200 px wide, because
 Google's Article guidance asks for all three and Discover needs 1200 px. Same
 route, one query param, one satori layout with three frames. No gold, no
@@ -1465,7 +1465,7 @@ For the sub-agent review before any task in section 19 is marked complete.
   closed when unset, rate limit through `claimRateLimitSlot`, and never accept
   a caller-supplied period, slug or Relay set that the server did not offer.
 - The draft body is validated before any write; markdown is rendered through
-  `ArticleMarkdown`, which already sanitises; raw HTML in a draft is rejected
+  `ArticleMarkdown`, which already sanitizes; raw HTML in a draft is rejected
   at the validator, not stripped at render.
 - Every research log URL is stored as text and rendered as a link with
   `rel="nofollow noopener"`; the URL host is not restricted (the desk must be
@@ -1508,8 +1508,8 @@ For the sub-agent review before any task in section 19 is marked complete.
 
 For the sub-agent audit against WCAG 2.2 AA and the CLAUDE.md rules.
 
-- Relay card: `<article>` labelled by its `<h3>`; facts in a `<dl>`; chips are
-  text, not colour alone; the source line is text with a real link; the
+- Relay card: `<article>` labeled by its `<h3>`; facts in a `<dl>`; chips are
+  text, not color alone; the source line is text with a real link; the
   permalink link has a name that includes the headline for screen reader
   link lists ("Permalink: {headline}"); nothing visible is aria-hidden.
 - Feed: a `<ul>` of cards under an `<h2>`; pagination as today; filters are
@@ -1658,7 +1658,7 @@ Phase 1, Relays (the pipeline stops writing articles and starts writing Relays)
 - BD-T005 Migration: settings rows and the categorize prompt append.
 - BD-T006 lib/relays/week.ts with tests (live and historical dates).
 - BD-T007 lib/relays/render.ts with tests: card text, link-free Discord text with the via line, the length rule.
-- BD-T007b lib/relays/grounding.ts with tests: numbers, capitalised tokens, content words, the normalisations in 4.6.
+- BD-T007b lib/relays/grounding.ts with tests: numbers, capitalized tokens, content words, the normalisations in 4.6.
 - BD-T008 lib/relays/write.ts, grounding first, hidden plus moderation row on failure.
 - BD-T009 curate.ts: extend CATEGORIZE_SCHEMA, call writeRelay, gate article_write.
 - BD-T010 settings.ts: bb_article_write_enabled, admin settings page ORDER array.

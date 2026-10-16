@@ -155,7 +155,7 @@ export const TOUGHEST_CALLS_BY_POSITION_SIZE = 3;
 /**
  * Sleeper injury_status values (players.metadata.sleeper.injury_status,
  * verbatim) that mean a player cannot play at all this week. Compared
- * uppercase and trimmed, the same normalisation
+ * uppercase and trimmed, the same normalization
  * lib/power-pulse/project.ts's injuryMultiplier already applies to this
  * field. See the SEO-T911 header note for why this list is narrower than
  * that file's LONG_TERM_INJURY_STATUSES.

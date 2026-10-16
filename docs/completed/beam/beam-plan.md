@@ -833,9 +833,9 @@ choice is loudest.
   replaced by the answer. A spinner alone is silence.
 - **Clarification is a real choice list.** A group of buttons inside a
   `<fieldset>` with a `<legend>` naming the ambiguity, focus moved to the first
-  option, each button labelled with everything that distinguishes it: "Drake
+  option, each button labeled with everything that distinguishes it: "Drake
   London, wide receiver, Atlanta Falcons".
-- **The input** is a labelled `<textarea>` (not an input, so long questions
+- **The input** is a labeled `<textarea>` (not an input, so long questions
   wrap), with `aria-describedby` pointing at the character counter and the
   example hint. Enter submits, Shift+Enter adds a line, and that is stated in
   the description.

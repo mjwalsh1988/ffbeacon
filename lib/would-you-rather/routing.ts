@@ -41,7 +41,7 @@ export type { LeagueCategoryKey };
  *
  * Chopped joined on 2026-09-22 when it became its own category (see
  * `lib/league-category.ts`). A room that has never configured a chopped
- * webhook is unchanged in behaviour: the bucket simply has no channel, so it
+ * webhook is unchanged in behavior: the bucket simply has no channel, so it
  * falls to the fallback webhook if one is set and is excluded from the pick
  * if not, which is the same rule every other bucket has always followed.
  */

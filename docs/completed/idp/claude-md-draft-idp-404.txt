@@ -136,7 +136,7 @@ PROPOSED:
   No value source prices a defender. Wherever a value would appear, the words
   "No market value" appear instead, never a zero; a trade grade with a defender
   in it is marked partial and totals use priced pieces only. In a dynasty or
-  keeper league a defender is protected from the cut list when the optimiser
+  keeper league a defender is protected from the cut list when the optimizer
   seats him in at least half the remaining regular-season weeks or he ranks
   inside the league's IDP starter count at his position
   (`lib/league-lineups/defender-protection.ts`).

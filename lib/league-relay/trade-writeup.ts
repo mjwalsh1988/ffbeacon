@@ -61,7 +61,7 @@ export interface TradeWriteupInput {
   /** Signal Check's read. Side "a" is teamA. */
   view: BuilderView;
   assetMeta: Record<SideKey, LeagueTradeAssetMeta[]>;
-  /** Null when the swap could not be modelled. The writeup then runs on values alone. */
+  /** Null when the swap could not be modeled. The writeup then runs on values alone. */
   impact: ExecutedTradeImpact | null;
   /** The trade's NFL week, when it has one. */
   week: number | null;
@@ -323,7 +323,7 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
       ? voice.pickPlain([
           `Signal Check has it as **${winner}'s** deal, by ${m} on ${fmt} values${conf}.`,
           `On ${fmt} values, **${winner}** wins it by ${m}${conf}.`,
-          `Signal Check scores it ${m} in favour of **${winner}**${conf}.`,
+          `Signal Check scores it ${m} in favor of **${winner}**${conf}.`,
           `By Signal Check's ${fmt} numbers, **${winner}** comes out ${m} ahead${conf}.`,
         ])
       : voice.pickPlain([
@@ -380,16 +380,16 @@ export function buildTradeWriteup(input: TradeWriteupInput): Writeup | null {
   /* -------------------------------------------------------------- caveat */
   const caveats: string[] = [];
   if (!impact) {
-    caveats.push("The season impact could not be modelled: one of these assets has already moved on.");
+    caveats.push("The season impact could not be modeled: one of these assets has already moved on.");
   } else {
     if (impact.gaps.lineup) caveats.push("No weekly projections are out yet, so there are no lineup figures.");
     if (impact.gaps.simulation) {
       caveats.push(
         impact.gaps.simulationCause === "engine-switch"
-          ? "This league's projections are being rebuilt on a new source, so the odds are not modelled yet."
+          ? "This league's projections are being rebuilt on a new source, so the odds are not modeled yet."
           : impact.gaps.simulationCause === "not-built"
-            ? "Projections for every team are not built yet, so the odds are not modelled yet."
-            : "No regular-season games are left, so the odds are not modelled.",
+            ? "Projections for every team are not built yet, so the odds are not modeled yet."
+            : "No regular-season games are left, so the odds are not modeled.",
       );
     }
     caveats.push(...impact.caveats);

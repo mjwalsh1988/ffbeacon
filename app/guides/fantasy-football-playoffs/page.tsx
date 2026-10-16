@@ -56,8 +56,8 @@ import {
  * WHAT IS CLAIMED ABOUT OUR TOOLS IS CHECKED AGAINST THE CODE (2026-09-18):
  *   - Power Pulse (lib/power-pulse/simulate.ts): a seeded Monte Carlo season,
  *     wins then points for as the seeding tiebreak, byes to the top seeds, the
- *     bracket reseeded every round, the median game modelled when the league
- *     uses it, divisions NOT modelled, playoff rounds played from each team's
+ *     bracket reseeded every round, the median game modeled when the league
+ *     uses it, divisions NOT modeled, playoff rounds played from each team's
  *     season-average projection. Last-place odds exist and are not shown, so
  *     the page never mentions them.
  *   - The Schedules Luck index (lib/league-schedule/insights.ts buildLuckRows):
@@ -70,7 +70,7 @@ import {
  *   - Opponent adjustment (lib/power-pulse/default-settings.ts): 0.85 to 1.15,
  *     and zero weight for receivers and quarterbacks by default.
  *
- * THREE KINDS OF NUMBER, EACH LABELLED WHERE IT APPEARS. The worksheet and the
+ * THREE KINDS OF NUMBER, EACH LABELED WHERE IT APPEARS. The worksheet and the
  * swing figure are a TEACHING MODEL (lib/guides/playoff-odds.ts) and say so.
  * The luck and lineup figures run PRODUCT CODE over INVENTED teams. Platform
  * rules and the odds-by-record study are PUBLISHED and linked in Sources, each
@@ -546,7 +546,7 @@ function RulesSection() {
         leagues quietly differ, so it is worth knowing yours before week 14:
       </Para>
       <GuideTable
-        caption="The default standings tiebreakers on three platforms, from each platform's help centre. Your league may have changed them."
+        caption="The default standings tiebreakers on three platforms, from each platform's help center. Your league may have changed them."
         head={["Platform", "When records are level"]}
         rows={[
           [
@@ -1192,32 +1192,32 @@ function FaqSection() {
 const SOURCES: { name: string; detail: string; href: string }[] = [
   {
     name: "Sleeper, How do playoff teams get determined",
-    detail: "Sleeper's help centre. Playoff team count, seeding order, divisions and byes.",
+    detail: "Sleeper's help center. Playoff team count, seeding order, divisions and byes.",
     href: "https://support.sleeper.com/en/articles/2203518-how-do-playoff-teams-get-determined",
   },
   {
     name: "Sleeper, Can I set tiebreakers",
-    detail: "Sleeper's help centre. Standings tiebreakers and tied playoff games.",
+    detail: "Sleeper's help center. Standings tiebreakers and tied playoff games.",
     href: "https://support.sleeper.com/en/articles/4238872-can-i-set-tiebreakers",
   },
   {
     name: "Sleeper, Extra game each week against league median",
-    detail: "Sleeper's help centre. How the median game works and where it applies.",
+    detail: "Sleeper's help center. How the median game works and where it applies.",
     href: "https://support.sleeper.com/en/articles/3971690-extra-game-each-week-against-league-median",
   },
   {
     name: "Sleeper, Can I customize my league's playoff seeding",
-    detail: "Sleeper's help centre. Custom seeding, the reseeding toggle and the two-week final.",
+    detail: "Sleeper's help center. Custom seeding, the reseeding toggle and the two-week final.",
     href: "https://support.sleeper.com/en/articles/2528718-can-i-customize-my-league-s-playoff-seeding",
   },
   {
     name: "Sleeper, Consolation bracket vs Toilet Bowl",
-    detail: "Sleeper's help centre. The two brackets for teams that miss the playoffs.",
+    detail: "Sleeper's help center. The two brackets for teams that miss the playoffs.",
     href: "https://support.sleeper.com/en/articles/2203534-consolation-bracket-vs-toilet-bowl",
   },
   {
     name: "Sleeper, When is my trade deadline",
-    detail: "Sleeper's help centre. How the deadline is set and changed.",
+    detail: "Sleeper's help center. How the deadline is set and changed.",
     href: "https://support.sleeper.com/en/articles/2435411-when-is-my-trade-deadline",
   },
   {
@@ -1227,12 +1227,12 @@ const SOURCES: { name: string; detail: string; href: string }[] = [
   },
   {
     name: "ESPN, Playoff seeding: how regular season standings tiebreakers work",
-    detail: "ESPN's help centre. Tiebreaker order for public and private leagues.",
+    detail: "ESPN's help center. Tiebreaker order for public and private leagues.",
     href: "https://support.espn.com/hc/en-us/articles/360036952471-Playoff-Seeding-How-Regular-Season-Standings-Tiebreakers-Work",
   },
   {
     name: "Yahoo, Head-to-head regular season tiebreakers",
-    detail: "Yahoo's help centre. Total points for as the wild card tiebreaker.",
+    detail: "Yahoo's help center. Total points for as the wild card tiebreaker.",
     href: "https://help.yahoo.com/kb/SLN35744.html",
   },
   {

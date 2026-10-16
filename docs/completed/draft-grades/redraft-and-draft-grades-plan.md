@@ -48,7 +48,7 @@ One guard, matching what `lib/power-pulse/load.ts` already does.
 
 ### Phase 1: measurement corrections (RD-T010..T013)
 Variance recalibrated on the startable range, made scoring-aware, then
-rank-aware. `playoff_round_type` honoured in the bracket simulation.
+rank-aware. `playoff_round_type` honored in the bracket simulation.
 
 ### Phase 2: waiver-aware roster construction (RD-T020..T023)
 The replacement-level idea Positional WAR already owns, applied to the draft

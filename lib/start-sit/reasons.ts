@@ -242,7 +242,7 @@ function environmentReason(input: StartSitReasonInput): string | null {
 
 /**
  * "If you need a safe floor, {A}'s is {f} to {B}'s {g}." when the confidence
- * favours A (the last starter); "If you're chasing upside, {A}'s ceiling is
+ * favors A (the last starter); "If you're chasing upside, {A}'s ceiling is
  * {f} to {B}'s {g}." when it does not. Only one of the two ever fires for a
  * given board, decided by which side of even the confidence figure sits.
  */

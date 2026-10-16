@@ -9,7 +9,7 @@
  *
  * Anti-annoyance: shown once per draft (localStorage-keyed), dismissible by
  * button, Escape, or backdrop click. Accessible dialog semantics: role=dialog,
- * aria-modal, labelled title, focus moves to the dialog on open and returns to
+ * aria-modal, labeled title, focus moves to the dialog on open and returns to
  * the previously focused element on close, focus is trapped while open.
  */
 

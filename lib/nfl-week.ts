@@ -67,7 +67,7 @@ export function weekRolloverMs(lastKickoffIso: string): number | null {
   const kickoff = Date.parse(lastKickoffIso);
   if (!Number.isFinite(kickoff)) return null;
   const { y, m, d } = partsOf(kickoff);
-  // Date.UTC normalises day 32 into the next month, and the day after is
+  // Date.UTC normalizes day 32 into the next month, and the day after is
   // always the same Eastern date whichever offset is in force.
   const next = new Date(Date.UTC(y, m - 1, d + 1));
   return easternMidnightMs(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());

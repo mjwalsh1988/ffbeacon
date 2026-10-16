@@ -123,7 +123,7 @@ export function SiteSearch() {
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    let canceled = false;
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
@@ -135,21 +135,21 @@ export function SiteSearch() {
           players?: PlayerResult[];
           articles?: ArticleResult[];
         };
-        if (!cancelled) {
+        if (!canceled) {
           setPlayers(data.players ?? []);
           setArticles(data.articles ?? []);
         }
       } catch {
-        if (!cancelled) {
+        if (!canceled) {
           setPlayers([]);
           setArticles([]);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!canceled) setLoading(false);
       }
     }, 200);
     return () => {
-      cancelled = true;
+      canceled = true;
       clearTimeout(timer);
     };
   }, [trimmed, longEnough, open]);
@@ -477,7 +477,7 @@ function SectionHeading({
  *  2. We navigate via router.push (owned by the always-mounted SiteSearch), not
  *     the Link, because onNavigate also closes the dialog, which unmounts this
  *     Link. Next.js aborts a Link's in-flight navigation when it unmounts, so a
- *     Link-driven navigation would be cancelled by the close.
+ *     Link-driven navigation would be canceled by the close.
  * Modified / non-primary clicks fall through untouched so the browser can open
  * the href in a new tab. */
 function OptionRow({

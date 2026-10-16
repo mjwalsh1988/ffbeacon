@@ -169,7 +169,7 @@ function rankEntries(
 /**
  * The Beacon Edge for two to eight sides. computeEdge stays the pairwise engine
  * (BEAM and the head-to-head meter call it unchanged); this is the same idea
- * generalised, for the background tabs once more than two players are being
+ * generalized, for the background tabs once more than two players are being
  * compared.
  *
  * Built by construction to reduce to computeEdge at N equal to 2, rather than

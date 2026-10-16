@@ -202,7 +202,7 @@ describe("IDP seating (plan IDP-302)", () => {
     expect(result.slots[0].playedAs).toBe("QB");
   });
 
-  it("pulseEligibility keeps the primary first and drops labels the optimiser cannot seat", () => {
+  it("pulseEligibility keeps the primary first and drops labels the optimizer cannot seat", () => {
     expect(pulseEligibility("LB", ["LB", "LS"])).toEqual(["LB"]);
     expect(pulseEligibility("DL", ["DL", "LB"])).toEqual(["DL", "LB"]);
     expect(pulseEligibility("LB", ["DB", "LB"])).toEqual(["LB", "DB"]);

@@ -1184,7 +1184,7 @@ function ArticlesSection({
  * which worked at three guides and fell apart at ten: the spotlight card is a
  * fixed amount of words and the list beside it grows by a row every time a
  * guide ships, so the right column ran hundreds of pixels past the left one
- * and the section read as half empty. A full-width spotlight has no neighbour
+ * and the section read as half empty. A full-width spotlight has no neighbor
  * to be shorter than, and a grid of equal cards stays even at any count
  * because the rows fill themselves.
  *
@@ -1298,7 +1298,7 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
   },
   "chopped-league-strategy": {
     // Swords, the same icon the card on /guides carries, so a reader who has
-    // seen one surface recognises the guide on the other.
+    // seen one surface recognizes the guide on the other.
     icon: Swords,
     hint: "Guillotine leagues, where last place goes home every week",
     lessons: [

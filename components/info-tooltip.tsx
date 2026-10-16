@@ -16,7 +16,7 @@ import { Info } from "lucide-react";
  *
  * Shared by every tooltip in this file and by the roster badges in
  * components/roster-badge.tsx, which follow the same contract. It exists so the
- * dismissal behaviour cannot drift between them: a tooltip that closes on
+ * dismissal behavior cannot drift between them: a tooltip that closes on
  * Escape in one place and traps focus in another is worse than either.
  *
  * `setOpen` comes straight from useState, so its identity is stable and the
@@ -61,10 +61,10 @@ const VIEWPORT_MARGIN = 8;
 
 /**
  * Nudges an open bubble sideways so it stays inside the viewport. A 256px
- * bubble centred on an icon near the edge of a 360px phone used to run off the
+ * bubble centered on an icon near the edge of a 360px phone used to run off the
  * screen, and the half nobody could see was usually the end of the sentence.
  * The shift uses the CSS `translate` property, which composes with the
- * centring transform rather than replacing it.
+ * centering transform rather than replacing it.
  */
 function useKeepOnScreen(open: boolean) {
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -303,8 +303,8 @@ export function ValueTooltip({
 
 /**
  * Shared color coding for a signed figure in a dense cell. Bright green when
- * the number is in the reader's favour, bright red when it is against them,
- * grey when it is inside the neutral band. Always paired with a sign in the
+ * the number is in the reader's favor, bright red when it is against them,
+ * gray when it is inside the neutral band. Always paired with a sign in the
  * text and a sentence in the label, so this is decoration.
  */
 export const VALUE_TONE = {

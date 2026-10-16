@@ -569,7 +569,7 @@ async function MatchupBody({
             that is already being played, using projections for players who have
             finished and for players who have not started. The table above says
             in a sentence why they are absent, which is the same call CLAUDE.md
-            makes for the Lineups optimiser panel. */}
+            makes for the Lineups optimizer panel. */}
         {!(view.resultsVisible && !view.isFinal) && (
           <>
             <BenchUpgrades
@@ -1137,7 +1137,7 @@ function RecentFormPanel({
 /**
  * The most recent settled weeks for one roster.
  *
- * The outcome is a word, never a colour and never a letter on its own: "won",
+ * The outcome is a word, never a color and never a letter on its own: "won",
  * "lost", "tied", and "no opponent" for the week an odd league leaves a roster
  * out. A missing score reports as a missing score rather than as a zero.
  */

@@ -194,7 +194,7 @@ export const HERO_ON_LOSER: Line[] = [
   { heat: 0, text: "{player} did the job for {name}, {act} on a {proj} projection." },
   { heat: 0, text: "{player} beat a {proj} projection by {diff}, which was not enough for {name}." },
   { heat: 0.3, text: "{player} put up {act} for {name}, {diff} over projection, and still took a loss. Somebody owes {player} an apology." },
-  { heat: 0.4, text: "{player} scored {act} on a {proj} projection, the only member of {name}'s roster with nothing to apologise for." },
+  { heat: 0.4, text: "{player} scored {act} on a {proj} projection, the only member of {name}'s roster with nothing to apologize for." },
   { heat: 0.5, text: "{player} went for {act} against a {proj} projection and got a loss for the trouble. Wasted on {name}, frankly." },
   { heat: 0.6, text: "{player} cooked up {act} on a {proj} projection and {name} still managed to burn the meal." },
   { heat: 0.7, text: "{player} scored {act}, {diff} over projection, and {name} lost anyway. {player} has grounds to request a trade." },
@@ -221,7 +221,7 @@ export const BUST_ON_LOSER: Line[] = [
  */
 export const BUST_COST_GAME: Line[] = [
   { heat: 0, text: "{player} missed a {proj} projection by {miss}, more than the {margin} {name} lost by." },
-  { heat: 0.3, text: "{player} came in {miss} under projection with {act}, and {name} lost by {margin}. Do the maths." },
+  { heat: 0.3, text: "{player} came in {miss} under projection with {act}, and {name} lost by {margin}. Do the math." },
   { heat: 0.5, text: "{player} scored {act} on a {proj} projection. {name} lost by {margin}. An average day from {player} wins this game." },
   { heat: 0.7, text: "{name} lost by {margin}, and {player} was {miss} short of projection on their own. {player} is not getting a holiday card." },
 ];
@@ -271,7 +271,7 @@ export const TOP_SCORER_LOSER: Line[] = [
  */
 export const SWAP_LOST_IT: Line[] = [
   { heat: 0, text: "{in} scored {inAct} on {name}'s bench while {out} scored {outAct} at {slot}. {name} lost by {margin}." },
-  { heat: 0.3, text: "{name} benched {in} ({inAct}) to start {out} ({outAct}) at {slot}, then lost by {margin}. The maths is not kind." },
+  { heat: 0.3, text: "{name} benched {in} ({inAct}) to start {out} ({outAct}) at {slot}, then lost by {margin}. The math is not kind." },
   { heat: 0.5, text: "{in} put up {inAct} from the bench. {out} put up {outAct} in the lineup. {name} lost by {margin}. Everybody here can do that subtraction." },
   { heat: 0.6, text: "{name} lost by {margin} with {in} sitting on the bench holding {inAct} points. That lineup call is going on the blooper reel." },
   { heat: 0.8, text: "{name} started {out} ({outAct}) over {in} ({inAct}) and lost by {margin}. Frame it and hang it where the trophy would have gone." },
@@ -310,7 +310,7 @@ export const EMPTY_SLOT_LINES: Line[] = [
   { heat: 0, text: "{name} left the {slot} slot empty." },
   { heat: 0.4, text: "{name} started nobody at {slot}. Not a bad player. Nobody." },
   { heat: 0.6, text: "{name} played a man down at {slot}. Bold. Wrong, but bold." },
-  { heat: 0.8, text: "{name} left {slot} empty, the fantasy equivalent of turning up to the game in pyjamas." },
+  { heat: 0.8, text: "{name} left {slot} empty, the fantasy equivalent of turning up to the game in pajamas." },
 ];
 
 /* -------------------------------------------------------------------------- */

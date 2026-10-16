@@ -34,7 +34,7 @@ import { buildLuckExample } from "@/lib/guides/playoff-luck-example";
  *     inline), over made-up lineups. The arithmetic is the
  *     product's; the teams are not real, and the captions say so.
  *   - PUBLISHED RULES. BracketFigure and ConsolationFigure draw what Sleeper's
- *     own help centre and blog say, and name them.
+ *     own help center and blog say, and name them.
  *
  * DeadlineGridFigure is the guide's own rule of thumb, drawn from the same
  * deadlineCall() the page's prose quotes, so the grid and the words cannot
@@ -739,7 +739,7 @@ export function ConsolationFigure() {
     <ChartFigure
       titleLevel={3}
       title="Two ways Sleeper runs the bracket for teams that miss"
-      description="From Sleeper's help centre. Up to eight of the teams with the worst records enter whichever one your league uses."
+      description="From Sleeper's help center. Up to eight of the teams with the worst records enter whichever one your league uses."
       summary="In a consolation bracket the winner of each game moves on and the last team standing wins it. In a Toilet Bowl the loser moves on, so every team is trying to win its way out, and the last team left finishes last in the league."
       table={
         <DataTable

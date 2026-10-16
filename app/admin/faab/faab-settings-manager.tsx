@@ -1903,7 +1903,7 @@ export function FaabSettingsManager({
             <Field
               label="Bid spread"
               htmlFor={`${ids}-auc-sigma`}
-              hint="How widely a rival's bid scatters around its centre. Higher means a noisier room. 0.1 to 1.5."
+              hint="How widely a rival's bid scatters around its center. Higher means a noisier room. 0.1 to 1.5."
             >
               <NumberInput
                 id={`${ids}-auc-sigma`}

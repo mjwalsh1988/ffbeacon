@@ -4,7 +4,7 @@
  *
  * WeekStrip is a named nav of plain links. The week being viewed carries
  * aria-current="page" and the live week says so in words, because "Week 4"
- * with a cyan border and "Week 3" with a grey one is a colour-only distinction
+ * with a cyan border and "Week 3" with a gray one is a color-only distinction
  * otherwise.
  *
  * PulsePages is the small set of sibling pages, drawn as tiles in the rail.

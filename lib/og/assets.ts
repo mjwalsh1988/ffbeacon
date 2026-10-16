@@ -84,7 +84,7 @@ export const OG_WORDMARK = "FFBeacon.com";
  *
  * Sleeper's CDN lies: every avatar and photo comes back as
  * `content-type: image/png` and a good number of them are JPEG bytes, EXIF
- * block and all. Labelling those `image/png` in a data URI produces a card
+ * block and all. Labeling those `image/png` in a data URI produces a card
  * where every photo is an empty box, because satori decodes by the type it is
  * given, finds a JPEG behind a PNG label, and silently draws nothing. Two bytes
  * of checking is the whole fix, and it also means a format satori cannot handle
@@ -112,7 +112,7 @@ const MAX_IMAGE_BYTES = 512_000;
 /**
  * Remote images already pulled in this process, including the misses.
  *
- * A null is cached as deliberately as a hit: a team defence has no headshot and
+ * A null is cached as deliberately as a hit: a team defense has no headshot and
  * answers 403 every time, and without the negative entry every render of every
  * card in the process would ask again and wait for the same refusal.
  *
@@ -179,7 +179,7 @@ export async function loadRemoteImage(
 
     // HANDED TO SATORI AT FULL SIZE, DELIBERATELY.
     //
-    // The obvious optimisation here is to downscale each photo to the box it is
+    // The obvious optimization here is to downscale each photo to the box it is
     // drawn in, on the theory that satori decodes whatever it is given into a
     // full bitmap. It was built, measured against a real twenty-player card, and
     // taken back out: three runs at 3.15s with the resize against three at 3.25s
@@ -212,14 +212,14 @@ const SLEEPER_CDN = "https://sleepercdn.com";
 
 /** What Sleeper's own player ids look like. Digits only, and short. */
 const PLAYER_ID_PATTERN = /^[0-9]{1,12}$/;
-/** An NFL team code, which is how Sleeper ids a team defence. */
+/** An NFL team code, which is how Sleeper ids a team defense. */
 const TEAM_CODE_PATTERN = /^[A-Za-z]{2,4}$/;
 
 /**
  * The photo for one roster slot, whatever kind of thing is in it.
  *
- * A player is a headshot; a TEAM DEFENCE is a team logo, on a different path
- * entirely. Sleeper answers 403 for a defence on the player path, so without
+ * A player is a headshot; a TEAM DEFENSE is a team logo, on a different path
+ * entirely. Sleeper answers 403 for a defense on the player path, so without
  * the second branch every DEF row on every card would be a blank square.
  *
  * The id is VALIDATED rather than trusted. It arrives from data we stored from
@@ -237,9 +237,9 @@ export function sleeperPlayerImageUrl(
   if (PLAYER_ID_PATTERN.test(id)) {
     return `${SLEEPER_CDN}/content/nfl/players/${id}.jpg`;
   }
-  // A defence's "player id" IS the team code, which is also how the logo path
+  // A defense's "player id" IS the team code, which is also how the logo path
   // is keyed. The position check is belt and braces: an id that is letters and
-  // is not a defence has nothing to point at either way.
+  // is not a defense has nothing to point at either way.
   if (TEAM_CODE_PATTERN.test(id) && (!position || /^(DEF|DST)$/i.test(position))) {
     return `${SLEEPER_CDN}/images/team_logos/nfl/${id.toLowerCase()}.png`;
   }

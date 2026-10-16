@@ -38,7 +38,7 @@ import type { ResolvedAsset, TeamImpact } from "./types";
  * (a 44 percent tight end was reading as an ordinary throw-in). At 0.4 without
  * the largest-asset test, a 55/45 two-man package would crown both of them.
  */
-const CENTREPIECE_SHARE = 0.4;
+const CENTERPIECE_SHARE = 0.4;
 /** Share below which an asset is a throw-in rather than a piece of the deal. */
 const FILLER_SHARE = 0.12;
 /** Weeks started, as a share of weeks left, at or above which a player starts. */
@@ -60,12 +60,12 @@ export type AssetNote = {
   tone: AssetTone;
 };
 
-export type AssetRole = "centrepiece" | "piece" | "filler";
+export type AssetRole = "centerpiece" | "piece" | "filler";
 
 /**
  * How scarce this asset's position is in the reader's OWN league, read from
  * league_positional_war_cache. Player-independent: it says nothing about this
- * roster, which is exactly why it renders as its own labelled block rather than
+ * roster, which is exactly why it renders as its own labeled block rather than
  * folding into the notes above, which are all roster-specific.
  */
 export type PositionalWarContext = {
@@ -117,8 +117,8 @@ function fmtValue(value: number): string {
 }
 
 function roleOf(share: number, sideCount: number, isLargest: boolean): AssetRole {
-  if (sideCount === 1) return "centrepiece";
-  if (isLargest && share >= CENTREPIECE_SHARE) return "centrepiece";
+  if (sideCount === 1) return "centerpiece";
+  if (isLargest && share >= CENTERPIECE_SHARE) return "centerpiece";
   if (share <= FILLER_SHARE) return "filler";
   return "piece";
 }
@@ -264,7 +264,7 @@ export function readAsset(
 
   // What the deal is actually about.
   const role = roleOf(share, opts.sideCount, opts.isLargest);
-  if (role === "centrepiece" && opts.sideCount > 1) {
+  if (role === "centerpiece" && opts.sideCount > 1) {
     notes.push({
       label: incoming ? "The piece you want" : "The piece you pay",
       detail: `${Math.round(share * 100)} percent of ${incoming ? "what you receive" : "what you send"} is him.`,
@@ -289,7 +289,7 @@ export function readAsset(
       });
     } else if (asset.age >= 29) {
       notes.push({
-        label: "Ageing",
+        label: "Aging",
         detail: `${asset.age.toFixed(1)} years old, so he is worth more to a team winning now than to one waiting.`,
         tone: incoming ? "bad" : "good",
       });

@@ -213,7 +213,7 @@ describe("key configuration", () => {
   });
 
   /**
-   * The literal value found in a real .env.local: a brand hex colour pasted
+   * The literal value found in a real .env.local: a brand hex color pasted
    * onto the wrong line. Without the shape check this "configures" Stripe and
    * every donation dies on a 401 that looks like an outage.
    */

@@ -4,7 +4,7 @@ import { CircleCheck, CircleMinus } from "lucide-react";
  * The START or SIT tag on a Who Should I Start card.
  *
  * Built on the components/team-status-badge.tsx pattern: an icon, a filled
- * pill, and the word itself, never colour alone. It sits right after the
+ * pill, and the word itself, never color alone. It sits right after the
  * player's name on each card, so a screen reader hears the answer before any
  * of the numbers that explain it.
  *

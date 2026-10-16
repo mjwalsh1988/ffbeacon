@@ -12,7 +12,7 @@ agent with less context (Opus or Sonnet) can build it by following the steps in
 order without re-deriving anything. Where this document says "do not", it
 means it.
 
-Companion for the owner: a plain-language page summarising this plan was
+Companion for the owner: a plain-language page summarizing this plan was
 published as an artifact on 2026-10-15 ("Search Growth Plan").
 
 ---
@@ -254,7 +254,7 @@ task of this plan. A diff touching any of them fails review.
 
 File to create: `app/tools/faab/calculator-data.ts`.
 
-Move, without changing behaviour, everything in `app/tools/faab/page.tsx`
+Move, without changing behavior, everything in `app/tools/faab/page.tsx`
 from `const supabase = await createClient();` down to and including the block
 that appends defenders to `players` and the `mastheadChips` computation, into:
 
@@ -314,7 +314,7 @@ Move all three into the new module and export them. Also move `readCell` and
 `newestBuiltAt` if they are defined in the guide file and used only by this
 loader; if they are imported from a lib module already, leave them where they
 are. The guide imports `loadChoppedMarket` and `type ChoppedMarket` from the
-new module. No behaviour change.
+new module. No behavior change.
 
 Add `lib/faab/chopped-market.test.ts` with one test: given a fake cells array
 holding the four keys in `BAND_LABELS` plus the overall key, the loader's
@@ -386,7 +386,7 @@ then:
      you stand, or connect your Sleeper chopped league.`, `chips` are
      `data.mastheadChips`, and whose actions are the same `MemberHeroCta`
      the general page uses plus a secondary link to `/guides/chopped-league-strategy`
-     labelled `Chopped league strategy` (replacing the general page's
+     labeled `Chopped league strategy` (replacing the general page's
      Player Rankings link).
   3. A short paragraph under the form: `Not in a chopped league? The ` +
      link to `/tools/faab` with anchor text `FAAB calculator` + ` prices
@@ -549,7 +549,7 @@ Create `app/tools/faab/manual-setup.test.ts` (none exists) with:
 
 - `parseManualSeed({ kind: "redraft", start: "12", alive: "9", danger: "near" })`
   returns leagueType `redraft`; the same call with `kind: "chopped"` spread
-  last returns `chopped`. This pins the behaviour the guillotine page relies
+  last returns `chopped`. This pins the behavior the guillotine page relies
   on.
 - `parseManualSeed({ start: "12", alive: "14" })` returns aliveCount null
   (the existing rule: alive above start is dropped).
@@ -601,7 +601,7 @@ resolved through the same resolution the waiver pages use; read
 page gets `context.format`, `context.sourceSlug`, `context.sourceName` and
 `context.settings`, and reuse that function rather than re-deriving).
 
-Behaviour:
+Behavior:
 
 - Resolve the live week with `resolveSeasonClock` (lib/start-sit/clock.ts).
   If `season` is null or `currentWeek` is outside 1 to 18, render nothing.
@@ -1059,7 +1059,7 @@ Append these to progress.md as they are started. IDs are GROW-T01 to
 GROW-T22. Status values: pending, in_progress, blocked, completed.
 
 ```
-GROW-T01 | pending | Extract /tools/faab data loading into app/tools/faab/calculator-data.ts, no behaviour change
+GROW-T01 | pending | Extract /tools/faab data loading into app/tools/faab/calculator-data.ts, no behavior change
      | files: app/tools/faab/calculator-data.ts, app/tools/faab/page.tsx
      | depends on: none
      | verified: no

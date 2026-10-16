@@ -98,7 +98,7 @@ function clampName(name: string): string {
 /**
  * Who the pick came from, in the form that goes in parentheses.
  *
- * Handle first, because a Sleeper handle is what managers recognise; a custom
+ * Handle first, because a Sleeper handle is what managers recognize; a custom
  * team name rotates season to season and a roster id means nothing to anybody.
  * The same preference order the team card already uses for pick attribution.
  */

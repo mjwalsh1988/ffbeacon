@@ -13,7 +13,7 @@ import {
  * words ride beside it as sr-only inside the same element (the Lineups rule):
  * an aria-hidden code with an sr-only twin goes silent when a screen reader
  * follows the pointer onto it. normal-case keeps the noun from being exposed
- * in capitals and read as an initialism. Colour is never the only signal.
+ * in capitals and read as an initialism. Color is never the only signal.
  */
 export function PositionChip({
   position,

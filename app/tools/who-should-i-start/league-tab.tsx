@@ -13,7 +13,7 @@
  * tested without a DOM; this file only turns that decision into JSX.
  *
  * N equals 2 is not a special case anywhere else in this file: every other
- * function below takes the full `sides` list and the two-player behaviour
+ * function below takes the full `sides` list and the two-player behavior
  * falls out of that list happening to have two entries.
  */
 

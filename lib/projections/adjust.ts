@@ -44,7 +44,7 @@ export type TeamRating = {
   team: string;
   /** Mean points per game, unadjusted. */
   rawPerGame: number;
-  /** Mean points per game after normalising by the opponent faced. */
+  /** Mean points per game after normalizing by the opponent faced. */
   adjustedPerGame: number;
   games: number;
 };

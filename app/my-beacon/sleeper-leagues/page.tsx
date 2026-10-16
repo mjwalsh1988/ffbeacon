@@ -151,7 +151,7 @@ export default async function SleeperLeaguesPage() {
        it keeps its room. */
     <div className={handle ? "space-y-4" : "space-y-6"}>
       {handle ? (
-        /* The card is its own labelled section, so it is not wrapped in a
+        /* The card is its own labeled section, so it is not wrapped in a
            second one. Connected, the whole connection is one row plus the way
            back into the form, instead of the pitch a returning reader has
            already read. */

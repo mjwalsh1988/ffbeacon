@@ -77,7 +77,7 @@ export interface BeaconBriefSettings {
   eventKeyWindowHours: number;
   /**
    * Ask the triage model whether a matched post actually changes the article before
-   * paying for a rewrite. Off means every match rewrites, which is the old behaviour.
+   * paying for a rewrite. Off means every match rewrites, which is the old behavior.
    */
   mergeGateEnabled: boolean;
   /**

@@ -9,17 +9,17 @@
  * recap stays on the edition.
  *
  * AN UPCOMING CARD says what to expect: kickoff in Eastern time, who is
- * favoured and what each side is expected to score, the forecast and what it
+ * favored and what each side is expected to score, the forecast and what it
  * means for a lineup, a short written preview, and the players projected to
  * score the most.
  *
  * THE FORECAST IS WORDS FIRST. The band ("Weather downgrade"), the forecast
- * sentence and the advice are text. The icon and the colour repeat the band.
+ * sentence and the advice are text. The icon and the color repeat the band.
  * A game with no forecast row says "No forecast yet"; it never borrows the
  * calm reading (lib/nfl-weather-impact.ts).
  *
  * Team logos and photos are decorative: the names are always the adjacent
- * text. The team colour strip is decoration. Nothing visible is aria-hidden.
+ * text. The team color strip is decoration. Nothing visible is aria-hidden.
  *
  * Heading levels: each card is an h3 under the panel's h2.
  *
@@ -353,8 +353,8 @@ function spreadWords(game: UpcomingGame): string | null {
   if (game.homeSpread === null) return null;
   if (game.homeSpread === 0) return "Rated even";
   return game.homeSpread < 0
-    ? `${game.home.nickname} favoured by ${Math.abs(game.homeSpread)}`
-    : `${game.away.nickname} favoured by ${game.homeSpread}`;
+    ? `${game.home.nickname} favored by ${Math.abs(game.homeSpread)}`
+    : `${game.away.nickname} favored by ${game.homeSpread}`;
 }
 
 export function UpcomingCard({
@@ -370,7 +370,7 @@ export function UpcomingCard({
 }) {
   const headingId = `game-${game.gameKey.toLowerCase()}`;
   const kickedOff = game.kickoffAt !== null && Date.parse(game.kickoffAt) <= now;
-  const favourite = spreadWords(game);
+  const favorite = spreadWords(game);
 
   return (
     <article
@@ -409,7 +409,7 @@ export function UpcomingCard({
 
         <ul role="list" className="mt-3 flex flex-wrap gap-1.5 text-xs">
           <li className="rounded-full border border-line bg-base/60 px-2.5 py-1 text-ink-muted">
-            {favourite ?? "No line published yet"}
+            {favorite ?? "No line published yet"}
           </li>
           {game.total !== null && (
             <li className="rounded-full border border-line bg-base/60 px-2.5 py-1 text-ink-muted">

@@ -106,7 +106,7 @@ describe("Team Need, points engine", () => {
         myDraftedPositions: ["RB", "RB", "WR", "WR", "WR", "QB"],
       }),
     );
-    // The old behaviour, still reachable when there are no projections: the open
+    // The old behavior, still reachable when there are no projections: the open
     // tight end slot wins. This is the defect, pinned so a regression is loud.
     expect(heuristicOnly.engine).toBe("heuristic");
     expect(heuristicOnly.need.player?.playerId).toBe("te");

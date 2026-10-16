@@ -23,7 +23,7 @@
  *     that moves a run from "computing" to "complete", and the poll has to
  *     stay alive to see that happen. Until then, `capture-progress.tsx`'s
  *     existing `router.refresh()` on "computing" still fires once (it is
- *     keyed on the status value, not on the poll stopping), so behaviour in
+ *     keyed on the status value, not on the poll stopping), so behavior in
  *     the interim is unchanged. Never polls forever regardless: a terminal
  *     status or repeated failure both end the loop.
  *   - Stops on unmount, and aborts the in-flight request so a slow response
@@ -39,7 +39,7 @@
  * React state and is exported so it can be unit tested directly: this repo has
  * no React rendering test harness (no jsdom, no @testing-library/react, no
  * react-test-renderer are installed), so a hook that only exposed its
- * behaviour through `useEffect` would be untestable. `useCaptureProgress`
+ * behavior through `useEffect` would be untestable. `useCaptureProgress`
  * itself is a thin wrapper that starts one poller per (runId, initial.status)
  * and forwards its callbacks into React state.
  */

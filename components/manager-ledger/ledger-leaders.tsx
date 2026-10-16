@@ -6,8 +6,8 @@
  * language rather than two. Each award gets its own icon and accent, so the
  * grid reads as distinct callouts rather than a repeating template.
  *
- * COLOUR IS NEVER THE MEANING. Every accent is paired with an icon AND a title
- * in words, and the figure itself is printed. A reader who sees no colour at
+ * COLOR IS NEVER THE MEANING. Every accent is paired with an icon AND a title
+ * in words, and the figure itself is printed. A reader who sees no color at
  * all loses nothing: "Games given away, 5" says the whole thing.
  */
 

@@ -98,7 +98,7 @@ export function DraftRoom({
   const [announcement, setAnnouncement] = useState("");
 
   // Re-seed from the server when its copy actually changes. Comparing the
-  // serialised pick list rather than the array identity keeps a re-render that
+  // serialized pick list rather than the array identity keeps a re-render that
   // produced an equal array from resetting local state mid draft.
   const serverKey = useMemo(
     () => initialPicks.map((p) => `${p.playerId}:${p.teamSlot ?? "x"}`).join("|"),

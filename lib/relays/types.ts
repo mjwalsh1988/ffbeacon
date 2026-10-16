@@ -57,7 +57,7 @@ export interface RelayFact {
   value: string;
 }
 
-/** The `relay` object the classify call returns, after normalisation. */
+/** The `relay` object the classify call returns, after normalization. */
 export interface RelayExtraction {
   headline: string;
   kind: RelayKind;

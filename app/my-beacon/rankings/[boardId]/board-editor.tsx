@@ -113,7 +113,7 @@ export function BoardEditor({
     const removals = Array.from(pendingRemovals.current);
     pendingRemovals.current = new Set();
     setSaveState("saving");
-    // The action re-derives ownership, validates every id and normalises the
+    // The action re-derives ownership, validates every id and normalizes the
     // breaks against the saved length.
     const result = await saveBoardPlayers(
       boardId,

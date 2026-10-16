@@ -47,7 +47,7 @@ export type SeasonWeekPoint = {
   /**
    * Set points over optimal points, both restricted to gradable slots.
    *
-   * NOT `scored / bestPossible`. Those two include the slots the optimiser
+   * NOT `scored / bestPossible`. Those two include the slots the optimizer
    * cannot touch (IDP), which adds the same constant to both halves and pulls
    * the ratio toward 1, flattering every manager in an IDP league. The ledger
    * stores the gradable-only pair for exactly this reason.

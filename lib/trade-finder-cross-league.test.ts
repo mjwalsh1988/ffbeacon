@@ -7,7 +7,7 @@
  * for real over tiny synthetic leagues, and the only thing stubbed is the
  * database read that turns a league id into rosters.
  *
- * Both behaviours under test were reported by readers rather than found by
+ * Both behaviors under test were reported by readers rather than found by
  * anyone looking: a manager in more than three leagues could press Search all
  * day and never see the fourth one, and the deals they did see came mostly from
  * whichever league happened to be first in the list.

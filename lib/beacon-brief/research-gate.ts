@@ -23,7 +23,7 @@ export interface ResearchGateVerdict {
 }
 
 export interface ResearchGateInput {
-  /** bb_research_gate_enabled. Off restores the pre-0186 behaviour. */
+  /** bb_research_gate_enabled. Off restores the pre-0186 behavior. */
   gateEnabled: boolean;
   /** Characters of usable text in the post, links and handles stripped. */
   postChars: number;

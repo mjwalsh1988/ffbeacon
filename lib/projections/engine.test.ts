@@ -1,7 +1,7 @@
 /**
  * computeBeaconProjections.
  *
- * Two of these tests exist because the behaviour they pin was WRONG in the
+ * Two of these tests exist because the behavior they pin was WRONG in the
  * first build and was only caught by querying production afterwards, not by
  * reading the code. Both are marked below. They are the reason this file is
  * worth more than its line count.
@@ -251,7 +251,7 @@ describe("computeBeaconProjections", () => {
     expect(result.mirrored.notProjectable).toBe(1);
   });
 
-  it("carries a modelled player's published points through at blend weight zero", () => {
+  it("carries a modeled player's published points through at blend weight zero", () => {
     // No current-season games means blendWeight 0, so our line contributes
     // nothing and the row must be byte-identical to Sleeper's in every base.
     const result = computeBeaconProjections(baseInput());
@@ -311,7 +311,7 @@ describe("computeBeaconProjections", () => {
       ["rookie|1", sleeperRow({ playerId: "rookie", week: 1 })],
     ]);
     const result = computeBeaconProjections(baseInput({ subjects, sleeper }));
-    expect(result.modelled).toBe(0);
+    expect(result.modeled).toBe(0);
     expect(result.mirrored.noShares).toBe(1);
     expect(result.projections[0].pointsPpr).toBe(14);
   });
@@ -352,7 +352,7 @@ describe("computeBeaconProjections", () => {
       settings: { ...SETTINGS, blend: { min: 0, max: 0.5, gamesForMax: 6 } },
     };
     const result = computeBeaconProjections(blending);
-    expect(result.modelled).toBeGreaterThan(0);
+    expect(result.modeled).toBeGreaterThan(0);
 
     const wr = result.projections.find((p) => p.playerId === "DET-wr1");
     expect(wr?.blendWeight).toBeCloseTo(0.5, 6);
@@ -412,7 +412,7 @@ describe("computeBeaconProjections", () => {
   it("contributes nothing at the shipped blend default, which is deliberate", () => {
     // blend.max ships at 0 on measured evidence (see default-settings.ts). At
     // that setting our source is a CALIBRATED Sleeper and nothing more, so a
-    // modelled player's stored total must still be Sleeper's own number. If
+    // modeled player's stored total must still be Sleeper's own number. If
     // this ever fails, someone raised the default and the backtest needs
     // rerunning before it goes anywhere near a reader.
     const inSeason = baseInput({
@@ -429,7 +429,7 @@ describe("computeBeaconProjections", () => {
     });
     const result = computeBeaconProjections(inSeason);
     const wr = result.projections.find((p) => p.playerId === "DET-wr1");
-    expect(wr?.modelled).toBe(true);
+    expect(wr?.modeled).toBe(true);
     expect(wr?.blendWeight).toBe(0);
     expect(wr?.pointsPpr).toBeCloseTo(14, 6);
   });
@@ -439,11 +439,11 @@ describe("computeBeaconProjections", () => {
       baseInput({ subjects: [], sleeper: new Map(), stats: [] }),
     );
     expect(result.projections).toEqual([]);
-    expect(result.modelled).toBe(0);
+    expect(result.modeled).toBe(0);
   });
 
   it("applies the game environment when a line exists and not when it does not", () => {
-    // A rich environment for a modelled player should move his line. With
+    // A rich environment for a modeled player should move his line. With
     // blendWeight 0 the stored POINTS cannot move, so assert on the stat line,
     // which is what a league rescoring under its own settings actually reads.
     const withOdds = computeBeaconProjections(
@@ -461,7 +461,7 @@ describe("computeBeaconProjections", () => {
     expect(b).toBeDefined();
     // Both mirror Sleeper's total at weight 0, which is the point: the
     // environment changed our own line without changing what we stored, and
-    // that is exactly the preseason behaviour the blend is meant to produce.
+    // that is exactly the preseason behavior the blend is meant to produce.
     expect(a?.pointsPpr).toBeCloseTo(b?.pointsPpr ?? -1, 6);
   });
 });

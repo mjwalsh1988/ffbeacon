@@ -149,7 +149,7 @@ export type PlayerRow = {
   /**
    * Every position Sleeper lets him start at (players.eligible_positions,
    * migration 0297). Optional so hand-built rows keep compiling; loadPlayers
-   * always fills it. Read by the optimiser only once the IDP switch is on.
+   * always fills it. Read by the optimizer only once the IDP switch is on.
    */
   eligible?: readonly string[];
 };
@@ -194,7 +194,7 @@ export type ProjectionRow = {
    * points with any injury already priced in; "out" means Sleeper scheduled the
    * player a game and published nothing, so the stored zero is a real answer.
    * Optional so a caller constructing rows by hand keeps the old, more
-   * conservative behaviour: an absent value is treated as "nobody priced this
+   * conservative behavior: an absent value is treated as "nobody priced this
    * in", and our own injury discount still applies.
    */
   availability?: string | null;
@@ -472,7 +472,7 @@ export async function loadPlayers(
   //
   // The slug fallback is kept rather than deleted: the slug tail is a real
   // recovery path for a row whose external id was stripped, and removing it
-  // would change behaviour rather than just its cost. It now runs ONCE for the
+  // would change behavior rather than just its cost. It now runs ONCE for the
   // union of everything the indexed passes missed, instead of once per chunk,
   // so a league needing it pays one scan and a league that does not pays none.
   // On the current corpus it never fires: all 10,480 player rows carry
@@ -674,7 +674,7 @@ async function loadProjectionsChunk(
  * resolveProjectionSourceForWindow in lib/projections/source.ts, and the guard
  * in lib/projections/source-guard.test.ts that keeps it that way). The default
  * exists so that a caller written tomorrow that forgets gets the old, correct,
- * single-source behaviour instead of a silently doubled one. Matches
+ * single-source behavior instead of a silently doubled one. Matches
  * loadAccuracy below, which has always defaulted this way.
  */
 export async function loadProjections(
@@ -719,7 +719,7 @@ export async function loadProjections(
  * that out at the query rather than leaving it to insertion order.
  *
  * Defaults to SLEEPER_SOURCE so every caller written before this parameter
- * existed keeps exactly the behaviour it always had. lib/projections/read.ts
+ * existed keeps exactly the behavior it always had. lib/projections/read.ts
  * is the one caller that passes the source it actually resolved, because a
  * reader on the ffbeacon source needs reliability measured against ffbeacon,
  * not against Sleeper.

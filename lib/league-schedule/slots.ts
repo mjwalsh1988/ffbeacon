@@ -6,7 +6,7 @@
  * empty slot holds the string "0". So the only correct way to read that array is
  * against a slot list built by taking `roster_positions` in the league's own
  * order and removing exactly the tokens that can never hold a starter: BN, IR,
- * TAXI, NA. Nothing else may be removed, including tokens we do not recognise.
+ * TAXI, NA. Nothing else may be removed, including tokens we do not recognize.
  * Drop one unknown token and every player below it moves up a slot, which is the
  * one bug this module exists to prevent.
  *
@@ -19,7 +19,7 @@
  * missing three linebackers is not that lineup. Two callers, two correct
  * answers, two functions. Do not unify them.
  *
- * Whether a kept slot is PROJECTABLE follows the same slot map the optimiser
+ * Whether a kept slot is PROJECTABLE follows the same slot map the optimizer
  * reads, passed in by the server loader (plan R-25). It defaults to the OFF
  * map, so a caller that does not pass one gets exactly what it always did.
  */
@@ -159,7 +159,7 @@ const GROUPS: Record<string, SlotGroup> = {
   IDP_FLEX: "IDP",
 };
 
-/** The visible label. An unrecognised token labels itself rather than vanishing. */
+/** The visible label. An unrecognized token labels itself rather than vanishing. */
 export function slotLabel(token: string): string {
   return LABELS[token] ?? token;
 }
@@ -171,7 +171,7 @@ export function slotDescription(token: string): string {
 
 /**
  * Which block of the lineup table a slot renders in. Anything we do not
- * recognise lands in IDP, because an exotic league should render its slot in a
+ * recognize lands in IDP, because an exotic league should render its slot in a
  * plausible place rather than have it disappear.
  */
 export function slotGroupOf(token: string): SlotGroup {

@@ -105,7 +105,7 @@ export function clientIp(req: Request): string {
  *
  * Fails CLOSED in production: a missing SIGNAL_SCOUT_IP_SALT throws rather than falling
  * back to a repository-known value (which would make prod hashes reversible). Outside
- * production an explicit, clearly-labelled dev/test value is used so local development
+ * production an explicit, clearly-labeled dev/test value is used so local development
  * and tests work with zero setup. This value is NEVER used in production.
  */
 const DEV_ONLY_IP_SALT = "ffbeacon-signal-scout-dev-only-not-for-production";

@@ -89,7 +89,7 @@ function listMatches(field: string, value: number): boolean {
  *
  * A month-restricted job (the seasonal stats sync) is checked during its months
  * and skipped outside them, because "did not run in June" is the correct
- * behaviour for a job that is not scheduled in June.
+ * behavior for a job that is not scheduled in June.
  */
 export function expectationFor(schedule: string, nowMs: number): CronExpectation {
   const trimmed = schedule.trim();
@@ -278,7 +278,7 @@ export function abandonedRunError(startedAt: string, nowMs: number): string {
  * Whether a quiet cron tick should still land a heartbeat row.
  *
  * PERF-T060: league-sync-worker skips its cron_runs row entirely on a tick
- * that claimed nothing and finalised nothing, which is most ticks. Without
+ * that claimed nothing and finalized nothing, which is most ticks. Without
  * some row landing periodically, findMissedJobs above would flag it as
  * missed after FREQUENT_MAX_GAP_HOURS (3 hours) of true silence, which is a
  * false alarm for a worker that is running fine and simply has nothing to

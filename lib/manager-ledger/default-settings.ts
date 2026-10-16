@@ -3,7 +3,7 @@
  *
  * There is no admin settings row for this model and there should not be one.
  * Power Pulse and Positional WAR both carry settings because both make
- * modelling choices a reasonable person could argue about: how much to trust a
+ * modeling choices a reasonable person could argue about: how much to trust a
  * projection, how to weight a season, where to put a cliff. This model makes no
  * such choice. It reads settled results and does arithmetic on them. The only
  * numbers here are cache policy and display caps, which are not opinions about

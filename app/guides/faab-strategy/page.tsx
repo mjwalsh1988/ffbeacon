@@ -887,7 +887,7 @@ function TimingSection({ market }: { market: FaabMarket }) {
         The calculator follows that table rather than the old theory. It used to take about
         fifteen percent off a bid in the first three weeks on the argument that early money has
         option value, and it no longer does. Option value is real, but it belongs to your
-        judgement about whether to hold, not to a guess about what a rival will bid, and the
+        judgment about whether to hold, not to a guess about what a rival will bid, and the
         rivals bid up in September.
       </Para>
       <Para>
@@ -1377,7 +1377,7 @@ function ClosingSection() {
         .
       </Para>
       <Para>
-        Two neighbours worth knowing about. This guide is about HOW MUCH to bid; the{" "}
+        Two neighbors worth knowing about. This guide is about HOW MUCH to bid; the{" "}
         <Link href="/waiver-wire" className={LINK_CLASS}>
           waiver wire page
         </Link>{" "}

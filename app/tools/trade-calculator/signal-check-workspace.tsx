@@ -55,7 +55,7 @@ export function SignalCheckWorkspace({
 
   // /tools/trade-calculator#sleeper-import is linked from the Sleeper leagues page,
   // and the panel is no longer on the page at load time for that hash to find.
-  // Honour the intent instead: open the import.
+  // Honor the intent instead: open the import.
   useEffect(() => {
     if (!showImport) return;
     if (window.location.hash !== "#sleeper-import") return;

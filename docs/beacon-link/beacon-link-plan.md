@@ -69,7 +69,7 @@ REVISION 2026-09-07, second pass, after the owner's review of the artifact.
    written Beacon+ where space is short. PayPal and Venmo are in (a business
    account exists). Sales tax runs through Stripe Tax behind a modular tax
    settings block (Part 29). All sales are final, handled case by case, and a
-   cancelled membership runs to the end of its paid period (Part 30 is the
+   canceled membership runs to the end of its paid period (Part 30 is the
    policy text). Everything that existed before this plan is in the Free tier;
    everything this plan and the Beacon Link plan add is paid. The legal read is
    the owner's to arrange and does not gate the build.
@@ -725,11 +725,11 @@ is one authenticated call. It is metered (Part 6.4).
 ### 4.2 New section: My Team (management)
 
 Extends the existing Lineups page rather than adding a route, because Lineups is
-already "one team, one week, the optimiser and the waiver wire". When `actable`
+already "one team, one week, the optimizer and the waiver wire". When `actable`
 and the roster shown is the reader's own:
 
-- The optimiser's "best lineup" gains an Apply this lineup button:
-  `roster_update_starters` with the optimiser's `optimalSleeperIds` arranged
+- The optimizer's "best lineup" gains an Apply this lineup button:
+  `roster_update_starters` with the optimizer's `optimalSleeperIds` arranged
   into the league's slot order. The button is disabled during a live week (you
   cannot change a lineup mid-game for players who have played), matching the
   page's existing live-week rules.
@@ -994,7 +994,7 @@ entitled sees the Beacon+ promotion for that action (Part 25: a locked button,
 a one-line strip, a rail card or a disclosure, never a modal of its own and
 never more than one per screen). On the Beacon Plus pages (Part 27) it is one
 of the things a membership includes, listed by outcome ("apply the lineup our
-optimiser found, on Sleeper, in one press") and never as the headline. There
+optimizer found, on Sleeper, in one press") and never as the headline. There
 is still no tools-hub card and no footer link for Beacon Link on its own,
 because it is a capability of a membership rather than a tool.
 
@@ -1217,7 +1217,7 @@ says what the PayPal button shows when tax is on.
 DECIDED 2026-09-07. The policy the site publishes and the code enforces:
 
 - All sales are final. No refund is issued automatically for any reason.
-- A cancelled membership runs to the END of the period already paid for, then
+- A canceled membership runs to the END of the period already paid for, then
   stops. There is no partial-period refund and no proration on cancel. The
   owner can end a membership early by hand (Part 19.6, Members: "End now") when
   a case warrants it.
@@ -1226,7 +1226,7 @@ DECIDED 2026-09-07. The policy the site publishes and the code enforces:
   the audit log with a note. Nothing in the reader-facing UI offers a refund
   button.
 - A one-time service is likewise final at purchase. The owner may refund one
-  at their discretion; the admin queue offers the button at every fulfilment
+  at their discretion; the admin queue offers the button at every fulfillment
   stage, and the audit row records the stage it was at.
 - A disputed charge (a chargeback) suspends access at once and until the
   dispute resolves. The policy asks readers to contact us before disputing.
@@ -1567,7 +1567,7 @@ How it resolves, in order:
 6. FAIL SOFT, and say so. If any query in steps 2 to 4 throws, the resolver
    returns the LAST GOOD answer for that reader from `lib/billing/entitlement-fallback.ts`,
    an in-process map of `userId -> { entitlements, at }` written on every
-   successful resolve and honoured for `ENTITLEMENT_FALLBACK_MS` (15
+   successful resolve and honored for `ENTITLEMENT_FALLBACK_MS` (15
    minutes), with `ent.degraded = true`. With no last good answer (a cold
    process), a SIGNED-IN reader gets the default tier plus `degraded`, and a
    guest gets the process-wide default-tier cache. A degraded answer is never
@@ -2029,7 +2029,7 @@ payment is marked `expired` by the reconcile cron (Part 18.5).
 ABSOLUTE RULE: `deliverable` is plain text. Blank lines separate paragraphs.
 It is rendered as text nodes inside `<p>` elements by
 `components/billing/plain-paragraphs.tsx`, never through `dangerouslySetInnerHTML`
-and never through a markdown renderer, because there is no sanitising renderer
+and never through a markdown renderer, because there is no sanitizing renderer
 in this codebase today and a review page is not the place to introduce one.
 The admin who writes it is trusted; the rule exists so the page cannot become
 an HTML injection surface if that ever changes.
@@ -2375,15 +2375,15 @@ handled explicitly:
 
 - `current_period_start` / `current_period_end` are read from the Subscription
   and, when absent, from `items.data[0]`, because the 2025-03-31 API version
-  moved them onto the item. The normaliser handles both shapes and
+  moved them onto the item. The normalizer handles both shapes and
   `lib/billing/providers/stripe.test.ts` feeds it both.
 - The subscription id on an Invoice is read from `invoice.subscription` and,
   when absent, from `invoice.parent.subscription_details.subscription`, for
   the same reason.
 - `payment_intent` and `customer` may arrive as a string or an expanded
   object; the id is taken either way (the donation route's `paymentIntentId`
-  helper, generalised).
-- Anything unrecognised in a status string maps to `incomplete` and is logged,
+  helper, generalized).
+- Anything unrecognized in a status string maps to `incomplete` and is logged,
   never to `active`.
 
 Calls, with the exact parameters:
@@ -2579,7 +2579,7 @@ is).
 Every flow below writes membership state through ONE function per subject:
 `syncMembershipFromProvider(provider, providerSubscriptionId)` and
 `syncPurchaseFromProvider(provider, providerCheckoutId)` in
-`lib/billing/sync.ts`. Each FETCHES the object from the provider, normalises
+`lib/billing/sync.ts`. Each FETCHES the object from the provider, normalizes
 it, upserts our row, revalidates the entitlement tag, writes an audit row when
 access changed, and returns the row. Webhooks, success pages, the reconcile
 cron and the admin resync button all call the same function.
@@ -2669,7 +2669,7 @@ PayPal: our own Cancel button opens the house confirm dialog
 `sendCancellationConfirmed` goes out once, on the transition, from the sync
 function, whichever path caused it.
 
-ABSOLUTE RULE: cancelling takes no more steps than joining did. One page,
+ABSOLUTE RULE: canceling takes no more steps than joining did. One page,
 one button, one confirmation. No retention screen of ours, no "are you sure"
 beyond the single confirm, no email-us-to-cancel. This is both the law's
 requirement and the site's character.
@@ -2693,7 +2693,7 @@ by hand. It is never scheduled.
 
 Per Part 12.4, no refund is ever automatic and no reader-facing control offers
 one. A refund, when the owner decides to grant one, is issued from
-`/admin/billing/orders` (a service, at any fulfilment stage, with a required
+`/admin/billing/orders` (a service, at any fulfillment stage, with a required
 note that goes into the audit row) or `/admin/billing/members` (a membership
 invoice, likewise with a note), or from the Stripe or PayPal dashboards.
 `charge.refunded` arrives; the handler finds the purchase by `payment_intent`,
@@ -2709,7 +2709,7 @@ the product page links the refund policy instead.
 `charge.dispute.created`: the purchase or membership is marked `disputed`,
 and if `disputeRevokesImmediately`, the membership's row is set to `unpaid`
 locally (a provider re-fetch would overwrite it, so `dispute_hold_until` is
-also set and the sync function honours it) and grants from that purchase are
+also set and the sync function honors it) and grants from that purchase are
 revoked. An admin email goes out at once. `charge.dispute.closed` with `won`
 clears the hold and resyncs.
 
@@ -2728,7 +2728,7 @@ clears the hold and resyncs.
    rules); `roster` renders the rosters of the chosen league; `trade` renders
    the Signal Check trade picker. The answers are stored on `intake`, and a
    league or roster answer is stored as the Sleeper ids, so the admin's
-   fulfilment view can open the league in League Pulse in one click.
+   fulfillment view can open the league in League Pulse in one click.
 3. `submitIntake` (server action) validates the answers against the product's
    schema, asserts ownership and `fulfilment_status = 'awaiting_intake'`,
    writes `intake`, `intake_submitted_at`, `due_at`, flips to `queued`, and
@@ -2749,7 +2749,7 @@ clears the hold and resyncs.
    and until when.
 
 A buyer who has not submitted the intake after `intakeReminderDays` gets one
-reminder (`intake_reminder_sent_at` claim). Nothing is ever auto-cancelled;
+reminder (`intake_reminder_sent_at` claim). Nothing is ever auto-canceled;
 an unclaimed purchase is the admin's to refund.
 
 ### 17.9 Account deletion
@@ -2825,7 +2825,7 @@ webhook pointed at production grants nobody anything.
 
 ### 18.3 `lib/billing/redact.ts`
 
-`redactStripeEvent` from `lib/donate/redact.ts` generalised by object type:
+`redactStripeEvent` from `lib/donate/redact.ts` generalized by object type:
 `redactCheckoutSession` (the donation allow-list, unchanged),
 `redactSubscription` (id, object, status, items[].price.id, items[].current_period_*,
 current_period_*, cancel_at_period_end, canceled_at, ended_at, trial_end,
@@ -2981,7 +2981,7 @@ heading.
 
 The site header gains, for a signed-in reader on the Free tier when selling
 is on, a "Beacon+" control to the LEFT of the donate heart, matched to its
-neighbours (the recent header commit set that convention): the mark as its
+neighbors (the recent header commit set that convention): the mark as its
 visible text, "Beacon Plus, see what a membership adds" as its accessible
 name, linking to `/plus`. It is the one place the promotion system is allowed
 to be persistent (Part 25.3), because a header control is where a reader
@@ -3006,8 +3006,8 @@ every write a server action with the same-origin guard and an audit row.
 Subpages, each its own route so each has its own H1:
 
 - `/admin/billing` (overview): members by tier, MRR computed from active
-  prices (a number, labelled as an estimate, because proration and tax are
-  Stripe's), purchases this month, the fulfilment queue count with overdue
+  prices (a number, labeled as an estimate, because proration and tax are
+  Stripe's), purchases this month, the fulfillment queue count with overdue
   in red, failed events count, and the kill switch state, loud.
 - `/admin/billing/tiers`: the list, reorderable (up and down buttons, not
   drag), with per-tier: name, slug (immutable after creation), tagline,
@@ -3039,7 +3039,7 @@ Subpages, each its own route so each has its own H1:
   The global promotion switch, `dismissDays` and `maxPerPage` live on the
   settings page; this page is per placement.
 - `/admin/billing/products`: create and edit services: name, slug, tagline,
-  description, price (same create-and-archive rule), fulfilment kind,
+  description, price (same create-and-archive rule), fulfillment kind,
   turnaround, the intake field builder (add a field, pick its kind, label,
   required), the grant list for `grant` products, public and active.
 - `/admin/billing/orders`: the queue (Part 17.8 step 4), filterable by
@@ -3052,7 +3052,7 @@ Subpages, each its own route so each has its own H1:
   (tier, until a date or for N days, note; creates a comp with `source =
   'admin'`), "Extend" (moves a comp's `expires_at`), "Change tier" (a comp
   only; a paid membership is changed on the provider's page), "End now" (a
-  comp ends at once; a paid membership is cancelled immediately on the
+  comp ends at once; a paid membership is canceled immediately on the
   provider with a warning that no refund is issued by this action), "Grant a
   feature" (feature, until, limit, note), "Revoke" a grant, "Resync from
   provider", "Resend welcome", and "Refund an invoice" (Part 17.7, note
@@ -3207,7 +3207,7 @@ Beyond the site-wide rules, which apply in full:
   (a screen reader reads both numbers with no indication which is real).
 - The interval toggle and the provider choice are native radios in labels,
   never buttons with `aria-pressed`, because the choice is one-of-many and
-  the platform's radio behaviour is the correct keyboard model.
+  the platform's radio behavior is the correct keyboard model.
 - The tier comparison is a real `<table>` with `<caption>` and scoped
   headers; the tier cards above it are the reading-order version of the same
   data, so the table is never the only place a fact lives.
@@ -3258,12 +3258,12 @@ A new section 10, "Membership and purchases", after Donations:
 
 - What Beacon Plus is, that it is optional, that the Free tier exists.
 - Recurring billing: the amount and interval are shown before you pay, the
-  membership renews automatically until cancelled, cancellation takes effect
+  membership renews automatically until canceled, cancellation takes effect
   at the end of the paid period, and all sales are final (Part 12.4), with a
   link to the Refund Policy (Part 30) as the controlling document on refunds.
 - How to cancel: on `/my-beacon/membership`, in one step, any time.
 - Trials and codes: a trial converts to a paid membership at its end unless
-  cancelled before then, and the trial end date is shown before you start;
+  canceled before then, and the trial end date is shown before you start;
   a redeemed code grants a membership for a stated period and does not renew.
 - Price changes: notice by email at least 30 days before a change applies to
   an existing member.
@@ -3511,7 +3511,7 @@ implementer is not choosing.
 
 | id | surface (file) | variant | feature |
 | --- | --- | --- | --- |
-| `lineups.apply` | Lineups optimiser panel, the Apply control (`app/leagues/[id]/lineups/`, the optimiser panel component) | locked | `beacon_link.action.set_lineup` |
+| `lineups.apply` | Lineups optimizer panel, the Apply control (`app/leagues/[id]/lineups/`, the optimizer panel component) | locked | `beacon_link.action.set_lineup` |
 | `lineups.swap` | Lineups, each listed move's "Make this change" | locked | `beacon_link.action.swap_starter` |
 | `lineups.cuts` | Lineups cut list, "Drop" | locked | `beacon_link.action.add_drop_free_agent` |
 | `lineups.waivers` | Lineups free agent panel, "Claim" | locked | `beacon_link.action.submit_waiver` |
@@ -3548,7 +3548,7 @@ The register is premium, which here means quiet. Concretely, and checked by
 `/plus` page string, notification email template and admin-saved override:
 
 - Present tense, second person, one outcome per sentence. "Apply the lineup
-  our optimiser found, on Sleeper, in one press."
+  our optimizer found, on Sleeper, in one press."
 - No exclamation marks. No "unlock", "supercharge", "level up", "elevate",
   "game-changing", "seamless", "powerful" or any word on the site-wide
   writing standard's banned list. No urgency ("limited time", "act now",
@@ -3592,7 +3592,7 @@ The register is premium, which here means quiet. Concretely, and checked by
 - The accessibility review sub-agent confirms, on every surface that carries
   a placement, that the promotion never sits between a heading and the data
   it introduces (it follows the heading and precedes the data only in the
-  `strip` variant, which is one line and is itself labelled).
+  `strip` variant, which is one line and is itself labeled).
 - A reader may turn every non-control promotion off for their account: a
   checkbox on `/my-beacon/notifications`, "Show me notes about Beacon Plus
   inside the tools", stored as `notification_preferences.kinds.plus_notes`
@@ -3708,7 +3708,7 @@ revision.
 - `lineup_alert`: from `lib/league-lineups/build.ts` on the reader's roster
   for the live week: every started slot holding a "0" placeholder, a player
   on bye, or a player whose `players.metadata.sleeper.injury_status` is
-  `Out`, `IR`, `Doubtful` or `Suspended`; and the optimiser's
+  `Out`, `IR`, `Doubtful` or `Suspended`; and the optimizer's
   `pointsLeftOnBench` when it exceeds `settings.thresholds.lineupBenchGap`
   (default 8.0). Fires ONLY when at least one problem exists. The dedupe key
   hashes the sorted problem set, so a second alert fires only if a NEW
@@ -3716,7 +3716,7 @@ revision.
   the Sunday morning window and again at the Thursday evening window for a
   Thursday starter only (the window checks `players` game day through
   `nfl_game_odds` when present). Link: the Lineups page; a connected member's
-  link lands on the optimiser with Apply one press away.
+  link lands on the optimizer with Apply one press away.
 - `waiver_reminder`: the league's waiver settings from `leagues.metadata`
   (`waiver_type`, `waiver_budget`, `waiver_day_of_week`, `daily_waivers`,
   `waiver_clear_days`, and the roster's remaining budget from
@@ -4128,7 +4128,7 @@ for a guest reads "Sign in to join" and carries `next=/plus`). 404 when
    saying that a member can connect their Sleeper account and carry out what
    our tools recommend without leaving the page, then a `<ul>` of the
    Beacon Link actions in the reader's tier (or the cheapest priced tier
-   that has them), each by OUTCOME: "Apply the lineup the optimiser found",
+   that has them), each by OUTCOME: "Apply the lineup the optimizer found",
    "Place the bid the FAAB calculator suggests", "Send a trade from Trade
    Ideas", "Accept or reject an offer with our verdict beside it", "Post to
    your league's chat and start a poll". Not one sentence about how. Hidden
@@ -4211,7 +4211,7 @@ a separate "your features" list to be written.
 
 ### 27.4 `/plus/redeem`
 
-Part 28.3's page. One `<form>`, one labelled input "Your code", one button
+Part 28.3's page. One `<form>`, one labeled input "Your code", one button
 "Redeem", a `role="alert"` for errors and a `role="status"` for success,
 the `?code=` prefill, "Sign in to redeem" for a guest with `next` carrying the
 code. Below the form, one sentence on what a code is (a membership on us for
@@ -4270,7 +4270,7 @@ the welcome page again", so the walkthrough is never a one-time modal.
   when every public priced tier has a yearly price, and the saving is stated
   in words beside the radio.
 - Prices are one text node each, never struck through against another. The
-  comparison is a real table. Every example figure is labelled as an example
+  comparison is a real table. Every example figure is labeled as an example
   in words.
 - Motion: none that conveys information; anything decorative respects
   `prefers-reduced-motion`.
@@ -4400,7 +4400,7 @@ A code is a string the owner mints that a signed-in reader redeems on
    code id, `sendCompStarted`, redirect to `/plus/welcome?redeemed=1`.
    Failure: the reason vocabulary mapped to one sentence each in a
    `role="alert"` ("That code has already been used", "That code has
-   expired", "That code is for new members", "We do not recognise that
+   expired", "That code is for new members", "We do not recognize that
    code"), and no distinction between "never existed" and "disabled", so a
    guesser learns nothing.
 
@@ -4605,7 +4605,7 @@ full.
 
 5. Discretionary refunds
 
-Although all sales are final, we recognise that circumstances vary. We
+Although all sales are final, we recognize that circumstances vary. We
 consider refund requests case by case, at our sole discretion, and a decision
 in one case does not bind us in another. To request a refund, email
 <support email> from the address on your account within fourteen days of the
@@ -4620,7 +4620,7 @@ provided.
 If you believe a charge is wrong, please contact us first so that we can look
 into it. A payment that is disputed with your card issuer, bank or payment
 provider suspends the access it paid for while the dispute is open. If the
-dispute is resolved in our favour, access is restored; if it is resolved in
+dispute is resolved in our favor, access is restored; if it is resolved in
 yours, the purchase is treated as refunded. We reserve the right to decline
 future purchases from an account that has raised a dispute without contacting
 us.
@@ -4788,7 +4788,7 @@ account page's identity manager. Sending: `POST /users/@me/channels` with
 `recipient_id` to open (or reopen) the DM, then `POST /channels/{id}/messages`
 with plain text content built by the kind's `buildDiscordMessage` (the same
 figures as the email, no embeds, one link, under 2,000 characters), through
-`lib/discord/dm.ts` (new) which honours Discord's rate-limit headers and
+`lib/discord/dm.ts` (new) which honors Discord's rate-limit headers and
 returns a reason on any failure (`not_in_guild`, `dms_closed`, `rate_limited`,
 `error`), never throws. A DM that fails with `dms_closed` sets the channel off
 and the next email says so in one sentence. `notification_deliveries` gains
@@ -4986,7 +4986,7 @@ of a panel League Pulse already renders from its caches:
 | `announcements` | editor-written text, plain paragraphs | `pages.announcements` |
 | `rules` | a teaser and link to the league's rules page `/home/rules` | `pages.rules` |
 | `history` | champions by season, from prior seasons we hold through `previous_league_id`, with an editor-written override list for seasons we do not | `leagues` chain, `pages.history` |
-| `links` | up to twelve labelled links (http or https only, validated) | `pages.links` |
+| `links` | up to twelve labeled links (http or https only, validated) | `pages.links` |
 | `discord` | a "Join the league Discord" button for one invite URL | `pages.discordInvite` |
 
 Every module reads caches and never triggers a compute (the same rule as
@@ -5013,7 +5013,7 @@ pages: { announcements?: string, rules?: string, history?: [{ season, champion, 
 Unknown module ids are dropped on save; a missing module is appended
 disabled; `hero` is forced to index 0 and enabled; two `half` modules in a
 row share one row on wide viewports and stack on narrow ones, and a `half`
-with no partner renders full. The accent colour is checked for contrast
+with no partner renders full. The accent color is checked for contrast
 against both the dark and the light ground (WCAG AA on text it is applied to,
 which is headings and the beam only) and refused with the measured ratio
 when it fails; the default is the site's purple. Long text is plain
@@ -5040,7 +5040,7 @@ accessibility review before it ships.
 VISIBILITY. `public` is the default and the point. `members` requires the
 viewer to be signed in and matched to a roster in the league (the saved
 handle's `sleeper_user_id` against `rosters.owner_user_id` / `co_owners`),
-renders a sign-in prompt otherwise, and is honoured on ffbeacon.com only; a
+renders a sign-in prompt otherwise, and is honored on ffbeacon.com only; a
 custom domain has no session (31.4b), so a `members` home is served on the
 custom domain as a one-line "This league's home is private. Open it on FF
 Beacon." with the link.
@@ -5574,7 +5574,7 @@ MB-T020 | lib/billing/entitlements.ts: resolveEntitlements, hasFeature, featureL
         | claimQuota, the caches and the tag; tests for every status in Part 14.5 and every grant rule.
 MB-T021 | lib/billing/gate-guard.test.ts (Part 14.6).
 MB-T022 | components/billing/feature-gate.tsx + plus-promo.tsx (all six variants) + promo-dismiss.tsx + tests
-        | (locked, hidden, no priced tier has it, budget of one per page, dismissed cookie honoured, kill switches).
+        | (locked, hidden, no priced tier has it, budget of one per page, dismissed cookie honored, kill switches).
 MB-T022a| lib/billing/promo-placements.ts: the Part 25.4 launch list + promo-placements.test.ts.
 MB-T023 | lib/billing/redact.ts + redact.test.ts (Part 18.3).
 MB-T024 | lib/billing/providers/types.ts + index.ts (getProvider, enabledProviders).
@@ -5760,7 +5760,7 @@ MB-T155 | /plus/league copy for the three parts of the plan; the three FAQ entri
         | ownership (Part 23.2).
 MB-T156 | CLAUDE.md env section: the five new env vars; docs/billing/billing.md: the Cloudflare token scopes, the
         | Vercel token, the wildcard record, the purchase runbook.
-MB-T157 | accessibility + security review sub-agents across Phase 7: the editor's every control native and labelled;
+MB-T157 | accessibility + security review sub-agents across Phase 7: the editor's every control native and labeled;
         | the layout validator drops unknown ids; the host table is the view and nothing else; no session is read
         | on a league host; the DNS and Vercel clients never log provider text; the accent contrast check.
 ```
@@ -5867,7 +5867,7 @@ MB-T138 | [P5] accessibility + security review sub-agents across Phase 6: the Re
 - `syncMembershipFromProvider` and `syncPurchaseFromProvider` are the only
   writers of membership and purchase state. Webhooks, success pages, the
   reconcile cron and admin resync all call them.
-- Cancelling takes no more steps than joining. One page, one button, one
+- Canceling takes no more steps than joining. One page, one button, one
   confirm. No retention screen, no email-to-cancel.
 - The renewal sentence is `renewalSentence()` and is used everywhere it
   appears; the four surfaces cannot disagree.
@@ -5904,7 +5904,7 @@ MB-T138 | [P5] accessibility + security review sub-agents across Phase 6: the Re
   cron expression carries no product meaning.
 - A comp, a trial and a code are three different sentences and one table.
   All sales are final; no reader-facing control offers a refund; a refund is
-  an admin action with a note. A cancelled membership runs to the end of its
+  an admin action with a note. A canceled membership runs to the end of its
   paid period. `/refund-policy` is the constant in
   `lib/billing/refund-policy.ts`.
 - Tax is a block with a mode in `lib/billing/tax.ts`; the Stripe provider

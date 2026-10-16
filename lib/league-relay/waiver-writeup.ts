@@ -174,7 +174,7 @@ const OVERPAY_LINES: Line[] = [
 const FREEBIE_LINES: Line[] = [
   { heat: 0.2, text: "Free, which is exactly the right price if this does not work out." },
   { heat: 0.2, text: "No budget spent, so the downside here is a roster spot." },
-  { heat: 0.4, text: "Costless, and therefore hard to criticise, which is annoying." },
+  { heat: 0.4, text: "Costless, and therefore hard to criticize, which is annoying." },
   { heat: 0, text: "No budget spent." },
   { heat: 0.5, text: "Nobody else bid, which is either an edge or a warning." },
   { heat: 0.6, text: "Unclaimed by every other manager in the league, which is data of a sort." },
@@ -242,7 +242,7 @@ function playerVerdict(
   p: WaiverPlayer,
   /**
    * False when ./waiver-fit.ts has already said what the player does for THIS
-   * roster. The judgements below are about the player in general ("startable in
+   * roster. The judgments below are about the player in general ("startable in
    * most weeks"), and printed beside a roster verdict they can contradict it: a
    * 12-point back is startable for most teams and still a bench piece on one
    * with three better backs. With a fit in hand only the facts are kept.
@@ -260,7 +260,7 @@ function playerVerdict(
     } ${Math.abs(p.change30dPct).toFixed(0)}% over thirty days`;
   })();
 
-  // A missing projection is never a judgement (plan IDP-129). For a defender it
+  // A missing projection is never a judgment (plan IDP-129). For a defender it
   // is the product's gap, not the player's: no value source prices defenders and
   // League Pulse does not project them yet. For anyone else it is a plain fact
   // about this week, not a verdict on the claim.

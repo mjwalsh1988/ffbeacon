@@ -265,7 +265,7 @@ export async function getXUserTweets(
  * requested id missing from `data` means it is gone at the source.
  *
  * Callers MUST pass no more than 100 ids. Silently truncating (the previous
- * behaviour) would make the deletion sweep report every dropped id as deleted
+ * behavior) would make the deletion sweep report every dropped id as deleted
  * and unpublish live articles, so an over-long list is a caller bug and is
  * reported as one.
  */

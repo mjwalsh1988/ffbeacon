@@ -4,7 +4,7 @@
  *
  * PageMasthead is the usual way in, and most pages should use that. This exists
  * for the one masthead that cannot: the player profile puts a headshot beside
- * the identity and tints the corner with the team colour, which is enough
+ * the identity and tints the corner with the team color, which is enough
  * bespoke structure that bending PageMasthead around it would cost more than it
  * saves. What it must not do is restate the gradient stops, because then a
  * change to the house style has to be made in two places and one of them gets

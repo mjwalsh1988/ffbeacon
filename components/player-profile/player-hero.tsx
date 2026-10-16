@@ -163,7 +163,7 @@ export function PlayerHero({
                    code beside it carries the meaning). The chip is tinted with
                    the team's own primary color when we have the nfl_teams row,
                    so the badge row picks up the team's brand rather than
-                   sitting in neutral grey. */
+                   sitting in neutral gray. */
                 <span
                   className="inline-flex items-center gap-1.5 rounded-md border border-line/70 bg-base px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-ink-muted"
                   style={

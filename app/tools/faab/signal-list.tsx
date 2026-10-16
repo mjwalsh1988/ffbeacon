@@ -7,7 +7,7 @@ import type { FaabSignal } from "@/lib/faab/types";
 /**
  * Every reason the number moved, so a reader can disagree with it.
  *
- * The direction is a word before it is a colour or an arrow: the percentage
+ * The direction is a word before it is a color or an arrow: the percentage
  * reads "12% to the bid" or "8% off the bid", so a reader who cannot see the
  * green arrow still knows which way it went.
  */

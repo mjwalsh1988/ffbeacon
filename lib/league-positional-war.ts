@@ -102,7 +102,7 @@ const SETTLED_REASON_TESTS: Array<(reason: string) => boolean> = [
 /**
  * Map calculateLeaguePositionalWar's return shape to the verdict persisted on
  * leagues.positional_war_status. A lookup over an already-exhaustive set of
- * reason strings, not new calculation logic. An unrecognised skipped reason
+ * reason strings, not new calculation logic. An unrecognized skipped reason
  * classifies as 'skipped' rather than 'settled', the same reasoning as Power
  * Pulse: the cost of an unnecessary extra retry is one recompute, the cost of
  * a wrongly-'settled' league is silence.

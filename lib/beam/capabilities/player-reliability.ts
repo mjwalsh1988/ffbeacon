@@ -120,7 +120,7 @@ export const playerReliability: BeamCapability<Params, Result> = {
       });
     }
 
-    // A beat rate is a fraction, and a fraction over five games is a rumour.
+    // A beat rate is a fraction, and a fraction over five games is a rumor.
     if (r.weeksPlayed < 8) {
       caveats.push(
         `That is only ${r.weeksPlayed} graded ${r.weeksPlayed === 1 ? "game" : "games"}, which is a small sample for a rate.`,

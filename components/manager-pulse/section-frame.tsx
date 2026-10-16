@@ -33,7 +33,7 @@ const TYPE_EXCLUSIVE_LABEL: Record<"dynasty" | "redraft", string> = {
 
 /**
  * Alternates the top-edge hairline so a long report does not
- * read as one grey column. Purely decorative; every section still carries the
+ * read as one gray column. Purely decorative; every section still carries the
  * same real heading and body regardless of which accent it gets.
  */
 const ACCENT_GRADIENT: Record<"purple" | "cyan", string> = {

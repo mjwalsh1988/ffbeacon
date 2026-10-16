@@ -116,7 +116,7 @@ export const glossaryTerm: BeamCapability<Params, Result> = {
       headline,
       body: result.body,
       // The definition IS the answer, so it is spoken in full rather than
-      // summarised down to a label and a truncated value.
+      // summarized down to a label and a truncated value.
       speech: `${result.heading}. ${result.body}`,
       facts: [],
       context,

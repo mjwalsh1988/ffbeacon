@@ -30,7 +30,7 @@ export type ProjectionSyncWindow =
  *
  * Full at the daily hour, and full whenever the live state is not a regular
  * season week we can name (preseason, off-season, a failed state read): a
- * narrowed run is an optimisation, and without a live week there is nothing to
+ * narrowed run is an optimization, and without a live week there is nothing to
  * narrow to safely.
  */
 export function projectionSyncWindow(

@@ -7,14 +7,14 @@
  * word, the border down the left edge and the sentence underneath, so no single
  * channel is load bearing.
  *
- * COLOUR IS NEVER THE SIGNAL. The tint reinforces a word that is already there,
- * which is the rule every other League Pulse surface follows. Remove the colour
+ * COLOR IS NEVER THE SIGNAL. The tint reinforces a word that is already there,
+ * which is the rule every other League Pulse surface follows. Remove the color
  * and the panel still says "Final" beside a tick.
  *
  * THE EDGE MATCHES THE SCHEDULES BOARD. Purple for a week still to come, cyan
- * for one in progress, flat grey for one that is done, exactly as
+ * for one in progress, flat gray for one that is done, exactly as
  * `stateEdgeClass` in components/league-schedule/format.ts paints a matchup
- * card. Two pages in the same section using two colour languages for the same
+ * card. Two pages in the same section using two color languages for the same
  * three states is the kind of thing nobody reports and everybody feels.
  *
  * Server component. Presentational only.
@@ -65,7 +65,7 @@ const TONES: Record<WeekPhase, Tone> = {
 /**
  * The banner over the whole page.
  *
- * The week number is a REAL `h2`, and the section is labelled by it. It was a
+ * The week number is a REAL `h2`, and the section is labeled by it. It was a
  * styled span first, which meant heading navigation skipped the page's whole
  * orienting statement: a reader pressing H went from "Lineups" straight to the
  * team name, past the one element that says whether these are forecasts or

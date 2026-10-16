@@ -61,7 +61,7 @@ export const WAIVER_START_MIN_GAIN = 0.5;
  * what a player is worth; it is the line under which giving him away for free
  * is a defensible move rather than a mistake the page talked a reader into.
  * Leagues price on different scales, so callers hand in values already
- * normalised to the reader's own format and source.
+ * normalized to the reader's own format and source.
  */
 export const DYNASTY_KEEP_VALUE = 1500;
 
@@ -184,7 +184,7 @@ export function protectedDefenderSentence(names: readonly string[]): string | nu
 /**
  * The players this roster would miss least, cheapest first.
  *
- * ANYONE THE OPTIMISER SEATS THIS WEEK IS EXCLUDED OUTRIGHT. He is, by
+ * ANYONE THE OPTIMIZER SEATS THIS WEEK IS EXCLUDED OUTRIGHT. He is, by
  * definition, one of the best nine players available to start, and a page that
  * offers a starter as a cut in one panel while telling you to start him in
  * another is two panels disagreeing on the same screen.
@@ -300,7 +300,7 @@ export type WaiverCandidate = {
  *   - A rebuilder is ranked on overall rank instead, because the player who
  *     might be a starter next season is worth more than the one who adds two
  *     points to a lineup that is not going anywhere. A start-now pickup is
- *     still listed and still labelled honestly; it is simply not led with.
+ *     still listed and still labeled honestly; it is simply not led with.
  *   - A bubble team gets the contender ordering, because a team still in it
  *     should act like one until it is not.
  *   - A Loaded team gets the contender ordering too, and for a sharper version
@@ -393,7 +393,7 @@ function waiverNote(
  *
  * A redraft league is always contending, whatever the record says: there is no
  * next season to trade toward, so the only thing to do with a bad team is try
- * to make it better. That is not a modelling choice, it is what the format is.
+ * to make it better. That is not a modeling choice, it is what the format is.
  */
 export function goalBrief(status: TeamStatus | null): string {
   if (!status) {

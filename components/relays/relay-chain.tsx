@@ -1,6 +1,6 @@
 /**
  * The chain of earlier and later Relays for one story, on the permalink page.
- * Two labelled lists of cards, each omitted when empty, so a reader moving by
+ * Two labeled lists of cards, each omitted when empty, so a reader moving by
  * heading meets "Earlier reports" and "Later reports" only when there are any.
  *
  * Server component.

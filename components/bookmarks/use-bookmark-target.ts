@@ -7,7 +7,7 @@
  * right of the breadcrumb bar, which saves the page you are on, and the button
  * inside League Pulse's league sheet, which saves a league you are only looking
  * at. Written once so that the announcement, the already-saved wording and the
- * warm-on-intent behaviour cannot drift between them.
+ * warm-on-intent behavior cannot drift between them.
  *
  * BEFORE THE LIST HAS LOADED, PRESSING ONLY EVER ADDS. On a handheld the server
  * sends no bookmarks, so until the warm fetch lands there is no way to know

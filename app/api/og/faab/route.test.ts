@@ -97,7 +97,7 @@ describe("parseFaabOgParams, the valid cases", () => {
     ).toBe("7");
   });
 
-  it("accepts a team defence id, which is letters rather than digits", () => {
+  it("accepts a team defense id, which is letters rather than digits", () => {
     expect(
       expectValid("p=PHI&bid=3&walk=6&budget=100&win=44&k=standard").playerId,
     ).toBe("PHI");

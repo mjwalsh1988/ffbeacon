@@ -9,7 +9,7 @@
  * beside it carry every word of the meaning, so a reader who never sees the
  * icon loses nothing. It is the one flourish on the card for the same reason
  * the trophy is the one flourish on the champion's: a league that plays this
- * format came for the drama, and a line of grey text does not deliver it.
+ * format came for the drama, and a line of gray text does not deliver it.
  *
  * Renders nothing before the first chop. An empty "nobody has been chopped"
  * card would take the top of the page every week of the preseason to say that

@@ -16,7 +16,7 @@
  *
  * Whether "Jonathan Taylor agrees to a two-year extension" at 11:55 and "Jonathan
  * Taylor officially signed his two-year extension" at 19:15 are the same event is not
- * a judgement call. It is a lookup. Lookups are free, they are stable, and they do not
+ * a judgment call. It is a lookup. Lookups are free, they are stable, and they do not
  * drift when a prompt is edited.
  *
  * WHAT THE KEY IS

@@ -11,7 +11,7 @@
  *
  * TWO VIEWS OF THE SAME ROWS. "Season" is totals, per game, games and last
  * week. "Week by week" is every week's points with the positional finish under
- * each, coloured by how good the finish was, plus how many of those weeks were
+ * each, colored by how good the finish was, plus how many of those weeks were
  * inside the starting range. Position, sort and search carry across both.
  *
  * ACCESSIBILITY CONTRACT
@@ -23,13 +23,13 @@
  *     keystroke.
  *   - "Show more" moves focus to the first row it revealed. Without that the
  *     last press removes the focused button and focus falls to the page body.
- *   - A selected button carries a check mark as well as its colour.
+ *   - A selected button carries a check mark as well as its color.
  *   - Both views are real tables with a caption, column headers and the
  *     player's name as the row header. The row header holds the name and team
  *     only, because a screen reader repeats it for every cell in the row.
  *   - The weekly bars under a name are a graphic and are aria-hidden. Their
  *     numbers are the Week by week view, one button away.
- *   - Colour in the weekly grid repeats the finish printed in the cell. No cell
+ *   - Color in the weekly grid repeats the finish printed in the cell. No cell
  *     depends on it.
  *   - No column is dropped on a phone. Games and last week move under the
  *     points and the per-game figure; the weekly grid scrolls sideways inside

@@ -253,7 +253,7 @@ describe("acceptanceOf, the tendency band shift (Manager Pulse, section 8.3)", (
     expect(acceptanceOf(theirs, profileOf("competitor"), 0.01, undefined, -1)).toBe("long-shot");
   });
 
-  it("never moves a band past its neighbour, whatever step size is passed", () => {
+  it("never moves a band past its neighbor, whatever step size is passed", () => {
     const theirs = impact({ valueDelta: 50, lineupDelta: 3 });
     const base = acceptanceOf(theirs, profileOf("competitor"), 0.02);
     expect(base).toBe("likely");

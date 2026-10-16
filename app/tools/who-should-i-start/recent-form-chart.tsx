@@ -16,8 +16,8 @@
  * line up under the columns of the drawing: the table is table-fixed with a
  * 4rem row-header column, and the SVG is inset by the same 4rem and divides
  * its width into the same number of equal slots. The row headers carry the
- * colour keys (a cyan square for scored, a light bar for projected), so there
- * is no separate legend to match by colour, and a week the player did not
+ * color keys (a cyan square for scored, a light bar for projected), so there
+ * is no separate legend to match by color, and a week the player did not
  * play says "Out" in its own cell right under its ring. The met-or-beat count
  * is a visible sentence. The SVG itself is aria-hidden: everything it draws
  * is in the table.

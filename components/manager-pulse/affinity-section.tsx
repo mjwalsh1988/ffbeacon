@@ -6,7 +6,7 @@
  * filing cabinet rather than as an answer. They are three views of one
  * question, so they share one visual system:
  *
- *   Favourites  player tiles, led by how many league-seasons they rostered him
+ *   Favorites  player tiles, led by how many league-seasons they rostered him
  *   Avoids      the same tile, led by how widely rostered he is everywhere else
  *   Repeats     a ranked bar chart, because it is one name and one count
  *
@@ -50,18 +50,18 @@ export function AffinitySection({
     <SectionFrame id="affinity" title="Who they like" accent="cyan" isSample={isSample}>
       {/* THE SAMPLE NOUN IS "PLAYER", NOT "LEAGUE-SEASON".
           `favouritesSampleSize` is `totals.size`: the count of distinct
-          players this manager has any exposure to at all. Labelled
+          players this manager has any exposure to at all. Labeled
           league-seasons it read as "over 391 league-seasons" on a manager the
           same page says has 60. `avoidsSampleSize` below is the same shape:
           candidate players considered. */}
       <PlayerFigure
-        title="Favourites"
+        title="Favorites"
         description="Players they roster far more often than that player is rostered anywhere else."
         players={affinity.favourites}
         sampleSize={affinity.favouritesSampleSize}
         sampleNoun="player"
-        emptyReason="Not enough exposure yet to name a favourite."
-        variant="favourite"
+        emptyReason="Not enough exposure yet to name a favorite."
+        variant="favorite"
         isSample={isSample}
       />
 
@@ -87,7 +87,7 @@ export function AffinitySection({
  * One player, as a tile.
  *
  * The lead figure differs by variant, because the two findings lead with
- * different evidence. A favourite leads with how many league-seasons THIS
+ * different evidence. A favorite leads with how many league-seasons THIS
  * manager rostered him, which is the unusual thing about it. An avoid leads
  * with the league-wide rate, because the manager's own count is zero by
  * definition and printing a zero as the headline of a card says nothing.
@@ -101,7 +101,7 @@ function PlayerTile({
   maxSeasons,
 }: {
   player: PlayerExposure;
-  variant: "favourite" | "avoid";
+  variant: "favorite" | "avoid";
   /** The largest league-season count in this list, so the bars are comparable. */
   maxSeasons: number;
 }) {
@@ -109,10 +109,10 @@ function PlayerTile({
   const badgeClass = colorKey ? POSITION_BADGE[colorKey] : POSITION_BADGE_FALLBACK;
 
   const leadValue =
-    variant === "favourite"
+    variant === "favorite"
       ? String(player.leagueSeasonsRostered)
       : formatPercent(player.leagueWideRosterRate);
-  const leadLabel = variant === "favourite" ? "league-seasons" : "rostered elsewhere";
+  const leadLabel = variant === "favorite" ? "league-seasons" : "rostered elsewhere";
 
   const theirShare = maxSeasons > 0 ? player.leagueSeasonsRostered / maxSeasons : 0;
 
@@ -141,7 +141,7 @@ function PlayerTile({
         <div className="shrink-0 text-right">
           <p
             className={`font-mono text-3xl font-extrabold leading-none tabular-nums ${
-              variant === "favourite" ? "text-brand-cyan" : "text-ink"
+              variant === "favorite" ? "text-brand-cyan" : "text-ink"
             }`}
           >
             {leadValue}
@@ -150,7 +150,7 @@ function PlayerTile({
         </div>
       </div>
 
-      {variant === "favourite" && (
+      {variant === "favorite" && (
         <span
           aria-hidden="true"
           className="mt-2 block h-1.5 w-full overflow-hidden rounded-full bg-line/50"
@@ -163,7 +163,7 @@ function PlayerTile({
       )}
 
       <p className="mt-1.5 text-[11px] leading-relaxed text-ink-muted">
-        {variant === "favourite"
+        {variant === "favorite"
           ? `Rostered in ${player.leagueSeasonsRostered} league-season${player.leagueSeasonsRostered === 1 ? "" : "s"}, against ${formatPercent(player.leagueWideRosterRate)} of leagues everywhere.`
           : `Rostered in ${formatPercent(player.leagueWideRosterRate)} of leagues everywhere, and never once by them.`}
       </p>
@@ -187,7 +187,7 @@ function PlayerFigure({
   sampleSize: number;
   sampleNoun: string;
   emptyReason: string;
-  variant: "favourite" | "avoid";
+  variant: "favorite" | "avoid";
   isSample?: boolean;
 }) {
   const sampleNote = formatSample(sampleSize, sampleNoun);
@@ -206,7 +206,7 @@ function PlayerFigure({
   const lead = players[0];
 
   const summary =
-    variant === "favourite"
+    variant === "favorite"
       ? `${title}: ${lead.name} leads, rostered in ${lead.leagueSeasonsRostered} of this manager's league-seasons against ${formatPercent(lead.leagueWideRosterRate)} of leagues everywhere. ${players.length} players listed.`
       : `${title}: ${lead.name} leads, rostered in ${formatPercent(lead.leagueWideRosterRate)} of leagues everywhere and never by this manager. ${players.length} players listed.`;
 

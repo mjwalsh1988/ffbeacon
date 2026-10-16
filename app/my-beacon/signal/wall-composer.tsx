@@ -361,7 +361,7 @@ export function WallComposer() {
       {/* The visible "Add image" button below is the real control; this input
           is only the browser's file dialog behind it. Out of the tab order and
           the accessibility tree, so a keyboard reader does not land on a second,
-          unlabelled "Browse" stop, and disabled on the same terms as the button
+          unlabeled "Browse" stop, and disabled on the same terms as the button
           so it cannot be reached another way once the image cap is hit. */}
       <input
         ref={fileInputRef}

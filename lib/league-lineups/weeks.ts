@@ -3,7 +3,7 @@
  *
  * Pure, and in lib/ rather than in the route file for a reason the build
  * enforces: a Next App Router page may only export the handful of names the
- * framework recognises, so a helper exported from a page for its own tests
+ * framework recognizes, so a helper exported from a page for its own tests
  * fails the type check. Splitting it out is the fix, and it is the better shape
  * anyway.
  */
@@ -26,7 +26,7 @@ export type LineupWeekOption = {
  * to move.
  *
  * `isCurrent` is never true on a week that has already settled. Sleeper's
- * `leg` can sit on a week whose games are done, and labelling that "this week"
+ * `leg` can sit on a week whose games are done, and labeling that "this week"
  * beside a final score reads as a page that has not noticed the games were
  * played.
  */

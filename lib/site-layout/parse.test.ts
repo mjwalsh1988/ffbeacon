@@ -163,7 +163,7 @@ describe("the defaults", () => {
     const merged = mergeSiteLayout(parsed);
     // Every section, exactly once, and a section the row predates APPENDED
     // rather than slotted into its default position. That is normalizeOrder's
-    // documented behaviour and it is the safe one: a stored order is somebody's
+    // documented behavior and it is the safe one: a stored order is somebody's
     // deliberate arrangement, so a new entry goes at the end rather than
     // pushing their choices around. The consequence is cosmetic and is why
     // migrations 0293 and 0338 update the stored row to put Waiver Wire and

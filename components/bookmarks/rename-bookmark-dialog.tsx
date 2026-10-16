@@ -3,7 +3,7 @@
 /**
  * Rename one bookmark.
  *
- * Centred on desktop rather than the house right-hand rail, per the rule in
+ * Centered on desktop rather than the house right-hand rail, per the rule in
  * CLAUDE.md: this is a decision with one field in it, and a full-height panel
  * holding a single input would be mostly empty. The bottom sheet on a phone is
  * unchanged, as is everything about how the dialog is operated.

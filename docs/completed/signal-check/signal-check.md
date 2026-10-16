@@ -205,7 +205,7 @@ that, any piece worth under `signal_check_quality_package_threshold` percent of
 side would need to draw level, recomputing the whole comparison at each step
 because a candidate can change which pieces count as package pieces and can move
 `H` itself. `adjustment = rawTrailing + x - rawFavoured`, credited to the
-favoured side.
+favored side.
 
 **Side totals are never rewritten.** The credit lands in
 `AnalyzedSide.consolidationAdjustment` and the sum in
@@ -291,7 +291,7 @@ package) -> depth. Each key maps to an admin-editable label
 `computeConfidence()` starts at 60 and adjusts: + separation (margin),
 - picks (noisier), - missing values, - a slotless pick, + clean Sleeper
 detection, - material pile-on, - a consolidation credit shaping the verdict
-(a modelled number rather than a measured one), - a capped balance solve,
+(a modeled number rather than a measured one), - a capped balance solve,
 + admin rule confidence_modifiers. Clamped
 0..100, mapped to low (<= `confidence_low_max`, default 40) / high
 (>= `confidence_high_min`, default 70) / medium otherwise.
@@ -352,7 +352,7 @@ Two sources, best first:
 
 1. **The published draft order.** If the league already has a draft for that
    season, `league_drafts.slot_to_roster_id` gives the exact slot. Read through
-   the existing `lib/league-pick-slots.ts`. Not an estimate, not labelled as one.
+   the existing `lib/league-pick-slots.ts`. Not an estimate, not labeled as one.
 2. **Projected standings.** Otherwise rank the teams by projected regular season
    finish (Power Pulse, ordered by the shared `compareProjectedFinish`) and split
    into thirds: top third sends LATE picks, middle MID, bottom EARLY. A pick for

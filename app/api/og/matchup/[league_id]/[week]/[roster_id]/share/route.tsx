@@ -76,7 +76,7 @@ const GROUP_COLOR: Record<SlotGroup, string> = {
   TE: "#FBBF24",
   FLEX: "#C084FC",
   SUPERFLEX: "#F472B6",
-  // One group, one colour, until the IDP group is split: the linebacker hue.
+  // One group, one color, until the IDP group is split: the linebacker hue.
   IDP: "#E879F9",
   K: "#A3E635",
   DEF: "#FB923C",
@@ -87,7 +87,7 @@ const GROUP_COLOR: Record<SlotGroup, string> = {
  *
  * A 46px headshot with breathing room above and below is what makes a row read
  * as a person rather than as a line of a table, which is the whole reason the
- * reference card this is modelled on is legible at thumbnail size in a chat.
+ * reference card this is modeled on is legible at thumbnail size in a chat.
  */
 const ROW_HEIGHT = 100;
 const PHOTO_SIZE = 46;
@@ -116,7 +116,7 @@ const MAX_ROSTER_ID = 64;
  * The most slots this route will draw.
  *
  * `roster_positions` is stored verbatim from Sleeper and `alignedStartingSlots`
- * keeps every token it does not recognise, so the height of this image is a
+ * keeps every token it does not recognize, so the height of this image is a
  * function of a value that originates outside our control, and any visitor can
  * get a league of their choosing synced simply by opening its deep view. Real
  * leagues sit well under this. A league over it gets a message rather than a
@@ -337,7 +337,7 @@ function Header({ card }: { card: ShareCard }) {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         {/* The real mark, inlined at module load, not a gradient square standing
-            in for one. It is the thing somebody recognises in a chat thread
+            in for one. It is the thing somebody recognizes in a chat thread
             before they have read a word of the card. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -370,7 +370,7 @@ function Header({ card }: { card: ShareCard }) {
  * The two team names, the two totals, and the strip under them.
  *
  * The strip is a WIN CHANCE before the games start and a MARGIN once they have,
- * never a bar of one quantity relabelled as the other. Both ends of the win
+ * never a bar of one quantity relabeled as the other. Both ends of the win
  * chance are printed as numbers, because a still image cannot be interrogated
  * and a bar on its own says nothing to anybody who cannot see it.
  */
@@ -585,7 +585,7 @@ function WinChance({ home, away }: { home: ShareCardSide; away: ShareCardSide })
           sizes a text node to its own content inside a column and neither
           textAlign nor a 100% width moves it, so the label sat pinned to the
           left edge under the home team's total. A one-child flex row is the
-          thing satori actually centres. */}
+          thing satori actually centers. */}
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
         <p
           style={{
@@ -733,7 +733,7 @@ function PlayerSide({
   /** Sleeper id to data URI. A miss draws the position instead. */
   photos: Map<string, string>;
   /**
-   * This side's colour, cyan on the left and purple on the right, matching the
+   * This side's color, cyan on the left and purple on the right, matching the
    * two ends of the scoreboard above. It marks the higher of the two numbers in
    * a row. Painting both sides' winners cyan said "home" on an away player and
    * broke the one pairing the card asks a reader to carry down the page.
@@ -858,7 +858,7 @@ function PlayerSide({
  * two reading as different kinds of thing at a glance is the same rule
  * `components/player-headshot.tsx` enforces on the page.
  *
- * A miss is not a broken box and not an empty one. A team defence has no
+ * A miss is not a broken box and not an empty one. A team defense has no
  * headshot at all (Sleeper answers 403 on the player path, so the logo path is
  * tried instead and can still come back empty), a photo can time out, and a
  * player Sleeper has no picture for is ordinary. The position code in the same

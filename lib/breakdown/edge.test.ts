@@ -290,7 +290,7 @@ describe("metric registry integrity", () => {
 });
 
 /**
- * computeGroupEdge generalises the same engine to N sides. These tests pin the
+ * computeGroupEdge generalizes the same engine to N sides. These tests pin the
  * properties that keep it a true generalisation rather than a second, possibly
  * disagreeing, implementation: at N equal to 2 it must land on the same
  * leader, label AND composite as computeEdge (not merely point the same

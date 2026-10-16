@@ -13,7 +13,7 @@ import "server-only";
  *   currently running, and cannot be misconfigured by anything an operator
  *   edits; it is preferred whenever it is present. NEXT_PUBLIC_SITE_URL is a
  *   NEXT_PUBLIC_ variable: it is inlined into the client bundle and is treated
- *   organisationally as non-sensitive, precisely because anything reachable
+ *   organizationally as non-sensitive, precisely because anything reachable
  *   from the browser cannot be a secret. A wrong or stale value there (a
  *   preview deployment's env, a copied staging config, a changed setting)
  *   would otherwise silently carry CRON_SECRET, a real secret, to whatever

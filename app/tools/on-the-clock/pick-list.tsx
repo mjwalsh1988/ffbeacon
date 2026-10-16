@@ -120,7 +120,7 @@ export function PickList({
                   ? "font-medium text-amber-300"
                   : "text-ink-muted";
             // Faint position hue behind the row so the list matches the board's
-            // color coding. Ownership stays signalled by the purple bar on the
+            // color coding. Ownership stays signaled by the purple bar on the
             // pick cell below (not a row fill), so the two never conflict.
             const posKey = positionColorKey(p.position);
             const rowTint = posKey ? POSITION_ROW[posKey] : "";

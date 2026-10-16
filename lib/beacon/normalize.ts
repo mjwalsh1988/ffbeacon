@@ -154,7 +154,7 @@ export interface SourcePrep {
 /**
  * Winsorize one source at its P99 and scale to [0,1], recording each player's
  * within-source quantile. Exported so the calibrated path (./calibrate.ts) reuses
- * the exact same outlier handling; its behaviour here is unchanged.
+ * the exact same outlier handling; its behavior here is unchanged.
  */
 export function prepSource(
   source: string,

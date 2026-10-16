@@ -63,7 +63,7 @@ describe("POST /api/leagues/[id]/refresh", () => {
     expect(pulseLeague).not.toHaveBeenCalled();
   });
 
-  it("still honours the per-league cooldown for a caller within budget", async () => {
+  it("still honors the per-league cooldown for a caller within budget", async () => {
     rpc.mockResolvedValue({ data: false, error: null });
     const res = await call("123");
     expect(res.status).toBe(429);

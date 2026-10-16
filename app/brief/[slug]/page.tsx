@@ -479,7 +479,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
         {/* The page runs the full width the rail leaves; the prose does not. A
             column that wide is unreadable at body size, so the article, what
             follows it, and the divider rules between them all keep a measure and
-            sit centred in the space. */}
+            sit centered in the space. */}
         <article className="mx-auto max-w-4xl">
           {/* The article header is the page masthead: same card, same beacon
               hairline, same gradient title treatment the rest of the site uses.

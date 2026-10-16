@@ -59,7 +59,7 @@ const POSITION_COLOR: Record<string, string> = {
  * business: a reader posting their bid into a group chat is not publishing
  * their league's roster, and the route accepts no parameter that could carry
  * one. That is a property of the parameter list, not of this render, which is
- * why ./params.ts refuses anything it does not recognise.
+ * why ./params.ts refuses anything it does not recognize.
  *
  * RATE LIMITED on its own "og_faab" bucket, 20 per 60 seconds per actor,
  * through the same try_claim_rate_limit helper app/api/og/start-sit uses. The

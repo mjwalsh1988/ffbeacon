@@ -50,7 +50,7 @@ const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POS
  * Sunday are not worth the same money, and before this weight the board's top
  * two entries in week 3 were both defenses, which is not a waiver wire page.
  *
- * 0.35 is a judgement rather than a measurement, and it is a deliberately
+ * 0.35 is a judgment rather than a measurement, and it is a deliberately
  * blunt one: it is enough to put the skill positions back on top without
  * removing streamers from the board, which readers do genuinely search for.
  * It affects the ORDER only. Every figure printed on a row is untouched, so a

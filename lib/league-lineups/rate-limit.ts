@@ -24,7 +24,7 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
  *   for a whole page: a limiter outage would turn every league's lineup into an
  *   error state, and the lineup is the thing a reader came for. Metering the
  *   panel instead bounds the work that actually amplifies, and a refusal
- *   degrades to one panel saying so while the lineup, the optimiser and the cut
+ *   degrades to one panel saying so while the lineup, the optimizer and the cut
  *   list all still render. Trade Ideas draws the same line: the page renders,
  *   the evaluation is what gets refused.
  *

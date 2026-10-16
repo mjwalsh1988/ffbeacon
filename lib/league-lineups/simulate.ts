@@ -4,7 +4,7 @@
  *
  * PURE, AND CLIENT-SAFE. No "server-only", no Supabase, no fetch. Every number
  * it needs is already on the page: each player carries `projected` and `sigma`,
- * and the optimiser has already reported the set total and the best total. That
+ * and the optimizer has already reported the set total and the best total. That
  * is the whole reason this is arithmetic rather than a server action, and it is
  * why the panel answers instantly and costs nothing to open.
  *
@@ -23,7 +23,7 @@
  * highest-scoring legal lineup the roster can produce; it does not depend on
  * which nine the manager has actually seated. So "points left on your bench"
  * after a swap is optimalTotal minus the NEW set total, with no second run of
- * the optimiser. A version that re-ran the fill per candidate would burn the
+ * the optimizer. A version that re-ran the fill per candidate would burn the
  * work to arrive at the identical number.
  *
  * THE COMPARISON IS THE LINEUP AS SET, ON BOTH SIDES. The Schedules page shows
@@ -82,11 +82,11 @@ function positionsOf(player: LineupPlayer): readonly string[] {
  *
  * Injured reserve and the taxi squad are out because Sleeper will not let them
  * into a lineup without a roster move, and a what-if a manager cannot carry out
- * is not a what-if. The same rule keeps them out of the optimiser
+ * is not a what-if. The same rule keeps them out of the optimizer
  * (lib/league-lineups/build.ts), so the two agree.
  *
  * Another STARTER is out for a different reason: moving a player from one
- * starting slot to another changes the total by nothing at all. The optimiser
+ * starting slot to another changes the total by nothing at all. The optimizer
  * panel already says so in as many words, and offering a menu of swaps worth
  * 0.0 would bury the ones worth eleven points.
  *

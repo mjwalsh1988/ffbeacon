@@ -24,11 +24,11 @@ import { MIN_GAMES, type StabilityFigure } from "@/lib/guides/idp-stability";
 import type { EligibilityCounts, RankGroupRow } from "@/lib/guides/idp-scarcity";
 
 /*
- * Colours come from the shared tokens, never typed here (review item 53).
+ * Colors come from the shared tokens, never typed here (review item 53).
  * Bars take chart-kit's validated series hues, measured against the figure
  * surface there: brand purple and cyan (SERIES_A, SERIES_B), the defensive
  * line lime (POSITION_SERIES.DL, the same hue as tailwind position.dl) and
- * ink.muted (PLAYER_SERIES[6]). Text and bar tracks take the tailwind colour
+ * ink.muted (PLAYER_SERIES[6]). Text and bar tracks take the tailwind color
  * utilities (fill-ink, fill-ink-subtle, fill-line-accent), so they follow
  * tailwind.config.ts if a token moves. The site ships one theme; every pair
  * here clears AA on it, and chart-kit.tsx records the ratios.

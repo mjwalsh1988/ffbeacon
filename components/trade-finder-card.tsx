@@ -218,7 +218,7 @@ export function TradeFinderCard({
       {/* teamName is already formatTeamLabel output, so it carries the handle
           when there is one to carry. The line used to append ownerHandle after
           it as well, which printed the same handle twice, and the word "Open"
-          did the job an underlined team name in the brand colour already does. */}
+          did the job an underlined team name in the brand color already does. */}
       <p className="mt-1 text-sm text-ink-muted">
         <Link
           href={teamHref}
@@ -412,7 +412,7 @@ export function TradeFinderCard({
  * How likely the other manager is to engage.
  *
  * A band with a reason attached rather than a percentage, because a percentage
- * about a person we have never met is a number we made up. Colour is never the
+ * about a person we have never met is a number we made up. Color is never the
  * only signal: the band's word is the label, and the reason is in the accessible
  * description underneath it.
  */
@@ -425,7 +425,7 @@ function AcceptanceBadge({ suggestion }: { suggestion: TradeSuggestion }) {
       ? "border-brand-cyan/50 bg-brand-cyan/10 text-brand-cyan"
       : "border-line text-ink-muted";
   // A third signal beside the word and the hue, so the three bands are told
-  // apart with no colour perception at all: a filled check for the one they
+  // apart with no color perception at all: a filled check for the one they
   // probably take, an open circle for the one worth asking, a dashed one for a
   // long shot.
   const Icon = likely ? CheckCircle2 : worthAsking ? CircleHelp : CircleDashed;
@@ -492,7 +492,7 @@ function AssetColumn({
  * Each player and pick is a card of its own rather than a row in a list, because
  * a trade is a set of discrete things and running them together makes a
  * three-for-one read as a paragraph. The surface is raised above the column
- * tint so the pieces separate without another border colour.
+ * tint so the pieces separate without another border color.
  *
  * Every figure we hold rides along at both breakpoints: position and team, trade
  * value, the weekly projection when there is one, and the age when there is one.
@@ -544,7 +544,7 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
         {/* The position moved out of the detail line and onto the name, in the
             shared position hue (lib/on-the-clock/position-colors). A card
             produced by a position filter has to make the position findable at a
-            glance, and it was previously the first word of a grey run-on
+            glance, and it was previously the first word of a gray run-on
             beginning "RB, PHI. value 6,412, 14.2 pts/wk, age 24.1".
 
             aria-hidden, and the position is restated in the detail line's

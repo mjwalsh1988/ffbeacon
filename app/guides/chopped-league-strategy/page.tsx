@@ -83,7 +83,7 @@ import {
  * checklist stores nothing. All three say in words what they are before they
  * say a number.
  *
- * EVERY NUMBER IS SOURCED OR LABELLED. The price curve in lesson 4, the pace
+ * EVERY NUMBER IS SOURCED OR LABELED. The price curve in lesson 4, the pace
  * targets in lesson 5 and the danger ladder beside them are all read from
  * DEFAULT_FAAB_SETTINGS.chopped at import rather than typed out, so a diagram
  * cannot drift from the calculator it describes, and each one says "by
@@ -776,10 +776,10 @@ function WhatSection() {
  * public season and runs 14 teams. ESPN's own example is 20 teams ending with
  * two alive and the final week deciding, and 20 minus 18 is 2. The numbers
  * every platform publishes are not house style, they are this subtraction.
- * lib/guides/chopped-season-length.ts holds the maths and its test pins each
+ * lib/guides/chopped-season-length.ts holds the math and its test pins each
  * of those claims.
  *
- * Every platform behaviour named below is from the rules pages linked under
+ * Every platform behavior named below is from the rules pages linked under
  * the table in lesson 1, read at the source, not from a summary of them.
  */
 function RulesSection() {
@@ -850,7 +850,7 @@ function RulesSection() {
         one changes something you would do differently if you knew about it.
       </Para>
       <GuideTable
-        caption="The four settings that vary between elimination leagues, and what each one changes about how you play. Platform behaviour is from the rules pages linked in lesson one."
+        caption="The four settings that vary between elimination leagues, and what each one changes about how you play. Platform behavior is from the rules pages linked in lesson one."
         head={["The setting", "What it varies between", "Why it changes your week"]}
         rows={[
           [
@@ -879,7 +879,7 @@ function RulesSection() {
       <Para>
         Two more worth checking before you draft, because most advice you will read quietly assumes
         them: whether trades are on (usually not), and whether the league starts a kicker and a
-        defence (several do not, including the FFPC Chop Classic). Sleeper&apos;s own published
+        defense (several do not, including the FFPC Chop Classic). Sleeper&apos;s own published
         recommendations are eighteen teams, PPR scoring, a $1,000 budget and two injured reserve
         slots, with trades off by default.
       </Para>

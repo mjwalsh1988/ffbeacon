@@ -170,7 +170,7 @@ describe("appetiteScore", () => {
     expect(appetiteScore(s, "TE", null)).toBe(0);
   });
 
-  it("adds a bonus for a favourite player", () => {
+  it("adds a bonus for a favorite player", () => {
     const s = slice({ favouritePlayerIds: ["p1"] });
     expect(appetiteScore(s, null, "p1")).toBeCloseTo(TENDENCY_DEFAULTS.FAVOURITE_BONUS, 5);
   });

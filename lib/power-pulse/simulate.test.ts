@@ -269,7 +269,7 @@ describe("simulateSeason with a weekly median game", () => {
     expect(sumWins(withMedian)).toBeCloseTo(12 * 14, 5);
   });
 
-  it("favours a high scorer twice over: the median game rewards points, not the draw", () => {
+  it("favors a high scorer twice over: the median game rewards points, not the draw", () => {
     const teams = rosterIds.map((id) => team(id, id === 1 ? 145 : 115));
     const without = simulateSeason(teams, schedule, OPTIONS).get(1)!;
     const withMedian = simulateSeason(teams, schedule, { ...OPTIONS, medianMatch: true }).get(1)!;

@@ -25,7 +25,7 @@ type UserRow = {
 };
 
 /**
- * A Supabase stand-in for the three tables this module reads. It honours
+ * A Supabase stand-in for the three tables this module reads. It honors
  * .range() so the paging path runs for real rather than being assumed, and it
  * counts the pages so a test can assert the loop stopped.
  */

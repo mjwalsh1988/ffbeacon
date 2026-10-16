@@ -7,7 +7,7 @@
  * WHAT THIS MEASURES
  *   Exposure: how many distinct league-seasons a manager rostered a player in,
  *   weighted by how deliberately they got him. A drafted player is a
- *   statement; a waiver add is a hole filled. Favourites rank exposure
+ *   statement; a waiver add is a hole filled. Favorites rank exposure
  *   against how commonly the player is rostered generally, so a universally
  *   owned player never reads as a preference. Avoids are the mirror image,
  *   gated by an opportunity requirement so an absence only counts when the
@@ -143,21 +143,21 @@ function toExposureEntry(
     leagueSeasonsRostered: totals.leagueSeasonsRostered,
     // PlayerExposure.leagueWideRosterRate is a plain number, not a nullable
     // one, so an unknown rate has to become SOME number here. Both current
-    // callers (buildFavourites, buildAvoids) already filter out a null rate
+    // callers (buildFavorites, buildAvoids) already filter out a null rate
     // before reaching this function, so the default below is never actually
     // exercised today. It still has to be chosen carefully for the caller
-    // that does not filter: favourites scores a player as
+    // that does not filter: favorites scores a player as
     // exposureScore * (1 - rate), so defaulting to 0 (as this used to do)
     // would rank an unknown player at the VERY TOP of the list, which is the
     // opposite of "we do not know". Defaulting to 1 instead sends the score
     // to 0, the bottom, which is the honest failure direction: an unknown
-    // player should never outrank a known non-favourite.
+    // player should never outrank a known non-favorite.
     leagueWideRosterRate: player?.leagueWideRosterRate ?? 1,
   };
 }
 
 /**
- * Favourites: exposure weighted against how commonly the player is rostered
+ * Favorites: exposure weighted against how commonly the player is rostered
  * generally, so a nearly-universal roster spot never reads as a preference.
  *
  * A player with a null `leagueWideRosterRate` is EXCLUDED rather than ranked
@@ -168,7 +168,7 @@ function toExposureEntry(
  * exposure at all, known-rate or not) so the list states how much evidence
  * stands behind it.
  */
-function buildFavourites(
+function buildFavorites(
   totals: Map<string, ExposureTotals>,
   players: Record<string, ManagerPlayerFacts>,
   favouritesShown: number,
@@ -182,11 +182,11 @@ function buildFavourites(
       const rate = row.player!.leagueWideRosterRate as number;
       return {
         entry: toExposureEntry(row.playerId, row.totals, row.player),
-        favouriteScore: row.totals.exposureScore * (1 - rate),
+        favoriteScore: row.totals.exposureScore * (1 - rate),
       };
     })
     .sort((a, b) => {
-      if (b.favouriteScore !== a.favouriteScore) return b.favouriteScore - a.favouriteScore;
+      if (b.favoriteScore !== a.favoriteScore) return b.favoriteScore - a.favoriteScore;
       return a.entry.name.localeCompare(b.entry.name);
     })
     .slice(0, favouritesShown)
@@ -307,7 +307,7 @@ export function computeAffinity(input: ManagerPulseInput): ManagerAffinity {
   const byPlayerBySeason = bestWeightPerLeagueSeason(input);
   const totals = totalExposure(byPlayerBySeason);
 
-  const { favourites, favouritesSampleSize } = buildFavourites(
+  const { favourites, favouritesSampleSize } = buildFavorites(
     totals,
     input.players,
     input.settings.display.favouritesShown,

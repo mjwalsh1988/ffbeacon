@@ -52,7 +52,7 @@ type SessionClient =
  */
 const MAX_SAVES_PER_USER = 100;
 
-/** Assets per side. The engine's own ceiling is three; six is slack, not licence. */
+/** Assets per side. The engine's own ceiling is three; six is slack, not license. */
 const MAX_ASSETS_PER_SIDE = 6;
 const MAX_TEXT = 400;
 const MAX_PITCH = 2000;
@@ -65,7 +65,7 @@ const MAX_PITCH = 2000;
  * number is declared. It still admits 1e308, and since the client posts the
  * snapshot wholesale a forged bookmark could render its own author an asset
  * worth a googol. Bounded here instead: trade values live in the low thousands
- * on every source we carry, so a million is slack rather than licence.
+ * on every source we carry, so a million is slack rather than license.
  */
 const finiteNumber = z.number().finite().min(-1e6).max(1e6);
 /** Nobody has ever been 200. Ages arrive from Sleeper as a decimal year. */

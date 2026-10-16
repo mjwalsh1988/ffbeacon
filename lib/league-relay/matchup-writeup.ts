@@ -50,7 +50,7 @@ import {
 } from "./commentary";
 import {
   COIN_FLIP_TAKES,
-  FAVOURITE_TAKES,
+  FAVORITE_TAKES,
   LOSS_TAKES,
   UNDERDOG_TAKES,
   WIN_TAKES,
@@ -184,15 +184,15 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
   /* ------------------------------------------------------------ the odds */
   const winProb = view.homeWinProb;
   const haveTotals = home.projectedTotal !== null && away.projectedTotal !== null;
-  // The favourite by win probability when there is one, by projected total
+  // The favorite by win probability when there is one, by projected total
   // otherwise, so the two halves of the sentence can never disagree.
-  const homeFavoured =
+  const homeFavored =
     winProb !== null ? winProb >= 0.5 : (home.projectedTotal ?? 0) >= (away.projectedTotal ?? 0);
-  const fav = homeFavoured ? home : away;
-  const dog = homeFavoured ? away : home;
+  const fav = homeFavored ? home : away;
+  const dog = homeFavored ? away : home;
   const favName = sideName(fav);
   const dogName = sideName(dog);
-  const chance = winProb !== null ? pct(homeFavoured ? winProb : 1 - winProb) : null;
+  const chance = winProb !== null ? pct(homeFavored ? winProb : 1 - winProb) : null;
   const favPts = (fav.projectedTotal ?? 0).toFixed(1);
   const dogPts = (dog.projectedTotal ?? 0).toFixed(1);
 
@@ -200,7 +200,7 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
   if (haveTotals && chance) {
     oddsLine = voice.pickPlain([
       `The model has ${favName} at ${favPts} and ${dogName} at ${dogPts}, and gives ${favName} a ${chance} chance.`,
-      `${favName} projects for ${favPts} to ${dogName}'s ${dogPts}, which makes ${favName} a ${chance} favourite.`,
+      `${favName} projects for ${favPts} to ${dogName}'s ${dogPts}, which makes ${favName} a ${chance} favorite.`,
       `On projections it is ${favName} ${favPts}, ${dogName} ${dogPts}. ${favName} wins this ${chance} of the time.`,
       `${favName} is the ${chance} pick, ${favPts} to ${dogPts} on projections.`,
     ]);
@@ -216,7 +216,7 @@ export function buildMatchupPreview(input: MatchupWriteupInput): Writeup | null 
     const line = voice.pick(COIN_FLIP_TAKES);
     if (line) oddsTakes.push(line);
   } else if (edge !== null && edge >= 0.2) {
-    const f = take(voice, FAVOURITE_TAKES, favName);
+    const f = take(voice, FAVORITE_TAKES, favName);
     const d = take(voice, UNDERDOG_TAKES, dogName);
     if (f) oddsTakes.push(f);
     if (d) oddsTakes.push(d);

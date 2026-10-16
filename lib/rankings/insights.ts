@@ -212,7 +212,7 @@ export function topMovers(
  * steepest cliff sits.
  *
  * DEFAULTS TO THE SAME WINDOW THE TABLE RENDERS, which is 30 days. A strip
- * summarising a week sitting directly above a table whose only movement
+ * summarizing a week sitting directly above a table whose only movement
  * columns are monthly gives a reader two different periods to hold in their
  * head and no warning that they differ.
  *

@@ -100,7 +100,7 @@ describe("idpPartOfScoring", () => {
 });
 
 /**
- * A fake client that honours eq, in and range the way PostgREST does, with
+ * A fake client that honors eq, in and range the way PostgREST does, with
  * the 1000-row cap, so a read that forgot to page would come back short.
  */
 function fakeLeagueClient(tables: Record<string, Array<Record<string, unknown>>>) {

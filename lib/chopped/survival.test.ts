@@ -134,7 +134,7 @@ describe("simulateSurvival", () => {
     }
   });
 
-  it("honours choppedPerWeek when a preset chops more than one", () => {
+  it("honors choppedPerWeek when a preset chops more than one", () => {
     const teams = [1, 2, 3, 4, 5].map((id) => team(id, [1], 100, 20));
     const results = simulateSurvival(teams, [1], {
       runs: 400,

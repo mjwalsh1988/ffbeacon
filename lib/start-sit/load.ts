@@ -447,7 +447,7 @@ export async function loadStartSitBoard(params: LoadStartSitBoardParams): Promis
     slug: formatResolution.slug,
     display: formatConfig?.display_name ?? formatResolution.slug,
     formatConfigId: formatConfig?.id ?? null,
-    // A format slug the active list does not recognise (a stale link, a typo)
+    // A format slug the active list does not recognize (a stale link, a typo)
     // falls back to plain PPR scoring rather than failing the whole board.
     scoring_type: formatConfig?.scoring_type ?? "ppr",
     te_premium_bonus: formatConfig?.te_premium_bonus ?? null,

@@ -157,7 +157,7 @@ function msFrom(value: unknown): number | null {
 /**
  * The stored value verdict for one made pick (plan IDP-131). Null for a keeper,
  * and null for any pick with no value behind it: the delta against ADP is kept,
- * and adpOnly says the row is market-only rather than a value judgement.
+ * and adpOnly says the row is market-only rather than a value judgment.
  */
 export function snapshotPickVerdict(input: {
   isKeeper: boolean;

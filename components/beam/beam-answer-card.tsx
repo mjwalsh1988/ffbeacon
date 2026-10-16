@@ -19,7 +19,7 @@ import type { BeamAnswer, BeamMatchedPlayer, BeamPlayerTable } from "@/lib/beam/
  * The card itself is therefore aria-hidden from the live region's point of view
  * but fully reachable by normal reading and by keyboard: links inside it are
  * real links, and a screen reader user browsing the transcript reads the same
- * content again in visual order, which is the correct behaviour for a
+ * content again in visual order, which is the correct behavior for a
  * transcript.
  *
  * A leaderboard answer carries a table instead of facts, rendered by

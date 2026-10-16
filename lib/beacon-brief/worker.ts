@@ -1129,9 +1129,9 @@ function pingIndexNowForArticle(slug: string): void {
  * information, snapshot a revision, and mark the ingestion revised.
  *
  * Shared by the two paths that reach it. `mode: 'rewrite'` jobs, which curation
- * enqueues when it recognises a follow-up up front, and the late duplicate guard in
+ * enqueues when it recognizes a follow-up up front, and the late duplicate guard in
  * the create path below, which catches the same-poll-window case curation is blind
- * to. Both want identical behaviour, so the logic lives here once.
+ * to. Both want identical behavior, so the logic lives here once.
  *
  * `applied: false` means the target article no longer exists (deleted between
  * enqueue and execution). That is a success for the queue: there is nothing to
@@ -1243,7 +1243,7 @@ async function applyRewriteToArticle(
  *
  * It applies the SAME two mechanical gates curation does (size floor, shared
  * subject), because this is the other door into a merge and a gate only one path
- * honours is not a gate. See ./followup.ts for why the model is not trusted alone.
+ * honors is not a gate. See ./followup.ts for why the model is not trusted alone.
  *
  * Returns the article to fold into, or null to write a new article as planned.
  */
@@ -1365,23 +1365,23 @@ async function retractDiscordCard(
   why: string,
 ): Promise<void> {
   try {
-    const { data: cancelled } = await admin
+    const { data: canceled } = await admin
       .from("beacon_brief_queue")
       .update({
         status: "done",
-        last_error: `cancelled: ${why}`,
+        last_error: `canceled: ${why}`,
         updated_at: new Date().toISOString(),
       })
       .eq("job_type", "discord_post")
       .eq("status", "pending")
       .filter("payload->>ingestion_id", "eq", ingestionId)
       .select("id");
-    if (cancelled && cancelled.length > 0) {
+    if (canceled && canceled.length > 0) {
       await logBeaconBrief(admin, {
         stage: "discord_post",
         level: "info",
         ingestionId,
-        message: `cancelled ${cancelled.length} queued Discord post(s): ${why}`,
+        message: `canceled ${canceled.length} queued Discord post(s): ${why}`,
       });
     }
 
@@ -1826,7 +1826,7 @@ async function handleArticleWrite(
     return { ok: true };
   }
 
-  // Last line of defence. The writer independently chose a slug that already exists on
+  // Last line of defense. The writer independently chose a slug that already exists on
   // a live article about one of the same players, from inside the merge window. That is
   // not a coincidence, it is the same story, and until migration 0177 it published
   // anyway behind five random hex characters.
@@ -2059,7 +2059,7 @@ async function processJob(
     } else if (job.job_type === "deletion_check") {
       // Legacy per-article job from before the batched sweep. Nothing to do: the
       // sweep now covers every published post from stored state. Retire it rather
-      // than spending an X read to honour a schedule that no longer exists.
+      // than spending an X read to honor a schedule that no longer exists.
       await logBeaconBrief(admin, {
         stage: "deletion_check",
         level: "info",

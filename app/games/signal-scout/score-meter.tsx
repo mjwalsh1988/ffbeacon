@@ -158,7 +158,7 @@ export function ScoreMeter({ score, startingScore, burned }: ScoreMeterProps) {
   // trade-margin-graph.tsx.
   const fillPct = burned ? 0 : clampedPct === 0 ? 0 : Math.max(clampedPct, 4);
 
-  // The travelling-current animation runs only while there is signal left to
+  // The traveling-current animation runs only while there is signal left to
   // carry it. A burned-out or zeroed meter has no fill to draw it in anyway,
   // and a dead signal should read as dead rather than still humming.
   // See the .scout-current block in app/globals.css.

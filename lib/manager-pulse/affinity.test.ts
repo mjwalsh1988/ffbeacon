@@ -221,7 +221,7 @@ describe("computeAffinity", () => {
     expect(rareIndex).toBeLessThan(commonIndex);
   });
 
-  it("excludes a player with a null leagueWideRosterRate from favourites", () => {
+  it("excludes a player with a null leagueWideRosterRate from favorites", () => {
     const result = computeAffinity(
       baseInput({
         players: { p1: player({ playerId: "p1", leagueWideRosterRate: null }) },
@@ -338,7 +338,7 @@ describe("computeAffinity", () => {
     expect(result.repeatDraftsSampleSize).toBe(2);
   });
 
-  it("respects the display caps for favourites and avoids", () => {
+  it("respects the display caps for favorites and avoids", () => {
     const players: Record<string, ManagerPlayerFacts> = {};
     const picks: ManagerDraftPick[] = [];
     const leagueSeasons: ManagerLeagueSeason[] = [
@@ -347,7 +347,7 @@ describe("computeAffinity", () => {
       leagueSeason({ sleeperLeagueId: "L3", season: 2025 }),
     ];
 
-    // 20 favourite candidates: rostered by this manager, low leagueWideRosterRate.
+    // 20 favorite candidates: rostered by this manager, low leagueWideRosterRate.
     for (let i = 0; i < 20; i++) {
       const id = `fav-${i}`;
       players[id] = player({ playerId: id, leagueWideRosterRate: 0.05 });

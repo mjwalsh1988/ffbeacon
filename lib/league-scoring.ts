@@ -228,7 +228,7 @@ export function scoreWithFallback(
   // the stored pts_* columns, which are offensive-only for him. A league with
   // no idp_* rule has no answer for him: null, which the UI reads as "No
   // projection", never a confident zero. A league that does score IDP scores
-  // his projected line through the one normaliser (team-defense and ADP keys
+  // his projected line through the one normalizer (team-defense and ADP keys
   // dropped, combined tackles derived when absent).
   if (isDefender(position)) {
     if (!isUsableScoring(scoring) || !scoresIdp(scoring)) {

@@ -252,7 +252,7 @@ function CardRow({
       onUpdate({ highlight: null });
       return;
     }
-    // Start from the tag's own colour, so switching the highlight on beside a
+    // Start from the tag's own color, so switching the highlight on beside a
     // green tag gives a green border. It stays a separate choice afterwards.
     const next: HighlightColor = card.badge
       ? TONE_TO_HIGHLIGHT[TOOL_BADGES[card.badge].tone]
@@ -435,7 +435,7 @@ function GridPreview({
                     className={`rounded-card border px-3 py-2 text-xs text-ink ${CARD_ACCENT_CLASSES[card.highlight ?? "none"]}`}
                   >
                     <span className="block font-medium">{TOOL_TITLES[card.href]}</span>
-                    {/* Visible words, not only a border colour, so the preview
+                    {/* Visible words, not only a border color, so the preview
                         says the same thing by eye and by ear. */}
                     <span className="block text-ink-muted">
                       <span className="sr-only">, </span>

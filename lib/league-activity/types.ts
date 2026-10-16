@@ -8,7 +8,7 @@
  *   forever, and it contains no prose at all.
  *
  *   A CARD is what a reader sees. Names, a headline, a sentence, an icon, a
- *   colour. It is built at render time by `writeup.ts` from an event plus the
+ *   color. It is built at render time by `writeup.ts` from an event plus the
  *   league's current identities, and it is never stored.
  *
  * Keeping those apart is the whole reason the copy can be rewritten next month
@@ -285,7 +285,7 @@ export interface ActivityEvent {
 /* -------------------------------------------------------------------------- */
 
 /**
- * The accent colour, as a name rather than a class.
+ * The accent color, as a name rather than a class.
  *
  * `writeup.ts` runs on the server and has no business knowing Tailwind class
  * strings; the component owns the mapping. Naming the intent here also means a
@@ -335,7 +335,7 @@ export interface ActivityChip {
   /** "@handle", or null when printing it would repeat the label. */
   owner: string | null;
   avatarId: string | null;
-  /** Colours the chip on a result card. Neutral everywhere else. */
+  /** Colors the chip on a result card. Neutral everywhere else. */
   tone: "win" | "loss" | "tie" | "neutral";
   href: string | null;
 }

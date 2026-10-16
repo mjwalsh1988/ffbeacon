@@ -16,7 +16,7 @@
  *   - Floor, projection, and ceiling, from each player's own measured scoring
  *     spread rather than a flat percentage guess.
  *
- * Generalised from a fixed pair to a group of two to eight players
+ * Generalized from a fixed pair to a group of two to eight players
  * (docs/seo/who-should-i-start-and-site-seo-plan.md section 2.7). Series
  * identity comes from PLAYER_SERIES in components/chart-kit.tsx, indexed by
  * a player's position in `sides`, never by NFL position.

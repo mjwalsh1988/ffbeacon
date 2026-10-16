@@ -102,7 +102,7 @@ function makeQuery(rows: Row[]) {
       lteFilters[col] = val;
       return query;
     },
-    // Only `.not(col, "is", null)` is modelled. A fixture row that omits the
+    // Only `.not(col, "is", null)` is modeled. A fixture row that omits the
     // column stands for a matched row; only an explicit null is excluded.
     not(col: string, op: string, val: unknown) {
       if (op === "is" && val === null) notNullCols.push(col);

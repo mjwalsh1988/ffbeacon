@@ -12,16 +12,16 @@ const config: Config = {
     /**
      * `text-base` means one size of type and nothing else.
      *
-     * The palette below names a colour `base` (the page background), and
-     * Tailwind turns every colour into a `text-*` utility. That produced two
-     * different rules called `.text-base`, and the colour one won inside a
+     * The palette below names a color `base` (the page background), and
+     * Tailwind turns every color into a `text-*` utility. That produced two
+     * different rules called `.text-base`, and the color one won inside a
      * breakpoint, so anything written `text-sm sm:text-base` went from readable
-     * grey to #07070D against a #07070D page at the sm breakpoint: invisible
+     * gray to #07070D against a #07070D page at the sm breakpoint: invisible
      * text, and only above one screen width, which is exactly the kind of bug
      * that survives review.
      *
      * Redefining `textColor` (outside `extend`, so it replaces rather than
-     * merges) drops that one entry. Every other colour is still available as
+     * merges) drops that one entry. Every other color is still available as
      * `text-*`, and `bg-base` and `border-base` are untouched, because only the
      * text scale has a `base` of its own to collide with.
      */
@@ -68,7 +68,7 @@ const config: Config = {
           success: "#10B981",
           // "Up" on a trend, a rank gap or a value change. Seven components
           // used this class before it existed, so every rising figure drew in
-          // the inherited text colour. Same green as success on purpose.
+          // the inherited text color. Same green as success on purpose.
           positive: "#10B981",
           warning: "#F59E0B",
           danger: "#EF4444",

@@ -45,7 +45,7 @@ export const MANAGER_PULSE_FAQ: FaqAccordionItem[] = [
   {
     question: "Why is a report still building?",
     answer:
-      "The first time a manager is looked up, their seasons are read from Sleeper one league at a time. You see a live partial report while that happens, labelled with how much of the history it covers so far, and it finishes on its own.",
+      "The first time a manager is looked up, their seasons are read from Sleeper one league at a time. You see a live partial report while that happens, labeled with how much of the history it covers so far, and it finishes on its own.",
   },
   {
     question: "Does it work for leagues on other apps?",

@@ -19,9 +19,9 @@
  *   learned in League Pulse. Purple means Rebuilder there, so violet means
  *   Rebuilder here; giving violet to Loaded put the same hue on two different
  *   bands across two surfaces of one product, which is worse than an unfamiliar
- *   colour. Sky is unspoken for, so Loaded takes it.
+ *   color. Sky is unspoken for, so Loaded takes it.
  *
- *   Colour is never the only signal either way: the band's word sits inside
+ *   Color is never the only signal either way: the band's word sits inside
  *   every chip and the sentence below is announced beside it.
  *
  * Pure. No React, no data access.

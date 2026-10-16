@@ -46,7 +46,7 @@ async function runPass(
     // quietWhen (PERF-T060). This job ticks every minute and the queue is
     // empty for most of them, so it was writing 1,440 ledger rows a day about
     // having found nothing to do, and `cron_runs` had grown to 76 MB. A pass
-    // that claimed nothing AND finalised nothing has nothing to record;
+    // that claimed nothing AND finalized nothing has nothing to record;
     // `recordCronRun` still writes one heartbeat row an hour on those, so
     // /admin/system cron-health can still see the job is alive.
     const summary = await recordCronRun(

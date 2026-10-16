@@ -32,7 +32,7 @@ const TONES = {
 
 export type FeatureTone = keyof typeof TONES;
 
-/** Text colour for the eyebrow: the tone itself, one step lighter where the tone is too dark for 11px text. */
+/** Text color for the eyebrow: the tone itself, one step lighter where the tone is too dark for 11px text. */
 const EYEBROW: Record<FeatureTone, string> = {
   cyan: "#22D3EE",
   purple: "#C084FC",

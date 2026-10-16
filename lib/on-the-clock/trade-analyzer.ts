@@ -2,7 +2,7 @@
  * The Trade Builder's asset catalog: everything a draft-room trade can contain,
  * priced.
  *
- * CATALOG ONLY. This module used to also grade a trade, totalling both sides and
+ * CATALOG ONLY. This module used to also grade a trade, totaling both sides and
  * printing its own verdict, and the Trade Builder showed that verdict above
  * Signal Check's. Two answers to one question, from two different models, and
  * they disagreed often enough to be a support problem. The grading is Signal

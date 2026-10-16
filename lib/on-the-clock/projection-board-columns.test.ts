@@ -9,12 +9,12 @@ import { join } from "node:path";
  * `projectPlayerWeek` reads `projection.availability` to decide whether the
  * SOURCE has already priced an injury designation in. The field is optional on
  * ProjectionRow so a caller building rows by hand keeps the conservative
- * behaviour, which means an unselected column does not fail a type check, does
+ * behavior, which means an unselected column does not fail a type check, does
  * not throw, and does not look wrong in any output. It just quietly makes the
  * draft room answer a different question from the Power Pulse page: our own
  * Questionable discount applied on top of a number Sleeper had already
  * discounted, and a season-long designation overruling a return timeline the
- * Power Pulse page honours.
+ * Power Pulse page honors.
  *
  * Same idea as lib/positional-war/naming.test.ts: a rule the compiler cannot
  * express, enforced by reading the source.

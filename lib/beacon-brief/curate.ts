@@ -469,7 +469,7 @@ interface DuplicateMatch {
  *   2. Overlapping event key. Same kind, some of the same people, different set. One
  *      cheap triage call against a short list the model has a real chance of judging.
  *   3. No key at all (unresolved names, or an event kind we cannot read). Falls back
- *      to the original behaviour: recent stories filtered by the shared-subject gate.
+ *      to the original behavior: recent stories filtered by the shared-subject gate.
  *
  * Each pass asks the article table first (legacy stories) and then the Relay
  * table (lib/relays/duplicates.ts). With the article path off, the Relay pass is
@@ -530,7 +530,7 @@ async function findDuplicateTarget(
 
   // The size floor still governs the two model-judged passes below, where a wrong
   // merge is a real risk. It is disabled by default (migration 0177) but stays
-  // honoured so the knob keeps working for anyone who turns it back on.
+  // honored so the knob keeps working for anyone who turns it back on.
   if (mergeBlockedByTier(opts.subject, settings.mergeBlockRelevanceTier)) {
     await logBeaconBrief(admin, {
       stage: "revision_link",

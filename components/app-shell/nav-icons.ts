@@ -4,7 +4,7 @@
  * The rail's tree is built on the server (lib/nav-tree.ts) and handed to the
  * client already filtered for who is looking, which is what keeps the admin
  * route list out of the bundle a signed-out visitor downloads. A React
- * component is not serialisable across that boundary, so a node carries the
+ * component is not serializable across that boundary, so a node carries the
  * name of its icon and the client looks it up here.
  *
  * This map holds no route, no label, and no hint: it is the one part of the

@@ -1,10 +1,10 @@
 /**
- * The BEAM glyph: the mascot's face, drawn in one colour.
+ * The BEAM glyph: the mascot's face, drawn in one color.
  *
  * It carries the two shapes the FF Beacon logo is built from, the peak and the
  * arc, as the crown and the headphone pods, so it sits beside the wordmark
  * without looking borrowed. Line art in currentColor rather than a shrunken copy
- * of the mascot artwork, because the header button is 20 CSS px and a full-colour
+ * of the mascot artwork, because the header button is 20 CSS px and a full-color
  * render at that size is a smudge. The artwork itself appears inside the panel,
  * where there is room for it (components/beam/beam-panel.tsx).
  *

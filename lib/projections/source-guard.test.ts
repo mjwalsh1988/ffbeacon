@@ -8,7 +8,7 @@
  *
  * `loadProjections` and `loadAccuracy` in lib/power-pulse/load.ts both take an
  * optional `source` and both now fall back to Sleeper without it. That default
- * is a safety net, not a licence to omit the argument, and there are two
+ * is a safety net, not a license to omit the argument, and there are two
  * separate reasons an omitted source is a bug.
  *
  * The one this guard is named for: the day an admin flips

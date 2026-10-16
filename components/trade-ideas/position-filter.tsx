@@ -21,9 +21,9 @@ import {
  *   `aria-pressed` say exactly the same thing, are one press each on touch, and
  *   are already how the rest of this feature expresses a two-state control.
  *
- * WHY COLOUR IS NEVER THE SIGNAL
+ * WHY COLOR IS NEVER THE SIGNAL
  *   The hue is the shared position palette (lib/on-the-clock/position-colors),
- *   so a chip here is the same colour as the tag on the asset row it produces.
+ *   so a chip here is the same color as the tag on the asset row it produces.
  *   Which chips are ON is carried by the border, the fill, a check-weight
  *   border, and `aria-pressed`; the hue only says which position, and the
  *   position is written on the chip in words as well.

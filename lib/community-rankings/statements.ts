@@ -5,7 +5,7 @@
  * A board says three kinds of thing:
  *   - WITHIN: every player on it is preferred over every player below him.
  *   - LEFT OFF: every player on it is preferred over every player the reader
- *     deliberately left off. A judgement the reader made, so it sits in the
+ *     deliberately left off. A judgment the reader made, so it sits in the
  *     within class and shares the within weight.
  *   - POOL: every player on it is preferred over every player in the first
  *     floor(n + n * poolMargin) of the board's pool (the seed source's ranked

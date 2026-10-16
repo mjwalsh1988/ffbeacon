@@ -2,7 +2,7 @@ import "server-only";
 import { timingSafeEqual } from "node:crypto";
 
 /**
- * Bearer verification for the two desk routes, modelled on lib/cron-auth.ts.
+ * Bearer verification for the two desk routes, modeled on lib/cron-auth.ts.
  *
  * BRIEF_DESK_TOKEN is distinct from CRON_SECRET so revoking the desk's access
  * affects nothing else. Constant-time comparison; fails closed with 500 when

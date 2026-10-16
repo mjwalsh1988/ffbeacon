@@ -545,7 +545,7 @@ function GroupTable({
   );
 }
 
-/** Movement in colour AND words: "up 3", "down 2", "new", "same". */
+/** Movement in color AND words: "up 3", "down 2", "new", "same". */
 function MovementText({ previous, current }: { previous: number | null; current: number }) {
   const m = communityMovement(previous, current);
   if (m.kind === "up" || m.kind === "down") {

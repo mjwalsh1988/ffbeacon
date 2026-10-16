@@ -242,7 +242,7 @@ export async function loadTradeImpactWorld(
      * to itself this function would read it a second time on every evaluated
      * request: same query, same answer, twice the work on the hot path. The
      * server action has nothing to hand over and passes nothing, which is the
-     * behaviour this parameter defaults to.
+     * behavior this parameter defaults to.
      */
     finder?: TradeFinderLeague | null;
   },

@@ -78,7 +78,7 @@ export function WinChanceChart({ view, goal }: { view: BidView; goal: GoalKey })
   const y = makeScale(0, 100, H - PAD_BOTTOM, PAD_TOP);
 
   // The other goal's own number, never the stretch rung: for the sure goal
-  // the stretch IS the walk-away, and a second line labelled "value bid"
+  // the stretch IS the walk-away, and a second line labeled "value bid"
   // sitting exactly on the walk-away would be two names for one number.
   const other =
     goal === "value" ? view.ladder.bidsByGoal.sure : view.ladder.bidsByGoal.value;
@@ -157,7 +157,7 @@ export function WinChanceChart({ view, goal }: { view: BidView; goal: GoalKey })
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
       >
-        {/* Horizontal gridlines at every 25 percent, labelled. */}
+        {/* Horizontal gridlines at every 25 percent, labeled. */}
         {[0, 25, 50, 75, 100].map((tick) => (
           <g key={tick}>
             <line

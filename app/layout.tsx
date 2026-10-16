@@ -56,7 +56,7 @@ export const metadata: Metadata = {
   // nothing says otherwise, so listing them changes nothing, and leaving them out
   // means a not-found branch that Next marks noindex never carries a
   // contradicting "index" beside it. On the general robots tag rather than
-  // googleBot only, because Bing honours max-image-preview and max-snippet too.
+  // googleBot only, because Bing honors max-image-preview and max-snippet too.
   //
   // Next merges metadata shallowly, so a page or layout that sets its own
   // `robots` replaces this whole object: every noindex route (leagues, admin,
@@ -142,7 +142,7 @@ export default function RootLayout({
       // it React reports the script's own work as a mismatch on every load.
       data-sidebar="expanded"
       // Same story as data-sidebar: the server says open, and the blocking
-      // script below minimises it before paint for anyone who had.
+      // script below minimizes it before paint for anyone who had.
       data-bookmark-bar="open"
       suppressHydrationWarning
       className={`dark ${GeistSans.variable} ${GeistMono.variable}`}
@@ -152,7 +152,7 @@ export default function RootLayout({
             rail is simply the right width from the first frame instead of
             painting collapsed and snapping open once React hydrates. */}
         <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
-        {/* Same trick, same reason, for whether the bookmark bar is minimised.
+        {/* Same trick, same reason, for whether the bookmark bar is minimized.
             See components/bookmarks/collapsed-state.ts. */}
         <script dangerouslySetInnerHTML={{ __html: BOOKMARK_BAR_INIT_SCRIPT }} />
         {/* Points an agent at the machine-readable description of the site, the

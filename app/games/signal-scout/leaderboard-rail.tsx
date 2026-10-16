@@ -14,7 +14,7 @@ import { LeaderboardPanel, boardLabel } from "./leaderboard-panel";
  * here), and the How It Works explainer beneath them.
  *
  * The rail is on the RIGHT from xl, in the same 340px track and with the same
- * sticky behaviour as every other rail on the site: pinned under the header,
+ * sticky behavior as every other rail on the site: pinned under the header,
  * capped at the viewport, scrolling inside itself, focusable so that scroll is
  * reachable from the keyboard. It used to sit on the left in a 20rem column
  * from lg, which put a board of other people's scores between the reader and

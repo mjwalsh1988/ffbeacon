@@ -7,7 +7,7 @@ import { BRIEF_DESK_SUBPAGES } from "@/lib/brief-desk-admin-nav";
 /** Secondary nav across the whole Beacon Desk, so a reader can jump between
  *  sibling sub-pages without returning to the overview. aria-current marks the
  *  active page for assistive tech. The Editions chip stays active on a review
- *  page, and aria-current is read off the same flag as the colour, so the chip
+ *  page, and aria-current is read off the same flag as the color, so the chip
  *  that looks current announces as current too. */
 export function BriefDeskSubNav() {
   const pathname = usePathname();

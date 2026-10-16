@@ -463,7 +463,7 @@ describe("buildTendencySlice", () => {
     expect(buildTendencySlice(highInput, "dynasty", [], [])!.confidence).toBe("high");
   });
 
-  it("carries the passed-in favourite and avoid id lists through unchanged", () => {
+  it("carries the passed-in favorite and avoid id lists through unchanged", () => {
     const input = baseInput({
       trades: [trade({ sleeperLeagueId: "L1", season: 2025, category: "dynasty" })],
     });

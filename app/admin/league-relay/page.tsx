@@ -211,9 +211,9 @@ export default async function LeagueRelayPage() {
 }
 
 /**
- * The status, as a word rather than only a colour.
+ * The status, as a word rather than only a color.
  *
- * Colour alone fails at WCAG 1.4.1 and fails anybody reading this in a
+ * Color alone fails at WCAG 1.4.1 and fails anybody reading this in a
  * screen reader, and "skipped" versus "failed" is precisely the distinction an
  * admin is scanning for.
  */

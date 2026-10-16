@@ -750,7 +750,7 @@ export async function calculateLeagueFaab(
   // The same swap test against every other roster, with no drop search: we
   // only need to know whether he cracks their lineup, and pricing their bench
   // is not our business. What is new is that the answer now carries a NUMBER
-  // as well as a yes or no, because the auction model needs a centre for each
+  // as well as a yes or no, because the auction model needs a center for each
   // rival's bid, not just a count of who is interested.
   let interestedRivals: number | null = null;
   let rivalsChecked: number | null = null;
@@ -1402,7 +1402,7 @@ export async function calculateLeagueFaab(
       continue;
     }
     const sim = auctionRivals.find((r) => r.rosterId === budgetRow.sleeperRosterId);
-    const centre = sim?.centerPct ?? 0;
+    const center = sim?.centerPct ?? 0;
     const spread = Math.exp(settings.auction.bidSigma);
     const toDollars = (pct: number) =>
       Math.min(budgetRow.remaining, Math.round((Math.max(0, pct) / 100) * totalBudget));
@@ -1414,9 +1414,9 @@ export async function calculateLeagueFaab(
       wouldStart: true,
       style: tendencyLabel(tendencies, budgetRow.sleeperRosterId),
       likelyBid:
-        money.totalBudget === null || centre <= 0
+        money.totalBudget === null || center <= 0
           ? null
-          : { low: toDollars(centre / spread), high: toDollars(centre * spread) },
+          : { low: toDollars(center / spread), high: toDollars(center * spread) },
     });
   }
   rivalRows.sort((a, b) => (b.likelyBid?.high ?? 0) - (a.likelyBid?.high ?? 0));

@@ -5,7 +5,7 @@ import { ordinal, type Disagreement } from "@/lib/ranking-boards/compare";
 /**
  * "Where you disagree most" (plan sections 13.6 and 13.7): up to five players
  * the reader has HIGHER than the ranking, drawn in purple to the right of the
- * centre line, and up to five LOWER, in cyan to the left. Every number is also
+ * center line, and up to five LOWER, in cyan to the left. Every number is also
  * a real text node beside its bar and in the table under the disclosure, so
  * nothing here is legible only as a shape.
  *

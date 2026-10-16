@@ -15,7 +15,7 @@ import { bustMemo } from "@/lib/memo-ttl";
  *
  * Clearing it globally rather than per file means a new memoised read cannot
  * quietly reintroduce the problem. The tests that assert the memo's own
- * behaviour make their calls inside a single test, so this hook does not
+ * behavior make their calls inside a single test, so this hook does not
  * interfere with them.
  */
 beforeEach(() => {

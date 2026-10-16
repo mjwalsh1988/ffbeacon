@@ -266,7 +266,7 @@ export type GroupEdgeSide = {
 };
 
 /**
- * The Beacon Edge, generalised from a pair to two-to-eight sides. For N equal
+ * The Beacon Edge, generalized from a pair to two-to-eight sides. For N equal
  * to 2 this reproduces computeEdge's leader and label (see edge.test.ts), so
  * the pairwise surface and BEAM can keep calling computeEdge unchanged while
  * the background tabs move to this for N players.

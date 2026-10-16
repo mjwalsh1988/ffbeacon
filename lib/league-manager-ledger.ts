@@ -199,7 +199,7 @@ function lastPulsedAtAdvanced(row: BackoffRow): boolean {
  *
  * Every field except `slots` is a count or a maximum, so all of them come from
  * `head: true` counts and one thin week column. `slots` is already on the
- * league row. Same key, same invalidation behaviour, a fraction of the cost.
+ * league row. Same key, same invalidation behavior, a fraction of the cost.
  * Mirrors the split lib/league-positional-war.ts makes for the same reason.
  */
 /** The IDP switch as a boolean. Memoised a minute inside loadPowerPulseSettings. */

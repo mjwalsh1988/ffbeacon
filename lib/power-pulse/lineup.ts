@@ -54,7 +54,7 @@ export type LineupCandidate = {
 const PULSE_POSITION_SET = new Set<string>(PULSE_POSITIONS);
 
 /**
- * A player row's eligibility as positions the optimiser understands: his
+ * A player row's eligibility as positions the optimizer understands: his
  * primary first, then every other listed position that is a PulsePosition.
  * Anything else Sleeper lists (OL, LS) is dropped. Pure, so the engines and
  * the what-if dialog agree on who can play where.

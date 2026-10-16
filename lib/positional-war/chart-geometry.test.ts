@@ -121,7 +121,7 @@ describe("parseAxisMode", () => {
     expect(parseAxisMode("")).toBe("rank");
   });
 
-  it("still honours an older shared link carrying ?war=rank", () => {
+  it("still honors an older shared link carrying ?war=rank", () => {
     expect(parseAxisMode("rank")).toBe("rank");
   });
 });
@@ -409,7 +409,7 @@ describe("the rank cap", () => {
     expect(depth.series[0].points.length).toBe(WAR_CHART_MAX_RANK);
   });
 
-  it("honours a caller-supplied cap, which is how the Overview preview stops at 25", () => {
+  it("honors a caller-supplied cap, which is how the Overview preview stops at 25", () => {
     const curves = [makeCurve("WR", 20, seq(90, (r) => 1.0 - r * 0.01))];
     const geometry = buildChartGeometry({
       curves,

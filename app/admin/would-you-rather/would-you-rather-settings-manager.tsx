@@ -10,8 +10,8 @@
  * THE SCHEDULE IS THE INTERESTING PART. The cron ticks hourly; these checkboxes
  * decide which of those ticks actually post. So the frequency is whatever is
  * ticked: three boxes is three posts a day, one box is one. Every time is
- * labelled in America/New_York, which is what the cron reads, so the label and
- * the behaviour cannot drift apart at a daylight-saving boundary.
+ * labeled in America/New_York, which is what the cron reads, so the label and
+ * the behavior cannot drift apart at a daylight-saving boundary.
  *
  * EACH LEAGUE TYPE CAN HAVE ITS OWN CHANNEL. Dynasty trades to the dynasty
  * room, redraft to the redraft room, best ball to the best ball room. The trade
@@ -141,13 +141,13 @@ export function WouldYouRatherSettingsManager({
           label="Include dynasty startup draft trades"
           checked={settings.pool.include_startup_trades}
           onChange={(v) => patch({ pool: { ...settings.pool, include_startup_trades: v } })}
-          hint="Startup picks are shown as the player taken at that seat, and the round is labelled as a startup trade."
+          hint="Startup picks are shown as the player taken at that seat, and the round is labeled as a startup trade."
         />
         <Toggle
           label="Require at least one real player in the trade"
           checked={settings.pool.require_player_asset}
           onChange={(v) => patch({ pool: { ...settings.pool, require_player_asset: v } })}
-          hint="Keeps pick-for-pick swaps out. They grade fine and play badly: there is nothing to recognise."
+          hint="Keeps pick-for-pick swaps out. They grade fine and play badly: there is nothing to recognize."
         />
         <Toggle
           label="Prefer leagues that already have Positional WAR curves"

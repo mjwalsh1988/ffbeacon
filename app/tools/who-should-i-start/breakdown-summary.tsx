@@ -1,12 +1,12 @@
 /**
- * The payoff sections beneath the table, generalised from two players to two
+ * The payoff sections beneath the table, generalized from two players to two
  * to eight: the Quick Takeaways grid (scannable plain-English answers to the
  * questions a casual manager actually asks) and the featured Beacon Verdict
  * card (the one-sentence bottom line). Server components.
  *
  * The old five takeaways (lib/breakdown/verdict.ts buildTakeaways) are a
  * pairwise-only function: they read raw reliability and projection fields off
- * exactly two MetricSide values and do not generalise to N sides, and that
+ * exactly two MetricSide values and do not generalize to N sides, and that
  * file is out of scope for this change (it stays the pairwise engine BEAM
  * depends on, per lib/breakdown/edge.ts's own docs on computeGroupEdge).
  * QuickTakeaways is rebuilt here instead, directly off the active lens's

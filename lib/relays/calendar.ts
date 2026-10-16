@@ -78,7 +78,7 @@ export function monthRange(year: number, month: number): { start: string; end: s
 }
 
 /**
- * The month as rows of seven days, Sunday first, padded with the neighbouring
+ * The month as rows of seven days, Sunday first, padded with the neighboring
  * months' days so every row is full.
  */
 export function monthGrid(year: number, month: number): CalendarDay[][] {

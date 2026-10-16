@@ -46,7 +46,7 @@ export type StripeResult<T> =
  * The secret key, or null when there is not a usable one.
  *
  * THE SHAPE IS CHECKED, not just the presence, and that is not pedantry: this
- * was written after finding `STRIPE_SECRET_KEY=#22D3EE` (a hex colour, pasted
+ * was written after finding `STRIPE_SECRET_KEY=#22D3EE` (a hex color, pasted
  * into the wrong line) sitting in a real environment file. A key that merely
  * exists sends the request, gets a 401, and surfaces to the reader as "we could
  * not open the payment page", which points at Stripe being down when the

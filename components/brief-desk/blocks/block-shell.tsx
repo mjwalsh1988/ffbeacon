@@ -1,5 +1,5 @@
 /**
- * The furniture every non-chart block shares: a section labelled by its
+ * The furniture every non-chart block shares: a section labeled by its
  * caption (an h3, because a block sits inside an h2 section of the edition),
  * the conclusion sentence in reading order before the content, the content,
  * and the dataset's provenance line under it. Chart blocks use ChartFigure
@@ -69,7 +69,7 @@ export function BlockDataMissing({ id, caption, conclusion }: { id: string; capt
 
 /**
  * The shared link style for a player name inside a block: the same plain
- * name the rankings table uses, coloured only on hover and focus. A name in a
+ * name the rankings table uses, colored only on hover and focus. A name in a
  * row or a tile is a link by its position, the way every player list on the
  * site works, so it needs no underline to say so.
  */

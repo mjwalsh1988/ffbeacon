@@ -67,7 +67,7 @@ const AUTO_BACKOFF_MAX_SECONDS = 300;
  *
  * Rolled fresh every cycle rather than once per tab. A fixed offset would hand
  * the same unlucky viewer the Sleeper fan-out every single minute for the whole
- * draft, and hand the same neighbours the losing end of the same race.
+ * draft, and hand the same neighbors the losing end of the same race.
  */
 const AUTO_JITTER_MS = 4000;
 

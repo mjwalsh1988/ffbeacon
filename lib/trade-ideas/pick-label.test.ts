@@ -26,7 +26,7 @@ describe("pickRoundLabel", () => {
 });
 
 describe("pickViaLabel", () => {
-  it("prefers the Sleeper handle, which is what managers recognise", () => {
+  it("prefers the Sleeper handle, which is what managers recognize", () => {
     expect(pickViaLabel(pick())).toBe("via @dynastyDan");
   });
 

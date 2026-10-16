@@ -3,7 +3,7 @@ import {
   biggestMiss,
   gradeWeek,
   planSlots,
-  summariseLineup,
+  summarizeLineup,
   type LedgerPlayer,
   type WeekInput,
 } from "./lineup";
@@ -173,7 +173,7 @@ describe("biggestMiss", () => {
   });
 });
 
-describe("summariseLineup", () => {
+describe("summarizeLineup", () => {
   const week = (over: Partial<GradedWeek>): GradedWeek => ({
     week: 1,
     officialPoints: 100,
@@ -189,7 +189,7 @@ describe("summariseLineup", () => {
   });
 
   it("counts a loss the best lineup would have won, and nothing else", () => {
-    const summary = summariseLineup([
+    const summary = summarizeLineup([
       week({ outcome: "loss", bestLineupOutcome: "win", pointsLeft: 12 }),
       // A loss the bench could not have saved.
       week({ outcome: "loss", bestLineupOutcome: "loss", pointsLeft: 3 }),
@@ -206,7 +206,7 @@ describe("summariseLineup", () => {
   });
 
   it("skips an unpaired week in both records rather than scoring it as a loss", () => {
-    const summary = summariseLineup([
+    const summary = summarizeLineup([
       week({ opponentPoints: null, outcome: null, bestLineupOutcome: null, pointsLeft: 5 }),
       week({ outcome: "win", bestLineupOutcome: "win" }),
     ]);
@@ -218,7 +218,7 @@ describe("summariseLineup", () => {
   });
 
   it("reports a null efficiency rather than a zero when nothing is gradable", () => {
-    const summary = summariseLineup([
+    const summary = summarizeLineup([
       week({ setPoints: 0, optimalPoints: 0, opponentPoints: null, outcome: null, bestLineupOutcome: null }),
     ]);
     expect(summary.efficiency).toBeNull();
@@ -275,7 +275,7 @@ describe("floating point residue", () => {
       },
       POOL,
     );
-    expect(summariseLineup([week, week, week]).efficiency).toBe(1);
+    expect(summarizeLineup([week, week, week]).efficiency).toBe(1);
   });
 });
 

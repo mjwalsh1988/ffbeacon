@@ -113,7 +113,7 @@ export const powerPulseSettingsSchema = z
 
     lineupRealism: z.object({
       enabled: z.boolean(),
-      // 0 is the current behaviour (assume a perfect lineup); 1 applies the
+      // 0 is the current behavior (assume a perfect lineup); 1 applies the
       // measured share in full.
       blend: unit,
       // At least two graded weeks before a manager's own measurement is used

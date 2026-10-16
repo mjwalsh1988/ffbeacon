@@ -16,7 +16,7 @@ import { AlertTriangle } from "lucide-react";
  * a page where nothing responds until they refresh by hand. That is the "it
  * eventually stops working" half of the reported bug.
  *
- * This boundary does NOT change 404 behaviour. Next re-throws the sentinel
+ * This boundary does NOT change 404 behavior. Next re-throws the sentinel
  * errors that notFound() and redirect() raise straight past error boundaries, so
  * a missing player still answers a real 404. That matters because it is the same
  * concern that keeps a loading.tsx out of the app root (see

@@ -80,7 +80,7 @@ export function emphasisForCategory(
  * The same answer from a plain dynasty flag, for the callers that only have one.
  *
  * On The Clock knows whether a format slug says dynasty long before it has a
- * Sleeper league object to categorise, and threading a category through every
+ * Sleeper league object to categorize, and threading a category through every
  * one of those call sites to reach the same two-way branch would be churn.
  */
 export function emphasisForDynastyFlag(isDynasty: boolean): LeagueEmphasis {

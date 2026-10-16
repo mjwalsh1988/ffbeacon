@@ -103,7 +103,7 @@ export function easternAddDaysAt(
   minute = 0,
 ): number {
   const p = easternParts(at);
-  // Date.UTC normalises day overflow, so adding to the day component is safe.
+  // Date.UTC normalizes day overflow, so adding to the day component is safe.
   const shifted = new Date(Date.UTC(p.year, p.month - 1, p.day + days, 12));
   return easternEpoch(
     shifted.getUTCFullYear(),

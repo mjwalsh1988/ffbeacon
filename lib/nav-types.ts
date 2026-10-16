@@ -47,7 +47,7 @@ type NavNodeBase = {
 
 /**
  * A row does exactly one of two things, and the type says so. Without the
- * union a node could carry neither, which renders a focusable, labelled row
+ * union a node could carry neither, which renders a focusable, labeled row
  * that does nothing when pressed.
  */
 export type NavNode = NavNodeBase &
@@ -63,7 +63,7 @@ export type NavNode = NavNodeBase &
         /**
          * Switches a view in place instead of navigating. Client-set only: a
          * section registered through `RegisterRailSections` lives entirely
-         * inside the client tree, so a function here never has to serialise.
+         * inside the client tree, so a function here never has to serialize.
          *
          * Optional on a section, which is opened by pressing it rather than
          * activated. Required on a leaf, which would otherwise do nothing.
@@ -74,10 +74,10 @@ export type NavNode = NavNodeBase &
   );
 
 /**
- * A section in the site tree, which is built on the server and serialised into
+ * A section in the site tree, which is built on the server and serialized into
  * the rail. Every row is a link, and `onSelect` is not part of the shape, so a
  * function cannot be put on one by accident: `lib/nav-tree.ts` types its own
- * sections as these, and Next would refuse to serialise a function anyway.
+ * sections as these, and Next would refuse to serialize a function anyway.
  * Rows that switch a view in place are contributed from the client and use the
  * wider `NavNode`.
  */

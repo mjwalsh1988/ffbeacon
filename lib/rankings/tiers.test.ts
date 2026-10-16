@@ -160,7 +160,7 @@ describe("assignPositionalTiers", () => {
     expect(results[RB_VALUES.length - 1].opensNextTier).toBe(false);
   });
 
-  it("honours the size cap even when a value is not a number", () => {
+  it("honors the size cap even when a value is not a number", () => {
     // NaN loses every comparison, so the split scan used to find no candidate
     // and abandon the run at any length.
     const rows: TierInput[] = [

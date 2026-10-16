@@ -311,7 +311,7 @@ export default function TermsPage() {
               withdrawing an interface may change or remove features here without
               notice.
             </p>
-            {/* MET Norway's licence (NLOD 2.0 and CC BY 4.0) requires this credit.
+            {/* MET Norway's license (NLOD 2.0 and CC BY 4.0) requires this credit.
                 The wording and both addresses live in lib/nfl-weather.ts, the
                 one file allowed to name a weather provider's host. */}
             <p className="mt-3">
@@ -434,7 +434,7 @@ export default function TermsPage() {
               The Service is provided on an as-is, best-effort basis by one person. We
               may add, change, suspend, or remove features at any time, including data
               sources, rankings, tools, and League Pulse coverage. Some features are
-              clearly labelled as new or experimental and may change or disappear
+              clearly labeled as new or experimental and may change or disappear
               without notice.
             </p>
             <p className="mt-3">

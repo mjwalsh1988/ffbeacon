@@ -202,9 +202,9 @@ export interface BeaconVerdict {
 export interface ConsolidationResult {
   enabled: boolean;
   applied: boolean;
-  /** Side the quality comparison favours. Null when nothing separated them. */
+  /** Side the quality comparison favors. Null when nothing separated them. */
   favouredSide: SideKey | null;
-  /** Points credited to the favoured side. Zero when not applied. */
+  /** Points credited to the favored side. Zero when not applied. */
   adjustment: number;
   /** The adjustment as a percent of the combined effective value. */
   adjustmentPct: number;

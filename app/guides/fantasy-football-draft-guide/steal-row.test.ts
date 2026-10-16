@@ -17,7 +17,7 @@ describe("readableAccent", () => {
     expect(lifted).not.toBe("#101820");
   });
 
-  it("lifts a dark red without turning it grey", () => {
+  it("lifts a dark red without turning it gray", () => {
     // Washington's real primary. The hue has to survive the lift.
     const lifted = readableAccent("#5A1414");
     const r = parseInt(lifted.slice(1, 3), 16);

@@ -4,7 +4,7 @@
  *
  * Pure, so every League Pulse loader answers the same three questions the same
  * way: which primary positions become lineup candidates, which accuracy and
- * opponent-split keys to read, and which slot map to hand the optimiser.
+ * opponent-split keys to read, and which slot map to hand the optimizer.
  *
  * Defenders become candidates only when the switch is on AND the league starts
  * a slot a defender can fill. A league with no defensive slot loads no defender
@@ -24,7 +24,7 @@ export type IdpReads = {
   idpEnabled: boolean;
   /** True when defenders are candidates in this league. */
   loadsDefenders: boolean;
-  /** The slot map the optimiser fills (the OFF map object when the switch is off). */
+  /** The slot map the optimizer fills (the OFF map object when the switch is off). */
   slotMap: SlotEligibilityMap;
   /** Primary positions whose players are lineup candidates. */
   candidatePositions: readonly string[];

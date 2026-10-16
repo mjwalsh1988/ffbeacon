@@ -839,7 +839,7 @@ export async function evaluateValidatedTrade(
     depthCost: depthCostOf(mineImpact.positionBefore, mineImpact.positionAfter),
     // Only when defenders are lineup candidates here. With the switch off a
     // defender is never loaded, so he adds no wins either, and "judged on
-    // projected wins only" would describe a judgement that was not made.
+    // projected wins only" would describe a judgment that was not made.
     unpricedDefenders: world.idpReads?.loadsDefenders
       ? [...incoming, ...outgoing].filter((a) => a.kind === "player" && isDefender(a.position)).length
       : 0,

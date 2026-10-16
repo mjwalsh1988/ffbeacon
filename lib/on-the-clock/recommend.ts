@@ -84,7 +84,7 @@ export interface RecommendInput {
   /**
    * How the drafter wants this team built. Only meaningful in a dynasty startup;
    * every other room passes the mode its format forces. Defaults to "balanced",
-   * which reproduces the pre-mode behaviour exactly.
+   * which reproduces the pre-mode behavior exactly.
    */
   mode?: BuildMode;
   /**
@@ -922,7 +922,7 @@ export function recommend(input: RecommendInput): RecommendResult {
 
   // ---- Best Value, tilted by mode ----
   // FF Beacon value stays the spine and the mode adds a bounded tilt on top, so
-  // the card is always recognisably an FF Beacon Values card rather than a
+  // the card is always recognizably an FF Beacon Values card rather than a
   // different ranking wearing its name. Compete tilts toward this season's
   // production WITHIN POSITION, which keeps the tilt roster-independent and stops
   // it simply promoting every quarterback.

@@ -195,7 +195,7 @@ describe("ranks", () => {
 /**
  * VARIETY IS THE FEATURE. A channel gets these messages several times a week
  * from the same league, and a bank of three lines is a bank a regular reader
- * has memorised by October. The seeded draw cannot manufacture variety it does
+ * has memorized by October. The seeded draw cannot manufacture variety it does
  * not have; the only supply is the size of the bank.
  *
  * The floor is deliberately checked at MID snark rather than at full, because

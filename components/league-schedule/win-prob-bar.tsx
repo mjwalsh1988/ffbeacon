@@ -4,7 +4,7 @@
  * WHAT WAS WRONG WITH THE FIRST ONE
  *   A 6px track split cyan and purple, with the two percentages in a sentence
  *   underneath. It was correct and it was unreadable: at that height, against a
- *   dark background, two saturated brand colours of similar lightness sit at
+ *   dark background, two saturated brand colors of similar lightness sit at
  *   nearly the same visual weight, so an 80/20 split and a 60/40 split look
  *   about the same. The reader was doing arithmetic off the caption because the
  *   drawing was not telling them anything.
@@ -15,21 +15,21 @@
  *   tinted to match its side of the bar and each sitting above its own team
  *   name. That alone answers "is this 80 or 55" without measuring anything.
  *
- *   The favourite is marked in words. The leading side carries a "Favoured"
- *   pill, so the answer survives greyscale, colour blindness, and a glance.
+ *   The favorite is marked in words. The leading side carries a "Favored"
+ *   pill, so the answer survives grayscale, color blindness, and a glance.
  *
  *   The track is 12px rather than 6, with the two fills separated by a hard
  *   edge and each carrying its own inline label once it is wide enough to hold
  *   one. A short bar drops its label rather than clipping it.
  *
- *   A dashed centre line marks 50. A split is much easier to read against a
+ *   A dashed center line marks 50. A split is much easier to read against a
  *   fixed reference than in isolation, and it is the difference between "the
  *   cyan bit is bigger" and "the cyan bit is well past even".
  *
  * ACCESSIBILITY. The whole drawing is aria-hidden and a single sentence carries
  * the same facts for a screen reader, spelled as "62 percent" rather than "62%".
- * Colour never carries meaning on its own here: every side has its percentage,
- * its team name, and the favourite has a word.
+ * Color never carries meaning on its own here: every side has its percentage,
+ * its team name, and the favorite has a word.
  *
  * Presentational. No state, no fetching, safe in a server component.
  */
@@ -39,7 +39,7 @@ import { pctLabel, pctWords } from "./format";
 /** Below this share, a fill is too narrow to hold its own label legibly. */
 const INLINE_LABEL_MIN = 0.18;
 
-/** Neither side is called the favourite inside this band. */
+/** Neither side is called the favorite inside this band. */
 const EVEN_BAND = 0.02;
 
 export function WinProbBar({
@@ -64,8 +64,8 @@ export function WinProbBar({
   const awayPct = 100 - homePct;
 
   const even = Math.abs(homeProb - 0.5) < EVEN_BAND;
-  const homeFavoured = !even && homeProb > 0.5;
-  const awayFavoured = !even && awayProb > 0.5;
+  const homeFavored = !even && homeProb > 0.5;
+  const awayFavored = !even && awayProb > 0.5;
 
   const numberSize = size === "full" ? "text-3xl sm:text-4xl" : "text-2xl";
   const trackHeight = size === "full" ? "h-3.5" : "h-3";
@@ -76,7 +76,7 @@ export function WinProbBar({
         <EndLabel
           name={homeName}
           pct={homePct}
-          favoured={homeFavoured}
+          favored={homeFavored}
           tone="home"
           numberSize={numberSize}
           align="start"
@@ -84,7 +84,7 @@ export function WinProbBar({
         <EndLabel
           name={awayName}
           pct={awayPct}
-          favoured={awayFavoured}
+          favored={awayFavored}
           tone="away"
           numberSize={numberSize}
           align="end"
@@ -127,9 +127,9 @@ export function WinProbBar({
           Win probability: {homeName} {pctWords(homeProb)}, {awayName} {pctWords(awayProb)}.
           {even
             ? " The two teams are close to even."
-            : homeFavoured
-              ? ` ${homeName} is favoured.`
-              : ` ${awayName} is favoured.`}
+            : homeFavored
+              ? ` ${homeName} is favored.`
+              : ` ${awayName} is favored.`}
         </span>
       </p>
     </div>
@@ -145,14 +145,14 @@ export function WinProbBar({
 function EndLabel({
   name,
   pct,
-  favoured,
+  favored,
   tone,
   numberSize,
   align,
 }: {
   name: string;
   pct: number;
-  favoured: boolean;
+  favored: boolean;
   tone: "home" | "away";
   numberSize: string;
   align: "start" | "end";
@@ -177,11 +177,11 @@ function EndLabel({
           {pct}
           <span className="text-base">%</span>
         </span>
-        {favoured && (
+        {favored && (
           <span
             className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${chip}`}
           >
-            Favoured
+            Favored
           </span>
         )}
       </div>

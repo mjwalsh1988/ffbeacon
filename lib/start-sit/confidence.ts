@@ -21,10 +21,10 @@ import type { StartSitCallLabel, StartSitProjection } from "./types";
 /** The two fields computeConfidence needs from each side of the comparison. */
 export type ConfidenceInput = Pick<StartSitProjection, "points" | "sigma">;
 
-/** 0.65 and up is labelled "clear". */
+/** 0.65 and up is labeled "clear". */
 export const CONFIDENCE_CLEAR_THRESHOLD = 0.65;
 
-/** 0.55 up to (not including) CONFIDENCE_CLEAR_THRESHOLD is labelled "lean". */
+/** 0.55 up to (not including) CONFIDENCE_CLEAR_THRESHOLD is labeled "lean". */
 export const CONFIDENCE_LEAN_THRESHOLD = 0.55;
 
 /**

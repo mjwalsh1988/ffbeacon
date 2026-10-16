@@ -83,7 +83,7 @@ export function rankIdpFreeAgents(
     if (!isDefender(position)) continue;
     // Where he would play: his primary when the league starts it, else the
     // first other position he is eligible at that it does. A DL/LB in a league
-    // that starts only LB slots is an LB free agent (the optimiser would seat
+    // that starts only LB slots is an LB free agent (the optimizer would seat
     // him there); ranked in that group, shown with his own primary.
     const eligible = [position, ...(player.eligible_positions ?? []).map((p) => p.toUpperCase())];
     const playsAt = eligible.find((p) => isDefender(p) && startable.has(p));

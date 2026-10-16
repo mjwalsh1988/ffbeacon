@@ -180,7 +180,7 @@ export function upgradeStrengthOf(
   }
 
   // Title odds, when we have them. A player who moves a bubble team into the
-  // bracket and a player who turns a bracket team into a favourite are two
+  // bracket and a player who turns a bracket team into a favorite are two
   // different buys, and playoff odds alone cannot tell them apart.
   const titleGain =
     marginal.titleOddsAfter !== null && marginal.titleOddsBefore !== null

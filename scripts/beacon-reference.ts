@@ -9,7 +9,7 @@
  *   npm run beacon:reference -- --rebuild --format dynasty-ppr-sflex
  *   npm run beacon:reference -- --rebuild --format dynasty-ppr-sflex --force
  *
- * --rebuild is the ONLY thing here that writes. Without --force it honours the
+ * --rebuild is the ONLY thing here that writes. Without --force it honors the
  * rebuild cadence, so it is safe to run repeatedly. With --force it replaces the
  * reference immediately, subject to the same source-completeness and shared-
  * player gates, which cannot be bypassed from anywhere.

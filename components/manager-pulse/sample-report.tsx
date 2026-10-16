@@ -29,7 +29,7 @@
  *   4. The heading below, stating in words that these are not real numbers.
  *   5. The outer `<section aria-labelledby>` points at that heading, so
  *      entering the region announces the disclaimer first, and each inner
- *      card is additionally wrapped in its own labelled region carrying the
+ *      card is additionally wrapped in its own labeled region carrying the
  *      same words. The two cards that render a `<table>` (leagues, affinity)
  *      also take an `isSample` prop that prefixes their own `<caption>` with
  *      the same disclaimer, since a caption is announced first on entering
@@ -75,7 +75,7 @@ const SECTION_LABEL: Record<ManagerSection, string> = {
 };
 
 /**
- * Wraps one card in its own labelled region carrying the sample disclaimer,
+ * Wraps one card in its own labeled region carrying the sample disclaimer,
  * so a reader who jumps straight to this section (skip links, heading
  * navigation, a screen reader's region list) still hears it is fake before
  * the section's own content.

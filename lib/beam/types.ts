@@ -210,7 +210,7 @@ export interface BeamInterpreter {
 /* What a capability produces                                          */
 /* ------------------------------------------------------------------ */
 
-/** One labelled number or short phrase under the headline. */
+/** One labeled number or short phrase under the headline. */
 export type BeamFact = {
   label: string;
   value: string;
@@ -231,7 +231,7 @@ export type BeamPlayerRow = {
   slug: string;
   position: string | null;
   team: string | null;
-  /** For the headshot. Null renders the position-coloured placeholder. */
+  /** For the headshot. Null renders the position-colored placeholder. */
   sleeperId: string | null;
 };
 

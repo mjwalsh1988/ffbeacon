@@ -30,10 +30,10 @@ import type { TradeReason } from "@/lib/trade-impact/types";
  *
  * WHY THE TONE PALETTE IS THE POWER PULSE ONE
  *   TradeReason is deliberately the same shape as PowerPulseDriver (see
- *   lib/trade-impact/types.ts), so it gets the same green / red / grey styling
+ *   lib/trade-impact/types.ts), so it gets the same green / red / gray styling
  *   components/power-pulse/pulse-detail.tsx uses for its drivers. A reader who
  *   has already read one team's Power Pulse breakdown knows what a tone means
- *   here without being taught twice. Colour is never the signal on its own: each
+ *   here without being taught twice. Color is never the signal on its own: each
  *   row carries an icon and a word ("Helps", "Costs", "Note") that a screen
  *   reader announces before the label.
  *

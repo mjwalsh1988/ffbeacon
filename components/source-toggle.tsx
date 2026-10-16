@@ -210,7 +210,7 @@ export function SourceToggle({
   const staticClass = `items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium ${
     inline ? "flex min-h-11 w-full" : "inline-flex h-9"
   }`;
-  // The header trigger stays 36px to match its neighbours; the invisible
+  // The header trigger stays 36px to match its neighbors; the invisible
   // ::before strip 4px above and below makes its hit area 44px tall.
   const triggerClass = inline
     ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent aria-disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

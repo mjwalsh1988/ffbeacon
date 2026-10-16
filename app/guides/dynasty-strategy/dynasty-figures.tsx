@@ -156,7 +156,7 @@ export function StatusBandsFigure() {
             <span
               className={`inline-block h-3 w-3 rounded-sm border ${BAND_STYLE[k].cell}`}
             />
-            {/* The range in words, so the grid never depends on colour alone. */}
+            {/* The range in words, so the grid never depends on color alone. */}
             {BAND_STYLE[k].label}, ranks{" "}
             {k === "contender"
               ? contenders
@@ -417,7 +417,7 @@ export function ProductionCurveFigure() {
           Decline has begun
         </li>
       </ul>
-      {/* The same ages in words, so the strip never depends on colour alone. */}
+      {/* The same ages in words, so the strip never depends on color alone. */}
       <ul
         role="list"
         aria-hidden="true"
@@ -598,7 +598,7 @@ export function AgeMarketFigure({ market }: { market: DynastyAgeMarket }) {
                 </span>
               )}
             </div>
-            {/* The bands in words, so the bar never depends on colour alone. */}
+            {/* The bands in words, so the bar never depends on color alone. */}
             <p className="mt-1 text-[11px] text-ink-subtle">
               {AGE_BANDS.map((b) => `${b.label}: ${p.bands[b.key]}`).join(", ")}
               {p.unknownAge > 0 ? `, age unknown: ${p.unknownAge}` : ""}

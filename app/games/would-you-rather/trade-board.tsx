@@ -6,8 +6,8 @@
  * NOTHING ON THIS COMPONENT KNOWS THE ANSWER. It is handed a `WyrRound`, which
  * carries names, positions, pick seats and the league's format, and carries no
  * value, no total, no margin and no verdict. The two sides are drawn
- * identically on purpose: no highlight, no ordering by worth, no colour that
- * favours one over the other, because any of those would be a hint.
+ * identically on purpose: no highlight, no ordering by worth, no color that
+ * favors one over the other, because any of those would be a hint.
  *
  * ONE BUTTON PER SIDE, SITTING UNDER THAT SIDE. On a phone the sides stack, so
  * each button is directly beneath the thing it is about; on a wide screen the

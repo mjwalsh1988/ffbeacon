@@ -61,7 +61,7 @@ export type ChartGeometry = {
    * Where zero wins sits, or null when the y-domain does not include it.
    *
    * Exposed rather than left for the caller to work out, because the caller
-   * has no scale: the whole point of this module is that it owns the maths.
+   * has no scale: the whole point of this module is that it owns the math.
    * The chart draws a marked line here, and "this is the line where a player
    * is worth exactly what a replacement is worth" is the single most useful
    * thing on the y-axis.

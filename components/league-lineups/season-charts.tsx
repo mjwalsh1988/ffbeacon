@@ -16,7 +16,7 @@
  * a chart half this site's readers cannot use, and an sr-only table nobody can
  * see is worse than a visible one everybody can.
  *
- * COLOUR IS NEVER THE SIGNAL. The bars carry a shape (a short bar inside a tall
+ * COLOR IS NEVER THE SIGNAL. The bars carry a shape (a short bar inside a tall
  * one is a gap; a bar below the line is a miss), every figure is in the table,
  * and the legend names each mark in words.
  *
@@ -120,7 +120,7 @@ function ScoredAgainstBest({
   const scale = (value: number) => (value / ceiling) * PLOT.height;
 
   // THE GRADABLE PAIR, not scored over bestPossible. Those two include the
-  // slots the optimiser cannot touch, which adds the same constant to both
+  // slots the optimizer cannot touch, which adds the same constant to both
   // halves and flatters every manager in an IDP league. It is also the figure
   // the season panel above and the table below both already quote, so deriving
   // it a second way would put three efficiencies on one screen.

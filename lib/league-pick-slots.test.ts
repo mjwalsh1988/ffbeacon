@@ -1,5 +1,5 @@
 /**
- * Cover for draft-slot labelling, and specifically for the case that used to be
+ * Cover for draft-slot labeling, and specifically for the case that used to be
  * decided by row order: a league holding more than one draft for one season.
  *
  * Migration 0029 made that legal, and a production league carries two completed

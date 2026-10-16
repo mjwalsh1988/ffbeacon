@@ -24,8 +24,8 @@
  * THE ELIGIBILITY IS THE LEAGUE'S OWN. A flex takes running backs, receivers
  * and tight ends; a superflex takes those plus quarterbacks; a QB slot takes
  * quarterbacks. That mapping is lib/power-pulse/types.ts PULSE_SLOT_ELIGIBILITY,
- * the same one the optimiser fills against, so this dialog can never offer a
- * swap the optimiser would consider illegal.
+ * the same one the optimizer fills against, so this dialog can never offer a
+ * swap the optimizer would consider illegal.
  *
  * THE LIST IS ORDERED BY PROJECTION AND NOT BY VERDICT. The best available
  * option is first because that is the useful order, but no row is marked as the
@@ -295,7 +295,7 @@ export function SlotSwapDialog({
                   // A SMALLER GAP IS THE GOOD DIRECTION HERE, so the tone is
                   // inverted against the other two rows. Reusing the same
                   // mapping would paint "you left two fewer points on the
-                  // bench" in the warning colour.
+                  // bench" in the warning color.
                   direction={invert(pointsDirection(gapShift ?? 0))}
                   missingNote="No best lineup to compare against, so there is no gap to report."
                 />

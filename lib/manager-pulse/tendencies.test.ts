@@ -206,10 +206,10 @@ describe("buildTendency", () => {
   });
 
   /* -------------------------------------------------------------------------- */
-  /* Favourites and avoids are passed through, not recomputed                  */
+  /* Favorites and avoids are passed through, not recomputed                  */
   /* -------------------------------------------------------------------------- */
 
-  it("passes report.affinity's favourite and avoid player ids through unchanged, to both lenses", () => {
+  it("passes report.affinity's favorite and avoid player ids through unchanged, to both lenses", () => {
     const input = baseInput({
       settings: settingsWith({ minAvoidSeasons: 1 }),
       leagueSeasons: [
@@ -248,7 +248,7 @@ describe("buildTendency", () => {
     expect(tendency.dynasty!.avoidPlayerIds).toEqual(report.affinity.avoids.map((a) => a.playerId));
     // The SAME lists on both lenses: affinity is pooled across dynasty and
     // redraft on purpose (its own file header explains why), so there is
-    // only ever one favourites/avoids list to pass through.
+    // only ever one favorites/avoids list to pass through.
     expect(tendency.redraft!.favouritePlayerIds).toEqual(tendency.dynasty!.favouritePlayerIds);
     expect(tendency.redraft!.avoidPlayerIds).toEqual(tendency.dynasty!.avoidPlayerIds);
   });

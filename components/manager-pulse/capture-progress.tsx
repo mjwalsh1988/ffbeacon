@@ -108,7 +108,7 @@ export function CaptureProgressPanel({
     // Every fifth league, crossing upward. Tracked by the multiple itself (not
     // a simple modulo) so a poll that jumps from 3 done to 12 done (a slow
     // poll landing after several leagues finished) still announces once,
-    // rather than being skipped because leaguesDone never equalled exactly 10.
+    // rather than being skipped because leaguesDone never equaled exactly 10.
     const currentMultipleOfFive = Math.floor(progress.leaguesDone / 5);
     if (
       next === null &&
@@ -217,7 +217,7 @@ export function CaptureProgressPanel({
             gives the bar its name instead of the two being announced back to
             back as two separate copies of the same sentence. The id sits on
             the inner span, not this <p>: ElapsedClock is a sibling of the
-            labelled text rather than a child of it, so the bar's accessible
+            labeled text rather than a child of it, so the bar's accessible
             name does not recompute (and re-announce) every second the clock
             ticks. */}
         <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-xs text-ink-muted">

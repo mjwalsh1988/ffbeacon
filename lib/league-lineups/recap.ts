@@ -2,7 +2,7 @@
  * The week, graded: what the lineup scored, what the best one available would
  * have scored, whether that gap cost the game, and who was responsible.
  *
- * PURE. Every figure comes from the players and the optimiser result the page
+ * PURE. Every figure comes from the players and the optimizer result the page
  * is already holding, so this adds no query and no model. It is the report
  * half of the Lineups page, the way lib/league-lineups/simulate.ts is the
  * what-if half.
@@ -21,7 +21,7 @@
  *
  * THE DEFICIT IS ADDED TO THE OFFICIAL SCORE rather than the total being
  * rebuilt from parts, which is the same arithmetic lib/manager-ledger/lineup.ts
- * does and for the same reason: the optimiser only improves the slots it can
+ * does and for the same reason: the optimizer only improves the slots it can
  * grade, and Sleeper's own total is the number that decided the game.
  */
 
@@ -57,7 +57,7 @@ export type WeekRecap = {
    * players would have WON it.
    *
    * The single most useful sentence this page can say about a settled week, and
-   * a claim about a real game rather than a modelled quantity. Ties are
+   * a claim about a real game rather than a modeled quantity. Ties are
    * excluded at both ends, matching the Manager Ledger's `winsLeftOnBench`.
    */
   costTheGame: boolean;

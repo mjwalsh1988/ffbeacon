@@ -42,10 +42,10 @@
  * the exact same order.
  *
  * THE ROW FILLS THE WIDTH IT HAS. From lg up each card grows to share the
- * row (never past 26rem, never under 300px) and the row centres itself with
+ * row (never past 26rem, never under 300px) and the row centers itself with
  * `justify-content: safe center`, so two cards sit side by side across the
  * board instead of hugging the left edge, and eight still scroll. "safe"
- * matters: plain centring pushes the first card past the scroll origin of an
+ * matters: plain centering pushes the first card past the scroll origin of an
  * overflowing row, where no scroll can reach it.
  *
  * SHARE LINKS CARRY format AND source EXPLICITLY, even though the reader's

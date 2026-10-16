@@ -507,7 +507,7 @@ export function PlayerSpotlight({
             <p className="mt-3 text-sm font-medium leading-relaxed text-ink">{data.reason}</p>
             {p.shortNote && <p className="mt-1.5 text-xs italic text-ink-muted">{p.shortNote}</p>}
 
-            {/* A plain div, not a labelled <section>. A named section becomes a
+            {/* A plain div, not a labeled <section>. A named section becomes a
                 landmark region, and two spotlights would add two of them inside
                 the one this page already has, each announcing a name that the
                 h4 immediately below then repeats in different words. */}

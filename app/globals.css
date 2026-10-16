@@ -408,7 +408,7 @@
  * Purely decorative. The bar is aria-hidden and the meter's real value is
  * announced by the sr-only summary sentence in score-meter.tsx, so nothing
  * here is load-bearing for a screen reader. Under reduced-motion the
- * travelling band is removed outright and the leading edge settles to a steady
+ * traveling band is removed outright and the leading edge settles to a steady
  * unpulsing glow, keeping the energized look with zero movement.
  */
 @keyframes scout-current-flow {
@@ -882,7 +882,7 @@
   animation-timing-function: ease-in-out;
 }
 
-/* The pool churns at its surface rather than travelling, so clumps always have
+/* The pool churns at its surface rather than traveling, so clumps always have
    a mass to sink into and separate from near the base of the frame. */
 @keyframes lava-pool {
   0%,
@@ -1229,13 +1229,13 @@
 }
 
 /**
- * The bookmark bar's minimise animation.
+ * The bookmark bar's minimize animation.
  *
  * Driven by `data-bookmark-bar` on <html>, which a blocking script in
  * app/layout.tsx sets from local storage before the first paint, for exactly
  * the reason the rail's width is (see above): React cannot know the remembered
  * value until it has hydrated, so a React-driven height would paint the bar
- * open and then snap it shut on every page load for anyone who minimised it.
+ * open and then snap it shut on every page load for anyone who minimized it.
  *
  * TWO PROPERTIES MOVE TOGETHER AND THEY DO DIFFERENT JOBS. The track's height
  * is what takes the bar out of the page, so the breadcrumb bar underneath rises
@@ -1333,7 +1333,7 @@
  * `:has()` rather than a class or an attribute set from React, because the
  * answer has to be right in the first painted frame: a JavaScript-driven offset
  * would land after hydration and visibly shift the rail on every page load. A
- * browser without `:has()` simply keeps today's behaviour, where the bar
+ * browser without `:has()` simply keeps today's behavior, where the bar
  * scrolls away, rather than getting a broken layout.
  */
 /**

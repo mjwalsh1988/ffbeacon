@@ -112,7 +112,7 @@ describe("parseWizardDraft", () => {
     expect(parsed?.formatSlug).toBe(DEFAULT_FORMAT);
   });
 
-  it("falls back on every field it does not recognise", () => {
+  it("falls back on every field it does not recognize", () => {
     const parsed = parseWizardDraft(
       {
         formatSlug: 12,

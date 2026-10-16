@@ -37,7 +37,7 @@ export type RankedBarRow = {
   display: string;
   /** Tailwind background class for the filled part. */
   barClass?: string;
-  /** Emphasised row (the leader). Gets the brand accent and heavier type. */
+  /** Emphasized row (the leader). Gets the brand accent and heavier type. */
   lead?: boolean;
 };
 
@@ -101,20 +101,20 @@ export function RankedBars({
 export type DivergingRow = {
   key: string;
   labelText: string;
-  /** Signed. Negative draws left of the centre line, positive right. */
+  /** Signed. Negative draws left of the center line, positive right. */
   value: number;
   display: string;
 };
 
 /**
- * Bars either side of a centre line, for a figure whose SIGN is the point.
+ * Bars either side of a center line, for a figure whose SIGN is the point.
  *
  * Position appetite and pick flow are both "which way is this manager
  * leaning", and a one-sided bar chart cannot say that without the reader
  * decoding a minus sign in the figure at the end of the row. Both halves are
  * scaled to the same largest magnitude, so the two sides are comparable.
  *
- * The centre line is drawn, and it is `aria-hidden` like every other mark
+ * The center line is drawn, and it is `aria-hidden` like every other mark
  * here: the sign is in the figure text and in the word beside it.
  */
 export function DivergingBars({
@@ -145,8 +145,8 @@ export function DivergingBars({
               aria-hidden="true"
               className="relative hidden h-2.5 flex-1 rounded-full bg-line/50 sm:block"
             >
-              {/* The centre line, so a reader can see which side a bar is on
-                  without measuring it against its neighbours. */}
+              {/* The center line, so a reader can see which side a bar is on
+                  without measuring it against its neighbors. */}
               <span className="absolute inset-y-[-2px] left-1/2 w-px -translate-x-1/2 bg-line-accent" />
               <span
                 className={`absolute top-0 h-full rounded-full ${

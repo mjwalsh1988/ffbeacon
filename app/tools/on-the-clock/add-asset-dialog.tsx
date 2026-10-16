@@ -8,7 +8,7 @@
  * a slot is not an asset until you know who is in it: a made pick is the player
  * taken, and an unmade one is whoever the market would take there.
  *
- * The sides are labelled with real team names rather than A and B. In a draft
+ * The sides are labeled with real team names rather than A and B. In a draft
  * room "Side A" is meaningless until you remember which side you assigned
  * yourself to, and a three-way conversation about picks makes it worse.
  *

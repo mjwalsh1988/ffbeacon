@@ -15,7 +15,7 @@ export type Crumb = { label: string; href?: string };
  *
  * This is the single source of truth for the design. League Pulse, the Beacon
  * Brief, and the player profiles all render through it, so a change to spacing,
- * colour, or focus treatment lands everywhere at once.
+ * color, or focus treatment lands everywhere at once.
  */
 export function SiteBreadcrumb({
   homeHref,

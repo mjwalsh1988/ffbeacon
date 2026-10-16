@@ -291,7 +291,7 @@ function ageValueContribution(
  * reference age, normalized by the total value moved so the result is a
  * lean rather than a raw dollar size. Buying a player younger than the
  * reference age, or selling one older than it, both push the result
- * positive; the two are the same underlying behaviour (choosing youth over
+ * positive; the two are the same underlying behavior (choosing youth over
  * proven production) approached from opposite sides of the trade.
  */
 function computeAgeLean(

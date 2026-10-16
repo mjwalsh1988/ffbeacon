@@ -63,7 +63,7 @@ export const CATEGORY_ORDER: { key: LeagueCategoryKey; label: string }[] = [
  * dynasty. lib/sleeper-to-format.ts now classifies the same way, so a continued
  * redraft league groups as redraft AND prices off the redraft board.
  *
- * NOTE for anything that PRICES a league rather than labelling it: a chopped
+ * NOTE for anything that PRICES a league rather than labeling it: a chopped
  * league still prices off the redraft board, and `lib/sleeper-to-format.ts` is
  * unchanged. This function answers "what kind of room is this", not "which
  * value board applies". The two were the same answer until today and are not

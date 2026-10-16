@@ -172,7 +172,7 @@ function Checkbox({
   // whole row, is min-h-11, and a native label click toggles the input. That
   // gives a full-width 44px tall hit area, which is what the project's absolute
   // 44 by 44 rule is actually asking for. `items-center` on the old wrapper
-  // centred the children inside a 44px row without making either of them 44px
+  // centered the children inside a 44px row without making either of them 44px
   // tall, so the real target was 20 by 20.
   return (
     <label
@@ -259,8 +259,8 @@ export function PowerPulseSettingsManager({
   };
 
   // Appended to the hint of each control that only does something while the
-  // lineup realism checkbox is on. Stated in words rather than signalled by a
-  // greyed-out control, which a screen reader announces as "dimmed" at best and
+  // lineup realism checkbox is on. Stated in words rather than signaled by a
+  // grayed-out control, which a screen reader announces as "dimmed" at best and
   // not at all at worst.
   const realismSuffix = settings.lineupRealism.enabled
     ? ""
@@ -523,7 +523,7 @@ export function PowerPulseSettingsManager({
           min={0}
           max={64}
           step="1"
-          hint="Current-season games a player needs before our weight reaches its maximum. Six, because usage stabilises in four to six games. In week 1 our weight is 0 and the stored row is Sleeper's."
+          hint="Current-season games a player needs before our weight reaches its maximum. Six, because usage stabilizes in four to six games. In week 1 our weight is 0 and the stored row is Sleeper's."
         />
         <Field
           label="Usage half life, weeks"
@@ -652,7 +652,7 @@ export function PowerPulseSettingsManager({
 
       <Section
         title="Lineup realism"
-        description="Power Pulse projects every remaining week from the best lineup a roster could possibly set, which assumes every manager in the league will extract every point their roster can produce for the rest of the season. Measured against settled results, real managers start roughly 76 to 90 percent of what was available to them. Turning this on discounts each team's projection toward their own measured share, from the Decisions page. It is off by default because it is a judgement call, not a bug fix: it is partly a claim about future behaviour rather than about a roster, and it is noisy early in a season."
+        description="Power Pulse projects every remaining week from the best lineup a roster could possibly set, which assumes every manager in the league will extract every point their roster can produce for the rest of the season. Measured against settled results, real managers start roughly 76 to 90 percent of what was available to them. Turning this on discounts each team's projection toward their own measured share, from the Decisions page. It is off by default because it is a judgment call, not a bug fix: it is partly a claim about future behavior rather than about a roster, and it is noisy early in a season."
       >
         <div className="sm:col-span-2">
           <Checkbox
@@ -662,7 +662,7 @@ export function PowerPulseSettingsManager({
             describedBy="pp-realism-hint"
           />
           <p id="pp-realism-hint" className="mt-1 text-[11px] leading-tight text-ink-subtle">
-            Off keeps the current behaviour exactly: every team is projected as if their
+            Off keeps the current behavior exactly: every team is projected as if their
             manager sets a perfect lineup every week. Bump the model version below after
             changing this, so every league rescores instead of serving a mix of both.
           </p>
@@ -670,7 +670,7 @@ export function PowerPulseSettingsManager({
         {/* The three below depend on the checkbox above. When it is off they
             still take input and still save, and nothing they hold changes any
             number, so the dependency is stated in each hint rather than left to
-            be inferred from a greyed-out control that a screen reader would not
+            be inferred from a grayed-out control that a screen reader would not
             mention at all. */}
         <Field
           label="Blend"

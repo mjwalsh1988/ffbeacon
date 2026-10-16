@@ -27,7 +27,7 @@ export type ActionResult = { ok: true; message?: string } | { ok: false; error: 
  * before it is written with the service-role client.
  *
  * Saving changes what the NEXT tick does. It does not retract a message already
- * posted, which is the only sane behaviour: a channel has already seen it.
+ * posted, which is the only sane behavior: a channel has already seen it.
  */
 export async function saveRelaySettingsAction(raw: unknown): Promise<ActionResult> {
   const { userId } = await requireAdmin(ADMIN_PATH);

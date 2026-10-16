@@ -25,7 +25,7 @@ import {
  *
  *   A search box that narrows a real <select> keeps all of that and adds the one
  *   thing that was missing. Nothing about the select changes: it is still a
- *   labelled form control, still keyboard-navigable, still announces "N of M",
+ *   labeled form control, still keyboard-navigable, still announces "N of M",
  *   still opens the wheel on a phone. The filter is an ordinary text input
  *   beside it. There is no custom widget to get wrong.
  *
@@ -537,7 +537,7 @@ export const PlayerPicker = memo(function PlayerPicker({
 /**
  * Options grouped by the team that holds each player.
  *
- * A pick that survives only because it is the current one is labelled as such,
+ * A pick that survives only because it is the current one is labeled as such,
  * so a reader who filters to "Jefferson" and finds Josh Allen still sitting in
  * the list knows why he is there.
  */

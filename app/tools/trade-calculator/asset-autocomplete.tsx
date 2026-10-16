@@ -89,7 +89,7 @@ export function AssetAutocomplete({
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    let canceled = false;
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
@@ -98,18 +98,18 @@ export function AssetAutocomplete({
           headers: FETCH_HEADERS,
         });
         const data = (await res.json()) as { results?: SearchResult[] };
-        if (!cancelled) {
+        if (!canceled) {
           setResults(data.results ?? []);
           setActiveIdx(NO_ACTIVE_OPTION);
         }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!canceled) setResults([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!canceled) setLoading(false);
       }
     }, 250);
     return () => {
-      cancelled = true;
+      canceled = true;
       clearTimeout(timer);
     };
   }, [trimmed, longEnough, formatSlug]);

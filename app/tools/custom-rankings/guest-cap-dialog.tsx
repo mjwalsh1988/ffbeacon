@@ -11,7 +11,7 @@ export const CLAIM_NEXT = "/tools/custom-rankings?claim=1";
 export const LOGIN_HREF = `/login?next=${encodeURIComponent(CLAIM_NEXT)}`;
 
 /**
- * The guest cap prompt (plan sections 8 and 13.5): a decision, so a centred
+ * The guest cap prompt (plan sections 8 and 13.5): a decision, so a centered
  * dialog. It says what the guest has and what an account adds, concretely,
  * and "Not now" leaves the board exactly as it is. Nothing a guest built is
  * lost by reaching the cap: it is carried into the account on sign-in.

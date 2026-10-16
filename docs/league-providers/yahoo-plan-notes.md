@@ -283,7 +283,7 @@ available but not installed. Vault is the token-encryption answer.
 - `lib/league-category.ts`: `categorizeLeague(league: SleeperLeague)` (line
   52) reads `settings.best_ball === 1` and `settings.type === 2`. Yahoo has no
   dynasty type and no best ball flag, so the provider adapter must emit these
-  as normalised fields.
+  as normalized fields.
 - `progress.md` task format is in CLAUDE.md; phases are headed
   `## Phase N - name`.
 
@@ -310,7 +310,7 @@ Answered in section 8 where the briefs settled them; still open where noted.
 - Terms of use: the Developer API terms (24-hour clause) are readable; the
   Fantasy-specific terms page is a 404 as of 2026-09-09 (owner's item 5a).
 - Yahoo `guid` versus `xoauth_yahoo_guid`, and the openid scopes: openid,
-  openid2, profile, email supported; `xoauth_yahoo_guid` labelled deprecated;
+  openid2, profile, email supported; `xoauth_yahoo_guid` labeled deprecated;
   the fantasy `guid` is read from users;use_login=1 after the exchange.
 - Best ball on Yahoo: no flag found (UNVERIFIED as a negative). IDP: yes
   (position type D with DL, LB, DB).
@@ -394,7 +394,7 @@ Yahoo program:
 - Access policy changed three times in ten months with no announcement
   channel. Budget for an unknown approval wait.
 - Refresh tokens rotate ("New refresh tokens invalidate old ones"); the FAQ
-  says a password change revokes them. Serialise refreshes per connection.
+  says a password change revokes them. Serialize refreshes per connection.
   Revocation endpoint https://api.login.yahoo.com/oauth2/revoke. Discovery
   document: grants authorization_code and refresh_token only, auth methods
   client_secret_basic and client_secret_post, no PKCE advertised.
@@ -498,7 +498,7 @@ Codebase inventory:
   today. Beacon Link plan Part 3.2 (docs/beacon-link/beacon-link-plan.md:356
   onward) proposes `sleeper_connections` with AES-256-GCM ciphertext, key
   version, status enum, owner-readable status VIEW, service_role-only base
-  table, env key. The provider plan generalises it to `provider_connections`
+  table, env key. The provider plan generalizes it to `provider_connections`
   on Vault.
 - Copy: 82 component files and the legal pages name Sleeper; identity card,
   save-handle form and notice, League Pulse form, Manager Pulse search form,
@@ -590,7 +590,7 @@ Empty until the owner has access. Entries to make here, each with a date:
   unit; the in-draft draft_status; the live scoreboard status; how many
   preevent weeks the scoreboard returns; editorial_team_abbr casing; the
   co-manager object; where is_keeper sits; the 999 rate; whether PKCE is
-  honoured; the exact scope string; whether public leagues are readable by a
+  honored; the exact scope string; whether public leagues are readable by a
   non-member's token.
 
 Write shapes for the day write access returns (library-derived, unverified

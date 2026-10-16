@@ -269,7 +269,7 @@ const nextConfig: NextConfig = {
       // tier 3, which is the tier the classifier gives every post about a current
       // player, so merging stopped entirely: one Jonathan Taylor contract became
       // six articles, one Jalon Walker ACL became five. Migration 0177 replaced
-      // that judgement call with a deterministic event key; 0178 merged what had
+      // that judgment call with a deterministic event key; 0178 merged what had
       // already published.
       //
       // The survivors were rewritten by hand for 0178 and carry every fact worth

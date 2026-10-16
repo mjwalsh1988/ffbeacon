@@ -94,7 +94,7 @@ The consequence must be stated in the UI and must never be "fixed": because
 replacement is weekly and the axis is structural, the curve does not cross zero
 at the replacement line. The player sitting exactly at structural demand carries
 a small POSITIVE figure, because he beats the weekly replacement in most weeks.
-So the marker at that point is labelled with its real value rather than an
+So the marker at that point is labeled with its real value rather than an
 asserted zero. On the live league checked below that value was between 0.05 and
 0.19 depending on position, and it is stored as `war_at_demand` precisely so the
 chart never has to guess it.
@@ -123,7 +123,7 @@ detect the swap.
 So the token "WAR" names exactly one metric here and always carries the word
 "Positional" adjacent to it. `lib/positional-war/naming.test.ts` enforces this
 as a proximity rule rather than a ban, because the Trade Ideas asset note
-legitimately prints a Positional WAR figure as labelled context: inside
+legitimately prints a Positional WAR figure as labeled context: inside
 `lib/trade-impact/`, `lib/faab/` and `lib/power-pulse/`, every occurrence of the
 token must have `Positional` within forty characters before it, comments
 included. The team-specific vocabulary is banned from `lib/positional-war/` and
@@ -134,7 +134,7 @@ The guard caught two real things during the build: two comments in
 `lib/power-pulse/` that said "the WAR model" and "rank-1 WAR" without
 qualification, and later a JSX comment carrying the task id `T-WAR-48`, whose
 hyphens put word boundaries either side of the token. The first two were
-rewritten. The second was a false positive and taught the guard to recognise
+rewritten. The second was a false positive and taught the guard to recognize
 `{/*` as a comment opener.
 
 ---
@@ -152,7 +152,7 @@ rewritten. The second was a false positive and taught the guard to recognise
 | `lib/positional-war/war.ts` | Points above replacement, the two lineups, and the win conversion. |
 | `lib/positional-war/engine.ts` | `computeCurves()`. Pure; takes plain data, returns plain data. |
 | `lib/positional-war/load.ts` | The cached full-universe read and the projection assembly. |
-| `lib/positional-war/chart-geometry.ts` | The path maths, shared by the on-page chart and the social card. |
+| `lib/positional-war/chart-geometry.ts` | The path math, shared by the on-page chart and the social card. |
 | `lib/positional-war/share.ts` | Cross-league compute sharing and its collision guard. |
 | `lib/positional-war/upgrade.ts` | The team-specific what-if. The one place the other metric lives in this directory. |
 | `lib/league-positional-war.ts` | The orchestrator: staleness, backoff, status writes, and `refreshPositionalWar`, which never throws. |
@@ -197,7 +197,7 @@ is not.
 - **Refill with the player removed.** Rejected: that is the team-specific metric
   and belongs in Trade Ideas.
 
-The per-position definition also produces the right flex behaviour with no
+The per-position definition also produces the right flex behavior with no
 special case. The merged fill is greedy by points, so the marginal seated player
 across every flex-eligible position sits near the same level, and in a league
 with deep flex the running back, receiver and tight end replacement levels
@@ -241,7 +241,7 @@ second copies six rows instead of reading the universe and running W+1 fills.
 on the WRITE path only. The read path does not change: the per-league table
 keeps its full rows, so every consumer still issues exactly one query.
 
-The risk was never the maths, it was a normalization bug serving one league's
+The risk was never the math, it was a normalization bug serving one league's
 curve to another with nothing visibly wrong. So `inputs_digest` stores nine
 human-readable values, not the hash, and every hit recomputes them from the
 requesting league and compares field by field. A mismatch logs both digests at
@@ -293,7 +293,7 @@ the run that produced it, and a curve of zeroes reads as a real result.
 | `/leagues/[id]` right rail | A three-line text finding, above "Explore this league". |
 | `/leagues/[id]/positional-war` | The same panel at full width, plus the upgrade what-if. |
 | `/leagues/[id]/power-pulse` | The same panel under the projected champion. |
-| `/leagues/[id]/trade-ideas` | A labelled context line on an asset card. |
+| `/leagues/[id]/trade-ideas` | A labeled context line on an asset card. |
 | `/api/og/war/[league_id]` | The shareable card. |
 | `/admin/system/league-health` | Both features' run health, one row per league. |
 | `/admin/power-pulse` | The model's five settings. |
@@ -329,11 +329,11 @@ product's owner uses a screen reader, so it got the most attention.
 - The readout is a FOCUS readout as well as a hover readout, in an `aria-live`
   region, so it is reachable by keyboard.
 - Each of the six series carries a distinct hue, a distinct dash pattern and a
-  distinct marker shape, so the chart survives colour removal. The palette was
+  distinct marker shape, so the chart survives color removal. The palette was
   chosen with the `dataviz` skill loaded and the contrast ratios computed
   against the ACTUAL composited panel surface rather than a token name.
 - The viewer overlay is a ring marker distinguishable by shape and stroke, plus
-  a literal "Yours" text column in the table. Never a colour-only signal.
+  a literal "Yours" text column in the table. Never a color-only signal.
 - The rail's anchor moves keyboard focus to the chart panel's heading, not
   merely the scroll position.
 - No responsive utility hides a data-bearing element at any breakpoint.
@@ -730,7 +730,7 @@ test sweeps every width from 200 to 1400 CSS px asserting it cannot happen.
 The x-axis label fitter is priority-ordered rather than left to right.
 "Replacement level" is the one sentence on that axis and it is six times as wide
 as the "0.5" and "1.5" that flank it, so it claims its space first and its
-neighbours give way. This drops LABELS, never ticks and never series, and every
+neighbors give way. This drops LABELS, never ticks and never series, and every
 dropped value is still in the data table under the chart, so nothing is hidden
 at any breakpoint.
 

@@ -218,9 +218,9 @@ function rivalNeedSignal(input: MarketInput): FaabSignal | null {
  * cheapest (p75 10%), and week 14 on the dearest of all (p75 18%, p90 42%),
  * because leftover budget is about to be worth nothing.
  *
- * Option value is still real, but it belongs to the reader's own judgement
+ * Option value is still real, but it belongs to the reader's own judgment
  * about holding money, not to an estimate of what a rival will bid. This
- * multiplier moves rival bid centres only.
+ * multiplier moves rival bid centers only.
  */
 export function calendarMultiplier(
   week: number,

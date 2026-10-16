@@ -240,7 +240,7 @@ async function loadPlayerFacts(
  * value means "nobody priced this in", so leaving the column unselected made the
  * draft room apply our own Questionable discount on top of a number Sleeper had
  * already discounted, and made it overrule a return timeline the Power Pulse
- * page honours. Same model, same player, different answer, for no reason a
+ * page honors. Same model, same player, different answer, for no reason a
  * reader could see.
  */
 async function loadAllProjections(

@@ -8,11 +8,11 @@ import {
 import { NFL_TEAMS, NFL_TEAM_CODES } from "./nfl-teams";
 
 describe("parseHomeSpread", () => {
-  it("reads a home-favoured line: SEA -3.5, SEA is home", () => {
+  it("reads a home-favored line: SEA -3.5, SEA is home", () => {
     expect(parseHomeSpread("SEA -3.5", -3.5, "SEA", "NE")).toBe(-3.5);
   });
 
-  it("reads an away-favoured line: SEA -3.5, SEA is away and NE is home", () => {
+  it("reads an away-favored line: SEA -3.5, SEA is away and NE is home", () => {
     expect(parseHomeSpread("SEA -3.5", -3.5, "NE", "SEA")).toBe(3.5);
   });
 
@@ -43,12 +43,12 @@ describe("parseHomeSpread", () => {
 });
 
 describe("impliedTotals", () => {
-  it("splits a home-favoured game", () => {
-    // 44.5 total, SEA (home) favoured by 3.5.
+  it("splits a home-favored game", () => {
+    // 44.5 total, SEA (home) favored by 3.5.
     expect(impliedTotals(44.5, -3.5)).toEqual({ home: 24, away: 20.5 });
   });
 
-  it("splits an away-favoured game", () => {
+  it("splits an away-favored game", () => {
     expect(impliedTotals(44.5, 3.5)).toEqual({ home: 20.5, away: 24 });
   });
 
@@ -123,7 +123,7 @@ describe("getEspnScoreboard", () => {
     expect(result).toEqual([]);
   });
 
-  it("parses a game with odds into a normalised row", async () => {
+  it("parses a game with odds into a normalized row", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(200, {
         events: [

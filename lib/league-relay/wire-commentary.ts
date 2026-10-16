@@ -70,7 +70,7 @@ export const ADD_PART_TIME: Line[] = [
 export const ADD_BENCH: Line[] = [
   { heat: 0, text: "{player} does not make {name}'s best lineup in any of the next {weeks} weeks." },
   { heat: 0.3, text: "{player} starts zero of the next {weeks} weeks for {name}. Bench depth, which is the polite word for it." },
-  { heat: 0.4, text: "On {name}'s roster, {player} is not starting in any of the next {weeks} weeks. A spare tyre in a jersey." },
+  { heat: 0.4, text: "On {name}'s roster, {player} is not starting in any of the next {weeks} weeks. A spare tire in a jersey." },
   { heat: 0.6, text: "{name} added {player}, who is projected to start for exactly nobody, {name} included, for the next {weeks} weeks." },
   { heat: 0.8, text: "{player} will not start a single one of the next {weeks} weeks for {name}. That is not a pickup, that is a collectible." },
 ];

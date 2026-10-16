@@ -7,7 +7,7 @@
  * natural order, so shading each bar darker where it is longer would encode bar
  * length twice and spend the only free channel on something the length already
  * says. The one exception is the reader's own team, drawn in brand purple with
- * a "You" chip beside it, so the difference never rests on colour alone.
+ * a "You" chip beside it, so the difference never rests on color alone.
  *
  * NOT AN <svg>. Every team name and every count is real text in the document,
  * which is what a screen reader reads and what a keyboard user can select. The

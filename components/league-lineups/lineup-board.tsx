@@ -15,7 +15,7 @@
  *   table is the only structure that lets a screen reader make the same
  *   comparison a sighted reader makes by scanning. Each row's slot is the row
  *   header, so a row reads as "RB, Bijan Robinson, projected 18.4" rather than
- *   as four unlabelled numbers.
+ *   as four unlabeled numbers.
  *
  * HOW IT SURVIVES A PHONE, WITH NOTHING HIDDEN
  *   The Mobile-First rule in CLAUDE.md is absolute: every piece of data on
@@ -54,7 +54,7 @@
  *   own.
  *
  * A NULL IS NEVER A ZERO. "No projection" is what an IDP slot, a bye and an
- * unrecognised player all get. A 0.0 there would read as a real forecast of
+ * unrecognized player all get. A 0.0 there would read as a real forecast of
  * nothing, would sum into a total, and would be believed.
  *
  * THE HEADLINE FIGURE FOLLOWS THE WEEK. Before the games it is the projection,
@@ -190,7 +190,7 @@ export function LineupBoard({
   /**
    * What a swap is measured against.
    *
-   * Straight off the optimiser's own two totals, so the what-if and the summary
+   * Straight off the optimizer's own two totals, so the what-if and the summary
    * card above it can never disagree about where the lineup starts. The spread
    * is recomputed here rather than carried, because it is a sum over the very
    * players in `groups` and deriving it anywhere else would be a second place
@@ -820,7 +820,7 @@ function PlayerRow({
         {/* THE PROJECTION, KEPT BUT DEMOTED. Small, muted, and carrying the
             signed difference, because the interesting thing about a result is
             how far off the forecast was. The sign is the point, so it is never
-            dropped, and the colour is reinforcement on top of a figure that
+            dropped, and the color is reinforcement on top of a figure that
             already carries it. */}
         {shadow !== null && swing !== null && (
           <span className="mt-0.5 block font-mono text-[10px] tabular-nums leading-tight text-ink-subtle">
@@ -861,9 +861,9 @@ function PlayerRow({
         headers={`${ids.gameColId} ${rowId}`}
         className="hidden px-2 py-2 align-middle md:table-cell"
       >
-        {/* THE BAND IS A WORD, NOT A TINT. The number alone plus a colour left
+        {/* THE BAND IS A WORD, NOT A TINT. The number alone plus a color left
             the high/average/low reading available to a sighted reader only
-            through hue, which is exactly what the colour rule forbids. The
+            through hue, which is exactly what the color rule forbids. The
             short form fits the column; the full sentence rides beside it. */}
         {tier && implied !== null ? (
           <span className={`${CHIP} ${ENVIRONMENT_TIER_CLASS[tier]}`}>

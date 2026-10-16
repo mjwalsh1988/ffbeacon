@@ -415,7 +415,7 @@ export function SeasonCalendarFigure() {
               stroke={b.color}
               strokeWidth={1}
             />
-            {/* A band that starts late in the season is labelled from its right
+            {/* A band that starts late in the season is labeled from its right
                 edge, so the words do not run off the end of the drawing. */}
             <text
               x={b.from >= 15 ? x(b.to) + cell / 2 - 8 : x(b.from) - cell / 2 + 8}

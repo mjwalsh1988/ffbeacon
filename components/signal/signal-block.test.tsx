@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { favoritePlayerLabel } from "./signal-block";
 import { PositionChip } from "@/components/position-chip";
 
-describe("favourite player (plan IDP-212)", () => {
+describe("favorite player (plan IDP-212)", () => {
   it("spells the position out in the accessible name", () => {
     expect(favoritePlayerLabel({ name: "Roquan Smith", position: "LB", team: "BAL" })).toBe(
       "Roquan Smith, linebacker, BAL",

@@ -529,7 +529,7 @@ export async function runCalculateTrends(
 
   const nowMs = Date.now();
   // The exact stamp every row this run writes will carry, so the sweep below can
-  // recognise "not written by this run" as "strictly older than this".
+  // recognize "not written by this run" as "strictly older than this".
   const updatedAtIso = new Date(nowMs).toISOString();
   const outputs = computeTrendRows(allRows, nowMs, intervalBySource, staleDaysBySource);
   console.log(`  ${outputs.length} (player, format, source) combos`);

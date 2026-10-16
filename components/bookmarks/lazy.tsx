@@ -21,7 +21,7 @@
  * SSR STAYS ON. `next/dynamic` here is React.lazy plus a boundary, not a
  * client-only escape hatch: the bar and the save button are still rendered into
  * the served HTML, which is the whole reason they receive their state from the
- * server rather than fetching it. Nothing about the no-flash behaviour changes.
+ * server rather than fetching it. Nothing about the no-flash behavior changes.
  */
 
 import dynamic from "next/dynamic";

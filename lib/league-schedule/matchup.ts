@@ -147,7 +147,7 @@ export type BuildMatchupInput = {
   homeAwayByTeamWeek?: Map<string, boolean> | null;
   /**
    * The IDP switch, read once by the server loader (plan R-25). Absent or
-   * false: defensive slots are not projected, not optimised and never offered
+   * false: defensive slots are not projected, not optimized and never offered
    * as a swap target, exactly as before. It must agree with the `projectable`
    * flags on `slots`, which the same loader built from the same switch.
    */
@@ -162,7 +162,7 @@ type UpgradeProposal = BenchUpgrade & { slotIndex: number };
  *
  * `BenchUpgrade.outPlayer` is not nullable, and the panel that renders it puts
  * the name straight into a sentence. So an unfilled slot needs something to
- * name, and it has to be something a reader recognises as the absence of a
+ * name, and it has to be something a reader recognizes as the absence of a
  * player rather than a player: "Start Waddle over an empty slot in FLEX" is the
  * whole point of the entry. Every number on it is null, never zero, so nothing
  * downstream can add it into a total or print it as a score.
@@ -442,7 +442,7 @@ function buildSide(
 
   /**
    * The best legal lineup, over the projectable slots only. An IDP slot cannot
-   * be optimised, because nothing is projected for the positions that fill it,
+   * be optimized, because nothing is projected for the positions that fill it,
    * and offering the slot to the fill would let a running back take it.
    *
    * On a settled week the candidates carry actual points, so this is the lineup

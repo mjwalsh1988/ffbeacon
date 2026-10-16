@@ -20,7 +20,7 @@ import type { TeamStatusKey } from "@/lib/league-team-status";
 /**
  * The chip for a game environment band.
  *
- * COLOUR IS NEVER THE SIGNAL. Every one of these is drawn with the implied
+ * COLOR IS NEVER THE SIGNAL. Every one of these is drawn with the implied
  * total itself plus the band as a word (ENVIRONMENT_TIER_SHORT for the eye,
  * ENVIRONMENT_TIER_LABEL for the ear), so the tint is a scanning aid and
  * removing it loses nothing. Callers must keep it that way: a chip carrying
@@ -32,7 +32,7 @@ import type { TeamStatusKey } from "@/lib/league-team-status";
  * ENVIRONMENT_TIER_LABEL ("High scoring") is the full form and goes to the ear
  * and anywhere there is room. This is what fits beside "24.5" in a table cell,
  * and it exists because the alternative was letting the tint be the only thing
- * saying high from low, which is the one thing the colour rule forbids.
+ * saying high from low, which is the one thing the color rule forbids.
  */
 export const ENVIRONMENT_TIER_SHORT: Record<EnvironmentTier, string> = {
   high: "high",
@@ -65,7 +65,7 @@ export const ENVIRONMENT_TIER_CLASS: Record<EnvironmentTier, string> = {
 /**
  * The status chip, matched to the four bands. Paired with the word every time.
  *
- * Text colours match components/team-status-badge.tsx, and for the same reason:
+ * Text colors match components/team-status-badge.tsx, and for the same reason:
  * measured against its own 10 percent fill, `brand-purple` runs 4.03 to 4.70
  * and fails AA on the darker card grounds, while `purple-400` runs 5.78 to
  * 6.96. The border stays on `brand-purple`, which is decoration and answers to

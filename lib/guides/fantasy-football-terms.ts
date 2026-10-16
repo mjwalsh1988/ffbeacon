@@ -625,7 +625,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
         id: "veto",
         term: "Veto",
         body: [
-          "A veto is the mechanism for cancelling a completed trade, either by a league vote or by the commissioner.",
+          "A veto is the mechanism for canceling a completed trade, either by a league vote or by the commissioner.",
           "Most leagues that use vetoes end up regretting them. A veto belongs to evidence of collusion, not to a trade that looks lopsided to someone who was not in the negotiation.",
         ],
       },
@@ -1236,7 +1236,7 @@ export type GlossaryAbbreviation = {
   more?: string;
   /** The full glossary entry, when there is one. */
   termId?: string;
-  /** Badge colour. Decorative: the letters and the words carry the meaning. */
+  /** Badge color. Decorative: the letters and the words carry the meaning. */
   tone?: AbbreviationTone;
 };
 

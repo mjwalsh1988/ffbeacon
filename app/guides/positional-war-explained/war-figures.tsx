@@ -228,7 +228,7 @@ export function SamePointsDifferentGapFigure() {
     <ChartFigure
       titleLevel={3}
       title="More points, smaller gap"
-      description="The invented quarterback and running back from the table above. The muted part of each bar is what the replacement player scores for free; the coloured part is the gap, and the gap is what Positional WAR measures."
+      description="The invented quarterback and running back from the table above. The muted part of each bar is what the replacement player scores for free; the colored part is the gap, and the gap is what Positional WAR measures."
       summary={`In this invented league the best quarterback scores ${GAP_ROWS[0].best.toFixed(1)} a week and the best running back ${GAP_ROWS[1].best.toFixed(1)}, yet the running back's gap over his replacement is ${(GAP_ROWS[1].best - GAP_ROWS[1].replacement).toFixed(1)} points against the quarterback's ${(GAP_ROWS[0].best - GAP_ROWS[0].replacement).toFixed(1)}, because the free running back is so much worse. Positional WAR follows the gap, not the total.`}
       table={
         <DataTable
@@ -516,7 +516,7 @@ export function MarkerFigure() {
       // Sits under the h3 "The marker", so one level down.
       titleLevel={4}
       title="The marker at the last starter is not zero"
-      description={`The tail of the invented running back line. The hollow marker sits at RB${DEMAND_RANK}, the last running back this league needs on a week with no byes, and it is labelled with its real value.`}
+      description={`The tail of the invented running back line. The hollow marker sits at RB${DEMAND_RANK}, the last running back this league needs on a week with no byes, and it is labeled with its real value.`}
       summary={`On the invented running back line the hollow marker sits at RB${DEMAND_RANK}, the last starter the league needs on a bye-free week, and its Positional WAR there is ${DEMAND_VALUE.toFixed(2)}, not zero. The line reaches zero a few ranks later, because byes make the last starter worth something on the weeks the position is thin.`}
       table={
         <DataTable

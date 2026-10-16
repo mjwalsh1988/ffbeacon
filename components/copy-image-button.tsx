@@ -280,7 +280,7 @@ export function CopyImageButton({
       </span>
 
       {/* Out of the accessibility tree AND out of the tab order until the
-          clipboard has actually refused, then a real labelled field a reader can
+          clipboard has actually refused, then a real labeled field a reader can
           both see and operate. */}
       {/* NO useId, AND NO id/htmlFor PAIR. The label WRAPS the input, which is
           the implicit association and needs no generated id at all. The explicit

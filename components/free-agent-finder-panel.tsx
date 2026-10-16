@@ -338,7 +338,7 @@ function PlayerCombobox({
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    let canceled = false;
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
@@ -353,18 +353,18 @@ function PlayerCombobox({
           headers: FETCH_HEADERS,
         });
         const data = (await res.json()) as { players?: SearchablePlayer[] };
-        if (!cancelled) {
+        if (!canceled) {
           setResults(data.players ?? []);
           setActiveIdx(NO_ACTIVE_OPTION);
         }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!canceled) setResults([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!canceled) setLoading(false);
       }
     }, 250);
     return () => {
-      cancelled = true;
+      canceled = true;
       clearTimeout(timer);
     };
   }, [trimmed, longEnough]);
@@ -596,7 +596,7 @@ function ReportSummary({
  *
  * The sentence is the meaning; the segmented bar under it says the same thing
  * with one cell per league and is aria-hidden. Free cells are filled and
- * rostered cells are outlined, so the split reads without colour.
+ * rostered cells are outlined, so the split reads without color.
  */
 export function AvailabilityMeter({
   playerName,
@@ -692,7 +692,7 @@ function ReportList({
 /**
  * One league's answer.
  *
- * Shape, then fill, then colour, so the state never rests on hue alone: a free
+ * Shape, then fill, then color, so the state never rests on hue alone: a free
  * agent is a filled check in a green well, a rostered player is a barred circle
  * in a plain one, and both carry the words. The words are what a screen reader
  * gets; the icons are aria-hidden because they say the same thing twice.

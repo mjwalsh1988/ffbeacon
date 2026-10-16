@@ -44,7 +44,7 @@ export function buildWouldYouRatherFaq(discordEnabled: boolean): FaqAccordionIte
     {
       question: "Why can't I see the values before I vote?",
       answer:
-        "Because that is the game. A value on the board would turn a judgement call into a reading exercise. The board carries names, positions, pick slots and the league's format, and nothing else, until your vote is recorded.",
+        "Because that is the game. A value on the board would turn a judgment call into a reading exercise. The board carries names, positions, pick slots and the league's format, and nothing else, until your vote is recorded.",
     },
     {
       question: "What does it mean when the room and Signal Check disagree?",

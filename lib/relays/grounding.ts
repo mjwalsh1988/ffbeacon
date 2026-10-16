@@ -10,12 +10,12 @@
  * Three checks, all one-directional:
  *
  *   numbers   Every number in the headline, the facts and the timeline must
- *             appear in the post after normalising separators. "$54M" matches
+ *             appear in the post after normalizing separators. "$54M" matches
  *             "54 million" and "$54,000,000"; "4-6 weeks" matches "4 to 6 weeks"
  *             and "four to six". Ordinals count as numbers in both spellings,
  *             so "2nd round" and "second round" are both checked against the
  *             post's own figure.
- *   names     Every capitalised token of two or more characters in the headline
+ *   names     Every capitalized token of two or more characters in the headline
  *             and in the fact labels and values must appear in the post, in its
  *             quoted or retweeted text, or in the player and team names the
  *             matcher resolved for this post (so "Eagles" may appear when the
@@ -66,7 +66,7 @@ export interface GroundingResult {
 }
 
 /**
- * Capitalised words that start sentences or name generic things and are not
+ * Capitalized words that start sentences or name generic things and are not
  * evidence of an invented name. Kept short on purpose: a token that is not
  * here is checked, and an unnecessary check is a false failure the admin can
  * clear in a click, which is the safe direction.
@@ -92,7 +92,7 @@ const SKIP_CAPITALISED = new Set([
 /**
  * The one kind of word a fact LABEL is checked for: an NFL team's city or
  * nickname. A label is the model's own framing of a value ("Timeline",
- * "Practice status", "Outcome"), written in title case, so every capitalised
+ * "Practice status", "Outcome"), written in title case, so every capitalized
  * word in it looks like a name to the general check and none of them is a
  * claim about the world. Checking labels the way values are checked hid twelve
  * of eighteen Relays in one backfill run over words like "Event" and
@@ -365,7 +365,7 @@ function stripPossessive(token: string): string {
  * with a number: rejecting every digit-leading token exempted "49ers" from the
  * check entirely. A token that is only digits is the number check's business.
  */
-function isCapitalisedName(token: string): boolean {
+function isCapitalizedName(token: string): boolean {
   if (token.length < 2) return false;
   if (/^\d+$/.test(token)) return false;
   if (!/^[A-Z0-9]/.test(token)) return false;
@@ -416,7 +416,7 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
       sentenceStart = /[.!?:]["')]*$/.test(raw);
       const token = raw.replace(/^[^A-Za-z0-9$]+|[^A-Za-z0-9]+$/g, "");
       if (!token) continue;
-      if (!isCapitalisedName(token)) continue;
+      if (!isCapitalizedName(token)) continue;
       const key = stripPossessive(token.toLowerCase());
       if (SKIP_CAPITALISED.has(key)) continue;
       if (alsoSkip?.has(key)) continue;
@@ -437,7 +437,7 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
       // A number written as a word ("Four") is a number, and the number check
       // already decided it.
       if (WORD_NUMBERS[key] !== undefined && postNumbers.has(WORD_NUMBERS[key])) continue;
-      // The first word of a sentence is capitalised whether or not it is a
+      // The first word of a sentence is capitalized whether or not it is a
       // name. Let it through when a stem of it is in the post ("Activated"
       // against "activate"); a real invented name will not stem to anything.
       // Never for a team word: "Pats" stems to "pat", which a post about a
@@ -454,7 +454,7 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
   };
 
   // The post's own words in order, so a pair the reporter wrote ("Pittsburgh
-  // Panthers" about a college player) is recognised as theirs.
+  // Panthers" about a college player) is recognized as theirs.
   const postWords = ` ${wordTokens(haystackText).join(" ")} `;
 
   // A city word directly followed by a nickname must be a real team, or a pair
@@ -513,7 +513,7 @@ export function checkRelayGrounding(post: GroundingPost, relay: GroundingRelay):
     // invented detail hides. The match reads stems on both sides, so "not
     // placed on injured reserve" shares "place" with "decided not to place".
     if (contentWords.some((w) => stems(w).some((st) => postHaystack.has(st) || postStems.has(st)))) continue;
-    // A fact labelled plainly "Team" whose value is nothing but a team the
+    // A fact labeled plainly "Team" whose value is nothing but a team the
     // matcher resolved ("Team: Commanders" on a post that said "HC Dan Quinn"
     // about a Commanders linebacker) states the match, which the name check
     // already allows in the headline. Only that label: "Former team:

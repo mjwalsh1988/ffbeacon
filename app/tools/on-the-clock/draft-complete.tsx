@@ -373,8 +373,8 @@ export function DraftComplete({
         }`}
         detail={
           (myPulse.unprojectedIdpCount ?? 0) > 0
-            ? "Players on your roster carrying a weekly projection. The rest sit outside the lineup maths, defensive picks included: Draft Pulse covers offense only."
-            : "Players on your roster carrying a weekly projection. The rest sit outside the lineup maths."
+            ? "Players on your roster carrying a weekly projection. The rest sit outside the lineup math, defensive picks included: Draft Pulse covers offense only."
+            : "Players on your roster carrying a weekly projection. The rest sit outside the lineup math."
         }
         wide
       />,

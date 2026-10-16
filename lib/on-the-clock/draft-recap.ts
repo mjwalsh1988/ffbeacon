@@ -47,7 +47,7 @@ export interface PassedOnInput {
  *
  * "Better" means higher FF Beacon value at TODAY's values, which is the only
  * honest thing to say: we are not claiming to know what the room knew then. For
- * a completed draft the values are the frozen snapshot ones, so the judgement is
+ * a completed draft the values are the frozen snapshot ones, so the judgment is
  * at least stable rather than drifting every time the board moves.
  */
 export function computePassedOn(input: PassedOnInput): PassedOn[] {

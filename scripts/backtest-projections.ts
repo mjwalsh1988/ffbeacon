@@ -39,7 +39,7 @@
  *
  * The third is the one that answers "is our model any good", because the other
  * two are mostly Sleeper. It is graded ONLY on rows the model actually produced
- * (`modelled`), since a mirrored row is Sleeper's number wearing our name and
+ * (`modeled`), since a mirrored row is Sleeper's number wearing our name and
  * scoring it as ours would flatter us by counting his work as ours.
  *
  * Game environment is EMPTY here, and that is a real limitation rather than an
@@ -341,7 +341,7 @@ async function main() {
     beacon: emptyBucket(),
   };
   const byPosition = new Map<string, { sleeper: Bucket; blended: Bucket; beacon: Bucket }>();
-  const byWeek: Array<{ week: number; n: number; sleeper: number | null; blended: number | null; beacon: number | null; modelled: number }> = [];
+  const byWeek: Array<{ week: number; n: number; sleeper: number | null; blended: number | null; beacon: number | null; modeled: number }> = [];
 
   for (let week = 1; week <= LAST_WEEK; week++) {
     const weekRows = sleeper.rows.filter((r) => r.week === week);
@@ -366,7 +366,7 @@ async function main() {
     const beaconById = new Map(beaconRun.projections.map((p) => [`${p.playerId}|${p.week}`, p]));
 
     const weekBuckets = { sleeper: emptyBucket(), blended: emptyBucket(), beacon: emptyBucket() };
-    let modelledThisWeek = 0;
+    let modeledThisWeek = 0;
 
     for (const projection of blendedRun.projections) {
       const key = `${projection.playerId}|${projection.week}`;
@@ -400,8 +400,8 @@ async function main() {
       // The isolating column: only rows OUR model produced. A mirrored row is
       // Sleeper's number, and scoring it as ours would credit us with his work.
       const pure = beaconById.get(key);
-      if (pure?.modelled && pure.pointsPpr !== null) {
-        modelledThisWeek += 1;
+      if (pure?.modeled && pure.pointsPpr !== null) {
+        modeledThisWeek += 1;
         add(pooled.beacon, pure.pointsPpr, actual.points);
         add(bucket.beacon, pure.pointsPpr, actual.points);
         add(weekBuckets.beacon, pure.pointsPpr, actual.points);
@@ -414,9 +414,9 @@ async function main() {
       sleeper: mae(weekBuckets.sleeper),
       blended: mae(weekBuckets.blended),
       beacon: mae(weekBuckets.beacon),
-      modelled: modelledThisWeek,
+      modeled: modeledThisWeek,
     });
-    process.stdout.write(`  week ${String(week).padStart(2)}: ${String(weekBuckets.sleeper.n).padStart(4)} graded, ${modelledThisWeek} modelled\n`);
+    process.stdout.write(`  week ${String(week).padStart(2)}: ${String(weekBuckets.sleeper.n).padStart(4)} graded, ${modeledThisWeek} modeled\n`);
   }
 
   const line = (label: string, b: Bucket) =>
@@ -435,7 +435,7 @@ async function main() {
     console.log(`\n  blended vs sleeper: ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% MAE (negative is better)`);
   }
   if (sM !== null && nM !== null) {
-    console.log(`  NOTE: the beacon row is graded on a different, smaller set (modelled rows only), so its MAE is not directly comparable to the two above. The per-position table below re-states sleeper on that same subset.`);
+    console.log(`  NOTE: the beacon row is graded on a different, smaller set (modeled rows only), so its MAE is not directly comparable to the two above. The per-position table below re-states sleeper on that same subset.`);
   }
 
   console.log(`\nBY POSITION`);
@@ -447,10 +447,10 @@ async function main() {
   }
 
   console.log(`\nBY WEEK (MAE)`);
-  console.log(`  week    n  modelled   sleeper   blended    beacon`);
+  console.log(`  week    n  modeled   sleeper   blended    beacon`);
   for (const w of byWeek) {
     console.log(
-      `  ${String(w.week).padStart(4)} ${String(w.n).padStart(4)} ${String(w.modelled).padStart(9)}   ${fmt(w.sleeper, 3).padStart(7)}   ${fmt(w.blended, 3).padStart(7)}   ${fmt(w.beacon, 3).padStart(7)}`,
+      `  ${String(w.week).padStart(4)} ${String(w.n).padStart(4)} ${String(w.modeled).padStart(9)}   ${fmt(w.sleeper, 3).padStart(7)}   ${fmt(w.blended, 3).padStart(7)}   ${fmt(w.beacon, 3).padStart(7)}`,
     );
   }
 

@@ -15,7 +15,7 @@ import { LeaguePulseForm } from "./league-pulse-form";
  * a function prop is ordinary.
  *
  * It adds no state and makes no decision the gate does not already own. The
- * one judgement here is `showSaveOption`, and it is D5 plus D6: a signed-in
+ * one judgment here is `showSaveOption`, and it is D5 plus D6: a signed-in
  * reader gets the "Save this as my Sleeper username" checkbox whether the form
  * is on screen (member-unsaved, box ticked) or behind Change on the card
  * (member-saved, box unticked), because the D6 notice under the form points at

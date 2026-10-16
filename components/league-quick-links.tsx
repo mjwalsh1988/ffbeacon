@@ -209,7 +209,7 @@ export function LeagueQuickLinks({
  * The first pass was an outlined card, which on this page put it in the same
  * visual bracket as the filter panel and the Sync all bar: things that sit
  * there, not things you press. Four changes fix that, and none of them is
- * colour alone.
+ * color alone.
  *
  *   The icon well carries the beacon gradient on black, which is the treatment
  *   this site already uses for its primary action (Sync, Sync all, Open league).

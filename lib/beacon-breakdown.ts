@@ -110,7 +110,7 @@ export type BreakdownContext = {
   formatDisplay: string;
   formatConfigId: string | null;
   scoringKey: ScoringKey;
-  /** Format shape, so downstream reads can pick the matching ADP flavour. */
+  /** Format shape, so downstream reads can pick the matching ADP flavor. */
   isDynasty: boolean;
   isSuperflex: boolean;
   sourceSlug: string | null;

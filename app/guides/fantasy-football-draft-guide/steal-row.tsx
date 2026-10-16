@@ -29,7 +29,7 @@ import type { BoardEntry } from "@/lib/draft-value/guide-data";
  * THE SENTENCE IS STILL THE CONTENT. The verdict is a full plain-English
  * paragraph and it sits directly under the headline numbers. A reader using a
  * screen reader gets the conclusion in one pass rather than assembling it from
- * six labelled figures, and the numbers corroborate rather than carry it.
+ * six labeled figures, and the numbers corroborate rather than carry it.
  * Nothing here is conveyed by color alone: the position hue sits behind the
  * position's own letters, and the team color sits behind the team's own
  * abbreviation.

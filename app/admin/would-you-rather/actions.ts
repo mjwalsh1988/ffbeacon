@@ -29,7 +29,7 @@ export type ActionResult = { ok: true; message?: string } | { ok: false; error: 
  *
  * Saving changes what the NEXT round and the NEXT cron tick do. It does not
  * touch votes already cast or polls already posted, which is the only sane
- * behaviour: a tally is a record of what people did under the rules at the
+ * behavior: a tally is a record of what people did under the rules at the
  * time.
  */
 export async function saveWouldYouRatherSettingsAction(raw: unknown): Promise<ActionResult> {

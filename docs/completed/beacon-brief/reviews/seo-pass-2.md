@@ -306,10 +306,10 @@ First-pass resolutions, each re-read against the code:
 - M3. The hub's robots rule keys on `feedQuery(search) || currentPage > 1`
   (app/brief/(feed)/page.tsx:49), so every filtered and every paged variant
   is noindex, follow and self-canonical through `feedPath` (:35). An
-  unrecognised `?team=` or `?player=` still produces a non-empty query
+  unrecognized `?team=` or `?player=` still produces a non-empty query
   (lib/relays/feed-params.ts:55-56 sets the param from the raw value, not
   the resolved one), so the empty state (:70, :119-123) is noindex with a
-  canonical of itself. An unrecognised `?kind=` or out-of-range `?week=`
+  canonical of itself. An unrecognized `?kind=` or out-of-range `?week=`
   parses to null, produces an empty query, and the page is then the
   indexable hub with canonical `/brief`, which is the right consolidation.
   `?team=phi` is uppercased in both the canonical and the lookup

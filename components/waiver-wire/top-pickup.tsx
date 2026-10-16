@@ -10,7 +10,7 @@
  * WHY THE PAGE NEEDS A FOCAL POINT. A reader arriving on "waiver wire week 4"
  * has one question before any other: who is the add. This answers it in one
  * card, at a size that says so, and the board below is then browsing rather
- * than searching. It is drawn as the page's showpiece: the position-coloured
+ * than searching. It is drawn as the page's showpiece: the position-colored
  * portrait on the left, the bid as the largest number on the page in the
  * beacon gradient on the right, and the measured figures as icon tiles.
  *

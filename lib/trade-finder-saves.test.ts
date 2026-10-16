@@ -126,7 +126,7 @@ describe("savedSuggestionSchema", () => {
     ).toBe(false);
   });
 
-  it("refuses an acceptance band it does not recognise", () => {
+  it("refuses an acceptance band it does not recognize", () => {
     expect(savedSuggestionSchema.safeParse(suggestion({ acceptance: "certain" })).success).toBe(
       false,
     );
@@ -186,7 +186,7 @@ describe("savedGradeSchema", () => {
     ).toBe(true);
   });
 
-  it("refuses an unknown favours value", () => {
+  it("refuses an unknown favors value", () => {
     expect(savedGradeSchema.safeParse(grade({ favours: "everyone" })).success).toBe(false);
   });
 

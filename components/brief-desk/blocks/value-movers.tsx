@@ -3,7 +3,7 @@
  * through chart-kit. The SVG is aria-hidden; the summary paragraph states the
  * conclusion and the biggest move either way; the table under the disclosure
  * carries every number. Bars are purple for a rise and red for a fall, and
- * every bar also carries its signed figure as text, so colour never carries
+ * every bar also carries its signed figure as text, so color never carries
  * the direction alone.
  *
  * Server component.
@@ -57,7 +57,7 @@ function MoversSvg({ movers, layout }: { movers: Mover[]; layout: "wide" | "narr
 
   const hasPos = movers.some((m) => m.change > 0);
   const hasNeg = movers.some((m) => m.change < 0);
-  // Only a chart with both directions diverges from a centre line. A
+  // Only a chart with both directions diverges from a center line. A
   // falls-only chart draws magnitude from the left like the risers chart, so
   // each bar starts beside its name instead of far across the plot.
   const diverging = hasPos && hasNeg;

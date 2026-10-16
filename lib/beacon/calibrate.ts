@@ -103,7 +103,7 @@ export function fitQuantileMap(
  * Below the fitted range the result is squeezed proportionally toward zero along
  * the line from the origin to the bottom knot. Deep players a source ranks past
  * where the reference has any opinion therefore land BELOW the fitted minimum,
- * never above it, and never at a value the reference would recognise as real.
+ * never above it, and never at a value the reference would recognize as real.
  * They keep their relative ordering.
  *
  * Ties in x are answered with the highest y at that x, so equal source values

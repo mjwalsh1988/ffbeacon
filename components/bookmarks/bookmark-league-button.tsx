@@ -23,9 +23,9 @@
  * this stays absent rather than offering a control that would only be able to
  * tell the reader to sign in.
  *
- * TWO SHAPES, ONE BEHAVIOUR. `block` is the full-width labelled button under
+ * TWO SHAPES, ONE BEHAVIOR. `block` is the full-width labeled button under
  * the sheet's primary action, on a phone. `icon` is the 36px square at the end
- * of each row of the desktop league tables, where a labelled button would cost
+ * of each row of the desktop league tables, where a labeled button would cost
  * a column of width that the league names need more. The accessible name is the
  * same full sentence either way, so nothing about what a screen reader hears
  * depends on which one is on screen.
@@ -116,7 +116,7 @@ function SaveLeague({
         }
       >
         <Icon aria-hidden="true" className="h-4 w-4" />
-        {/* The state is in the words as well as in the glyph and the colour,
+        {/* The state is in the words as well as in the glyph and the color,
             wherever there is room for words. */}
         {variant === "block" ? (saved ? "Bookmarked" : "Bookmark this league") : null}
       </button>

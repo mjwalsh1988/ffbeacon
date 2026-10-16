@@ -483,7 +483,7 @@ export const NAV_TREE_SECTION_IDS: string[] = ALL_SECTIONS.map(
  *
  * React-cached on its arguments. The rail and the mobile drawer both need this
  * in the same render, and both are client components, so two calls means the
- * tree is serialised into the payload twice. Called with the object
+ * tree is serialized into the payload twice. Called with the object
  * `getNavViewer()` returns and the layout `loadSiteLayout()` returns (both
  * cached, so the same references both times) this returns the same array, and
  * the payload carries it once.

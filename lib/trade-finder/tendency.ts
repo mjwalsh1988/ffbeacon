@@ -44,7 +44,7 @@ export type { ManagerTendency, TendencySlice };
  * still behaves sanely, and they are the same defaults the settings row ships.
  *
  * The remaining constants are genuinely local: they are scale factors for this
- * module's own bounded appetite score, not product judgements about what to
+ * module's own bounded appetite score, not product judgments about what to
  * say, so there is nothing for an admin to tune.
  */
 /**
@@ -89,9 +89,9 @@ export const TENDENCY_DEFAULTS = {
    * than one trade's rounding.
    */
   POSITION_APPETITE_SCALE: 2000,
-  /** Ceiling on the position term alone, so it can never outweigh a favourite/avoid hit. */
+  /** Ceiling on the position term alone, so it can never outweigh a favorite/avoid hit. */
   POSITION_COMPONENT_MAX: 0.6,
-  /** How much naming a favourite player adds. */
+  /** How much naming a favorite player adds. */
   FAVOURITE_BONUS: 0.4,
   /** How much naming an avoided player subtracts. */
   AVOID_PENALTY: 0.4,
@@ -130,7 +130,7 @@ function clampSteps(raw: number, max: number): number {
  * How the acceptance band should move for this counterparty, in steps.
  *
  * -1, 0 or +1 before clamping; clamped to `settings.bandStepMax` either way,
- * so an admin who dials the cap to 0 gets exactly the behaviour that implies:
+ * so an admin who dials the cap to 0 gets exactly the behavior that implies:
  * no tendency ever moves a band, whatever the trading history says.
  *
  * The reason string is a fragment the caller composes into its own sentence,
@@ -185,7 +185,7 @@ export function bandAdjustment(
  * already legal offers.
  *
  * Bounded to roughly [-1, 1]: the position term saturates at
- * POSITION_COMPONENT_MAX, and the favourite/avoid bonus is a flat add, so the
+ * POSITION_COMPONENT_MAX, and the favorite/avoid bonus is a flat add, so the
  * combined total cannot run away even when both fire in the same direction.
  * Zero for a null slice, and zero when neither a position nor a player id is
  * given.

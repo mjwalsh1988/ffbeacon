@@ -26,7 +26,7 @@
  * Headings are matched case-insensitively against `guide_entries.heading`,
  * which is the string an admin edits at /admin/signal-guide. A heading that
  * matches nothing opens the panel at the top, which is the same thing the "?"
- * button does, so a renamed entry degrades to the old behaviour rather than
+ * button does, so a renamed entry degrades to the old behavior rather than
  * breaking the control.
  */
 

@@ -97,7 +97,7 @@ export default async function BriefIndexPage({ searchParams }: PageProps) {
   // A team or player in the address that resolves to nothing is an empty
   // view, not the whole feed. Rendering every report under "?team=PHIL" looks
   // like a working filter and is not one.
-  const unrecognised = (teamCode !== null && !team) || (playerSlug !== null && !player);
+  const unrecognized = (teamCode !== null && !team) || (playerSlug !== null && !player);
 
   // The week view needs the season's weeks before it can pick one; the
   // filter form needs them on every view.
@@ -129,9 +129,9 @@ export default async function BriefIndexPage({ searchParams }: PageProps) {
 
   const [sidebarData, feed, latestBrief, monthItems] = await Promise.all([
     loadRelaySidebar(supabase),
-    unrecognised || view === "calendar" ? Promise.resolve({ relays: [], total: 0 }) : loadRelayFeed(supabase, filter, currentPage),
+    unrecognized || view === "calendar" ? Promise.resolve({ relays: [], total: 0 }) : loadRelayFeed(supabase, filter, currentPage),
     isBareHub ? loadLatestBrief(supabase) : Promise.resolve(null),
-    view === "calendar" && !unrecognised ? loadRelaysBetween(supabase, monthWindow.start, monthWindow.end) : Promise.resolve([]),
+    view === "calendar" && !unrecognized ? loadRelaysBetween(supabase, monthWindow.start, monthWindow.end) : Promise.resolve([]),
   ]);
 
   // The address the pagination and the week rail build on carries the week
@@ -164,7 +164,7 @@ export default async function BriefIndexPage({ searchParams }: PageProps) {
   const totalPages = Math.max(1, Math.ceil(feed.total / RELAY_PAGE_SIZE));
 
   let content: React.ReactNode | undefined;
-  if (view === "calendar" && !unrecognised) {
+  if (view === "calendar" && !unrecognized) {
     content = (
       <RelayCalendar
         year={monthSel.year}
@@ -173,7 +173,7 @@ export default async function BriefIndexPage({ searchParams }: PageProps) {
         todayKey={easternDateKey(now)}
       />
     );
-  } else if (view === "week" && !unrecognised && weekCounts.length > 0) {
+  } else if (view === "week" && !unrecognized && weekCounts.length > 0) {
     content = (
       <>
         <WeekRail weeks={weekCounts} selected={week} search={search} />
@@ -210,8 +210,8 @@ export default async function BriefIndexPage({ searchParams }: PageProps) {
       viewSwitcher={<ViewSwitcher current={view} search={settled} />}
       content={content}
       emptyMessage={
-        unrecognised
-          ? "The team or player in the address was not recognised. Clear the filters to see every report."
+        unrecognized
+          ? "The team or player in the address was not recognized. Clear the filters to see every report."
           : undefined
       }
       filters={

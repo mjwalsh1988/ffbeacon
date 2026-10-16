@@ -415,7 +415,7 @@ describe("classifyPositionalWarResult", () => {
     });
   }
 
-  it("degrades an unrecognised skipped reason to 'skipped' rather than 'settled'", () => {
+  it("degrades an unrecognized skipped reason to 'skipped' rather than 'settled'", () => {
     const result: PositionalWarResult = {
       ok: true,
       positions: 0,

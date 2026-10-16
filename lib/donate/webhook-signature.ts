@@ -23,7 +23,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  *
  * Four things this gets right that a naive version gets wrong:
  *
- *   1. THE BODY MUST BE THE RAW BYTES. Parsing the JSON and re-serialising it
+ *   1. THE BODY MUST BE THE RAW BYTES. Parsing the JSON and re-serializing it
  *      changes key order and whitespace, and the signature then never matches.
  *      The route reads `await req.text()` and hands the string straight here.
  *   2. THE COMPARISON IS TIMING SAFE. A byte-by-byte early-exit compare leaks

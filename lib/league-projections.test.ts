@@ -41,7 +41,7 @@ describe("finishPercentile", () => {
     expect(finishPercentile(12, 12)).toBe(1);
   });
 
-  it("normalises across league sizes", () => {
+  it("normalizes across league sizes", () => {
     // Middle of an 11-team league and middle of a 21-team league agree.
     expect(finishPercentile(6, 11)).toBeCloseTo(0.5);
     expect(finishPercentile(11, 21)).toBeCloseTo(0.5);

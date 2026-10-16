@@ -53,7 +53,7 @@ import { projectionSourceDisplay } from "@/lib/projections/source-constants";
  * section of the deep view makes, for the same reason.
  *
  * TWO QUESTIONS, ONE PAGE, DECIDED BY THE WEEK. Before the games this is a
- * lineup helper: a projection per player, an optimiser, a waiver wire and a cut
+ * lineup helper: a projection per player, an optimizer, a waiver wire and a cut
  * list. After them it is a REPORT: what was scored, the best lineup that was
  * available, whether the difference cost the game, who came through, and what
  * the week did to the season. lib/league-lineups/status.ts decides which, and
@@ -350,7 +350,7 @@ export default async function LeagueLineupsPage({
  * is asked to compute is time a reader spends looking at nothing.
  *
  *   The MANAGER LEDGER is a full season of matchups, transactions, draft picks
- *   and one optimiser run per team per week. Only the season section shows it,
+ *   and one optimizer run per team per week. Only the season section shows it,
  *   so `SeasonBody` refreshes it behind its own skeleton, exactly as
  *   app/leagues/[league_id]/decisions/page.tsx does.
  *

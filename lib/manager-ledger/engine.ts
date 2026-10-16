@@ -27,7 +27,7 @@ import { MIN_WEEKS_FOR_RANK } from "./default-settings";
 import {
   gradeWeek,
   planSlots,
-  summariseLineup,
+  summarizeLineup,
   type LedgerPlayer,
   type WeekInput,
 } from "./lineup";
@@ -147,7 +147,7 @@ export function computeLedger(input: EngineInput): LedgerResult | LedgerSkip {
       sleeperRosterId: roster.sleeperRosterId,
       teamName: roster.teamName,
       ownerHandle: roster.ownerHandle,
-      lineup: summariseLineup(weeks),
+      lineup: summarizeLineup(weeks),
       waivers: buildWaiverLedger(
         roster.sleeperRosterId,
         input.transactions,

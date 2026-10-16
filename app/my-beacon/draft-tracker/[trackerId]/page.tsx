@@ -110,7 +110,7 @@ export default async function DraftBoardPage({
   return (
     <div className="space-y-6">
       {/* Without this the trail reads the raw uuid, split on its hyphens and
-          capitalised. */}
+          capitalized. */}
       <SetBreadcrumbLabel value={tracker.name} />
       <BackLink />
       <DraftRoom

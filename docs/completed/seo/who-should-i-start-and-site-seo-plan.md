@@ -14,7 +14,7 @@ Three jobs, in the order they should ship:
    permanently redirected.
 2. Move the trade calculator (Signal Check) to a slug that matches the title it
    shipped with on 2026-09-10, with a permanent redirect.
-3. A site-wide SEO audit with a prioritised fix list.
+3. A site-wide SEO audit with a prioritized fix list.
 
 Two conventions this document follows because the codebase does: plain ASCII
 punctuation everywhere (no em dashes, no curly quotes, no ellipsis character),
@@ -48,7 +48,7 @@ against it without further sign-off.
   templated on the live week): "Who should I start this week? Put any players
   into Beacon Breakdown, the free start/sit tool, and get a Week {N} verdict
   from projections and matchups." Section 2.4.
-- Short label, used ONLY in the header nav, the footer, the /tools catalogue
+- Short label, used ONLY in the header nav, the footer, the /tools catalog
   card eyebrow, breadcrumbs and bookmarks: "Start / Sit". Section 2.2.
 - Long-form link phrase for body copy and CTAs from other tools, rotated
   across a small set so no single anchor repeats site-wide: "find out who to
@@ -62,7 +62,7 @@ against it without further sign-off.
   (lib/projections/read.ts loadAdjustedProjections) so the FF Beacon
   projection switch flips it with zero code change. Section 2.6.
 - The existing pairwise Beacon Edge engine (lib/breakdown/) is KEPT and
-  generalised to N players for the "background" tabs. BEAM keeps calling it.
+  generalized to N players for the "background" tabs. BEAM keeps calling it.
   Section 2.7.
 - Trade calculator slug: /tools/trade-calculator. Permanent redirects for the
   base path and for /v/:shareId share links. Section 3.
@@ -168,7 +168,7 @@ What it already gets right for the new job, and must keep:
   projectPlayerWeek, and the projection SOURCE is already resolved once per
   render through lib/projections/source.ts resolveProjectionSourceForWindow
   fed by league_power_pulse_settings.beaconProjections
-  (lib/breakdown/load-extras.ts lines 512-520). The switch is honoured today.
+  (lib/breakdown/load-extras.ts lines 512-520). The switch is honored today.
 - No live Sleeper call on the page. lib/breakdown/load-extras.ts
   resolveSeasonClock derives season and current week from stored rows.
 - The comparison URL is never canonical; the canonical is always the bare
@@ -207,7 +207,7 @@ owner wrote it), used in these places and nowhere else:
   Sit", description "Beacon Breakdown: who should I start this week".
 - Footer: lib/site.ts FOOTER_COLUMNS entry (around line 284), label "Start /
   Sit".
-- /tools catalogue: lib/tools-catalog.ts entry (lines 81-94), eyebrow "Start /
+- /tools catalog: lib/tools-catalog.ts entry (lines 81-94), eyebrow "Start /
   Sit", title "Beacon Breakdown: Who Should I Start?", cta "Find out who to
   start".
 - Breadcrumb: lib/breadcrumbs.ts line 66, "Start / Sit".
@@ -401,7 +401,7 @@ Outline (H2 unless marked), with what goes under each:
   anchors do not count.
 - H2 "How do I decide who to start in fantasy football?" A plain method in
   five sentences, the kind of passage an AI Overview lifts: projection first,
-  then matchup, then floor if you are favoured and ceiling if you are not,
+  then matchup, then floor if you are favored and ceiling if you are not,
   then injury and weather last, and never bench a stud for a matchup.
 - H2 "Start/sit questions, answered". H3 per question, answer in the first
   sentence: Can I compare more than two players? (yes, up to eight, and you
@@ -447,8 +447,8 @@ old slug keeps old links working:
 - ?p=slug1,slug2,...,slugN. Two to eight player slugs, comma separated,
   order preserved (it is the order the reader added them, and the cards keep
   it until the verdict re-sorts). ?a=&b= is accepted as an alias and
-  normalised into ?p=a,b on the server; the canonical never carries either.
-- ?start=K. Integer, 1 to N-1, default 1. Labelled on screen "How many of
+  normalized into ?p=a,b on the server; the canonical never carries either.
+- ?start=K. Integer, 1 to N-1, default 1. Labeled on screen "How many of
   these do you start?" as a native number input with a visible label, min 1,
   max N-1, step 1, plus minus/plus buttons that are real buttons with
   accessible names ("Start one fewer", "Start one more"). It is not a slot
@@ -507,8 +507,8 @@ The result, top to bottom:
    points. Each card is an article with the player's name as its h3, and it
    carries, in this order:
    - A START or SIT badge, using the TeamStatusBadge pattern
-     (components/team-status-badge.tsx): icon plus word plus colour, never
-     colour alone. START cards get a rank ("Start 1 of 2"). The badge is the
+     (components/team-status-badge.tsx): icon plus word plus color, never
+     color alone. START cards get a rank ("Start 1 of 2"). The badge is the
      first thing after the name so a screen reader hears the answer before
      the numbers.
    - Headshot, position pill (POSITION_BADGE tokens), team, opponent via
@@ -520,7 +520,7 @@ The result, top to bottom:
      beside it in small type ("Floor 8.1, ceiling 21.6", computed as mean
      minus and plus one sigma, clamped at zero).
    - Matchup: the opponent multiplier as a word and a number ("Matchup:
-     favourable, 1.08") with the defence's rank against the position.
+     favorable, 1.08") with the defense's rank against the position.
    - Game environment: implied team total and tier from
      lib/nfl-game-environment.ts, with "No line yet" as the null sentence.
    - Reliability: beat rate and availability rate as percentages, with the
@@ -556,7 +556,7 @@ The result, top to bottom:
 
 6. The Background tabs (section 2.7): "Head to head" (renamed from The
    Breakdown), "Your lineup" (with a league), "Projections", "Reliability",
-   "Market", "Stats". All generalised to N players. This is where every piece
+   "Market", "Stats". All generalized to N players. This is where every piece
    of data the tool shows today lives on; none of it is removed.
 
 Empty state (no ?p=): the masthead with the H1, the picker, the stepper set
@@ -648,7 +648,7 @@ export type StartSitVerdict = {
   never counted toward K; among the rest, descending adjusted points; ties
   broken by higher floor, then by higher beat rate, then by slug so the order
   is stable. No slot model. The reader has decided what slot they are
-  filling; this is the unconstrained top-K. The research on the optimiser
+  filling; this is the unconstrained top-K. The research on the optimizer
   (lib/power-pulse/lineup.ts) concluded a matroid fill is the wrong tool here
   because there is no "any position" token in PULSE_SLOT_ELIGIBILITY and
   inventing one just to bypass the slot logic defeats the point; a sort is
@@ -693,13 +693,13 @@ export type StartSitVerdict = {
      toWeek: week, scoringSettings: scoringSettingsForFormat(format),
      positionByPlayer, injuryByPlayer, currentWeek }. That one call resolves
      the projection source through resolveProjectionSourceForWindow with
-     settings.beaconProjections, loads accuracy and defence splits scoped to
+     settings.beaconProjections, loads accuracy and defense splits scoped to
      the SAME source, and runs projectPlayerWeek per player. It is the shared
      read path both guard tests exist to protect, so the new module needs no
      allow-list entry in lib/projections/source-guard.test.ts or
      lib/projections/raw-column-guard.test.ts.
   3. In parallel: loadGameEnvironment(season, week) from
-     lib/nfl-game-environment.ts, and the defence rank for each opponent and
+     lib/nfl-game-environment.ts, and the defense rank for each opponent and
      position (a new small reader over nfl_defense_vs_position that returns
      rank within the season for the scoring base; add it beside
      loadDefenseSplits in lib/power-pulse/load.ts). loadAdjustedProjections
@@ -774,13 +774,13 @@ needs one, the seam is one claimRateLimitSlot call in lib/start-sit/load.ts
 after validation and before wave 2, failing to a visible "busy" state rather
 than an error, the way the Lineups free-agent panel does.
 
-### 2.7 The background tabs: generalising the pairwise engine to N
+### 2.7 The background tabs: generalizing the pairwise engine to N
 
 The owner wants every piece of information the tool shows today kept, with
 the start/sit verdict in front of it. The pairwise Beacon Edge engine is also
 a live dependency of BEAM (lib/beam/capabilities/player-compare-verdict.ts
 calls loadBreakdown, loadBreakdownExtras and assembleBreakdown and returns
-the verdict sentence verbatim). So the engine is kept, and generalised
+the verdict sentence verbatim). So the engine is kept, and generalized
 without breaking its two-player surface.
 
 The change in lib/breakdown/metrics.ts: each Metric gains an optional
@@ -816,9 +816,9 @@ The tabs, each taking sides: BreakdownPlayer[] instead of a pair:
 - Your lineup (was Your league): calculateLeagueImpact already runs once per
   candidate; it takes the list. The weekly start/bench grid becomes N rows.
 - Projections: the weekly line chart takes N series. components/chart-kit.tsx
-  POSITION_SERIES gives six distinguishable series (colour plus dash plus
+  POSITION_SERIES gives six distinguishable series (color plus dash plus
   marker); for players seven and eight extend it with two more entries in
-  the same file (a solid grey with a plus marker, a dotted white with a
+  the same file (a solid gray with a plus marker, a dotted white with a
   hexagon), validated with the dataviz contrast formula the file documents.
   The schedule strip and the floor/ceiling range bars become N rows.
 - Reliability: N cards, N strips.
@@ -882,7 +882,7 @@ app/tools/who-should-i-start:
 - start-sit-card.tsx (new, server): one card. Uses Panel from
   components/dashboard-panel.tsx for the shell, StatTile for the projected
   points, a new small StartSitBadge in components/start-sit-badge.tsx built
-  on the TeamStatusBadge pattern (icon plus word plus colour), PlayerHeadshot,
+  on the TeamStatusBadge pattern (icon plus word plus color), PlayerHeadshot,
   POSITION_BADGE, opponentLabel.
 - start-sit-picker.tsx (new, client): the multi-player combobox with chips
   and the start-count stepper. Built from breakdown-selector.tsx, which is
@@ -965,7 +965,7 @@ X or Y" if it does not already route them; check lib/beam/interpret/.
 
 From the exhaustive grep (50 files). Runtime code first, then docs.
 
-Navigation and catalogue (section 2.2 has the new strings):
+Navigation and catalog (section 2.2 has the new strings):
 - lib/site.ts lines 88-92 (TOOLS_NAV), 169-174 (SEARCHABLE_TOOLS), 284-289
   (FOOTER_COLUMNS).
 - lib/tools-catalog.ts lines 34 (ToolHref union) and 81-94 (card).
@@ -1004,7 +1004,7 @@ Prose links, each gets a long-form anchor from section 2.2 (rotate them):
 - The trade calculator page's "smaller than a trade" hand-off in the
   opposite direction, if present, uses "who should I start this week".
 
-Code comments and docs that cite the old path (accuracy only, no behaviour):
+Code comments and docs that cite the old path (accuracy only, no behavior):
 components/chart-kit.tsx lines 33-39, components/league-category-tabs.tsx
 lines 22-27, app/games/signal-scout/leaderboard-panel.tsx lines 197-205,
 lib/sleeper-handle/validate.ts lines 13-18, lib/signal-scout/stats-bundle.ts
@@ -1064,11 +1064,11 @@ invites breaking them:
   buttons with full accessible names; the removal of a chip moves focus to
   the combobox; the run button's result is announced once through the
   role="status" verdict line, not through a second live region.
-- Confidence bar: text pill and sr-only sentence; never colour alone.
-- Colour: START uses signal.success plus icon plus word; SIT uses ink.muted
+- Confidence bar: text pill and sr-only sentence; never color alone.
+- Color: START uses signal.success plus icon plus word; SIT uses ink.muted
   plus icon plus word.
 - Reduced motion: no animation on the board at all; the only motion is the
-  existing dialog transitions, which already honour motion-reduce.
+  existing dialog transitions, which already honor motion-reduce.
 - Before marking complete, the accessibility review sub-agent confirms "no
   data hidden at any breakpoint" and walks the board with a screen reader
   in table-navigation mode and in browse mode.
@@ -1077,7 +1077,7 @@ invites breaking them:
 
 1. Land the engine and the scoring helper with tests, behind no flag (pure
    code, no surface).
-2. Land the generalised breakdown engine with the N equals 2 parity test.
+2. Land the generalized breakdown engine with the N equals 2 parity test.
 3. Build the new route folder in place under the OLD path first (so the diff
    is reviewable), including the written sections and the toughest-calls
    block.
@@ -1222,13 +1222,13 @@ Google shipped five core updates between March 2025 and May 2026 and four
 spam updates, none of the spam updates with a policy announcement, and the
 helpful content system is retired into core ranking, so there is no separate
 recovery event to wait for. The February 2026 Discover core update was the
-first to be labelled Discover-only and it rewards topic-level expertise from
+first to be labeled Discover-only and it rewards topic-level expertise from
 a site's own country, which is directly relevant to the Beacon Brief. AI
 Overviews fire on roughly 20 to 40 percent of general queries (18 percent in
 Pew's real-browsing sample, higher in vendor sets), cut organic clicks by
-about 40 percent in the only randomised field experiment (Agarwal and Sen,
+about 40 percent in the only randomized field experiment (Agarwal and Sen,
 2026), and cite pages that already rank (76 percent of citations are top
-ten). Google's own July 2026 optimisation guide says there are no special
+ten). Google's own July 2026 optimization guide says there are no special
 requirements for AI features, that Google Search does not read llms.txt, and
 that schema markup is recommended for SEO generally but not required for AI
 visibility; Ahrefs' controlled test found schema produced no citation lift.
@@ -1452,7 +1452,7 @@ ordered by effort:
 ### 4.6 The Discover and Brief note
 
 The February 2026 Discover core update rewards demonstrated topic expertise
-and penalises clickbait. The Brief already has the template right (byline,
+and penalizes clickbait. The Brief already has the template right (byline,
 dates, NewsArticle, entity links, an index-quality gate). Two things to keep
 doing and one to add: keep the index-quality gate strict, keep headlines
 descriptive, and add the Search Console generative AI performance report and
@@ -1820,7 +1820,7 @@ T975 | pending | Delete PRIMARY_NAV; align /join canonical and description; time
      | verified: no
 
 T976 | pending | Methodology page /guides/how-ff-beacon-works, linked from every tool page
-     | files: app/guides/how-ff-beacon-works/page.tsx, lib/guides catalogue, tool pages
+     | files: app/guides/how-ff-beacon-works/page.tsx, lib/guides catalog, tool pages
      | depends on: none
      | verified: no
 

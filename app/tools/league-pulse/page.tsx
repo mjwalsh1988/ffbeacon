@@ -143,7 +143,7 @@ export default async function LeaguePulsePage({
     }
   }
 
-  // Who the results are for, in the wording a reader recognises. The display
+  // Who the results are for, in the wording a reader recognizes. The display
   // name and the username are different strings on Sleeper, so the fallback
   // matters rather than being defensive noise.
   const viewerLabel = sleeperDisplayName ?? lookupUsername;

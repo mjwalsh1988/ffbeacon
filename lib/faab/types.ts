@@ -360,7 +360,7 @@ export interface AuctionSettings {
   participation: number;
   /** Chance a rival who does not need him bids anyway. */
   strayBidRate: number;
-  /** Lognormal spread of a rival's bid around its centre. */
+  /** Lognormal spread of a rival's bid around its center. */
   bidSigma: number;
   /**
    * What share of a rival's RESERVATION PRICE they actually bid.
@@ -368,7 +368,7 @@ export interface AuctionSettings {
    * A rival's `centerPct` is what the player is worth to them, and nobody bids
    * their worth. FAAB is one budget for a whole season, so every dollar spent
    * here is a dollar not available for the next injury, and a manager who bids
-   * their full valuation on every claim is broke by week 6. Modelling rivals
+   * their full valuation on every claim is broke by week 6. Modeling rivals
    * as bidding their reservation price put the simulated top rival at the p90
    * of every real auction we hold and pushed the reader's recommendation to
    * the whole budget on any player two teams wanted.
@@ -412,7 +412,7 @@ export interface GoalSettings {
   valueTarget: number;
   /** Win chance the "make sure I win" bid aims at, 0 to 1. */
   sureTarget: number;
-  /** The most the sure bid may exceed his worth, as a percent. Labelled when it does. */
+  /** The most the sure bid may exceed his worth, as a percent. Labeled when it does. */
   sureMaxOverWorthPct: number;
   /**
    * How close to a genuine starter a player has to be, 0 to 1, before the page
@@ -420,7 +420,7 @@ export interface GoalSettings {
    *
    * The same share the scarcity premium is scaled by. Kept as its own number
    * because the point at which a premium starts to apply and the point at
-   * which it is worth a sentence are different judgements: the premium fades
+   * which it is worth a sentence are different judgments: the premium fades
    * in smoothly and the warning either appears or does not.
    */
   scarceShare: number;
@@ -845,7 +845,7 @@ export interface LeagueFaabReport {
   reasons: string[];
   /** Who else would start him, and what they can spend. */
   rivals: RivalRow[];
-  /** Rivals who would not start him, summarised rather than listed. */
+  /** Rivals who would not start him, summarized rather than listed. */
   rivalsNotInterested: number;
   /** The reader's own starters who are out this week. */
   injuredStarters: InjuredStarter[];

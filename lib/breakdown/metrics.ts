@@ -3,7 +3,7 @@
  *
  * This file exists to fix one specific dishonesty. The headline verdict used to
  * be `valueA / (valueA + valueB)` while the table underneath computed eleven
- * separate comparisons, which meant the table could favour one player seven rows
+ * separate comparisons, which meant the table could favor one player seven rows
  * to four while the meter above it pointed the other way. The table looked like
  * the evidence for a verdict it had played no part in producing.
  *

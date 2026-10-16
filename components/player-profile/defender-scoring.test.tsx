@@ -115,7 +115,7 @@ describe("initial render (Sleeper default, no storage)", () => {
     </DefenderScoringProvider>,
   );
 
-  it("is a labelled radio group with Sleeper default checked", () => {
+  it("is a labeled radio group with Sleeper default checked", () => {
     expect(html).toContain("<fieldset");
     expect(html).toContain("Score this player as");
     expect(html).toMatch(/checked="" value="idp123"/);

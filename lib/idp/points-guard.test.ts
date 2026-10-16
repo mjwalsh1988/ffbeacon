@@ -11,12 +11,12 @@
  * Modeled on lib/projections/raw-column-guard.test.ts. The rule is textual and
  * deliberately blunt: the scanned modules may not contain the column names at
  * all, in code or in comments. Test files are not scanned; they carry real
- * Sleeper payloads as fixtures, and a fixture is how the normaliser proves it
+ * Sleeper payloads as fixtures, and a fixture is how the normalizer proves it
  * DROPS these keys.
  *
  * IF THIS TEST JUST FAILED ON YOUR CHANGE: score the defender from his stat line
  * with scoreIdpLine and a preset, or with the league's own scoring through the
- * normaliser. There is no allow-list here on purpose.
+ * normalizer. There is no allow-list here on purpose.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";

@@ -93,7 +93,7 @@ describe("mergePowerPulseSettings and the stale production row", () => {
   });
 
   it("still lets the stored row win on values it actually carries", () => {
-    // This is the behaviour an admin expects and it is NOT what was fixed. The
+    // This is the behavior an admin expects and it is NOT what was fixed. The
     // stale clamps really are in effect until someone re-saves the settings,
     // and that is a product decision rather than a code bug.
     const merged = mergePowerPulseSettings(staleRow);

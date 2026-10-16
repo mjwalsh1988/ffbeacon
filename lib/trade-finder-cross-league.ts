@@ -137,7 +137,7 @@ export async function findCrossLeagueTrade(
      * the window. Optional and absent by default: findPortfolioTrade
      * (app/actions/trade-finder.ts) is members-only, so every real caller has
      * one and passes it, but a caller that omits it (including every test in
-     * lib/trade-finder-cross-league.test.ts) gets exactly today's behaviour,
+     * lib/trade-finder-cross-league.test.ts) gets exactly today's behavior,
      * no tendency data, rather than an error. See
      * lib/trade-finder-tendency-context.ts for the sign-in reasoning; this
      * function never guesses a sign-in state, it only reads tendencies when
@@ -169,7 +169,7 @@ export async function findCrossLeagueTrade(
   // reloading the page.
   // The finite check belongs here rather than only at the action. NaN survives
   // Math.trunc and Math.max, and NaN % n is NaN, which would empty the window
-  // and pin nextCursor at NaN for the rest of the session. The action sanitises
+  // and pin nextCursor at NaN for the rest of the session. The action sanitizes
   // its own input, but this function is exported and called directly by tests.
   const rawCursor = Number.isFinite(params.cursor) ? Math.trunc(params.cursor) : 0;
   const start = Math.max(0, rawCursor) % ids.length;

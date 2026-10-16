@@ -67,7 +67,7 @@ export type LedgerPosition = PulsePosition;
  * One settled week for one roster, graded.
  *
  * `setPoints` is NOT necessarily the score Sleeper put on the board. It is the
- * score of the set lineup restricted to the slots this model can optimise. In
+ * score of the set lineup restricted to the slots this model can optimize. In
  * a league with no IDP those are the same number. In an IDP league they are
  * not, because `startingSlots` in lib/power-pulse/lineup.ts drops the tokens
  * it has no position eligibility for, and comparing a full official total
@@ -172,7 +172,7 @@ export type LineupLedger = {
   /**
    * Games lost that the best legal lineup out of the same roster would have
    * won. THE headline number of this feature, and a count of real games rather
-   * than a modelled quantity.
+   * than a modeled quantity.
    */
   winsLeftOnBench: number;
   /** Weeks in which at least one startable slot could not be graded. */

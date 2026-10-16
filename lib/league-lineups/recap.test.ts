@@ -94,7 +94,7 @@ describe("playerSwings", () => {
 
 describe("buildWeekRecap", () => {
   it("puts the best lineup on the OFFICIAL basis, not the gradable one", () => {
-    // The optimiser measures over the slots it can grade. Adding its deficit to
+    // The optimizer measures over the slots it can grade. Adding its deficit to
     // Sleeper's own total is what keeps "best you had" from printing a figure
     // LOWER than the score beside it in an IDP league.
     const recap = buildWeekRecap({

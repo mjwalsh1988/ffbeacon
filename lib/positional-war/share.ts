@@ -116,7 +116,7 @@ export async function resolveSharedCurves(
     }
 
     // A fingerprint collision: two leagues hashed to the same key with
-    // different real inputs. The maths was never the risk here, a
+    // different real inputs. The math was never the risk here, a
     // normalization bug silently serving league A's curve to league B is.
     console.error(
       `[positional-war] fingerprint collision on ${fingerprint.slice(0, 8)}: field "${cmp.field}" differs`,

@@ -35,7 +35,7 @@
  *
  * `throughWeek` is the league's last regular season week, and the caller reads
  * it from the same playoff_week_start Power Pulse uses. Absent, every week on
- * the board is used, which is the old behaviour and is right for a caller that
+ * the board is used, which is the old behavior and is right for a caller that
  * genuinely has no schedule.
  *
  * AN EMPTY STARTING SLOT IS NOT WORTH ZERO
@@ -185,7 +185,7 @@ export interface DraftPulseInput {
   /**
    * Every player id anyone in the league controls, so an unfilled slot can be
    * scored at the best player still available rather than at zero. Omit to keep
-   * the old behaviour, which a caller with no view of the wider league should.
+   * the old behavior, which a caller with no view of the wider league should.
    */
   rosteredPlayerIds?: ReadonlySet<string>;
   /**

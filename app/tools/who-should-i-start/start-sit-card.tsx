@@ -11,7 +11,7 @@
  * card, a green border and glow around the whole card, and a gradient frame
  * on the headshot. A SIT card has a quiet banner in the same place and a
  * plain border. The banner always carries the word, so none of this is
- * colour alone.
+ * color alone.
  *
  * READING ORDER. The DOM order is the order a screen reader hears: the
  * player's name (the h3, which is also the article's accessible name), the
@@ -126,7 +126,7 @@ function injuryTone(status: string): InjuryTone {
  * (#EF4444). On a START card the green shell lightens the ground under the
  * pill and #EF4444 falls to about 4.4:1 there, just under AA for 11px bold;
  * #F87171 measures about 5:1 on the same ground. Border and tint keep the
- * signal colour. Same rule in PILL_TONE below.
+ * signal color. Same rule in PILL_TONE below.
  */
 const INJURY_PILL_TONE: Record<InjuryTone, string> = {
   danger: "border-signal-danger/40 bg-signal-danger/15 text-red-400",
@@ -138,7 +138,7 @@ const INJURY_PILL_TONE: Record<InjuryTone, string> = {
  * The tone of the word pill beside a matchup or a game environment. The
  * matchup bands are matchupPhrase's own thresholds in lib/breakdown/scoring.ts
  * (1.02 and up is favorable or better, above 0.98 is neutral, above 0.92 is
- * tough), so the colour can never disagree with the word printed in it.
+ * tough), so the color can never disagree with the word printed in it.
  */
 type PillTone = "good" | "neutral" | "warn" | "bad";
 
@@ -174,7 +174,7 @@ function pts(value: number): string {
   return value.toFixed(1);
 }
 
-/** A labelled row with an icon tile: the matchup, the game environment, the small-sample sentence. */
+/** A labeled row with an icon tile: the matchup, the game environment, the small-sample sentence. */
 function MetricRow({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }) {
   return (
     <div className="flex items-start gap-3 rounded-card border border-line bg-base/30 px-3 py-2.5">

@@ -158,7 +158,7 @@ export function gameKey(away: string, home: string): string {
 
 export const GAME_KEY_PATTERN = /^[A-Z]{2,4}-[A-Z]{2,4}$/;
 
-/** "GB -4.5", "PK", or null with no line. Home-relative input, favourite-relative output. */
+/** "GB -4.5", "PK", or null with no line. Home-relative input, favorite-relative output. */
 export function spreadText(home: string, away: string, homeSpread: number | null): string | null {
   if (homeSpread === null || !Number.isFinite(homeSpread)) return null;
   if (homeSpread === 0) return "PK";
@@ -175,7 +175,7 @@ export type CoverResult = { team: string | null; text: string };
 
 /**
  * Who covered. The home side covers when its margin plus its spread is above
- * zero (a 4.5-point home favourite who wins by 7 covers by 2.5).
+ * zero (a 4.5-point home favorite who wins by 7 covers by 2.5).
  */
 export function coverResult(
   home: string,

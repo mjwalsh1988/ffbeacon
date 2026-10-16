@@ -447,7 +447,7 @@ function formatSentence(input: RationaleInput): string {
  *
  * Budgeted for the ear. Every branch is at most three sentences, and the
  * projection line is dropped whenever a format sentence already earned its
- * place, because the same number is sitting in a labelled tile a few inches up
+ * place, because the same number is sitting in a labeled tile a few inches up
  * and a fourth sentence pushes the spoken body past the point where a listener
  * can hold it under a draft clock.
  */

@@ -35,7 +35,7 @@ import {
  *   unscrolled. The strip now sits in its own bordered tray under an eyebrow and
  *   a "Pick a view" hint, the same shape every other control group on the site
  *   wears, and the open tab carries the beacon gradient along its bottom edge.
- *   The affordance is the frame, the hint and the hover, never colour alone.
+ *   The affordance is the frame, the hint and the hover, never color alone.
  *
  * ACCESSIBILITY. The WAI tabs pattern, manual activation: arrow keys move focus
  * between tabs and Enter or Space selects, so a screen reader user can pass over
@@ -49,7 +49,7 @@ type TabKey = "impact" | "value";
 
 /**
  * The order, which never varies. Only the LABELS change with league format, so
- * the keyboard handler reads this rather than closing over the labelled array:
+ * the keyboard handler reads this rather than closing over the labeled array:
  * a useCallback with empty deps over a per-render array is a stale closure
  * waiting to happen, even where the values it reads happen to be constant.
  */
@@ -184,7 +184,7 @@ export function VerdictTabs({
                 }`}
               >
                 {/* The beacon gradient, under the open tab only. A second signal
-                    beside the fill, so which tab is open survives with no colour
+                    beside the fill, so which tab is open survives with no color
                     perception at all. */}
                 {selected && (
                   // pointer-events-none: the underline spans the bottom of the

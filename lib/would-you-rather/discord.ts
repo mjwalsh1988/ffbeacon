@@ -741,7 +741,7 @@ export async function ingestClosedPolls(
         // did reach Discord and people may well have voted on it. Closed out as
         // ingested-with-a-note rather than as an error, and flagged as
         // unidentified so the trade is never posted again: we have no way to
-        // recognise anyone who voted on it.
+        // recognize anyone who voted on it.
         await closeOutPoll(admin, poll.id, 0, 0, now, {
           note: "Discord returned no poll on that message.",
           reachedDiscord: true,
@@ -874,7 +874,7 @@ async function readPollVoters(
  * `ignoreDuplicates` against the unique index on (trade_id, discord_user_id) is
  * what drops a repeat vote. Somebody who answered an earlier poll on this same
  * trade already has a row, so their second vote is not inserted and does not
- * move the tally, which is exactly the behaviour a count could never give.
+ * move the tally, which is exactly the behavior a count could never give.
  *
  * A voter appearing under BOTH answers is dropped rather than guessed at. It
  * should be impossible (the poll is posted with allow_multiselect false), so

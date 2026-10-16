@@ -6,7 +6,7 @@
  * dropped the unique (league_id, season) constraint because that is real, and
  * one production league carries two completed 23-round 2026 startups whose seat
  * maps DISAGREE about which team sits where. Two modules need to pick between
- * them, and if they pick differently the same pick gets labelled off one draft
+ * them, and if they pick differently the same pick gets labeled off one draft
  * and priced off the other:
  *
  *   lib/league-pick-slots.ts     labels a traded pick "1.04"
@@ -114,7 +114,7 @@ export const loadLeagueDrafts = cache(
       const rounds = toInt(settings.rounds ?? metaSettings.rounds) ?? 0;
       const declaredTeams = toInt(settings.teams ?? metaSettings.teams) ?? 0;
       // The seat map is the same fact by another route, and it is the one the
-      // pick maths actually indexes into. When the two disagree the seat map
+      // pick math actually indexes into. When the two disagree the seat map
       // wins, because a stale `teams` would roll high seats into the next round.
       //
       // The HIGHEST seat, not the count. Sleeper emits slot_to_roster_id with

@@ -7,7 +7,7 @@
  * WHY THIS IS MORE THAN LOWERCASE-AND-HYPHENATE
  *
  * The input is a string a language model wrote, not a string this codebase built, and
- * the naive version turned every character it did not recognise into a word break. Two
+ * the naive version turned every character it did not recognize into a word break. Two
  * live URLs paid for that:
  *
  *   Ja'Kobi Lane  ->  jak-bi-lane-ravens-training-camp

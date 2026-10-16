@@ -144,9 +144,9 @@ export function SignalCheckTradeCard({
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {/*
               The chip is the visible half of the border treatment, so the
-              colour is never the only carrier. No aria-label: a bare span is
+              color is never the only carrier. No aria-label: a bare span is
               role="generic", where ARIA prohibits an accessible name, so the
-              label would be honoured by Chrome and dropped by Firefox. The
+              label would be honored by Chrome and dropped by Firefox. The
               visible text already says it, and the card heading says it again
               for anyone who did not reach the chip.
             */}

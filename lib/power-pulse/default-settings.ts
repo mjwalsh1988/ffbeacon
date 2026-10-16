@@ -175,10 +175,10 @@ export type PowerPulseSettings = {
    * available. Turning it on multiplies each team's projected weekly mean by a
    * factor built from their own measured efficiency.
    *
-   * OFF BY DEFAULT, DELIBERATELY. It is a judgement call, not a bug fix, and it
+   * OFF BY DEFAULT, DELIBERATELY. It is a judgment call, not a bug fix, and it
    * has two costs worth stating. It is partly self-fulfilling: telling a
    * manager they are projected lower because they set bad lineups is a claim
-   * about their future behaviour, not their roster. And it is noisy early, when
+   * about their future behavior, not their roster. And it is noisy early, when
    * three weeks of evidence is being asked to predict fourteen. `blend` and
    * `minWeeks` exist to bound both. Bump `modelVersion` when changing any of
    * this, so every league rescores rather than serving a mix.
@@ -207,7 +207,7 @@ export type PowerPulseSettings = {
     enabled: boolean;
     /**
      * How far to move from "perfect lineup" toward the measured efficiency.
-     * 0 is the current behaviour, 1 applies the measured share in full. The
+     * 0 is the current behavior, 1 applies the measured share in full. The
      * default of 0.5 is a hedge: a manager's past is evidence about their
      * future, but not proof of it.
      */

@@ -94,9 +94,9 @@ const COL_RULE = "border-r border-line/60";
  * own background, which is what makes the rounded corner hold.
  *
  * The wash itself is a white overlay at 4.5% rather than a named surface
- * colour. It lifts whatever is underneath by the same small amount wherever the
+ * color. It lifts whatever is underneath by the same small amount wherever the
  * table is used, so it cannot land as "no visible change" on one background and
- * a hard block on another, which is what picking a fixed colour risks.
+ * a hard block on another, which is what picking a fixed color risks.
  *
  * The gap BETWEEN rows is border-spacing on the table, not padding here.
  *
@@ -301,7 +301,7 @@ export function TeamSeason({
       {/* The table can never push the page sideways, whatever a team name does
           to the opponent column. */}
       <div className="mt-4 overflow-x-auto">
-        {/* The row gap is OFF below sm, and that is what lets the coloured state
+        {/* The row gap is OFF below sm, and that is what lets the colored state
             edge run unbroken down a week: on a phone a week is two rows, and
             six pixels of border-spacing between them would put a visible break
             in the middle of that edge. With the gap at zero the two cells touch
@@ -319,7 +319,7 @@ export function TeamSeason({
           </caption>
           {/* The header is a band with a rule under it, and each label carries
               an icon. The icons are decorative and every one of them sits beside
-              the word it illustrates, so nothing here depends on recognising a
+              the word it illustrates, so nothing here depends on recognizing a
               glyph. */}
           <thead className="bg-surface-elevated/70 text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
@@ -484,13 +484,13 @@ function SeasonTableRow({
       )}
       {/* The state edge, on the week cell rather than the row, because a border
           on a <tr> is not painted under border-collapse in every engine. Same
-          three colours as the week cards, so the two views read the same way:
-          purple still to play, cyan the live week, grey settled. The word is
-          right underneath it, so the colour is reinforcement. */}
+          three colors as the week cards, so the two views read the same way:
+          purple still to play, cyan the live week, gray settled. The word is
+          right underneath it, so the color is reinforcement. */}
       <tr className="group/row align-top">
         <th
           scope="row"
-          // The coloured state edge turns the corner into the row instead of
+          // The colored state edge turns the corner into the row instead of
           // ending in two square points. Small on purpose: any more and the cell
           // reads as a separate card rather than the start of a row.
           //
@@ -598,14 +598,14 @@ function SeasonTableRow({
 
           THREE THINGS TIE IT TO THAT WEEK, and it needs all three, because a
           full-width row under a table row is otherwise just the next thing down.
-          It carries the SAME coloured state edge as the week cell above, and
+          It carries the SAME colored state edge as the week cell above, and
           with the row gap off below sm the two touch, so the edge runs unbroken
           down the pair. It takes the bottom-left corner the week cell gives up.
           And it owns the rule that closes the week, which the main row's cells
           drop below sm, so the divider lands after the meter rather than
           between the two halves of one week.
 
-          The hairline across the top is the lighter COL_RULE grey, not the
+          The hairline across the top is the lighter COL_RULE gray, not the
           week-closing accent, so it reads as a fold inside the week rather than
           as a second week starting. Two weights, two meanings.
 
@@ -643,7 +643,7 @@ function SeasonTableRow({
           On desktop this gap is `border-spacing-y-1.5` on the table, but that
           property applies to EVERY gap equally, and below sm a week is two rows,
           so any value big enough to separate two weeks also put the same break
-          between a week and its own win chance meter and cut the coloured state
+          between a week and its own win chance meter and cut the colored state
           edge in half. Hence border-spacing-y-0 below sm, and the gap drawn
           where it is actually wanted: after the meter, never inside a week.
 
@@ -666,14 +666,14 @@ function SeasonTableRow({
  *   The named link in the opponent cell covers its own cell with
  *   `after:absolute after:inset-0`, and that is as far as it can reach: the
  *   nearest positioned ancestor is the `td`. Stretching it across the row means
- *   making the `tr` the containing block, and if any engine declines to honour
+ *   making the `tr` the containing block, and if any engine declines to honor
  *   `position: relative` on a table row the overlay does not shrink, it escapes
  *   to the next positioned ancestor, which here is the whole Panel. Every row
  *   would then cover the entire panel and the last one in the markup would win
  *   every click. A failure mode that bad is not worth the tidier markup.
  *
  *   So each remaining cell gets its own overlay instead. Cells are reliable
- *   containing blocks in every engine, and the result is the behaviour a reader
+ *   containing blocks in every engine, and the result is the behavior a reader
  *   expects: anywhere in the week opens the week.
  *
  * WHY THE EXTRA ANCHORS ARE HIDDEN
@@ -707,7 +707,7 @@ function CellOverlayLink({ href }: { href: string }) {
  * on its own could not be read: at that height an 80/20 split and a 60/40 split
  * look about the same, so the reader was doing arithmetic off the caption. The
  * percentage is the large thing, tinted by which side of even it falls on, with
- * a track underneath that fills from the left against a dashed centre mark.
+ * a track underneath that fills from the left against a dashed center mark.
  *
  * `inline` is the phone row: the label sits beside the number instead of above
  * the column, because a full-width row has no heading of its own to inherit.
@@ -817,8 +817,8 @@ function ScoreSummary({
  * Won, Lost, Tied, Bye, or Projected.
  *
  * The word is the label and it is always there. The icon and the tint only
- * repeat it, so the column survives greyscale and a screen reader that sees
- * neither. A win is the one outcome that gets a colour, because it is the one a
+ * repeat it, so the column survives grayscale and a screen reader that sees
+ * neither. A win is the one outcome that gets a color, because it is the one a
  * reader is scanning the column for.
  */
 function OutcomeLabel({
@@ -874,11 +874,11 @@ function SideFigure({ value }: { value: number | null }) {
  * Hard, even or easy.
  *
  * The word is the label and the arrow only repeats it, so the column survives
- * greyscale, colour blindness, and a screen reader that never sees either.
+ * grayscale, color blindness, and a screen reader that never sees either.
  *
  * WHY THE PROJECTED FIGURE IS NOT DRAWN
  *   The chip used to carry "121.4 projected" on a second line under it, which
- *   pushed the pill off centre in its own cell and repeated a number that is
+ *   pushed the pill off center in its own cell and repeated a number that is
  *   already the right-hand half of the Result or projection column on every
  *   unplayed week. It is still announced, as part of the chip's own text, so a
  *   screen reader user keeps the baseline the word is measured against on a

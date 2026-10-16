@@ -143,7 +143,7 @@ Quoted intent, condensed, and the reading this plan takes of each:
 
 Everything in this Part was checked on 2026-09-08. VERIFIED means read from
 the cited page. UNVERIFIED means from a search snippet, a single third-party
-report, or a library's behaviour rather than Yahoo's words.
+report, or a library's behavior rather than Yahoo's words.
 
 ### 2.1 The Yahoo developer program in 2026
 
@@ -240,7 +240,7 @@ report, or a library's behaviour rather than Yahoo's words.
 - Why Yahoo before ESPN: ESPN has no official API; private ESPN leagues need
   the `espn_s2` and `SWID` browser cookies copied by hand (ffscrapr ESPN
   authentication vignette). Yahoo is the only one of the three big hosts
-  with a documented OAuth 2.0 API and a licence to point at. VERIFIED.
+  with a documented OAuth 2.0 API and a license to point at. VERIFIED.
   Appendix C carries the full survey of the other hosts.
 
 Re-checked 2026-09-09 (revision 2). Everything above still reads as
@@ -314,7 +314,7 @@ troubleshooting page and the discovery document
   `client_secret`, or `Authorization: Basic base64(client_id:client_secret)`.
   Discovery lists `client_secret_basic` and `client_secret_post`.
 - Response: `access_token`, `token_type` "bearer", `expires_in` "3600",
-  `refresh_token`, `xoauth_yahoo_guid` (labelled deprecated on the flow
+  `refresh_token`, `xoauth_yahoo_guid` (labeled deprecated on the flow
   page), `id_token` when `openid` was requested.
 - Refresh: same endpoint, `grant_type=refresh_token`, `refresh_token`. "New
   refresh tokens invalidate old ones automatically" (flow page); "The best
@@ -903,7 +903,7 @@ export interface LeagueProvider {
   listLeagues(actor: ProviderActor, args: { season: number; providerUserId?: string })
     : Promise<ProviderResult<ProviderLeagueSummary[]>>;
 
-  /** The capture set, one call each, all normalised */
+  /** The capture set, one call each, all normalized */
   getLeague(actor, ref: ProviderLeagueRef): Promise<ProviderResult<ProviderLeague>>;
   getRosters(actor, ref): Promise<ProviderResult<ProviderRoster[]>>;
   getMembers(actor, ref): Promise<ProviderResult<ProviderMember[]>>;
@@ -932,7 +932,7 @@ matchups path, where CLAUDE.md records that collapsing them once cached a
 whole league at 0.0 wins.
 
 The Sleeper implementation wraps the existing functions (Part 8) and does
-not change their behaviour. The Yahoo implementation is Part 7.
+not change their behavior. The Yahoo implementation is Part 7.
 
 `lib/providers/registry.ts` exports `getProvider(slug): LeagueProvider`,
 `listActiveProviders(supabase)` (the impure read of `league_providers`,
@@ -942,11 +942,11 @@ registry is the ONLY place a provider implementation is imported;
 `lib/providers/sleeper/*` or `lib/providers/yahoo/*` outside `lib/providers/`
 and their own tests.
 
-### 4.5 Normalised shapes
+### 4.5 Normalized shapes
 
 `lib/providers/types.ts`. Every shape carries `raw: unknown`, the provider's
 original object, which the sync writes to the row's `metadata` column
-unchanged (the Original Source Object rule). The normalised fields are what
+unchanged (the Original Source Object rule). The normalized fields are what
 the sync writes to named columns.
 
 ```ts
@@ -968,7 +968,7 @@ export type ProviderLeagueSummary = {
   status: "pre_draft" | "drafting" | "in_season" | "complete";
   totalRosters: number;
   logoUrl: string | null;
-  shape: LeagueShape;           // enough to categorise without a full sync
+  shape: LeagueShape;           // enough to categorize without a full sync
   raw: unknown;
 };
 
@@ -1079,7 +1079,7 @@ export type ProviderPlayer = {
   providerPlayerId: string;
   fullName: string; firstName: string; lastName: string;
   asciiName: string | null;
-  position: string;                           // normalised: QB RB WR TE K DEF DL LB DB
+  position: string;                           // normalized: QB RB WR TE K DEF DL LB DB
   eligiblePositions: string[];
   teamAbbr: string | null;                    // NORMALISED to nfl_teams.abbreviation
   status: string | null;
@@ -1254,7 +1254,7 @@ Outside the directory, exactly these change when a provider is added:
 
 The checklist, in order. This is the shape of every future provider phase:
 
-1. Research record: auth model, access programme, terms (retention,
+1. Research record: auth model, access program, terms (retention,
    attribution, commercial use), rate limits, every resource the capture
    set needs, id schemes, the cross-reference to Sleeper ids. A URL per
    fact; UNVERIFIED on anything else.
@@ -1355,7 +1355,7 @@ Lineups:
 
 | Feature | Component | Keys | Sleeper | Yahoo | When absent |
 | --- | --- | --- | --- | --- | --- |
-| Optimiser and the what-if | `components/league-lineups/board.tsx` | rosters, positionalStarters | yes, yes | yes, yes | Never absent. |
+| Optimizer and the what-if | `components/league-lineups/board.tsx` | rosters, positionalStarters | yes, yes | yes, yes | Never absent. |
 | Free agent panel | `components/league-lineups/waivers-panel.tsx` | freeAgentList | yes | yes (25 per page, top 100) | Panel renders "not available on {provider}". |
 | Cut list dynasty guard | `components/league-lineups/cut-list.tsx` | dynastyType (or the override) | yes | via override | Guard reads `keeperStyle` off `LeagueShape`, which the override feeds. |
 | Taxi section | same board | taxiSquad | yes | no | Absent, no sentence. |
@@ -1504,7 +1504,7 @@ Part 6 (nullable column, but a null is a review-queue entry, never silent).
 `would_you_rather_trades`: rename `sleeper_transaction_id` to
 `provider_transaction_id`; `side_a_roster_id` and `side_b_roster_id`
 comments say provider roster ids. Add `provider text not null default
-'sleeper'` (denormalised from the league for the serving index, so the
+'sleeper'` (denormalized from the league for the serving index, so the
 Discord router and the admin panel can filter without a join).
 
 `league_activity`: `roster_ids` and `player_ids` arrays hold provider ids;
@@ -1696,7 +1696,7 @@ create table public.provider_players (
                         check (match_confidence between 0 and 1),
   full_name           text not null,
   position            text not null,
-  team_abbr           text,                          -- normalised to nfl_teams.abbreviation
+  team_abbr           text,                          -- normalized to nfl_teams.abbreviation
   status              text,
   is_active           boolean not null default true, -- still in the provider's universe
   superseded_by       text,                          -- another provider_player_id, Part 6.6
@@ -1919,11 +1919,11 @@ Part is the pipeline and its edge cases.
    (`yahoo_id -> gsis_id -> players.metadata.sleeper.gsis_id`).
 4. Team defense by code: a Yahoo player with `position_type = 'DT'` (or
    `display_position = 'DEF'`) maps to the Sleeper DEF whose
-   `external_ids->>'sleeper'` equals the normalised team abbreviation.
-5. Name, position and team: `search_name` (the existing normalised column
+   `external_ids->>'sleeper'` equals the normalized team abbreviation.
+5. Name, position and team: `search_name` (the existing normalized column
    on `players`) equality on Yahoo's `ascii_first + ascii_last`, with
-   position agreement (after Yahoo-to-Sleeper position normalisation) AND
-   team agreement (after alias normalisation). Confidence 0.9. Name and
+   position agreement (after Yahoo-to-Sleeper position normalization) AND
+   team agreement (after alias normalization). Confidence 0.9. Name and
    position agreement with a team mismatch where the Sleeper row's
    `metadata.sleeper.team_changed_at` is within 45 days: confidence 0.7,
    review. Name only, or any case with two candidates: review, reason
@@ -1997,7 +1997,7 @@ with its index, and `resolveSleeperPlayers`' second pass is narrowed to
 rows where `external_ids ? 'sleeper'` so a Yahoo-tailed slug can never
 answer a Sleeper lookup), `external_ids = '{}'`, `metadata = {"yahoo":
 {...}}`, `source_synced_at = {"yahoo": now}`, `status` from Yahoo's status,
-`position` normalised. `internal_attributes` empty. Rankings, values and
+`position` normalized. `internal_attributes` empty. Rankings, values and
 projections for such a row are simply absent, which every surface already
 tolerates for an unranked player.
 
@@ -2036,7 +2036,7 @@ code is not in the aliases goes to review rather than to a guess.
 ### 6.8 Positions
 
 Yahoo `display_position` can be compound (`WR,RB`); `primary_position` is
-single. Normalise: `primary_position` first; `DEF` and `DT` to `DEF`; `D`
+single. Normalize: `primary_position` first; `DEF` and `DT` to `DEF`; `D`
 position type with `DL`, `LB`, `DB` kept; anything else (`OL`, `P`, `LS`)
 kept as-is with no `PULSE_SLOT_ELIGIBILITY` entry, so it is unprojectable
 and renders as such. Position disagreement between Yahoo and Sleeper (a
@@ -2109,7 +2109,7 @@ Routes:
   session). Redirects to
   `https://api.login.yahoo.com/oauth2/request_auth?client_id=...&redirect_uri=...&response_type=code&scope=openid%20fspt-r&state=...&code_challenge=...&code_challenge_method=S256&language=en-us`.
   PKCE is sent because it is harmless if ignored and protective if
-  honoured (Part 2.2). `openid` is requested so the token response carries
+  honored (Part 2.2). `openid` is requested so the token response carries
   an `id_token` with a stable `sub`; `email` and `profile` are NOT
   requested (we have no use for the reader's Yahoo email, and asking for
   less is what the consent screen shows).
@@ -2154,7 +2154,7 @@ under `public/brand/yahoo/`; it is never restyled.
   `api.login.yahoo.com`.
 - `withAccessToken(connectionId, fn)`: the one entry every Yahoo API call
   uses. It loads the connection, and if `access_expires_at` is within 120
-  seconds it refreshes FIRST. Refreshes are serialised per connection with
+  seconds it refreshes FIRST. Refreshes are serialized per connection with
   a database lock: `update provider_connections set refresh_lock_until =
   now() + interval '30 seconds' where id = $1 and (refresh_lock_until is
   null or refresh_lock_until < now()) returning id`; a caller that does not
@@ -2192,7 +2192,7 @@ under `public/brand/yahoo/`; it is never restyled.
   size guard
   (`MAX_RESPONSE_BYTES` is reused from `lib/sleeper.ts`, moved to
   `lib/http/size-guard.ts` with its test), and classifies the response.
-- Budget: `lib/providers/budget.ts` generalises `lib/sleeper-budget.ts`
+- Budget: `lib/providers/budget.ts` generalizes `lib/sleeper-budget.ts`
   into `getProviderBudget(provider)` returning a `TokenBucket` per provider;
   the Sleeper bucket keeps its 600 default and its
   `manager_pulse_settings.sync.sleeperCallsPerMinute` wiring, Yahoo starts
@@ -2214,14 +2214,14 @@ under `public/brand/yahoo/`; it is never restyled.
   read by the admin panel and the connect page banner); 403 otherwise:
   `not_member`; 404:
   `not_found`; 5xx: `unavailable`; 200 with `fantasy_content`: parse.
-- JSON normalisation: `lib/providers/yahoo/json.ts` turns Yahoo's
+- JSON normalization: `lib/providers/yahoo/json.ts` turns Yahoo's
   numeric-keyed collections into arrays and merges the `[0]`/`[1]` split
   (metadata array of single-key objects plus the sub-resource object) into
   one plain object per resource, converting numeric strings on a known
   allow-list of fields (`team_id`, `player_id`, `week`, `count`, points,
   `value`, `stat_id`) and leaving everything else as strings. It is pure
   and fixture-tested against every response shape in Part 14.3. The raw
-  parsed JSON, not the normalised form, is what goes into `metadata`.
+  parsed JSON, not the normalized form, is what goes into `metadata`.
 - Request budget per league sync (used by the freshness and queue
   estimates): league with `out=settings,standings,teams` 1; teams with
   rosters 1 per team (12); scoreboard 1 per week needed; roster per week
@@ -2233,7 +2233,7 @@ under `public/brand/yahoo/`; it is never restyled.
 ### 7.4 Entity mapping
 
 Each mapping is a pure function in `lib/providers/yahoo/map-*.ts` from
-the normalised JSON to the Part 4.5 shape, fixture-tested.
+the normalized JSON to the Part 4.5 shape, fixture-tested.
 
 #### 7.4.1 League
 
@@ -2361,7 +2361,7 @@ times each:
 
 Any token not in the table is passed through UNCHANGED (so
 `alignedStartingSlots` keeps it and `slotGroupOf` files it under IDP, the
-existing behaviour for exotic Sleeper tokens) and recorded on
+existing behavior for exotic Sleeper tokens) and recorded on
 `leagues.scoring_translation.unknownSlots[]`. `lib/providers/yahoo/slot-map.test.ts`
 asserts every emitted token is known to Part 3.7's maps.
 
@@ -2459,7 +2459,7 @@ whose draft has not happened yields zero picks and `draft_status =
 #### 7.4.8 Players
 
 `map-player.ts`. `providerPlayerId = player_id` (numeric tail), names
-from `name`, `position` per Part 6.8, `teamAbbr` normalised through
+from `name`, `position` per Part 6.8, `teamAbbr` normalized through
 `nfl_teams.aliases`, `status`, `jerseyNumber = uniform_number`,
 `headshotUrl = headshot.url` after host validation, `externalIds = {}`
 (Yahoo publishes none). The seed alias list for `nfl_teams.aliases`,
@@ -2467,7 +2467,7 @@ UNVERIFIED as to Yahoo's exact casing and recorded by the spike: Yahoo is
 believed to use mixed case ("Jax", "Was", "Ari", "Atl", "Bal", "Buf",
 "Car", "Chi", "Cin", "Cle", "Dal", "Den", "Det", "GB", "Hou", "Ind", "KC",
 "LV", "LAC", "LAR", "Mia", "Min", "NE", "NO", "NYG", "NYJ", "Phi", "Pit",
-"SF", "Sea", "TB", "Ten") where Sleeper uses upper case; the normaliser
+"SF", "Sea", "TB", "Ten") where Sleeper uses upper case; the normalizer
 upper-cases first and then consults the alias list, so only genuinely
 different codes need a row.
 
@@ -2528,7 +2528,7 @@ After the first successful capture the provider writes
   two modes agree on a league whose schedule is fully known.
 - Positional WAR: unaffected (it reads no schedule and no roster).
 - Manager Ledger: unaffected in principle (settled weeks, actual points,
-  the same optimiser). Two Yahoo specifics: the IR list is the current
+  the same optimizer). Two Yahoo specifics: the IR list is the current
   roster's, exactly as for Sleeper; and `taxiIds` is always empty.
 - Lineups: renders every panel; the free-agent panel reads
   `lib/faab/free-agents.ts`, which needs a "who is unowned" answer, and
@@ -2553,7 +2553,7 @@ After the first successful capture the provider writes
 ## Part 8. The Sleeper provider
 
 `lib/providers/sleeper/` wraps the existing functions without changing a
-line of their behaviour:
+line of their behavior:
 
 - `provider.ts` implements `LeagueProvider` by calling the `lib/sleeper.ts`
   league functions and converting their null-versus-empty returns to
@@ -2591,7 +2591,7 @@ move.
 
 The Sleeper handle flows (`lib/sleeper-handle/*`,
 `app/actions/sleeper-handle.ts`, the gate states, the identity card) are
-unchanged in behaviour and keep their names. They gain a sibling for
+unchanged in behavior and keep their names. They gain a sibling for
 OAuth providers (Part 10.3), and the two are composed by one
 `components/providers/provider-gate.tsx` that asks the registry which
 `auth_kind` the provider has.
@@ -3035,7 +3035,7 @@ synced Sleeper leagues".
 
 All routes take the league ref (9.2), render values through
 `resolveLeagueContext` unchanged, and add the attribution text band for
-Yahoo. The brand rule is unchanged: FF Beacon colours, Geist, no gold, no
+Yahoo. The brand rule is unchanged: FF Beacon colors, Geist, no gold, no
 DPC background. A members-only Yahoo league's OG image is served only when
 the request carries a signed token minted by the page for the sharer
 (`lib/og-token.ts`, HMAC over league ref plus expiry with `CRON_SECRET`
@@ -3148,7 +3148,7 @@ each phase.
 `lib/client-sleeper-import.test.ts`, `lib/projections/source-guard.test.ts`,
 `lib/projections/raw-column-guard.test.ts`, `lib/positional-war/naming.test.ts`,
 `lib/security/sleeper-size-guard.test.ts`, and every model test listed in
-the inventory. The refactor is behaviour-preserving for Sleeper and these
+the inventory. The refactor is behavior-preserving for Sleeper and these
 are the proof.
 
 ### 14.2 New guards
@@ -3232,7 +3232,7 @@ the answer, the retention answer and the brand approval.
 - LP-T005 `lib/providers/copy.ts`, `capability-copy.ts`, tests.
 - LP-T006 `lib/providers/registry.ts` with `getProvider`,
   `listActiveProviders`, `providerForLeague`; `registry-guard.test.ts`.
-- LP-T007 `lib/providers/budget.ts` generalising the bucket; re-exports;
+- LP-T007 `lib/providers/budget.ts` generalizing the bucket; re-exports;
   `lib/sleeper-budget.test.ts` still green.
 - LP-T008 `components/providers/capability-notice.tsx`,
   `provider-mark.tsx`, `attribution.tsx`, a11y audit.
@@ -3500,7 +3500,7 @@ stat_categories ids; the slot labels for W/T, Q/W/R/T, D, DL, LB, DB; the
 `renew` format; picks with a season; the timestamp unit; the in-draft
 `draft_status`; the live scoreboard status; how many preevent weeks are
 returned; `editorial_team_abbr` casing; the co-manager object; where
-`is_keeper` sits; the 999 rate; whether PKCE is honoured; whether
+`is_keeper` sits; the 999 rate; whether PKCE is honored; whether
 `fspt-r` is the exact scope string; whether public leagues are readable
 by a non-member's token in practice.
 
@@ -3551,7 +3551,7 @@ Yahoo, read directly on 2026-09-08:
 - https://developer.yahoo.com/apps/create/ (login wall observed)
 - https://legal.yahoo.com/us/en/yahoo/terms/product-atos/fantasysportsapi/index.html (NOT reachable)
 
-Libraries and community, for shapes and behaviour Yahoo does not document:
+Libraries and community, for shapes and behavior Yahoo does not document:
 - https://github.com/uberfastman/yfpy (query.py, models.py, issues 51, 79, 84, 85)
 - https://github.com/spilchen/yahoo_fantasy_api (league.py, team.py, yhandler.py) and https://yahoo-fantasy-api.readthedocs.io/
 - https://github.com/whatadewitt/yahoo-fantasy-sports-api (README, YahooFantasy.mjs, issues 81, 118, 123) and https://y-fantasy-node-docs.vercel.app/
@@ -3854,7 +3854,7 @@ take them:
 2. MFL second. The richest data of any host, including everything the
    Manager Ledger and the pick valuation want, and the only host that
    documents writes, so it is also where Beacon Link could work with a
-   licence to point at. It needs `auth_kind = 'credentials'` (a username
+   license to point at. It needs `auth_kind = 'credentials'` (a username
    and password exchanged for an `MFL_USER_ID` cookie that we hold as a
    secret exactly as a Yahoo refresh token, in Vault, under
    `provider_connections`) or `'api_key'` for the read-only export path,
@@ -3874,7 +3874,7 @@ take them:
    reader's whole ESPN session (far more than a scoped token), and the
    endpoint changes without notice. `'session_cookie'` is admitted by the
    registry constraint so the question is recorded, and the answer today
-   is no. If ESPN ever publishes an API with a licence, it re-enters the
+   is no. If ESPN ever publishes an API with a license, it re-enters the
    list at step 1's cost.
 5. CBS and Underdog: not worth the contract. CBS's API is deprecated and
    per-league; Underdog's terms forbid it and best ball has no lineups or

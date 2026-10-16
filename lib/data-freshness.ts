@@ -67,7 +67,7 @@ export type FreshnessSpec = {
   /**
    * Exempt while the live phase says "regular" and the first regular season
    * game has not been played. Nothing writes a stat line in that window, so
-   * silence is the correct behaviour rather than a symptom.
+   * silence is the correct behavior rather than a symptom.
    */
   kickoffGated?: boolean;
   /**
@@ -92,7 +92,7 @@ export type FreshnessResult = {
   /** True when the table is out of season and was therefore not judged. */
   outOfSeason: boolean;
   /**
-   * Why the table was exempted from judgement, or null when it was judged.
+   * Why the table was exempted from judgment, or null when it was judged.
    * Shown instead of a status so a reader is told which reason applies rather
    * than being left to infer it from a green badge.
    */

@@ -302,7 +302,7 @@ export type ColdGuardResult = { ok: true } | { ok: false; reason: string };
  *   - --confirm-project exactly matches the project this run actually
  *     resolves (rule 5: the operator has named the project, not just typed
  *     --cold out of habit).
- * Order matters for the message a person sees first: the acknowledgement
+ * Order matters for the message a person sees first: the acknowledgment
  * comes before the project check, since a run missing both should be told
  * about the destructive nature of --cold before being told about a mismatched
  * ref.

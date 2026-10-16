@@ -48,7 +48,7 @@ const POSITION_COLOR: Record<string, string> = {
  * They are the SAME lucide paths the site renders (Star and Scissors, v0.460),
  * copied here rather than imported, because Satori resolves `currentColor` from
  * nothing and a component's default attributes would arrive strokeless. The
- * colours are the site's own: cyan for strength, amber for caution.
+ * colors are the site's own: cyan for strength, amber for caution.
  *
  * A data URI is decoded in-process, so neither of these costs a network fetch
  * at render time. Built once at module load, not per row.

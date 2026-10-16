@@ -58,7 +58,7 @@ export function LeagueFilterField({
       />
       {value && (
         // A named button, not a bare glyph. "Clear" on its own would be one
-        // more unlabelled X in a page full of them.
+        // more unlabeled X in a page full of them.
         <button
           type="button"
           onClick={() => onChange("")}

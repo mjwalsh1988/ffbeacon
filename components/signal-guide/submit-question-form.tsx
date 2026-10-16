@@ -45,13 +45,13 @@ export function SubmitQuestionForm({
   useEffect(() => {
     if (!active || prefillDone.current) return;
     prefillDone.current = true;
-    let cancelled = false;
+    let canceled = false;
     (async () => {
       try {
         const res = await fetch("/api/guide/viewer");
         if (!res.ok) return;
         const data = (await res.json()) as { name: string | null; email: string | null };
-        if (cancelled) return;
+        if (canceled) return;
         if (data.name) setName((prev) => prev || data.name!);
         if (data.email) setEmail((prev) => prev || data.email!);
       } catch {
@@ -59,7 +59,7 @@ export function SubmitQuestionForm({
       }
     })();
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, [active]);
 

@@ -67,7 +67,7 @@ export const NAV_SECTION_LABELS: Record<NavSectionId, string> = {
   admin: "Admin (admins only)",
 };
 
-/** The colour a tag's pill is filled with. */
+/** The color a tag's pill is filled with. */
 export type ToolBadgeTone = "beacon" | "cyan" | "green" | "amber";
 
 /** The icon inside a tag's pill. Resolved to a component in components/tool-badge.tsx. */
@@ -170,7 +170,7 @@ export const HIGHLIGHT_LABELS: Record<HighlightColor, string> = {
 
 /**
  * The highlight a tag suggests when an admin switches the highlight on. Only a
- * suggestion: the colour is still its own choice afterwards.
+ * suggestion: the color is still its own choice afterwards.
  */
 export const TONE_TO_HIGHLIGHT: Record<ToolBadgeTone, HighlightColor> = {
   beacon: "purple",

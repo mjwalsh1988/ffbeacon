@@ -21,7 +21,7 @@ import type { WyrErrorCode } from "./types";
 
 /**
  * A same-origin marker the browser will not attach cross-site without CORS,
- * which the site never grants. Not a CSRF defence on its own; it is the cheap
+ * which the site never grants. Not a CSRF defense on its own; it is the cheap
  * first filter, and every state change behind it is additionally keyed to a
  * server-derived identity.
  */

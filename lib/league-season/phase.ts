@@ -22,7 +22,7 @@
  * A league can be complete WITHOUT a champion: Sleeper says the season is over
  * but the bracket never got played, or was never captured. That is a real
  * state and it is reported as one (`phase: "complete"`, `champion: null`)
- * rather than being rounded to either neighbour. A post-season page still
+ * rather than being rounded to either neighbor. A post-season page still
  * renders; it just has no name to put on the trophy.
  */
 

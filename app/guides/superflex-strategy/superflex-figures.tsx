@@ -142,7 +142,7 @@ export function ReplacementLineFigure() {
           </text>
         ))}
         {/* Bars: starters in a one-QB league are purple, the extra superflex
-            starters are cyan, everyone else is grey. */}
+            starters are cyan, everyone else is gray. */}
         {ranks.map((r) => {
           const fill = r <= 12 ? PURPLE : r <= 24 ? CYAN : LINE;
           return (

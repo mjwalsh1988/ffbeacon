@@ -3,7 +3,7 @@ import {
   boardWeeks,
   isPublishableWeek,
   parseWeekSegment,
-  weekNeighbours,
+  weekNeighbors,
   weekPath,
   weekPhase,
   weekPhaseLabel,
@@ -107,20 +107,20 @@ describe("weekPhaseLabel", () => {
   });
 });
 
-describe("weekNeighbours", () => {
+describe("weekNeighbors", () => {
   it("gives both arrows in the middle of the season", () => {
-    expect(weekNeighbours(5, 8)).toEqual({ prev: 4, next: 6 });
+    expect(weekNeighbors(5, 8)).toEqual({ prev: 4, next: 6 });
   });
 
   it("drops the back arrow on week 1", () => {
-    expect(weekNeighbours(1, 8)).toEqual({ prev: null, next: 2 });
+    expect(weekNeighbors(1, 8)).toEqual({ prev: null, next: 2 });
   });
 
   it("drops the forward arrow at the publishable edge rather than linking a dead page", () => {
-    expect(weekNeighbours(9, 8)).toEqual({ prev: 8, next: null });
+    expect(weekNeighbors(9, 8)).toEqual({ prev: 8, next: null });
   });
 
   it("says nothing about a week that is not publishable at all", () => {
-    expect(weekNeighbours(15, 8)).toEqual({ prev: null, next: null });
+    expect(weekNeighbors(15, 8)).toEqual({ prev: null, next: null });
   });
 });

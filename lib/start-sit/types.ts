@@ -29,7 +29,7 @@
  * THIS IS NOT A SLOT MODEL. The reader has already decided which lineup slot
  * they are filling (a flex decision between an RB and a WR is the ordinary
  * case), so ranking is the unconstrained top K of N by projected points. The
- * lineup optimiser in lib/power-pulse/lineup.ts solves a different problem
+ * lineup optimizer in lib/power-pulse/lineup.ts solves a different problem
  * (fill every slot at once under PULSE_SLOT_ELIGIBILITY) and is not reused
  * here; inventing an "any position" token in that eligibility table just to
  * bypass its slot logic would defeat the point of having it.
@@ -76,7 +76,7 @@ export type StartSitCandidate = {
  * One candidate's numbers for the selected week, under the resolved
  * projection source and the reader's format. Every field is nullable and a
  * null is read as an absence, never a zero: a bye week, an unpublished
- * projection, a defence rank with no split yet, a beat rate with too few
+ * projection, a defense rank with no split yet, a beat rate with too few
  * graded weeks, an environment with no line published yet.
  */
 export type StartSitProjection = {

@@ -82,7 +82,7 @@ export function environmentEffect(env: GameEnvironment | null, settings: Project
 
   let rushShift = 0;
   if (env.spread !== null) {
-    // A NEGATIVE spread means this team is FAVOURED, and a favourite runs
+    // A NEGATIVE spread means this team is FAVORED, and a favorite runs
     // more, so the sign flip below is deliberate. Get this backwards and
     // every game script in the model inverts silently: it never shows up in
     // a total, only in which side of the pass/rush split moves.

@@ -14,7 +14,7 @@
  * This test is crude, and it is the only thing that will catch the collision
  * re-emerging in six months. A flat ban on the token inside lib/trade-impact/
  * would be wrong, because the Trade Ideas asset note legitimately prints a
- * Positional WAR figure as labelled context. So the enforceable rule is
+ * Positional WAR figure as labeled context. So the enforceable rule is
  * PROXIMITY rather than absence.
  *
  * Three rules, each a section of this file:
@@ -207,7 +207,7 @@ describe("the team-specific vocabulary stays out of the Positional WAR modules",
 });
 
 describe("the guard itself works", () => {
-  // A guard that cannot fail is not a guard. These pin the matcher's behaviour
+  // A guard that cannot fail is not a guard. These pin the matcher's behavior
   // against the cases most likely to be got wrong.
   function scan(content: string): number {
     const lines = content.split("\n");

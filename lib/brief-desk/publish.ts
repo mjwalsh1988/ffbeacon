@@ -197,7 +197,7 @@ export async function approveEdition(
   // moment that answer changes.
   bustMemo(HAS_EDITIONS_MEMO_KEY);
   // after(), not a floating promise: a promise left running when the action's
-  // response is sent can be cancelled, and the repo's other IndexNow callers
+  // response is sent can be canceled, and the repo's other IndexNow callers
   // all use after() for exactly that reason.
   after(() => submitIndexNow([`/brief/${slug}`, "/brief", "/brief/editions"]));
 

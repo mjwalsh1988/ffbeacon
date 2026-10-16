@@ -38,7 +38,7 @@ export type ProjectionSettings = {
   /**
    * How a player's role is measured from player_stats.
    *
-   * The half life is the load-bearing number. Published stabilisation work puts
+   * The half life is the load-bearing number. Published stabilization work puts
    * a target share at four to six games before it is signal rather than noise,
    * and three to four games before a usage shift reads as structural. A four
    * week half life puts that finding directly into the model: the last four
@@ -105,7 +105,7 @@ export type ProjectionSettings = {
    * are the two numbers that move fantasy scoring most and that no season
    * average can carry.
    *
-   * Both adjustments are small on purpose. A 7 point favourite shifts about 3%
+   * Both adjustments are small on purpose. A 7 point favorite shifts about 3%
    * of its plays from passing to rushing, which is the right order of magnitude
    * and deliberately not more. When no odds row exists BOTH multipliers are
    * exactly 1: a missing line is an adjustment we did not make, never a neutral
@@ -128,7 +128,7 @@ export type ProjectionSettings = {
   /**
    * Per-position spread calibration.
    *
-   * Every projection source over-spreads: twelve seasons analysed by Fantasy
+   * Every projection source over-spreads: twelve seasons analyzed by Fantasy
    * Football Analytics give calibration slopes below 1.0 at EVERY position (QB
    * 0.67, TE 0.72, RB 0.79, WR 0.85). The top players are projected too high
    * and the late-round starters too low. Applied to the BLENDED projection, so

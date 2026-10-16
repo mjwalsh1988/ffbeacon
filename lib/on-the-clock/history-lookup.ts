@@ -109,7 +109,7 @@ export function deriveSnapshotConfidence(params: {
   /**
    * When the projection sweep behind the frozen Draft Pulse, grades and awards
    * was computed. Undefined on a caller that has no projections at all, which is
-   * not the same as a stale one and is not penalised.
+   * not the same as a stale one and is not penalized.
    */
   projectionDateMs?: number | null;
 }): SnapshotConfidence {

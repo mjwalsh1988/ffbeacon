@@ -14,8 +14,8 @@ import { BeaconValueIcon, BEACON_SOURCE_SLUG } from "@/components/beacon-value-i
  * decided in lib/team-standing-figure.ts; this file is how it looks.
  *
  * It is a pill, deliberately, built to the same recipe as TeamStatusBadge:
- * icon, filled background, bright border, soft glow in the pill's own colour.
- * A bare line of grey text under a tag reads as a caption that fell off
+ * icon, filled background, bright border, soft glow in the pill's own color.
+ * A bare line of gray text under a tag reads as a caption that fell off
  * something, and the eye skips it. Two pills side by side read as one unit of
  * information, which is what they are.
  *
@@ -23,7 +23,7 @@ import { BeaconValueIcon, BEACON_SOURCE_SLUG } from "@/components/beacon-value-i
  * Fourth and below take a neutral pill with a finish-line flag, because a medal
  * for 9th is a joke at the reader's expense.
  *
- * Colour is never the only signal: the ordinal is spelled out inside every
+ * Color is never the only signal: the ordinal is spelled out inside every
  * pill, the icon differs between a medal and a plain finish, and the
  * screen-reader sentence names the measure being quoted.
  *
@@ -52,9 +52,9 @@ const MEDAL_TONE: Record<number, string> = {
 const PLAIN_TONE = "border-line-accent bg-base/70 text-ink-muted";
 
 /**
- * The value pill, in the colour of the tag it sits beside.
+ * The value pill, in the color of the tag it sits beside.
  *
- * Two bands print a value figure and they are different colours, so one fixed
+ * Two bands print a value figure and they are different colors, so one fixed
  * tone would put a purple pill against a green tag on every Loaded row and
  * break the "two pills read as one unit" idea the whole component is built on.
  * The label text is `text-ink` either way, so only the frame changes and the

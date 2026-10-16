@@ -12,7 +12,7 @@ import { Panel } from "@/components/dashboard-panel";
  *   take the masthead, the tabs, and the navigation down with the one panel that
  *   could not be computed. So the limit is reported inside the evaluation slot,
  *   in the reader's own terms, while the rest of the page renders normally. The
- *   copy says what happened and what happens next. It does not apologise and it
+ *   copy says what happened and what happens next. It does not apologize and it
  *   does not use the word "error", because nothing went wrong.
  *
  * WHY LOADING NAMES THE WORK
@@ -40,7 +40,7 @@ const COPY: Record<
   loading: {
     eyebrow: "Working",
     title: "Rebuilding your lineup for every remaining week",
-    body: "Each week is re-optimised with the trade applied, then the rest of the season is simulated against the real schedule.",
+    body: "Each week is re-optimized with the trade applied, then the rest of the season is simulated against the real schedule.",
     Icon: Loader,
     live: true,
   },

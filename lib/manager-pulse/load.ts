@@ -734,7 +734,7 @@ async function mapSleeperPlayerIds(admin: Client, sleeperIds: string[]): Promise
  * A missing row means we have never seen that player on any roster, which is
  * NULL (we cannot say how common he is), not 0. The affinity module treats the
  * two differently and relies on that distinction: it excludes a player with an
- * unknown rate from the favourites ranking rather than ranking him as maximally
+ * unknown rate from the favorites ranking rather than ranking him as maximally
  * rare, which is what a 0 would do.
  */
 async function fetchRosterExposure(
@@ -753,7 +753,7 @@ async function fetchRosterExposure(
       .in("sleeper_player_id", chunk);
     if (error) {
       // Non-fatal, like every other read here. Without the denominator the
-      // favourites list simply has less to say; it does not become wrong.
+      // favorites list simply has less to say; it does not become wrong.
       console.error("[manager-pulse/load] roster exposure read failed:", error.message);
       return out;
     }

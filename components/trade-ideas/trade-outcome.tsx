@@ -47,8 +47,8 @@ import type { ImpactGaps, ResolvedAsset, TeamImpact } from "@/lib/trade-impact/t
  *      it does for this roster. This is where "6,000 value" becomes "starts nine
  *      of eleven weeks for you", which is the fact a manager is actually after.
  *
- * COLOUR IS NEVER THE ANSWER ON ITS OWN
- *   The call is a word before it is a colour, every tone chip carries its own
+ * COLOR IS NEVER THE ANSWER ON ITS OWN
+ *   The call is a word before it is a color, every tone chip carries its own
  *   label, and each arrow icon is paired with text. The graph is aria-hidden
  *   with a sentence beneath it that states the same split in words, the pattern
  *   app/tools/trade-calculator/trade-margin-graph.tsx already set.
@@ -235,9 +235,9 @@ function Headline({
 }) {
   // "Even" has no winner, so the number describes a spread rather than an edge.
   const marginCaption =
-    outcome.valueFavours === "even"
+    outcome.valueFavors === "even"
       ? "value spread"
-      : outcome.valueFavours === "you"
+      : outcome.valueFavors === "you"
         ? "value your way"
         : "value their way";
 
@@ -265,7 +265,7 @@ function Headline({
       </div>
 
       {/* The number, big. Same gradient treatment Signal Check gives its margin,
-          so a reader who knows one recognises the other. */}
+          so a reader who knows one recognizes the other. */}
       <div className="shrink-0 sm:text-right">
         <p
           className="bg-clip-text font-mono text-4xl font-bold tabular-nums text-transparent sm:text-5xl"
@@ -307,9 +307,9 @@ function BalanceBar({
   const you = Math.round(outcome.yourShare);
   const them = 100 - you;
   const spoken =
-    outcome.valueFavours === "even"
+    outcome.valueFavors === "even"
       ? `On value, you receive ${you} percent of what is moving and ${theirTeamLabel} receives ${them} percent. The two sides are level.`
-      : outcome.valueFavours === "you"
+      : outcome.valueFavors === "you"
         ? `On value, you receive ${you} percent of what is moving and ${theirTeamLabel} receives ${them} percent, so you come out ${Math.round(outcome.valueMarginPct)} percent ahead.`
         : `On value, you receive ${you} percent of what is moving and ${theirTeamLabel} receives ${them} percent, so ${theirTeamLabel} comes out ${Math.round(outcome.valueMarginPct)} percent ahead.`;
 
@@ -570,7 +570,7 @@ function AssetColumn({
  * breakpoint: shrinking it on a phone would take the one thing that makes this
  * section feel like a decision and turn it back into a list.
  *
- * A centrepiece gets a brighter frame, so which player the deal is actually
+ * A centerpiece gets a brighter frame, so which player the deal is actually
  * about is visible before anything is read.
  */
 function AssetCard({
@@ -584,11 +584,11 @@ function AssetCard({
   incoming: boolean;
   sleeperLeagueId: string;
 }) {
-  const centrepiece = verdict.role === "centrepiece";
+  const centerpiece = verdict.role === "centerpiece";
   return (
     <div
       className={`rounded-card border p-3 ${
-        centrepiece
+        centerpiece
           ? incoming
             ? "border-brand-cyan/45 bg-surface-elevated"
             : "border-brand-purple/45 bg-surface-elevated"

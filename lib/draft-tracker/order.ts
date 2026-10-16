@@ -1,5 +1,5 @@
 /**
- * Ordering, filtering, and labelling for the Draft Tracker. Pure, browser-safe,
+ * Ordering, filtering, and labeling for the Draft Tracker. Pure, browser-safe,
  * deterministic: no Supabase, no fetch, no clock.
  *
  * The three orderings answer three different questions, and the copy says so
@@ -163,9 +163,9 @@ export function parseTeamNames(raw: unknown): string[] {
 }
 
 /**
- * Normalise submitted team names to exactly `count` entries, trimmed and
+ * Normalize submitted team names to exactly `count` entries, trimmed and
  * length-capped. Extra entries are dropped and missing ones become blank, so a
- * client that sends the wrong number of boxes cannot desynchronise the slots.
+ * client that sends the wrong number of boxes cannot desynchronize the slots.
  */
 export function normalizeTeamNames(raw: unknown, count: number): string[] {
   // Cut to length BEFORE coercing every element. A server action body can carry

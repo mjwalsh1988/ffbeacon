@@ -5,21 +5,21 @@ import { describePick, type PickLike } from "@/lib/trade-ideas/pick-label";
  * whose it was.
  *
  * READING ORDER IS THE POINT
- *   "2027 R1" in the strongest weight, the pool as a coloured pill, and the
+ *   "2027 R1" in the strongest weight, the pool as a colored pill, and the
  *   original owner in subtle text after it. A manager scanning a list of eight
  *   picks is looking for the round first and the owner second, and the pill is
  *   what lets them find the early ones without reading a word.
  *
  * WHY THE POOL IS A PILL AND THE OWNER IS NOT
- *   The pool has three values and they rank. A pill can carry that in colour, so
+ *   The pool has three values and they rank. A pill can carry that in color, so
  *   the difference between an early pick and a late one is visible before it is
  *   read. The owner is an open set of names, where a pill would be twelve
  *   different chips that all look equally important and none of which mean
  *   anything at a glance.
  *
- * COLOUR IS NEVER THE ONLY SIGNAL
- *   The pill says its own word, so "Early" is legible with no colour perception
- *   at all. The colours follow the same convention the rest of League Pulse uses
+ * COLOR IS NEVER THE ONLY SIGNAL
+ *   The pill says its own word, so "Early" is legible with no color perception
+ *   at all. The colors follow the same convention the rest of League Pulse uses
  *   for a ranking: cyan at the valuable end, purple at the other.
  *
  * ONE ACCESSIBLE STRING, NOT FOUR

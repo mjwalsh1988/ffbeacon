@@ -1,6 +1,6 @@
 /**
  * The hub's kind and week filters: a plain GET form, native selects with
- * labels, and a submit button. A keyboard reader tabs through two labelled
+ * labels, and a submit button. A keyboard reader tabs through two labeled
  * controls and a button; a crawler and a reader with JavaScript off get the
  * same working form. The chosen values are shareable as `?kind=&week=`, which
  * is why nothing here is client state.

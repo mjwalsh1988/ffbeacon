@@ -7,7 +7,7 @@
  * first becomes what you actually scored, and the gap becomes what you left on
  * your bench, which is the same question asked backwards.
  *
- * ON A SETTLED WEEK THE MIDDLE FIGURE IS THE RECAP'S, NOT THE OPTIMISER'S.
+ * ON A SETTLED WEEK THE MIDDLE FIGURE IS THE RECAP'S, NOT THE OPTIMIZER'S.
  * `optimization.optimalTotal` is measured over the slots the model can grade;
  * `recap.bestPossible` is that deficit added onto Sleeper's own official total.
  * In a league with no IDP they are the same number. In one with IDP they are
@@ -124,7 +124,7 @@ export function LineupSummary({ view }: { view: LineupView }) {
           </div>
         </div>
 
-        {/* The goal chip. Colour is paired with the word, and the reason rides
+        {/* The goal chip. Color is paired with the word, and the reason rides
             along as a visually hidden sentence rather than a title attribute,
             which touch and most screen readers never surface. */}
         {view.status && (
@@ -176,7 +176,7 @@ export function LineupSummary({ view }: { view: LineupView }) {
               : ` ${optimization.moves.length} ${optimization.moves.length === 1 ? "change" : "changes"} would have closed the gap.`
             : optimization.moves.length === 0
               ? " Nothing on your bench beats what you are starting."
-              : // "below" only when the optimiser is actually rendered. It is
+              : // "below" only when the optimizer is actually rendered. It is
               // hidden mid-week (page.tsx), and pointing a reader at a panel
               // that is not there is worse for a non-visual reader, who cannot
               // see the absence.

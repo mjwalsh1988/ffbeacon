@@ -46,7 +46,7 @@ export function VerdictPanel({
   return (
     <div className="space-y-5">
       {/* Did the reader agree with the model? Said in words first, because it
-          is the first thing anyone wants after a vote, and because a colour on
+          is the first thing anyone wants after a vote, and because a color on
           the card would not say it at all. */}
       <p
         className={`rounded-card border px-3.5 py-3 text-sm font-medium leading-relaxed ${
@@ -61,7 +61,7 @@ export function VerdictPanel({
           ? `Signal Check calls this one close enough to be a coin flip, at ${view.marginPct}% apart. You picked ${SIDE_LABEL[yourSide]}.`
           : gotItRight
             ? `You and Signal Check agree. ${SIDE_LABEL[view.winnerSide === "a" ? "a" : "b"]} comes out ahead on value.`
-            : `Signal Check sees it the other way. You picked ${SIDE_LABEL[yourSide]}; the values favour ${SIDE_LABEL[view.winnerSide === "a" ? "a" : "b"]}.`}
+            : `Signal Check sees it the other way. You picked ${SIDE_LABEL[yourSide]}; the values favor ${SIDE_LABEL[view.winnerSide === "a" ? "a" : "b"]}.`}
       </p>
 
       {/* Verdict hero. */}
@@ -256,7 +256,7 @@ function ConfidenceChip({ label, level }: { label: string; level: string }) {
         : "bg-signal-warning";
   return (
     // No aria-label: ARIA does not guarantee a name on a generic element is
-    // exposed, and where it is, the children can be pruned in its favour. The
+    // exposed, and where it is, the children can be pruned in its favor. The
     // visible children already say "Confidence: Medium confidence".
     <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-3 py-1 text-xs">
       <span className="text-ink-subtle">Confidence:</span>

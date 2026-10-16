@@ -198,7 +198,7 @@ function readKeys(value: unknown): string[] {
 }
 
 /**
- * The players a caller pinned to one side, as ids we recognise.
+ * The players a caller pinned to one side, as ids we recognize.
  *
  * Bounded and deduplicated here rather than trusted, for the same reason the
  * position list is: a caller cannot widen the search, or the work it costs, by
@@ -229,7 +229,7 @@ function readPlayerIds(value: unknown): string[] | null {
 }
 
 /**
- * The position groups a caller named, normalised and deduplicated.
+ * The position groups a caller named, normalized and deduplicated.
  *
  * Bounded by the six that exist, so a caller cannot widen the search by posting
  * a list, and returned in the fixed display order so the same two groups always

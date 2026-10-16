@@ -8,7 +8,7 @@
  * unchecked, our own checkout endpoint becomes a laundering service for
  * somebody else's link, and the link arrives wearing Stripe's padlock.
  *
- * So the path is not sanitised, it is RESOLVED against our own origin and then
+ * So the path is not sanitized, it is RESOLVED against our own origin and then
  * checked against it. Anything that resolves anywhere else, a scheme, a host, a
  * protocol-relative reference, a backslash browsers fold into a slash, falls
  * back to the home page. Pure, and tested, because the failure is silent when
@@ -61,7 +61,7 @@ export function safeReturnPath(input: unknown, siteOrigin: string): string {
     const out = `${resolved.pathname}${resolved.search}`;
 
     // The OUTPUT is checked for a protocol-relative form as well as the input.
-    // `/..//evil.example` passes every check above and normalises to the
+    // `/..//evil.example` passes every check above and normalizes to the
     // pathname `//evil.example`, which is same-origin here only because the one
     // caller prefixes an absolute origin. Handed to a `Location` header or an
     // `href` by any future caller, that string is a live open redirect. This

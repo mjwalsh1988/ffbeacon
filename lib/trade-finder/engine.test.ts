@@ -267,7 +267,7 @@ describe("findTrades", () => {
   it("brings back picks when told to collect them", () => {
     const picks = run({ goal: "add-picks" }).suggestions;
     expect(picks.length).toBeGreaterThan(0);
-    // The goal is a constraint, so EVERY suggestion honours it, not just the
+    // The goal is a constraint, so EVERY suggestion honors it, not just the
     // top one. A reader who asked for picks never sees a deal without one.
     for (const s of picks) expect(s.mine.pickCountDelta).toBeGreaterThan(0);
   });
@@ -290,7 +290,7 @@ describe("findTrades", () => {
     }
   });
 
-  it("honours the shape goals", () => {
+  it("honors the shape goals", () => {
     expect(run({ goal: "consolidate" }).suggestions.length).toBeGreaterThan(0);
     expect(run({ goal: "split-assets" }).suggestions.length).toBeGreaterThan(0);
     for (const s of run({ goal: "consolidate" }).suggestions) {
@@ -918,7 +918,7 @@ describe("findTrades rationale", () => {
  * has not said the pick riding along with him is unwelcome. What the tests below
  * pin is that the named group is always THERE, on the side it was named for,
  * and that the two asks compose with the goals and with a named player rather
- * than quietly cancelling each other.
+ * than quietly canceling each other.
  */
 describe("findTrades position asks", () => {
   it("brings back the position that was asked for", () => {
@@ -1025,7 +1025,7 @@ describe("findTrades position asks", () => {
   });
 
   it("changes nothing when no position is named", () => {
-    // The empty case has to be byte-identical to the old behaviour, or every
+    // The empty case has to be byte-identical to the old behavior, or every
     // reader who never touches the control gets a different engine.
     const before = run().suggestions.map((s) => s.key);
     const after = run({ wantPositions: [], givePositions: [] }).suggestions.map(
@@ -1130,7 +1130,7 @@ describe("packages of named players", () => {
     }
   });
 
-  it("honours a pin on BOTH sides at once", () => {
+  it("honors a pin on BOTH sides at once", () => {
     const { suggestions } = run({
       targetPlayerIds: ["th-te1"],
       offerPlayerIds: ["my-rb3"],
@@ -1245,7 +1245,7 @@ describe("suggestions weighted by the reader's Power Pulse standing", () => {
   it("offers a rebuilder draft capital and does not offer it to a contender", () => {
     // A pick coming back is the shape of a rebuild and noise on a roster trying
     // to win this season, and the acquirable pool has always known that. This
-    // locks the behaviour down now that the reader's standing is what decides
+    // locks the behavior down now that the reader's standing is what decides
     // it end to end.
     expect(
       topFor("rebuilder").suggestions.some((s) => s.mine.pickCountDelta > 0),
@@ -1474,7 +1474,7 @@ describe("the dynasty strategy toggle", () => {
     // Absent means "we have not been told", never "contender". A caller that
     // has not thought about it still gets the stance-weighted ranking that
     // shipped before the toggle, which is what stops this from being a silent
-    // behaviour change for every other consumer of the engine.
+    // behavior change for every other consumer of the engine.
     const unset = run({ teams: league().map((t) => ({ ...t, pulse: pulse() })) });
     expect(unset.suggestions.length).toBeGreaterThan(0);
     expect(unset.suggestions.some((s) => (s.mine.lineupDelta ?? 0) <= 0)).toBe(true);

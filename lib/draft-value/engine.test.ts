@@ -577,7 +577,7 @@ describe("scoreFormat", () => {
     expect(scored.map((s) => s.beaconPick).sort((x, y) => (x as number) - (y as number))).toEqual([
       3, 20, 140,
     ]);
-    // Our order is b, c, a, so b takes pick 3 and the market's pick-20 favourite
+    // Our order is b, c, a, so b takes pick 3 and the market's pick-20 favorite
     // slides to 20 for us.
     expect(scored.find((s) => s.playerId === "b")?.beaconPick).toBe(3);
     expect(scored.find((s) => s.playerId === "a")?.beaconPick).toBe(140);

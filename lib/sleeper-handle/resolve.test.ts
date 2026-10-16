@@ -184,7 +184,7 @@ describe("resolveSleeperViewer", () => {
     expect(await resolveSleeperViewer(client, undefined)).toBeNull();
   });
 
-  it("still honours the URL for a guest", async () => {
+  it("still honors the URL for a guest", async () => {
     const { client } = stubClient({ user: null });
     const viewer = await resolveSleeperViewer(client, "someone");
     expect(viewer).toMatchObject({ username: "someone", source: "url" });
@@ -344,7 +344,7 @@ describe("the pre-0268 backfill reaches the league deep views", () => {
 
     const viewer = await resolveSleeperViewer(client, undefined);
     // The handle still works; only the id-first match is unavailable, which is
-    // the pre-existing display-name behaviour rather than a broken page.
+    // the pre-existing display-name behavior rather than a broken page.
     expect(viewer?.username).toBe("beacon");
     expect(viewer?.sleeperUserId).toBeNull();
     expect(updates).toHaveLength(0);

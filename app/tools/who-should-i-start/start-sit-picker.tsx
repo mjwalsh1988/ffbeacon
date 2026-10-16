@@ -16,7 +16,7 @@
  * mirrors initialPlayers, so a page loaded with ?p= already renders its
  * players as chips with no script required. Adding a NEW player needs the
  * search fetch, which needs JavaScript, so the <noscript> block swaps in a
- * plain labelled text field that accepts a comma-separated list of slugs or
+ * plain labeled text field that accepts a comma-separated list of slugs or
  * names as p, matching the week picker's noscript pattern in
  * week-select.tsx. Preserved params (week, league, roster, format, source,
  * and anything else the page is holding) ride along as hidden inputs either
@@ -362,7 +362,7 @@ function AddPlayerCombobox({
   inputRef: React.RefObject<HTMLInputElement | null>;
   atMax: boolean;
   maxReasonId: string;
-  /** Slugs already picked, greyed out in the results so a reader cannot double-add by clicking. */
+  /** Slugs already picked, grayed out in the results so a reader cannot double-add by clicking. */
   excludeSlugs: string[];
   onCommit: (result: SearchResult) => void;
 }) {
@@ -387,7 +387,7 @@ function AddPlayerCombobox({
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    let canceled = false;
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
@@ -396,18 +396,18 @@ function AddPlayerCombobox({
           headers: FETCH_HEADERS,
         });
         const data = (await res.json()) as { results?: SearchResult[] };
-        if (!cancelled) {
+        if (!canceled) {
           setResults(data.results ?? []);
           setActiveIdx(NO_ACTIVE_OPTION);
         }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!canceled) setResults([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!canceled) setLoading(false);
       }
     }, 250);
     return () => {
-      cancelled = true;
+      canceled = true;
       clearTimeout(timer);
     };
   }, [trimmed, longEnough]);

@@ -86,13 +86,13 @@ describe("sideQuality package discounts", () => {
 });
 
 describe("compareTradeQuality", () => {
-  it("favours one premium asset over a raw-heavier package of lesser pieces", () => {
+  it("favors one premium asset over a raw-heavier package of lesser pieces", () => {
     const cmp = compareTradeQuality([5498], [2190, 2164, 1531], POOL, CONFIG);
     expect(cmp.b.rawTotal).toBeGreaterThan(cmp.a.rawTotal);
     expect(cmp.favoured).toBe("a");
   });
 
-  it("still favours a package when its pieces are genuinely strong", () => {
+  it("still favors a package when its pieces are genuinely strong", () => {
     const cmp = compareTradeQuality([5498], [4900, 4600], POOL, CONFIG);
     expect(cmp.favoured).toBe("b");
   });
@@ -125,13 +125,13 @@ describe("solveTradeBalance", () => {
 
   it("balances: adding the solved asset really does level the two sides", () => {
     const result = solveTradeBalance([5498], [2190, 2164, 1531], POOL, CONFIG);
-    const levelled = compareTradeQuality(
+    const leveled = compareTradeQuality(
       [5498],
       [2190, 2164, 1531, result.balancingAsset],
       POOL,
       CONFIG,
     );
-    expect(levelled.a.qualityTotal).toBeCloseTo(levelled.b.qualityTotal, 3);
+    expect(leveled.a.qualityTotal).toBeCloseTo(leveled.b.qualityTotal, 3);
   });
 
   it("applies nothing to a one-for-one, however wide the value gap", () => {
@@ -174,7 +174,7 @@ describe("solveTradeBalance", () => {
     expect(result.applied).toBe(true);
   });
 
-  it("needs no adjustment when the favoured side already leads on raw value", () => {
+  it("needs no adjustment when the favored side already leads on raw value", () => {
     const result = solveTradeBalance([9000], [10, 10, 10], POOL, CONFIG);
     expect(result.favoured).toBe("a");
     expect(result.applied).toBe(false);

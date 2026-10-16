@@ -51,7 +51,7 @@ function row(
 }
 
 describe("pickPairSource", () => {
-  it("honours the requested source when it covers both formats", () => {
+  it("honors the requested source when it covers both formats", () => {
     const registry = [source("a", { is_default: true }), source("b")];
     expect(pickPairSource(registry, PAIR, "b")).toBe("b");
   });

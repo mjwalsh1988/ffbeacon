@@ -212,7 +212,7 @@ describe("buildReason", () => {
     );
   });
 
-  it("always ends in a full stop and starts capitalised", () => {
+  it("always ends in a full stop and starts capitalized", () => {
     const reason = buildReason(input({ projectedPoints: 8 }));
     expect(reason.endsWith(".")).toBe(true);
     expect(reason[0]).toBe(reason[0].toUpperCase());

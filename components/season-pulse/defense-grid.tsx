@@ -6,7 +6,7 @@
  *
  * EVERY CELL PRINTS ITS NUMBER AND ITS RANK. The tint repeats the rank (green
  * for a defense that gives up a lot to the position, red for one that gives up
- * little) and never stands in for it, so the grid reads the same in greyscale
+ * little) and never stands in for it, so the grid reads the same in grayscale
  * and to a screen reader.
  *
  * SORTABLE BY COLUMN. Each column header is a button; aria-sort on the header

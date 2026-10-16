@@ -145,7 +145,7 @@ export function parseWeight(value: string | undefined): number | null {
  *     the raw one. KNOWN_POSITIONS lists DE before LB, so before this rule a
  *     player Sleeper files as position "DE" with fantasy_positions ["LB"] was
  *     stored as "DE" (Azur Kamara and Kendall Donnerson, 2026-09-25), which no
- *     slot map, isDefender check or position filter recognises.
+ *     slot map, isDefender check or position filter recognizes.
  *   - Otherwise the raw label is folded (DE to DL, OLB to LB, CB to DB) through
  *     lib/site.ts foldDefenderPosition, the one copy of that mapping.
  *

@@ -31,8 +31,8 @@ import { LedgerDetail } from "./ledger-detail";
 import { games, pct, pts, record, summarySentence } from "./format";
 
 /**
- * Colour for the efficiency figure. Always paired with the number itself, and
- * with a rank in the accessible name, so colour is never the only carrier.
+ * Color for the efficiency figure. Always paired with the number itself, and
+ * with a rank in the accessible name, so color is never the only carrier.
  */
 function efficiencyTone(value: number | null): string {
   if (value === null) return "text-ink-subtle";

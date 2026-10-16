@@ -224,7 +224,7 @@ async function loadBoard(args: {
   const players: TrackerPlayer[] = [];
   for (const row of rankingRows) {
     const p = row.players;
-    // The same coercion the position colours use, so a position that survives
+    // The same coercion the position colors use, so a position that survives
     // to the badge lookup always has a class to find.
     const position = normalizePositionColor(p.position);
     if (!position) continue; // IDP and other non-draftable rows

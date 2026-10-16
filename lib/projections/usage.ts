@@ -4,7 +4,7 @@
  *
  * WHY SHARES AND NOT COUNTS: a target COUNT moves with a team's pass volume,
  * which moves with game script, opponent, and injuries to other people. A
- * target SHARE is a player's job, and the published stabilisation research
+ * target SHARE is a player's job, and the published stabilization research
  * says a share reads as signal rather than noise by four to six games. The
  * half life below puts that finding directly into the weighting: at a four
  * week half life, the last four games carry about as much weight as

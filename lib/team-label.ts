@@ -106,7 +106,7 @@ export function ownerLine(
 /**
  * The pairing for callers that treat "we know nothing about this manager" as a
  * distinct case and skip the label entirely, rather than printing a roster
- * number nobody would recognise.
+ * number nobody would recognize.
  */
 export function formatTeamLabelOrNull(
   input: Omit<TeamLabelInput, "sleeperRosterId">,

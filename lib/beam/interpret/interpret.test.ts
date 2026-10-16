@@ -1,7 +1,7 @@
 /**
  * Interpretation tests. Pure, no database.
  *
- * These cover the layer that has all the judgement in it: normalization, the
+ * These cover the layer that has all the judgment in it: normalization, the
  * verb rule, entity extraction, and capability scoring. Player resolution and
  * the capabilities themselves need real rows and are covered by the smoke run
  * (npm run beam:smoke), which asks real questions against the real database.
@@ -175,7 +175,7 @@ describe("capability routing", () => {
     ).toBe("player.compare.stat");
   });
 
-  it("routes a two-player judgement question to the verdict", () => {
+  it("routes a two-player judgment question to the verdict", () => {
     expect(
       topReading("who is better for dynasty garrett wilson or drake london"),
     ).toBe("player.compare.verdict");

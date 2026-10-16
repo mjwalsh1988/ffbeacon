@@ -47,7 +47,7 @@ import {
  * /guides/dynasty-strategy
  *
  * How to run a dynasty roster over several seasons, written in Michael's first
- * person for a reader who has just realised their team is neither good enough
+ * person for a reader who has just realized their team is neither good enough
  * to win this year nor bad enough to get a top pick.
  *
  * WHY THIS PAGE. Search Console (90 days to 2026-09-18) shows 46 different
@@ -69,12 +69,12 @@ import {
  * early, mid or late slot is lib/signal-check/values.ts, as the trade guide
  * already says.
  *
- * THREE KINDS OF NUMBER, EACH LABELLED WHERE IT APPEARS. One figure is LIVE
+ * THREE KINDS OF NUMBER, EACH LABELED WHERE IT APPEARS. One figure is LIVE
  * (lib/guides/dynasty-age-market.ts, in the reader's resolved source and a
  * dynasty format matched to theirs). Some are PUBLISHED, quoted from named
  * studies that the Sources section links: 4for4 and ESPN on age curves,
  * Fantasy Life on receivers, PFF on quarterbacks, Dynasty Nerds on rookie pick
- * hit rates, Footballguys on pick timing, and Sleeper's own help centre on taxi
+ * hit rates, Footballguys on pick timing, and Sleeper's own help center on taxi
  * squads. Each was read at the source before it was quoted. EVERY OTHER NUMBER
  * IS INVENTED AND SAYS SO.
  *
@@ -1178,10 +1178,10 @@ function RosterSection() {
         </Link>{" "}
         is roster space for young players that does not count against your
         roster limit. League Pulse reads Sleeper leagues, so here is how Sleeper
-        runs it, from its own help centre:
+        runs it, from its own help center:
       </Para>
       <GuideTable
-        caption="How Sleeper's taxi squad settings work, from Sleeper's help centre. Your commissioner chooses the values."
+        caption="How Sleeper's taxi squad settings work, from Sleeper's help center. Your commissioner chooses the values."
         head={["Setting", "How it works"]}
         rows={[
           [
@@ -1462,7 +1462,7 @@ const SOURCES: { name: string; detail: string; href: string }[] = [
   },
   {
     name: "Sleeper, How do taxi squads work",
-    detail: "Sleeper's help centre. The taxi squad settings in Lesson 8.",
+    detail: "Sleeper's help center. The taxi squad settings in Lesson 8.",
     href: "https://support.sleeper.com/en/articles/3640482-how-do-taxi-squads-work",
   },
 ];

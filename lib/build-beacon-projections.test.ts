@@ -6,7 +6,7 @@
  * rather than dropped with no evidence it happened.
  *
  * The rest of this file is deliberately untested here, matching its own
- * header: it is "the I/O half", and every judgement it makes lives in
+ * header: it is "the I/O half", and every judgment it makes lives in
  * lib/projections/, which is pure and gets its own test files (engine.test.ts
  * in particular pins the sleeperPlayerId preference this test exercises end
  * to end). This file is the smallest fake Supabase client that satisfies one

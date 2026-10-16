@@ -422,7 +422,7 @@ async function lookupDirect(
   // BEAM answered confidently about the wrong player.
   //
   // search_name ascending is deterministic, so the same question always gets
-  // the same candidate set, which also makes the behaviour reproducible in a
+  // the same candidate set, which also makes the behavior reproducible in a
   // bug report.
   const { data, error } = await db
     .from("players")

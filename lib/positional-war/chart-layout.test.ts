@@ -147,7 +147,7 @@ describe("fitAxisLabels", () => {
   it("keeps the replacement label and drops the decimals it would smear into", () => {
     const kept = fitAxisLabels(wide, 10, 4, isReplacement);
     expect(kept.map((t) => t.label)).toContain("Replacement level");
-    // "Replacement level" is ~94 units wide at fontSize 10, centred on x=60,
+    // "Replacement level" is ~94 units wide at fontSize 10, centered on x=60,
     // so it covers 13 to 107 and swallows both 0.5 and 1.5.
     expect(kept.map((t) => t.label)).not.toContain("0.5");
     expect(kept.map((t) => t.label)).not.toContain("1.5");

@@ -93,7 +93,7 @@ function DeltaLine({
  *
  * TWO PULSING DOTS AND A WORD, and the word is the part that matters. The dots
  * are `aria-hidden` decoration; "Today" is real text, so a reader who cannot
- * see the animation still learns why that row is empty. Colour is not carrying
+ * see the animation still learns why that row is empty. Color is not carrying
  * it either.
  *
  * `motion-safe:` on the animation rather than `motion-reduce:animate-none`, so

@@ -40,7 +40,7 @@ describe("resolveCadence in season", () => {
     expect(easternParts(after.period!.periodEnd)).toMatchObject({ month: 11, day: 10, hour: 9 });
   });
 
-  it("honours a different close weekday and hour", () => {
+  it("honors a different close weekday and hour", () => {
     const out = resolveCadence(STATE, { ...SETTINGS, runWeekday: 3, runHourEt: 6 }, easternEpoch(2026, 9, 16, 7));
     expect(out.period?.week).toBe(1);
     expect(easternParts(out.period!.periodEnd)).toMatchObject({ weekday: 3, hour: 6 });

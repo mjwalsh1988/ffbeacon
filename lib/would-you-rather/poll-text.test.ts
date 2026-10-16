@@ -324,7 +324,7 @@ describe("leagueFormatBullets", () => {
     ]);
   });
 
-  it("counts kicker and defence as starting spots, since it prints them", () => {
+  it("counts kicker and defense as starting spots, since it prints them", () => {
     // The site's own "Start N" chip leaves them out. Here the lineup is printed
     // beside the count, so a reader adding the line up has to get the same
     // number back.

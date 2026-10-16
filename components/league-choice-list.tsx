@@ -75,7 +75,7 @@ export function describeChoice(choice: LeagueChoice): string {
  *
  * Native radios rather than `role="radio"` on divs. Arrow-key movement,
  * checked state and form participation all come for free from the platform,
- * so the keyboard behaviour is not worse than the select it replaces. Rolling
+ * so the keyboard behavior is not worse than the select it replaces. Rolling
  * our own would mean reimplementing all three and getting one of them wrong.
  *
  * ABSOLUTE RULE FOR CALLERS: `onChange` MUST NOT trigger expensive or

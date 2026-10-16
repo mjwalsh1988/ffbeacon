@@ -11,7 +11,7 @@
  * The replacement is the lineup itself. A defender is protected when either
  * holds:
  *
- *   1. The optimiser seats him in at least half of the remaining regular-season
+ *   1. The optimizer seats him in at least half of the remaining regular-season
  *      weeks, on the same rest-of-season projections the cut list already
  *      reads, filled with the same slot map the page uses.
  *   2. He ranks inside this roster's starting count at his primary position on

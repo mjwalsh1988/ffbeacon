@@ -52,7 +52,7 @@ describe("guards", () => {
     expect(isTrackingMode("everyone")).toBe(false);
   });
 
-  it("recognises a uuid and nothing else", () => {
+  it("recognizes a uuid and nothing else", () => {
     expect(isUuid("11111111-1111-1111-1111-111111111111")).toBe(true);
     expect(isUuid("11111111-1111-1111-1111-11111111111")).toBe(false);
     expect(isUuid("not-a-uuid")).toBe(false);

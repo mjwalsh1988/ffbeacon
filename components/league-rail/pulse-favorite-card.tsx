@@ -14,7 +14,7 @@
  * honest reason (leagues.power_pulse_status).
  *
  * Server component: pure presentation over data resolved by the caller. Every
- * figure is paired with a word, so nothing here is carried by colour alone.
+ * figure is paired with a word, so nothing here is carried by color alone.
  */
 
 import Link from "next/link";

@@ -51,7 +51,7 @@ type Client = SupabaseClient<Database>;
 export type SuggestionGrade = {
   /** "Even trade", "Slight edge to ...", whatever the ruleset renders. */
   verdictLabel: string;
-  /** Which side the grader favours, from the reader's point of view. */
+  /** Which side the grader favors, from the reader's point of view. */
   favours: "you" | "them" | "neither";
   confidenceLabel: string | null;
   tradeShapeLabel: string | null;

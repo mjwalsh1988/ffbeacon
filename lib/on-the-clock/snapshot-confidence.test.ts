@@ -35,7 +35,7 @@ describe("deriveSnapshotConfidence and the projection vintage", () => {
     ).toBe("medium");
   });
 
-  it("does not penalise a snapshot that has no projections at all", () => {
+  it("does not penalize a snapshot that has no projections at all", () => {
     // A projection outage freezes an empty pulse on purpose, and the awards that
     // depend on it stay honestly pending. That is a different thing from stale
     // projections and must not be graded as though it were.

@@ -80,7 +80,7 @@ plan says so rather than inventing it.
 
 So there are three honest moves, and we make all three.
 
-**A. Draft pace, labelled as a league fact.** From `start_time`, `last_picked`
+**A. Draft pace, labeled as a league fact.** From `start_time`, `last_picked`
 and the pick count we get seconds per pick for the whole draft, and from
 `settings.pick_timer` we get what share of the allowed clock the room used. That
 is a fact about the ROOM, not about one manager. The UI says it in those words:
@@ -108,7 +108,7 @@ poll time. "Was on autopick in 2 of their last 5 drafts" is a real engagement
 signal and it is only obtainable while the draft is running.
 
 If B and C have no rows for a manager, the draft clock card shows what it has
-(the league pace, labelled as such) and says plainly that per-pick timing starts
+(the league pace, labeled as such) and says plainly that per-pick timing starts
 accumulating from the first live draft we watch them in. It does not show an
 empty chart and it does not guess.
 
@@ -520,7 +520,7 @@ Metrics fall into three buckets, and every one of them declares which it is in
   and redraft each get their own, and All shows both.
 - **Type-exclusive.** Only meaningful in one game, and absent in the other
   rather than shown as zero:
-  - Dynasty only: pick trading behaviour, age lean, startup versus rookie draft
+  - Dynasty only: pick trading behavior, age lean, startup versus rookie draft
     split, rookie pick usage, the rebuild-or-contend read.
   - Redraft only: in-season churn rate as a share of the roster, waiver
     dependence, and the fact that every team is win-now, which is already how
@@ -561,7 +561,7 @@ Large accent numbers: win rate, championships, playoff rate.
 - Positional shape of their first three rounds, across all drafts.
 - Rookie versus veteran lean in dynasty startups.
 - Keeper usage where the league has keepers.
-- Draft pace, labelled as a league fact per 2.3A.
+- Draft pace, labeled as a league fact per 2.3A.
 - Per-pick clock and autopick rate when `draft_pick_observations` has rows, with
   sample size and error bar stated on the card.
 
@@ -578,7 +578,7 @@ a trade-in counts as a deliberate acquisition.
 
 Two lists:
 
-- **Favourites**: highest exposure relative to how commonly that player is
+- **Favorites**: highest exposure relative to how commonly that player is
   rostered across every league in our database. A player everyone rosters is not
   a preference.
 - **Avoids**: players with high league-wide exposure this manager has never
@@ -608,7 +608,7 @@ Derived from those grades:
 - Age lean: net value flow weighted by player age. This is the dynasty tell. A
   buyer of 22-year-olds and a buyer of proven production want very different
   offers.
-- Pick behaviour: do they trade picks at all, and do they buy or sell them.
+- Pick behavior: do they trade picks at all, and do they buy or sell them.
 - Who they trade with most.
 
 **"Who they overpay for"** is the intersection of two facts already computed
@@ -630,7 +630,7 @@ Ledger does. Never silently dropped, never priced as zero.
 - Lineup efficiency, best-lineup record and wins left on the bench, read from
   `league_manager_ledger_cache` per 4.4, with the covered-league count stated.
 - Abandonment signal: league-seasons ending with several weeks of zero moves and
-  an incomplete lineup. Reported as a count, not as a judgement.
+  an incomplete lineup. Reported as a count, not as a judgment.
 
 ### 6.7 How to deal with them
 
@@ -737,7 +737,7 @@ Premium, with mobile as the top priority.
 - Every section leads with one large accent number and a short subtitle. That is
   the premium tell: a figure big enough to read across a room, with a sentence
   under it saying what it means in plain words.
-- Gradient section headers alternate so a long report does not read as one grey
+- Gradient section headers alternate so a long report does not read as one gray
   column.
 - Entry animations are short, respect `prefers-reduced-motion`, and never gate
   content behind an animation finishing.
@@ -1070,8 +1070,8 @@ counts these rows instead, and the enqueue RPC links to the in-flight job rather
 than duplicating it.
 
 **`player_roster_exposure` (0258)** exists because the affinity section ranks
-favourites against how commonly a player is rostered generally, and without that
-denominator every manager's favourites list is the same list of good players.
+favorites against how commonly a player is rostered generally, and without that
+denominator every manager's favorites list is the same list of good players.
 The loader correctly refused to compute it per report (the only options were one
 query per player or a full scan of every roster on the site), so it is a
 pre-calculated table rebuilt on the existing nightly derived job. It iterates no
@@ -1090,7 +1090,7 @@ the abandonment quiet-week floor) and `wording` (ten thresholds that decide whic
 word a figure earns) were both extracted during the build, each time because an
 agent shipped them as local constants and said so, and each time because they are
 exactly what the "no hardcoded limit" rule is about: a number that decides
-whether we call somebody "faded" is a judgement about what we are willing to say
+whether we call somebody "faded" is a judgment about what we are willing to say
 about a person.
 
 `draft.pickObservationGapMs` was REMOVED after review: the observation gap is

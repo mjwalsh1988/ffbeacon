@@ -605,8 +605,8 @@ function TierCell({ row }: { row: RankingsRow }) {
  * no tier at all. The column was highlighting gaps no ring marked and leaving
  * ringed rows plain.
  *
- * The fact is spoken as well as toned, since colour is not information a
- * screen reader or a colour-blind reader receives.
+ * The fact is spoken as well as toned, since color is not information a
+ * screen reader or a color-blind reader receives.
  */
 function GapCell({ row }: { row: RankingsRow }) {
   const gap = row.gapToNext ?? null;
@@ -827,10 +827,10 @@ function MetricTile({
  *
  * These cells used to be a `<span aria-label="Moved up 3 positions">` wrapping
  * an `<span aria-hidden="true">3</span>`. Two things are wrong with that.
- * `aria-label` is only honoured on elements with a widget or structural role,
+ * `aria-label` is only honored on elements with a widget or structural role,
  * and a bare `<span>` has neither, so the label was liable to be dropped and
  * the only remaining text was hidden: the cell could read as empty. And even
- * where it was honoured, hiding the visible number means a reader who points
+ * where it was honored, hiding the visible number means a reader who points
  * at it finds nothing and falls back to an ancestor.
  *
  * So every figure below is ONE REAL TEXT NODE, never hidden, with only the

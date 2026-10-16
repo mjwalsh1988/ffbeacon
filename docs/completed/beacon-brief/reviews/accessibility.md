@@ -213,7 +213,7 @@ purple border and fill, but `aria-current` is set only on an exact pathname
 match. On /admin/brief-desk/editions/[id] the Editions chip looks current and
 announces as an ordinary link. The comment at line 9 claims the chip "stays
 active on a review page", which is true for the eye and false for the ear. This
-is state carried by colour alone.
+is state carried by color alone.
 
 Fix: pass `aria-current={active ? "page" : undefined}` at line 34, matching the
 variable the class already uses.
@@ -327,7 +327,7 @@ pages, carrying the page's own filter as a hidden field.
   value-movers.tsx lines 78 to 104 and injury-timeline.tsx lines 102 to 130. Both
   pass `titleLevel={3}`, which is right under the edition's h2 sections. Both
   summaries state a conclusion ("the biggest rise is X at +Y"), not a shape.
-- Colour is never the only channel. Value-movers bars carry the signed figure as
+- Color is never the only channel. Value-movers bars carry the signed figure as
   text beside every bar (line 135); the Relay status chips in the admin list
   carry the word (relays-manager.tsx line 291); the callout's tone is paired with
   its caption text.

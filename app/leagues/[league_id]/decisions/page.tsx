@@ -176,7 +176,7 @@ export default async function DecisionsPage({
   if (!league) notFound();
 
   // Independent of each other, so they run together rather than in a queue.
-  // `resolveLeagueContext` is the one that depends on its neighbour's result.
+  // `resolveLeagueContext` is the one that depends on its neighbor's result.
   const [{ otherLeagues }, resolvedSource] = await Promise.all([
     loadLeagueHeaderActions(
       supabase,

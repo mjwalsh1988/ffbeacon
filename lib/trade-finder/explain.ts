@@ -526,7 +526,7 @@ export function buildPitch(params: {
   // gap on two bench pieces, and the sentence has to be true in both cases.
   //
   // When they ARE behind by a visible margin, this says nothing rather than
-  // apologising for it. Pointing out the shortfall in the message that proposes
+  // apologizing for it. Pointing out the shortfall in the message that proposes
   // the trade argues against the trade.
   if (params.valueGap <= RANK_THRESHOLDS.EVEN_GAP) {
     reasons.push("On value it is close to even both ways.");

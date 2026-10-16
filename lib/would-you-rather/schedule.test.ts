@@ -52,7 +52,7 @@ describe("isPostHour", () => {
     expect(isPostHour(noon, [])).toBe(false);
   });
 
-  it("honours a once-a-day schedule at an arbitrary hour", () => {
+  it("honors a once-a-day schedule at an arbitrary hour", () => {
     // The admin asked for 6pm only. 22:00Z is 6pm EDT.
     expect(isPostHour(new Date("2026-08-28T22:00:00Z"), [18])).toBe(true);
     expect(isPostHour(new Date("2026-08-28T12:00:00Z"), [18])).toBe(false);

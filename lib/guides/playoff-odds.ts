@@ -15,7 +15,7 @@
  *     them has to lose), which is one reason the real tool simulates instead.
  *   - Your remaining games are won with a fixed chance each week.
  *   - Ties in the standings are broken by a coin flip. Real leagues use points
- *     for, which favours the stronger team, so this slightly understates a good
+ *     for, which favors the stronger team, so this slightly understates a good
  *     team and slightly flatters a weak one.
  *   - No median game, no divisions, no byes: one standings table and one line.
  *

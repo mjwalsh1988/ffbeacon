@@ -1,7 +1,7 @@
 /**
  * Build the FF Beacon projections and store them.
  *
- * The I/O half. Every judgement lives in lib/projections/, which is pure and
+ * The I/O half. Every judgment lives in lib/projections/, which is pure and
  * unit tested; this file only loads, joins, and writes.
  *
  * WHAT IT LOADS
@@ -100,7 +100,7 @@ export type BeaconProjectionsResult = {
   /** Rows written with source = 'ffbeacon'. */
   rowsWritten: number;
   /** Rows where our own model actually produced the number. */
-  modelled: number;
+  modeled: number;
   /** Rows copied through from Sleeper, by why. */
   mirrored: Record<string, number>;
   /** Sleeper rows the window contained. */
@@ -171,7 +171,7 @@ export async function runBuildBeaconProjections(
       | "skipped"
       | "reason"
       | "rowsWritten"
-      | "modelled"
+      | "modeled"
       | "mirrored"
       | "sleeperRows"
       | "statRows"
@@ -199,7 +199,7 @@ export async function runBuildBeaconProjections(
 
   const empty = {
     rowsWritten: 0,
-    modelled: 0,
+    modeled: 0,
     mirrored: {},
     sleeperRows: 0,
     statRows: 0,
@@ -360,14 +360,14 @@ export async function runBuildBeaconProjections(
     .join(" ");
   console.log(
     `  beacon projections ${season} wk${fromWeek}-${toWeek}: ${inserts.length} written ` +
-      `(${result.modelled} modelled, ${cleared} stale cleared, ${droppedNoSleeperId} dropped) from ${sleeperRows.length} sleeper rows, ` +
+      `(${result.modeled} modeled, ${cleared} stale cleared, ${droppedNoSleeperId} dropped) from ${sleeperRows.length} sleeper rows, ` +
       `${stats.length} stat rows, ${environment.size} environments [${timingSummary}]`,
   );
 
   return finish({
     skipped: false,
     rowsWritten: inserts.length,
-    modelled: result.modelled,
+    modeled: result.modeled,
     mirrored: result.mirrored as unknown as Record<string, number>,
     sleeperRows: sleeperRows.length,
     statRows: stats.length,
@@ -512,7 +512,7 @@ async function loadStats(
   // rows here in the loop below, so it paged roughly 81 times across the wire
   // to keep 24 pages' worth of data.
   //
-  // `players!inner(position)` pushes that filter into Postgres. The behaviour
+  // `players!inner(position)` pushes that filter into Postgres. The behavior
   // is IDENTICAL: the discarded rows were exactly the non-projectable ones, and
   // they contributed nothing to a team denominator either, because team
   // offensive snaps is a MAX over the same projectable set and the target,
@@ -645,7 +645,7 @@ async function loadEnvironment(
       impliedTotal:
         row.away_implied_total === null ? null : Number(row.away_implied_total),
       // The away side's spread is the negation of the home side's, so a home
-      // favourite (negative) makes the away team an underdog (positive). Doing
+      // favorite (negative) makes the away team an underdog (positive). Doing
       // this here rather than storing a second column keeps one published
       // number as one stored number.
       spread: homeSpread === null ? null : -homeSpread,

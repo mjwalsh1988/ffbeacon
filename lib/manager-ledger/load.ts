@@ -344,7 +344,7 @@ export async function loadLedgerDraftPicks(
  *
  * One read for the union of ids across matchups, transactions and the draft,
  * rather than three. `loadPlayers` drops anything whose position is not one the
- * lineup optimiser understands, which is exactly the set this model can grade.
+ * lineup optimizer understands, which is exactly the set this model can grade.
  */
 export async function loadLedgerPlayers(
   supabase: ServiceClient,

@@ -16,7 +16,7 @@
  * THE WINDOWS ARE EASTERN AND THE LABELS SAY SO. The cron ticks every fifteen
  * minutes; these weekdays and hours decide which of those ticks post. Every
  * time is resolved in America/New_York, which is what the cron reads, so the
- * label and the behaviour cannot drift apart at a daylight-saving boundary.
+ * label and the behavior cannot drift apart at a daylight-saving boundary.
  *
  * Accessibility: every control has a real label tied by id, each group is a
  * fieldset with a legend, the save result is announced through a polite live

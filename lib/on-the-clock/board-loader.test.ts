@@ -71,7 +71,7 @@ function mockSupabase(opts: {
 
   function builder(table: string) {
     const state: { selectArg?: string; eq: Record<string, unknown> } = { eq: {} };
-    // player_value_history honours its captured_at / player_id filters, newest
+    // player_value_history honors its captured_at / player_id filters, newest
     // first, so the loader's newest-capture read and its per-player fallback
     // both see real rows.
     const valueRows = () =>

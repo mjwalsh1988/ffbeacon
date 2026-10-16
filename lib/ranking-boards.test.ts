@@ -65,7 +65,7 @@ describe("tier breaks", () => {
     expect(tierRanges([2], 0)).toEqual([]);
   });
 
-  it("normalises: sorted, unique, inside the board, and reports what fell off", () => {
+  it("normalizes: sorted, unique, inside the board, and reports what fell off", () => {
     expect(normalizeTierBreaks([10, 2, 2, 0, -1, 1.5, "x", null], 12)).toEqual({
       breaks: [2, 10],
       removed: [],

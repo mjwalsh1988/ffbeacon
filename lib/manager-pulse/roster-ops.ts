@@ -78,7 +78,7 @@
  *   `MOVE_SHAPE_MIN_MOVES` total moves the shape returns null, because a shape
  *   read off three moves is a shape read off noise, not a pattern.
  *
- * ABANDONMENT IS A COUNT, NOT A JUDGEMENT
+ * ABANDONMENT IS A COUNT, NOT A JUDGMENT
  *   `abandonmentCount[lens]` counts league-seasons (from `weeklyMoves`, since
  *   that is the only array carrying both a per-week move history and
  *   `weeksWithIncompleteLineup`) that end with BOTH a run of at least
@@ -113,9 +113,9 @@ const LENSES: LeagueLens[] = ["all", "dynasty", "redraft"];
 
 /*
  * The move-shape thresholds and the abandonment quiet-week floor used to be
- * constants here. They are settings now (`settings.behaviour`), because they
+ * constants here. They are settings now (`settings.behavior`), because they
  * are exactly what this feature's settings row exists for: the number that
- * decides whether we call somebody "front-loaded" or "faded" is a judgement
+ * decides whether we call somebody "front-loaded" or "faded" is a judgment
  * about what we are willing to say about a person, and every such number in
  * Manager Pulse is adjustable without a deploy. See the ABSOLUTE rule in
  * default-settings.ts.

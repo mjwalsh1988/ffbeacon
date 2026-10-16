@@ -28,7 +28,7 @@ import {
  *   sr-only sentence carries the identical facts for the ear. Every figure
  *   appears in both. Neither is a summary of the other.
  *
- * WHY THE SWAPS AND THE TOTAL ARE LABELLED SEPARATELY
+ * WHY THE SWAPS AND THE TOTAL ARE LABELED SEPARATELY
  *   Each swap is worth what it is worth on its own, against the lineup exactly
  *   as it stands. Take the first one and the second one is worth something
  *   different, because the player it was going to replace is now somewhere else

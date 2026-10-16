@@ -44,7 +44,7 @@ every failure is a structured result.
 
 **A webhook, and a receipt ledger.** This reversed an earlier decision, and the
 reason is worth recording. The first build had no webhook at all: a donation
-fulfils nothing, so there was no entitlement to grant and no state to reconcile,
+fulfills nothing, so there was no entitlement to grant and no state to reconcile,
 and Stripe's own automatic receipt covered the only message a donor gets. We now
 send that receipt ourselves, in the FF Beacon email shell, because it is the one
 moment a donor is most glad they gave and a Stripe-branded email is a poor use
@@ -73,7 +73,7 @@ in there. That is also the fallback: if Stripe is misconfigured, rate limited or
 down, there is still a way to give.
 
 **The card key's SHAPE is checked, not just its presence.** Written after
-finding `STRIPE_SECRET_KEY=#22D3EE`, a brand hex colour pasted onto the wrong
+finding `STRIPE_SECRET_KEY=#22D3EE`, a brand hex color pasted onto the wrong
 line, in a real environment file. A key that merely exists sends the request,
 gets a 401, and reaches the reader as "we could not open the payment page",
 which points at Stripe when the problem is one line of config. Refusing it in
@@ -85,7 +85,7 @@ with PayPal and Venmo still offered, and puts the real reason in the log.
 `POST /api/donate/checkout` creates a Checkout Session and returns its URL. It
 creates no charge, writes nothing to our database and stores no card data.
 
-Defences run in this order, and the order is the point:
+Defenses run in this order, and the order is the point:
 
 1. **Same-origin.** A cross-site page cannot forge `Origin`, so this is the cheap
    first filter on a state-changing POST. Same guard as `/api/guide/submit`.
@@ -108,7 +108,7 @@ conversion, it rounds once, and nothing downstream sees a fractional cent.
 
 **The cancel destination is the one piece of caller-supplied input on a URL a
 third party redirects to**, which is the exact shape of an open redirect. It is
-not sanitised, it is resolved against our own origin and then checked against it
+not sanitized, it is resolved against our own origin and then checked against it
 (`lib/donate/return-path.ts`). Control characters are rejected BEFORE the trim,
 because trimming first repairs a hostile string instead of refusing it. Both
 redirect targets are built from the configured site URL rather than the request's
@@ -204,7 +204,7 @@ takes money and were behind the product in several other places.
 
 Terms gained: what the Service is and is not (analysis rather than advice, a
 gambling disclaimer covering the odds data, an AI-assisted content disclosure), a
-content licence for Signal profiles and submissions, a copyright complaints
+content license for Signal profiles and submissions, a copyright complaints
 route, a no-affiliation statement for the NFL and every data provider, the
 donations section, indemnification, a liability cap with consumer carve-outs,
 governing law and an informal-resolution-then-courts dispute process, and the
@@ -241,7 +241,7 @@ each one is a trap the next payment feature can fall into:
   `lib/donate/outcome.ts` with tests, because inline logic in a server component
   is logic nothing can test.
 - **A protocol-relative path out of the open-redirect guard.**
-  `/..//evil.example` cleared every input check and normalised to
+  `/..//evil.example` cleared every input check and normalized to
   `//evil.example`. Harmless with today's single caller, which prefixes an
   absolute origin, and a live open redirect for any future one. The output is
   now checked as well as the input.
@@ -260,7 +260,7 @@ each one is a trap the next payment feature can fall into:
   is served for AdSense verification. It now says "no subscription, no paywall,
   no locked tier", which is durably true. The Privacy Policy described donation
   records we do not store, gave "performance of a contract" as the lawful basis
-  for a gift, and claimed we honour Global Privacy Control, which nothing
+  for a gift, and claimed we honor Global Privacy Control, which nothing
   implements. All three corrected.
 
 ## The receipt, end to end
@@ -276,7 +276,7 @@ each one is a trap the next payment feature can fall into:
 5. `try_claim_donation_receipt` hands the send to exactly one caller.
 6. The receipt goes out through Resend, and the row records `sent` or `failed`.
 
-The status codes are chosen for Stripe's retry behaviour rather than for
+The status codes are chosen for Stripe's retry behavior rather than for
 tidiness. A bad signature is 400, because that request will never become valid
 and retrying it helps nobody. An event we do not handle is 200, because a 500
 would have Stripe retrying it for days. A genuine send failure is 500, so the

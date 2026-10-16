@@ -3,7 +3,7 @@
 /**
  * The small-screen half of the navigation rail: a trigger in the header that
  * slides a drawer in from the left holding the same section tree, with the same
- * two-level behaviour, plus the format and source controls that live in the
+ * two-level behavior, plus the format and source controls that live in the
  * header popover on desktop and the sign-in state.
  *
  * Rendered through a portal into <body> so the drawer escapes the sticky

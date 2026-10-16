@@ -1,7 +1,7 @@
 /**
  * Spread calibration.
  *
- * Every projection source over-spreads: twelve seasons analysed by Fantasy
+ * Every projection source over-spreads: twelve seasons analyzed by Fantasy
  * Football Analytics give calibration slopes below 1.0 at every position (QB
  * 0.67, TE 0.72, RB 0.79, WR 0.85). Top players are projected too high and
  * late round starters too low. The correction shrinks a projection toward its
@@ -11,7 +11,7 @@
  *
  * The stored artifact is a stat line, not a point total, and correcting the
  * total alone would leave a line whose parts no longer add up: receptions
- * times yards per reception would stop equalling receiving yards the moment
+ * times yards per reception would stop equaling receiving yards the moment
  * only the total moved. Applying the correction as a single uniform scale on
  * every value in the line keeps it internally consistent while still moving
  * the priced total by exactly the calibrated amount.

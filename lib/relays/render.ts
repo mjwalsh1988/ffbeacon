@@ -44,7 +44,7 @@ export interface RelayCardText {
   discordFitted: boolean;
 }
 
-/** Normalise a handle to exactly one leading at sign. */
+/** Normalize a handle to exactly one leading at sign. */
 export function handleWithAt(handle: string): string {
   const trimmed = handle.trim().replace(/^@+/, "");
   return `@${trimmed || "source"}`;

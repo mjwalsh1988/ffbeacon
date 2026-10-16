@@ -66,7 +66,7 @@ describe("parseDomainList", () => {
 });
 
 /**
- * Recognising the rejection that took the whole feature down.
+ * Recognizing the rejection that took the whole feature down.
  *
  * Seven of the 22 domains seeded in migration 0186 could not be crawled by
  * Anthropic's search agent. The API does not drop a blocked entry or warn: it
@@ -77,7 +77,7 @@ describe("parseDomainList", () => {
  * left to the generic error path.
  */
 describe("isDomainAccessError", () => {
-  it("recognises the real rejection text the API returned", () => {
+  it("recognizes the real rejection text the API returned", () => {
     // Copied verbatim from the live 400 during the 0187 investigation.
     const real =
       '400 {"type":"error","error":{"type":"invalid_request_error",' +

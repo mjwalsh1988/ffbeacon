@@ -24,7 +24,7 @@
  *
  * WHAT IT DELIBERATELY DOES NOT MODEL
  * Waiver priority and FAAB budgets. Two teams both short a tight end cannot both
- * sign the same one, and modelling who wins that claim would need a waiver order
+ * sign the same one, and modeling who wins that claim would need a waiver order
  * we do not have and a bidding model nobody could check. Each team is offered
  * the same pool, walking DOWN it for a second hole at the same position so one
  * team never signs one player twice. The overlap between teams is a known,

@@ -89,7 +89,7 @@ describe("buildWarDashboardPositions", () => {
     }
   });
 
-  it("honours a shorter cap for the preview", () => {
+  it("honors a shorter cap for the preview", () => {
     const positions = build({ maxRank: 25 });
     expect(positions[0].curve.length).toBe(25);
   });

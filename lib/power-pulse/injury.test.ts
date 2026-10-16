@@ -164,7 +164,7 @@ describe("projectPlayerWeek", () => {
     expect(questionable?.points).toBe(healthy?.points);
   });
 
-  it("honours a return timeline instead of overruling it", () => {
+  it("honors a return timeline instead of overruling it", () => {
     // Jordyn Tyson, end to end. Sleeper marks him out through week 4 and
     // projects 10.7 from week 5, and both halves of that must survive: the out
     // weeks score zero, and the projected weeks score the projection.

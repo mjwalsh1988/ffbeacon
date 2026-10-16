@@ -189,7 +189,7 @@ without the slug clause: BitmapOr over idx_players_external_sleeper,
                          Execution Time: 0.251 ms
 ```
 
-`pg_stat_statements` holds five variants of this shape totalling about 9,400
+`pg_stat_statements` holds five variants of this shape totaling about 9,400
 calls at 300 to 605 ms mean; `players` shows 80,129 sequential scans reading
 716 million tuples in 115 days, on a 10,481 row table.
 
@@ -320,7 +320,7 @@ Evidence. `lib/signal-scout/stats-bundle.ts:121` calls the
 summing `player_stats.metadata` JSON per row and windowing the result: a
 full scan of the 293k row `player_stats` table per call. It is the single
 largest query by total time in the ledger: 7,857 calls, 686 ms mean, 5,393 s
-total. The player profile stopped calling it in favour of the nightly
+total. The player profile stopped calling it in favor of the nightly
 pre-calculated `player_positional_finishes` table
 (`lib/player-profile.ts:233`, `lib/calculate-positional-finishes.ts:6`),
 which holds the same (player, season, scoring, finish, players_ranked)
@@ -572,7 +572,7 @@ Vercel invocation count.
 Fix. One RPC, `league_sync_tick(p_holder, p_lease_seconds, p_limit)`, that
 acquires the lease, reaps, claims and returns the claimed jobs plus the
 pending count in a single statement. Skip the `cron_runs` insert on a tick
-that claimed nothing and finalised nothing (write one heartbeat row per
+that claimed nothing and finalized nothing (write one heartbeat row per
 hour instead, so `cron-health` still sees the job alive). Read settings
 once per tick.
 
@@ -731,7 +731,7 @@ Risk. None.
   carries it. Checked, fine.
 - Fonts: Geist Sans and Mono through `next/font`, self-hosted, no external
   font requests. Checked, fine.
-- Icons: `lucide-react` named imports throughout; Next 15 optimises that
+- Icons: `lucide-react` named imports throughout; Next 15 optimizes that
   package by default. Checked, fine.
 - Tailwind: content globs cover `app`, `components`, `lib`; the 128 kB sheet
   is the whole design system plus 26 keyframe animations in `globals.css`.
@@ -1161,7 +1161,7 @@ merge.
 
 PERF-T023. `createAdminClient` is not React-cached (`lib/supabase/server.ts:60`),
 so a render that calls it three times builds three clients. Wrap it in
-`cache()` the same way `createClient` is. One line; no behaviour change.
+`cache()` the same way `createClient` is. One line; no behavior change.
 
 PERF-T040. League overview first byte (4.7). `pulseLeagueCore` returns
 `league: existing` on the cached branch and the upserted row on the sync
@@ -1210,14 +1210,14 @@ client import moves inside the realtime effect:
 useEffect(() => {
   if (!realtimeEnabled || !draftId) return;
   let channel: RealtimeChannel | null = null;
-  let cancelled = false;
+  let canceled = false;
   void import("@/lib/supabase/client").then(({ createClient }) => {
-    if (cancelled) return;
+    if (canceled) return;
     const supabase = createClient();
     channel = supabase.channel(/* unchanged */);
     /* unchanged subscription body */
   });
-  return () => { cancelled = true; if (channel) void channel.unsubscribe(); };
+  return () => { canceled = true; if (channel) void channel.unsubscribe(); };
 }, [realtimeEnabled, draftId]);
 ```
 
@@ -1253,7 +1253,7 @@ pending count in one body. `lib/league-bulk-sync.ts runLeagueSyncWorker`
 calls it once per loop; `app/api/cron/league-sync-worker/route.ts` stops
 pre-acquiring the lease. `lib/cron-runs.ts recordCronRun` gains
 `{ quietWhen: (result) => boolean }`; the worker passes a predicate that is
-true when nothing was claimed and nothing finalised, and the ledger row is
+true when nothing was claimed and nothing finalized, and the ledger row is
 skipped, with one heartbeat row per hour so `cron-health` still sees the
 job. `lib/cron-health.test.ts` covers the heartbeat.
 

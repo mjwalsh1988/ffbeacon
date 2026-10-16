@@ -215,8 +215,8 @@ function DraftBoardInner({
                 // Position hue for a drafted cell: the entire made cell is tinted with
                 // its positional color so the board reads by position at a glance.
                 // Unknown positions fall back to the prior neutral fill.
-                // positionColorKey, not the six-key normaliser: a defender pick
-                // in an IDP draft gets its own hue (R-22), never the grey.
+                // positionColorKey, not the six-key normalizer: a defender pick
+                // in an IDP draft gets its own hue (R-22), never the gray.
                 const posKey = pick ? positionColorKey(pick.position) : null;
                 const posFill = pick
                   ? posKey

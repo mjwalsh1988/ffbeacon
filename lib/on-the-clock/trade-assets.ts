@@ -196,7 +196,7 @@ export function resolveDraftAsset(ref: DraftAssetRef, ctx: ResolveContext): Reso
   // holds the one copy of "a made pick IS the player taken, an unmade pick is the
   // player the market would take there", because League Pulse now has to reach the
   // same answer for startup trades in its feed. The labels below are still this
-  // room's own; only the judgement is shared.
+  // room's own; only the judgment is shared.
   const substitution = substituteStartupPick({
     // The room only ever asks about seats that exist in this draft.
     seatKnown: true,

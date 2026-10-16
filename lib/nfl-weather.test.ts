@@ -55,18 +55,18 @@ describe("unit conversions", () => {
     expect(celsiusToFahrenheit(19.3)).toBeCloseTo(66.74, 2);
   });
 
-  it("turns kilometres an hour into miles an hour", () => {
+  it("turns kilometers an hour into miles an hour", () => {
     expect(kmhToMph(1.609344)).toBeCloseTo(1, 10);
     expect(kmhToMph(24.076)).toBeCloseTo(14.96, 2);
     expect(kmhToMph(0)).toBe(0);
   });
 
-  it("turns metres a second into miles an hour", () => {
+  it("turns meters a second into miles an hour", () => {
     expect(metersPerSecondToMph(1)).toBeCloseTo(2.23694, 4);
     expect(metersPerSecondToMph(10)).toBeCloseTo(22.3694, 3);
   });
 
-  it("turns millimetres into inches", () => {
+  it("turns millimeters into inches", () => {
     expect(millimetersToInches(25.4)).toBe(1);
     expect(millimetersToInches(2.54)).toBeCloseTo(0.1, 10);
   });
@@ -580,7 +580,7 @@ describe("forecastCoordinate", () => {
 });
 
 describe("the attribution", () => {
-  it("is the wording MET Norway's licence asks for", () => {
+  it("is the wording MET Norway's license asks for", () => {
     expect(MET_NORWAY_ATTRIBUTION).toBe("Weather data from MET Norway");
   });
 });

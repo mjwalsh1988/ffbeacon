@@ -52,9 +52,9 @@ export type GameEnvironment = {
   /** The over/under for the whole game. Null when no line is published. */
   gameTotal: number | null;
   /**
-   * This team's spread, negative when they are favoured. Flipped from the
+   * This team's spread, negative when they are favored. Flipped from the
    * stored home spread for the away side, in one place, so nothing downstream
-   * can read a favourite as an underdog.
+   * can read a favorite as an underdog.
    */
   spread: number | null;
   /** What the market expects THIS team to score. Null with no line. */
@@ -164,11 +164,11 @@ export function describeEnvironment(
   return `${expected}, about average for this week.${age}`;
 }
 
-/** Favoured by, underdog by, or a pick 'em. Null spread gives null. */
+/** Favored by, underdog by, or a pick 'em. Null spread gives null. */
 export function describeSpread(spread: number | null): string | null {
   if (spread === null) return null;
   if (spread === 0) return "Even game";
-  return spread < 0 ? `Favoured by ${Math.abs(spread).toFixed(1)}` : `Underdog by ${spread.toFixed(1)}`;
+  return spread < 0 ? `Favored by ${Math.abs(spread).toFixed(1)}` : `Underdog by ${spread.toFixed(1)}`;
 }
 
 function numOrNull(value: unknown): number | null {

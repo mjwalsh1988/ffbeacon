@@ -168,7 +168,7 @@ export function ScheduleEmpty({
 
 /**
  * The shared shell. An icon that is paired with a heading rather than standing
- * in for one, so nothing here depends on recognising a glyph.
+ * in for one, so nothing here depends on recognizing a glyph.
  */
 function EmptyPanel({
   eyebrow,

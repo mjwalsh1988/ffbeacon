@@ -9,7 +9,7 @@ import type {
  * The Contender / Loaded / Bubble / Rebuilder tag.
  *
  * Built to read as a tag at a glance rather than as another line of text: an
- * icon, a filled pill, a bright border, and a soft glow in the tag's own colour.
+ * icon, a filled pill, a bright border, and a soft glow in the tag's own color.
  * That matters most in the league list, where the tag sits in a column of plain
  * values and has to be findable without reading it.
  *
@@ -28,7 +28,7 @@ import type {
  *   - Longshot: dice. The redraft reading of the same band, where nothing
  *     carries over and the season has to break this team's way.
  *
- * Colour follows the convention the rest of League Pulse uses for a rank, cyan
+ * Color follows the convention the rest of League Pulse uses for a rank, cyan
  * at the top and purple at the bottom, and is never the only signal: the icon
  * and the word both carry it, and the `aria-label` spells out the full sentence
  * explaining the call, so a screen reader gets the reasoning a sighted reader
@@ -71,7 +71,7 @@ const ICON: Record<TeamStatusVariant, Record<TeamStatusKey, LucideIcon>> = {
  *   rebuilder   #C084FC   5.29 to 6.29   AA, short of AAA
  *
  * Rebuilder was `brand-purple` (#A855F7) and measured 3.79 to 4.44, failing AA
- * on every ground. Without the fill the same colour is 5.08:1, which is how it
+ * on every ground. Without the fill the same color is 5.08:1, which is how it
  * survived review the first time: the fill is exactly the step that sinks it.
  * `purple-400` keeps the band unmistakably purple and clears the floor. The
  * borders and glows stay on `brand-purple`, because a 60 percent border is

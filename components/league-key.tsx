@@ -19,7 +19,7 @@ import {
  *
  * WHY EACH ENTRY IS A BOX
  *   It used to be a badge with a sentence floating beside it. At a glance that
- *   reads as a run of text with some colour in it rather than as a lookup table,
+ *   reads as a run of text with some color in it rather than as a lookup table,
  *   and in a narrow sidebar the sentence had about 150px to live in. Each entry
  *   is now its own bordered card with the tag on top and one line under it, so
  *   the eye can jump straight to the tag it is trying to look up.

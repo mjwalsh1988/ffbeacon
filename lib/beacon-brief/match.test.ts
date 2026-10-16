@@ -4,7 +4,7 @@ import { resolveTeamReference, teamCity, teamNickname } from "./match";
 /**
  * Tests for team reference resolution.
  *
- * The behaviour that matters is the tier ORDER and the refusal to guess. Before
+ * The behavior that matters is the tier ORDER and the refusal to guess. Before
  * this, only an exact abbreviation or exact full name auto-linked, so "Falcons"
  * and "Commanders" (how reporters actually write) went to manual review every
  * time: 68 team rows were approved by hand. Nicknames are unique across the 32

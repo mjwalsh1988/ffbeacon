@@ -113,7 +113,7 @@ export type ConnectBreakdownResult =
  * Either the reader typed a handle, or they have one saved and we read it here.
  *
  * The saved branch never takes a username from the client. A handle that
- * arrived over the wire is a handle anyone can send, so trusting one labelled
+ * arrived over the wire is a handle anyone can send, so trusting one labeled
  * "saved" would make the whole saved path a way to look up a stranger with
  * somebody else's rate-limit slot. The only thing the client says is "use
  * mine", and the server decides what that means.
@@ -235,7 +235,7 @@ export async function connectBreakdownLeagues(
 
   // Chunked and paged: a reader with many leagues has more rosters than one
   // request returns. A failed read is treated as nothing synced (the prior
-  // behaviour on error), never as a partial list.
+  // behavior on error), never as a partial list.
   let leagueRows: Array<{ id: string; sleeper_league_id: string }> = [];
   let rosterRows: Array<{
     league_id: string;

@@ -1,7 +1,7 @@
 /**
  * Build the Beacon Steals board (draft_value_targets).
  *
- * This is the I/O half. Every judgement lives in engine.ts, which is pure and
+ * This is the I/O half. Every judgment lives in engine.ts, which is pure and
  * unit tested; this file only loads, joins, and writes.
  *
  * WHAT IT LOADS, PER FORMAT
@@ -45,7 +45,7 @@
  * Bringing opponent strength and injury into the Beacon Steals board too would
  * mean teaching engine.ts to accept a pre-adjusted number and dropping its own
  * reliability/availability step, which is a change to the pure, unit-tested
- * judgement layer this file is not the one to make.
+ * judgment layer this file is not the one to make.
  *
  * Formats with no FF Beacon rankings, or no ADP market, are SKIPPED rather than
  * written empty. An empty board is a bug; a missing board is a fact.

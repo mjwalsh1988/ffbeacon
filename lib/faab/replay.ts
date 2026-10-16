@@ -2,7 +2,7 @@
  * Would the number we print have won the auction that actually happened?
  *
  * This replaces the calibration in `backtest.ts`, which could only ask whether
- * the model's price curve landed in the same neighbourhood as a league's real
+ * the model's price curve landed in the same neighborhood as a league's real
  * bids. This asks the sharper question, auction by auction: here is a claim
  * somebody actually won, here is what the model would have recommended that
  * morning, and would it have been enough.

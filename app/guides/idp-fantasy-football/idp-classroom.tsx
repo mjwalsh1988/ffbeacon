@@ -3,7 +3,7 @@
 /**
  * The IDP guide's interactive panels (plan IDP-219).
  *
- * Native radios and checkboxes in labelled fieldsets, one polite live region
+ * Native radios and checkboxes in labeled fieldsets, one polite live region
  * per panel that speaks one sentence on a change, nothing stored anywhere.
  * Every panel says in words what it is before it shows a number. The pattern
  * follows app/guides/chopped-league-strategy/chopped-classroom.tsx.
@@ -268,7 +268,7 @@ function ordinal(n: number): string {
 /**
  * Lesson 4: set how many of one position start across a whole league and see
  * what the best player left over scored, against the best one. The numbers
- * are real per-game points by season rank; nothing is modelled.
+ * are real per-game points by season rank; nothing is modeled.
  */
 export function ReplacementLevel({
   season,

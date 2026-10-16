@@ -37,7 +37,7 @@ export type ProjectionSourceSlug = (typeof PROJECTION_SOURCES)[number];
 export function projectionSourceDisplay(source: string | null | undefined): string {
   if (source === BEACON_SOURCE) return "FF Beacon";
   if (source === SLEEPER_SOURCE) return "Sleeper";
-  // An unknown slug names itself rather than being relabelled as one of the
+  // An unknown slug names itself rather than being relabeled as one of the
   // two we know: a heading that says "Sleeper" over somebody else's numbers is
   // worse than one that says a word the reader has to look up.
   return source && source.trim().length > 0 ? source : "Sleeper";

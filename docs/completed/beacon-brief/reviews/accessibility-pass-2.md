@@ -27,7 +27,7 @@ components/dashboard-panel.tsx, components/faq-accordion.tsx).
 Method: every file and line cited below was read in full. Contrast figures were
 computed from the tokens in tailwind.config.ts with sRGB relative luminance and
 alpha compositing over the real ancestor backgrounds (the script is not kept;
-the composited colours are stated beside each figure so the arithmetic can be
+the composited colors are stated beside each figure so the arithmetic can be
 repeated). `npm run typecheck` passes on the tree as reviewed. No code file was
 edited by this pass.
 
@@ -206,12 +206,12 @@ its textarea at line 691.
 File: components/beacon-brief/brief-pagination.tsx lines 116 to 119 and 160 to
 163.
 
-On the first page "Previous" renders as a greyed span with `aria-hidden="true"`,
+On the first page "Previous" renders as a grayed span with `aria-hidden="true"`,
 and on the last page "Next" does the same. Both are visible text hidden from
 assistive technology, which the site's rule forbids. A screen reader user on
 page 1 hears the page list and "Next" and never learns there is a Previous
 that does not apply, which is survivable, but a reader pointing a finger or a
-mouse at the greyed control hears nothing at all.
+mouse at the grayed control hears nothing at all.
 
 This predates the build: the diff for this file changes only `pageHref`. It is
 recorded because the file is in the changed set and the first pass listed the
@@ -350,7 +350,7 @@ sibling blocks.
   app/admin/brief-desk, lib/relays, lib/brief-desk and the changed
   beacon-brief and player-profile files finds only the validator's own
   detection list (lib/brief-desk/validate-draft.ts 55 to 61), its test, and
-  the normaliser in lib/relays/extract.ts 103 to 106, which exist to keep
+  the normalizer in lib/relays/extract.ts 103 to 106, which exist to keep
   those characters out of copy. No aria-label, alt, option label or visible
   string carries one.
 - Nothing visible is aria-hidden in the new files. Every `aria-hidden` is a
@@ -423,11 +423,11 @@ sibling blocks.
   three-up to two-up (stat-tiles.tsx 39); the action cards two-up to one
   (action-list.tsx 63); every table scrolls rather than dropping a column
   (P2-m5 covers the one wrapper that is not yet keyboard reachable).
-- Colour is never the only channel: every status chip carries the word
+- Color is never the only channel: every status chip carries the word
   (relays-manager.tsx 323, editions/page.tsx 95); the value-movers bars carry
   the signed figure as text (135) and the table carries every number; the
   callout's tone is a border beside a caption; the "danger" stat in the admin
-  overview is a labelled number.
+  overview is a labeled number.
 - Interactive blocks render their default state on the server (top-scorers,
   format-toggle, return-planner are client components whose initial state is
   the default sort, format and week range), so the page is complete without

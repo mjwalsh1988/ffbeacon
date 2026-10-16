@@ -30,7 +30,7 @@ describe("emphasisForCategory", () => {
     expect(dynasty.valueLabel.length).toBeGreaterThan(0);
   });
 
-  it("explains the value column in both modes, so it is never an unlabelled number", () => {
+  it("explains the value column in both modes, so it is never an unlabeled number", () => {
     for (const category of [
       "dynasty",
       "redraft",

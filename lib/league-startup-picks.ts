@@ -10,7 +10,7 @@
  *                      (slot_to_roster_id), the settings (teams / rounds /
  *                      reversal_round), and the raw draft object with its
  *                      start_time and last_picked epochs. Read through
- *                      lib/league-drafts.ts, shared with the slot labeller so
+ *                      lib/league-drafts.ts, shared with the slot labeler so
  *                      the two can never choose different drafts.
  *   draft_selections   one row per pick of every COMPLETED draft we captured,
  *                      with round, seat, and the FF Beacon player id.

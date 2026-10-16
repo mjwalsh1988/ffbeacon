@@ -13,8 +13,8 @@
  * rest of the season is worth for each additional point per week of expected
  * scoring. Multiply a lineup delta by it and you have a projected-wins delta.
  *
- * THE MATHS, AND WHY IT IS A DERIVATIVE RATHER THAN A SIMULATION
- *   One game is won when your score beats theirs. Modelled as two independent
+ * THE MATH, AND WHY IT IS A DERIVATIVE RATHER THAN A SIMULATION
+ *   One game is won when your score beats theirs. Modeled as two independent
  *   normals, that is P(win) = Phi(z) with z = (mu_me - mu_them) / s and
  *   s = sqrt(sigma_me^2 + sigma_them^2). Nudge your mean by d and the win
  *   probability moves by phi(z) * d / s to first order, where phi is the normal

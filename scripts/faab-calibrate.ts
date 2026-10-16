@@ -5,7 +5,7 @@
  * The replay in `lib/faab/replay.ts` grades the PRICE half of the ladder only,
  * because historical rosters are not stored and the worth half cannot be
  * reconstructed. That left the two halves that produce the printed number,
- * rival bid centres and the worth cap, with no measurement at all.
+ * rival bid centers and the worth cap, with no measurement at all.
  *
  * This fills that gap the only way available: it builds synthetic auctions
  * whose shape we know (how many rivals want him, how big an upgrade he is)

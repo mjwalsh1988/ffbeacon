@@ -27,7 +27,7 @@ import type { PulseTeam } from "@/lib/league-power-pulse-data";
 import { PulseDetail, ordinal, pct } from "./pulse-detail";
 import type { LeagueEmphasis } from "@/lib/league-emphasis";
 
-/** Colour ramp for the headline score. Always paired with the number itself. */
+/** Color ramp for the headline score. Always paired with the number itself. */
 function scoreTone(score: number): {
   text: string;
   ring: string;
@@ -60,7 +60,7 @@ function DivergenceChip({ team }: { team: PulseTeam }) {
     : better
       ? "text-signal-success"
       : "text-signal-danger";
-  // The word carries the meaning; colour only reinforces it.
+  // The word carries the meaning; color only reinforces it.
   const word = even ? "even" : better ? `up ${d}` : `down ${Math.abs(d)}`;
   return (
     <span className="inline-flex flex-col items-end leading-tight">
@@ -466,7 +466,7 @@ function PlayoffCell({ odds }: { odds: number | null }) {
  *
  * The same cell as PlayoffCell and the opposite reading: there, more is
  * better. Here a high number is the bad one, so the tone runs the other way
- * and the bar fills toward danger. Neither is carried by colour alone: the
+ * and the bar fills toward danger. Neither is carried by color alone: the
  * number is the number, and the column header says which question it answers.
  */
 function ChopRiskCell({ odds }: { odds: number | null }) {

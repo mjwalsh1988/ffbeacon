@@ -53,7 +53,7 @@ describe("POSITION_SERIES", () => {
   });
 });
 
-/** WCAG relative luminance of a #RRGGBB colour. */
+/** WCAG relative luminance of a #RRGGBB color. */
 function luminance(hex: string): number {
   const channel = (i: number) => {
     const c = parseInt(hex.slice(i, i + 2), 16) / 255;
@@ -75,7 +75,7 @@ describe("POSITION_SERIES across all nine positions (IDP-103)", () => {
     for (const p of NINE) expect(style(p)).toBeDefined();
   });
 
-  it("keeps colour, dash and marker pairwise distinct over the nine", () => {
+  it("keeps color, dash and marker pairwise distinct over the nine", () => {
     expect(new Set(NINE.map((p) => style(p).color)).size).toBe(NINE.length);
     expect(new Set(NINE.map((p) => style(p).dash ?? "solid")).size).toBe(NINE.length);
     expect(new Set(NINE.map((p) => style(p).marker)).size).toBe(NINE.length);

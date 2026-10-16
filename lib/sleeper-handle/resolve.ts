@@ -159,7 +159,7 @@ async function claimBackfillSlot(): Promise<boolean> {
  * METERED, and the reason is specific. This runs inside a PAGE RENDER on all
  * ten league deep views. Before migration 0323 a reader could PATCH
  * `sleeper_user_id` back to null through PostgREST, and the meter stays as a
- * second line of defence. A failed resolution writes nothing, so without a
+ * second line of defense. A failed resolution writes nothing, so without a
  * meter, every render of a row with no id would spend one Sleeper call from
  * the shared process-wide bucket in lib/sleeper-budget.ts, and other readers'
  * interactive calls would start timing out.

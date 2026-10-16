@@ -18,7 +18,7 @@ import type { ManagerPulseInput } from "./input-types";
 export { pickTendencySlice };
 
 /**
- * Builds the tendency DTO from an already-computed report, so the favourite
+ * Builds the tendency DTO from an already-computed report, so the favorite
  * and avoid player ids Trade Ideas sees are the SAME ones section 6.4 already
  * ranked, never a second, possibly different, top-N pass over the same data.
  */

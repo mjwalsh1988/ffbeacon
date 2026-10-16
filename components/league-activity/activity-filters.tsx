@@ -12,7 +12,7 @@ import {
  * LINKS, NOT BUTTONS, and no client JavaScript anywhere in this file. The feed
  * is server rendered and server paginated, so a filter is genuinely a different
  * URL: making it a link means it is shareable, it survives a back button, it
- * works before hydration, and a keyboard user gets the browser's own behaviour
+ * works before hydration, and a keyboard user gets the browser's own behavior
  * for free.
  *
  * WHICH IS WHY THE ACTIVE ONE IS `aria-current` AND NOT `aria-pressed`.
@@ -21,7 +21,7 @@ import {
  * the page would be describing something that did not happen.
  *
  * A CHIP FOR A CATEGORY WITH NOTHING IN IT IS STILL RENDERED, disabled and
- * labelled as empty. Hiding it would make the filter row change shape as the
+ * labeled as empty. Hiding it would make the filter row change shape as the
  * window widens, which is disorienting, and "there were no trades this
  * fortnight" is itself an answer.
  *
@@ -224,7 +224,7 @@ function Chip({
       aria-current={active ? "page" : undefined}
       className={`inline-flex min-h-[44px] items-center rounded-full border font-semibold transition-colors sm:min-h-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${size} ${
         active
-          ? // The active chip is not colour alone: it also carries the only
+          ? // The active chip is not color alone: it also carries the only
             // filled background and the only bright text in the row.
             "border-brand-cyan/60 bg-brand-cyan/15 text-brand-cyan"
           : "border-line bg-base/50 text-ink-muted hover:border-line-accent hover:text-ink"

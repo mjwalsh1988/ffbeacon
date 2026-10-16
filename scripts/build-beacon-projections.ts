@@ -40,7 +40,7 @@ async function main() {
       `in ${result.durationMs}ms (model ${result.modelVersion}).`,
   );
   console.log(
-    `  ${result.modelled} modelled from our own usage, ${result.rowsWritten - result.modelled} mirrored from Sleeper.`,
+    `  ${result.modeled} modeled from our own usage, ${result.rowsWritten - result.modeled} mirrored from Sleeper.`,
   );
   const reasons = Object.entries(result.mirrored)
     .filter(([, count]) => count > 0)

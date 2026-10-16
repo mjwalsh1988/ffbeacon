@@ -8,8 +8,8 @@ import {
   positionColorKey,
 } from "./position-colors";
 
-describe("defender position colours (IDP-103)", () => {
-  it("maps DL, LB and DB to their own classes, never the grey fallback", () => {
+describe("defender position colors (IDP-103)", () => {
+  it("maps DL, LB and DB to their own classes, never the gray fallback", () => {
     for (const p of ["DL", "LB", "DB"] as const) {
       const key = positionColorKey(p);
       expect(key).toBe(p);
@@ -27,7 +27,7 @@ describe("defender position colours (IDP-103)", () => {
     expect(positionColorKey("SS")).toBe("DB");
   });
 
-  it("leaves the offense-only normaliser at six, so the draft tracker stays offense-only", () => {
+  it("leaves the offense-only normalizer at six, so the draft tracker stays offense-only", () => {
     expect(normalizePositionColor("LB")).toBeNull();
     expect(normalizePositionColor("DST")).toBe("DEF");
     expect(positionColorKey("WR")).toBe("WR");

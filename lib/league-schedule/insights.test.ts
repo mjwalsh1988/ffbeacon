@@ -264,7 +264,7 @@ describe("stretches", () => {
     expect(toughestStretch(1, mixed)?.startWeek).toBe(3);
   });
 
-  it("honours a custom window size", () => {
+  it("honors a custom window size", () => {
     const stretch = toughestStretch(1, FOUR_WEEKS, 2);
     expect(stretch).toEqual({ startWeek: 4, endWeek: 5, opponentPoints: 115 });
   });

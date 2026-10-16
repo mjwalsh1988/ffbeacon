@@ -24,7 +24,7 @@ import { computeRosterSwap } from "./roster-swap";
  *
  * `evaluate.ts` itself needs a Supabase client and a whole league, so the two
  * helpers that carry this arithmetic are exercised here through their published
- * behaviour: the position-points shape (a per-week rate over the candidate set
+ * behavior: the position-points shape (a per-week rate over the candidate set
  * that actually exists after the trade) and the per-slot averages that replaced
  * a third pass of lineup building.
  */

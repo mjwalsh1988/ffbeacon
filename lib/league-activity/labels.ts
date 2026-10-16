@@ -292,7 +292,7 @@ export function prettifyKey(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Sleeper's league `status`, as a phase a person would recognise. */
+/** Sleeper's league `status`, as a phase a person would recognize. */
 export function leagueStatusLabel(status: string | null | undefined): string {
   switch ((status ?? "").toLowerCase()) {
     case "pre_draft":

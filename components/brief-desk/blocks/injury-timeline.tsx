@@ -130,7 +130,7 @@ const NARROW_AXIS_H = 24;
 function NarrowTimeline({ dated, minWeek, maxWeek, ticks }: { dated: TimelineRow[]; minWeek: number; maxWeek: number; ticks: number[] }) {
   const x = makeScale(minWeek, maxWeek, 16, NARROW_W - 20);
   const height = NARROW_AXIS_H + PAD * 2 + dated.length * NARROW_ROW_H;
-  // About 44 units per "Wk 10" label: every tick is labelled when they fit,
+  // About 44 units per "Wk 10" label: every tick is labeled when they fit,
   // every second or third when the window is long. Gridlines stay on all.
   const step = Math.max(1, Math.ceil((44 * ticks.length) / (NARROW_W - 36)));
   return (

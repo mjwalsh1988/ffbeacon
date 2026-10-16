@@ -39,7 +39,7 @@ export const TRADE_EVAL_MAX = 10;
  *
  * The evaluation bucket below only fires once a proposal has been checked
  * against the league, which is correct for a reader who clicked a stale link and
- * wrong as the only defence. A security review found the hole: send a
+ * wrong as the only defense. A security review found the hole: send a
  * syntactically valid proposal naming a player who is not on the roster, and it
  * fails validation, so it never reaches the expensive claim, so it costs an
  * attacker nothing and costs us a database read every time. Garbage was the

@@ -297,7 +297,7 @@ describe("the token WAR appears nowhere in lib/manager-pulse", () => {
   it("finds no unqualified use anywhere in the directory, comments included", () => {
     // This file is excluded from its own scan, not allow-listed: a guard
     // that checks for a token has to name that token, in its headings, its
-    // failure message, and the self-tests below that pin its behaviour.
+    // failure message, and the self-tests below that pin its behavior.
     // That is not an unfixed violation the way an ALLOWLIST entry would
     // mean; there is nothing here to fix, the scanner cannot be made to
     // pass while also being unable to describe what it is scanning for.

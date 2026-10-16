@@ -144,7 +144,7 @@ describe("multi-roster moves", () => {
     expect((e?.payload as { bid: number }).bid).toBe(17);
   });
 
-  it("files an unrecognised Sleeper type without losing its real name", () => {
+  it("files an unrecognized Sleeper type without losing its real name", () => {
     const e = buildTransactionEvent(tx({ type: "something_new", roster_ids: [1] }));
     expect(e?.kind).toBe("commissioner_move");
     // The deep link filters the transactions page on Sleeper's own string, so

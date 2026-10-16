@@ -19,7 +19,7 @@
  * not the exotic one), has no hover, and a long press producing a `contextmenu`
  * event is not something to rest reorder, rename and remove on.
  *
- * WAI-ARIA menu behaviour, all of it: `role="menu"` over `role="menuitem"`
+ * WAI-ARIA menu behavior, all of it: `role="menu"` over `role="menuitem"`
  * buttons, roving focus with the arrow keys plus Home and End, Escape closes
  * and hands focus back to whatever opened it, a click anywhere outside closes
  * it, and Tab closes it rather than walking the reader through a floating list

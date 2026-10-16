@@ -209,7 +209,7 @@ export function moveTierBreak(
 /**
  * Breaks from an ordered list of tier numbers (a source's published tiers, or
  * the per-row tiers of the old storage): a line wherever the tier changes
- * between two neighbours, the step into a null ("no tier") included.
+ * between two neighbors, the step into a null ("no tier") included.
  */
 export function breaksFromTiers(tiers: readonly (number | null)[]): number[] {
   const out: number[] = [];
@@ -309,7 +309,7 @@ export type ProfileBoard = {
  * was written for.
  *
  * Adding a line splits one tier in two: the top half keeps the label, the new
- * lower half starts unlabelled, and every tier below moves down one number.
+ * lower half starts unlabeled, and every tier below moves down one number.
  */
 export function shiftLabelsForAddedBreak(
   labels: Record<string, string>,

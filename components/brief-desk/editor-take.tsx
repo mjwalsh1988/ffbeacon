@@ -2,7 +2,7 @@
  * The editor's take (plan section 23.5): the owner's own two or three
  * sentences, written on the review page and placed right under the summary.
  * It is the one part of an edition no run may write (the validator refuses a
- * draft that carries one), so it is labelled with the owner's name.
+ * draft that carries one), so it is labeled with the owner's name.
  *
  * Renders nothing when the edition has no take. Server component.
  */

@@ -664,7 +664,7 @@ const DEFENDER_LABELS: Readonly<Record<string, IdpPosition>> = {
   SS: "DB",
 };
 
-/** Every label foldDefenderPosition recognises, upper case, for a query filter. */
+/** Every label foldDefenderPosition recognizes, upper case, for a query filter. */
 export const DEFENDER_POSITION_LABELS: readonly string[] = Object.keys(DEFENDER_LABELS);
 
 /** DL, LB or DB for any defender label (case-insensitive), null for anyone else. */
@@ -714,7 +714,7 @@ export function positionNoun(
   return entry ? entry[form] : position;
 }
 
-/** The same word as a heading, first letter capitalised: "Running backs". */
+/** The same word as a heading, first letter capitalized: "Running backs". */
 export function positionHeading(
   position: string | null | undefined,
   form: PositionNounForm = "plural",

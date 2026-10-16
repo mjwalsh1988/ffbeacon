@@ -169,7 +169,7 @@ export function buildLlmsTxt(data: LlmsData): string {
   // "Nothing here yet"). The two rules differ because the files answer
   // different questions: a sitemap advertises pages worth crawling, and this
   // describes the desk's taxonomy. An empty bucket is still a true statement
-  // about how coverage is organised, and it renders a real page rather than
+  // about how coverage is organized, and it renders a real page rather than
   // a 404.
   section("The Beacon Brief: NFL news for fantasy managers", [
     link(

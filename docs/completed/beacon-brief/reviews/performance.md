@@ -26,7 +26,7 @@ lib/relays/load.ts:212-224 (relayIdsForPlayer, relayIdsForTeam), 249-257
 
 The file defines `ID_BATCH = 300` at line 41 with the comment "Most ids one
 `.in()` filter carries; PostgREST puts them all in the URL", and `hydrate`
-honours it. The three feed paths do not: they read every matching relay id
+honors it. The three feed paths do not: they read every matching relay id
 (capped at 1000) and pass `ids.slice(0, 1000)` straight into `.in("id", ...)`.
 
 Cost: a uuid plus its comma is 37 bytes in the query string, so 300 ids is
@@ -413,7 +413,7 @@ unstable_cache:
   revalidate 5 minutes, tag `playerArticles`. Public, keyed on the player.
   Correct. One note, not a performance finding: nothing in `writeRelay` calls
   `revalidateTag(CACHE_TAGS.playerArticles)`, so a new relay takes up to five
-  minutes to reach the profile teaser. That is the documented TTL behaviour,
+  minutes to reach the profile teaser. That is the documented TTL behavior,
   not a regression.
 
 Revalidate values on changed pages:
@@ -444,7 +444,7 @@ Three client blocks, all under components/brief-desk/blocks/:
 
 About 414 lines, call it 4 to 6 KB gzipped plus three tree-shaken lucide icons.
 No chart library, no date library, no state manager crosses the boundary. All
-three take plain serialised data, and each renders its default state on the
+three take plain serialized data, and each renders its default state on the
 server, which is what plan 11.2 requires.
 
 Nothing server-renderable was made a client component. The two checks that
@@ -459,7 +459,7 @@ matter both pass:
   components/beacon-brief/brief-feed.tsx. Correct.
 
 One weight note that is not a client-bundle cost but is a payload cost: the
-client blocks receive their whole `BundleDataset` as props, which is serialised
+client blocks receive their whole `BundleDataset` as props, which is serialized
 into the RSC flight payload for the page. `top_scorers` is capped at 20 rows per
 position across six positions and `value_movers_by_format` at 15, so the worst
 case is a few tens of KB. Acceptable, and bounded by the validator's own limits
@@ -476,7 +476,7 @@ Recorded so a later pass does not "fix" these.
 - `pageAll` in bundle.ts:85-98 builds a fresh query per page through a factory,
   which is the right way to page PostgREST (the builder mutates), and stops on
   a short page. Every read in that file that can exceed 1000 rows goes through
-  it, which is the 1000-row rule honoured.
+  it, which is the 1000-row rule honored.
 - The bundle's cheap due-checks run outside the memo and the heavy assembly runs
   inside it (bundle.ts:615-648). That is the correct split: the answer to "is an
   edition due" moves the moment a draft lands, without rebuilding 40 pages of

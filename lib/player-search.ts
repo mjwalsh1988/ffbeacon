@@ -28,7 +28,7 @@ import { currentNflSeason } from "@/lib/nfl-season";
  * status filter did the opposite of its job in both directions at once. It let
  * through retired free agents, which is the thing the paragraph above says it
  * cannot catch, and it removed 28 currently-ranked real players, among them
- * Ricky Pearsall and Jayden Higgins, for the offence of being hurt.
+ * Ricky Pearsall and Jayden Higgins, for the offense of being hurt.
  *
  * Nobody noticed until 2026-08-25, because the player dimension had not been
  * synced since May and every one of those players was still carrying a stale

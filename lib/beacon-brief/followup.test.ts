@@ -6,7 +6,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
  * The point of interest is the worker's late duplicate guard, which passes
  * articleCreatedAfter so it sees exactly the articles curation could not have seen.
  * These tests drive loadFollowupCandidates against a hand-rolled Supabase stub that
- * records the filters applied, because the filters ARE the behaviour: getting the
+ * records the filters applied, because the filters ARE the behavior: getting the
  * status filter or the created_at bound wrong is how a duplicate slips through or a
  * live article gets mangled.
  */

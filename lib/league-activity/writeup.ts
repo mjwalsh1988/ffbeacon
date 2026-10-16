@@ -450,10 +450,10 @@ function reserveCard(
   const fromTaxi = Array.isArray(p.fromTaxi) ? p.fromTaxi : [];
 
   const moves: ActivityAsset[] = [
-    ...toReserve.map((id) => labelledAsset(ctx, id, "out", "To IR")),
-    ...fromReserve.map((id) => labelledAsset(ctx, id, "in", "Off IR")),
-    ...toTaxi.map((id) => labelledAsset(ctx, id, "out", "To taxi")),
-    ...fromTaxi.map((id) => labelledAsset(ctx, id, "in", "Off taxi")),
+    ...toReserve.map((id) => labeledAsset(ctx, id, "out", "To IR")),
+    ...fromReserve.map((id) => labeledAsset(ctx, id, "in", "Off IR")),
+    ...toTaxi.map((id) => labeledAsset(ctx, id, "out", "To taxi")),
+    ...fromTaxi.map((id) => labeledAsset(ctx, id, "in", "Off taxi")),
   ];
 
   const phrases: string[] = [];
@@ -895,7 +895,7 @@ function playerAsset(
   };
 }
 
-function labelledAsset(
+function labeledAsset(
   ctx: ActivityContext,
   id: string,
   direction: "in" | "out",
@@ -1027,7 +1027,7 @@ function transactionsHref(ctx: ActivityContext, event: ActivityEvent): string {
   // The transactions page filters on `league_transactions.type`, which is
   // Sleeper's raw string. Our kind is the same word for the four types we know
   // and is "commissioner_move" for anything else, so a card built from an
-  // unrecognised type would have linked to an empty list. The payload keeps the
+  // unrecognized type would have linked to an empty list. The payload keeps the
   // original when it differs.
   const stored =
     typeof event.payload.sleeperType === "string" && event.payload.sleeperType

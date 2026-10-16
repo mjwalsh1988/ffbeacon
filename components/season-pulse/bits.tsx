@@ -5,7 +5,7 @@
  * No hooks, so every one renders inside a server component and inside the
  * client leaders board alike.
  *
- * NOTHING HERE IS COLOUR-ONLY. A position badge prints the position and the
+ * NOTHING HERE IS COLOR-ONLY. A position badge prints the position and the
  * rank as text and adds the spelled-out words for a screen reader inside the
  * same element; the hue repeats what the letters already say.
  */
@@ -27,7 +27,7 @@ export const POSITION_CHIP: Record<SeasonPosition, string> = {
   DEF: "border-position-def/45 bg-position-def/10 text-position-def",
 };
 
-/** The house link: cyan on hover, a visible focus ring, never colour alone in running text. */
+/** The house link: cyan on hover, a visible focus ring, never color alone in running text. */
 export const PULSE_LINK =
   "font-medium text-ink underline decoration-ink/25 underline-offset-[3px] transition-colors hover:text-brand-cyan hover:decoration-brand-cyan/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 

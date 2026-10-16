@@ -86,12 +86,12 @@ export function weekPhaseLabel(week: number): string {
 }
 
 /**
- * The two neighbours of a week, for the previous/next links under the board.
+ * The two neighbors of a week, for the previous/next links under the board.
  *
  * Null on either side where there is no publishable week there, so the page
  * renders one arrow rather than a dead one.
  */
-export function weekNeighbours(
+export function weekNeighbors(
   week: number,
   currentWeek: number,
 ): { prev: number | null; next: number | null } {

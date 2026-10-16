@@ -10,7 +10,7 @@
  * WHY THIS IS NOT `slice(0, n) + "..."`. Satori does not ellipsize, so every
  * generated image has to shorten names itself, and a plain truncation produces
  * "Amon-Ra St...." and "N. England Pat...", which are not names. Each rung below
- * is still something a reader recognises, and the truncation is last on purpose
+ * is still something a reader recognizes, and the truncation is last on purpose
  * because it is the only rung that is not.
  */
 
@@ -22,7 +22,7 @@
  *   3. The last word alone, "Patriots", "McCaffrey".
  *   4. A truncation, reached only by a single very long token.
  *
- * Rung three exists because of team defences. "New England Patriots" survives
+ * Rung three exists because of team defenses. "New England Patriots" survives
  * rung two as "N. England Patriots", which is still too long, and truncating
  * that gives "N. England Pat...". "Patriots" is what everybody calls them, and
  * the row already says DEF, NE beside it.

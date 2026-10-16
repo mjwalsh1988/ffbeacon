@@ -16,7 +16,7 @@
  *
  * Presentational server component. The counts are a `<dl>` so a screen reader
  * gets term and definition rather than four loose numbers, and each figure's
- * unit is in its own text rather than implied by a neighbouring label.
+ * unit is in its own text rather than implied by a neighboring label.
  */
 
 import Link from "next/link";

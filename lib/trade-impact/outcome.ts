@@ -55,12 +55,12 @@ const PLAYOFF_NOISE_PP = 1;
  */
 const LINEUP_NOISE = 0.5;
 
-export type Favours = "you" | "them" | "even";
+export type Favors = "you" | "them" | "even";
 
 export type OutcomeCall =
   /** Both measures agree it is good for you. */
   | "take"
-  /** One says good, the other is quiet, or the split favours your direction. */
+  /** One says good, the other is quiet, or the split favors your direction. */
   | "lean-yes"
   /** They disagree with nothing to break the tie, or nothing moved at all. */
   | "close"
@@ -85,7 +85,7 @@ export type TradeOutcome = {
    * (|A-B| / (A+B)), so a trade cannot be 12% here and 30% there.
    */
   valueMarginPct: number;
-  valueFavours: Favours;
+  valueFavors: Favors;
   lopsided: boolean;
 
   /** Change in projected wins. Null when there is no season left to simulate. */
@@ -95,7 +95,7 @@ export type TradeOutcome = {
   /** Change in optimal starting lineup, points per week. */
   lineupDelta: number | null;
   /** Null when nothing about the season could be measured at all. */
-  winsFavours: Favours | null;
+  winsFavors: Favors | null;
 
   /**
    * True when value and wins point opposite ways. The single most useful thing
@@ -108,7 +108,7 @@ function sum(assets: ResolvedAsset[]): number {
   return assets.reduce((total, asset) => total + asset.value, 0);
 }
 
-function favoursFromDelta(delta: number, noise: number): Favours {
+function favorsFromDelta(delta: number, noise: number): Favors {
   if (delta > noise) return "you";
   if (delta < -noise) return "them";
   return "even";
@@ -140,17 +140,17 @@ function readWins(
   winsDelta: number | null,
   playoffDeltaPp: number | null,
   lineupDelta: number | null,
-): Favours | null {
+): Favors | null {
   if (winsDelta !== null) {
-    const call = favoursFromDelta(winsDelta, WINS_NOISE);
+    const call = favorsFromDelta(winsDelta, WINS_NOISE);
     if (call !== "even") return call;
   }
   if (playoffDeltaPp !== null) {
-    const call = favoursFromDelta(playoffDeltaPp, PLAYOFF_NOISE_PP);
+    const call = favorsFromDelta(playoffDeltaPp, PLAYOFF_NOISE_PP);
     if (call !== "even") return call;
   }
   if (lineupDelta !== null) {
-    return favoursFromDelta(lineupDelta, LINEUP_NOISE);
+    return favorsFromDelta(lineupDelta, LINEUP_NOISE);
   }
   // Every measure that existed said "no meaningful change". That is "even",
   // not "unknown", and the two must not be collapsed.
@@ -175,9 +175,9 @@ const HEADLINE: Record<OutcomeCall, string> = {
 function buildSummary(o: {
   call: OutcomeCall;
   split: boolean;
-  valueFavours: Favours;
+  valueFavors: Favors;
   valueMarginPct: number;
-  winsFavours: Favours | null;
+  winsFavors: Favors | null;
   winsDelta: number | null;
   playoffDeltaPp: number | null;
   lineupDelta: number | null;
@@ -185,14 +185,14 @@ function buildSummary(o: {
   statusLabel: string | null;
 }): string {
   const valuePart =
-    o.valueFavours === "even"
+    o.valueFavors === "even"
       ? "The two sides are level on value"
-      : o.valueFavours === "you"
+      : o.valueFavors === "you"
         ? `You come out ${pct(o.valueMarginPct)} ahead on value`
         : `You give up ${pct(o.valueMarginPct)} more value than you get back`;
 
   const winsPart =
-    o.winsFavours === null
+    o.winsFavors === null
       ? null
       : o.winsDelta !== null && Math.abs(o.winsDelta) >= WINS_NOISE
         ? `${signed(o.winsDelta)} projected wins`
@@ -233,35 +233,35 @@ function buildSummary(o: {
  * roster, so breaking a split with the same disagreement would be circular.
  */
 function decide(
-  valueFavours: Favours,
-  winsFavours: Favours | null,
+  valueFavors: Favors,
+  winsFavors: Favors | null,
   statusKey: TeamImpact["statusKey"],
 ): { call: OutcomeCall; split: boolean } {
   // Nothing about the season could be measured. Value is the whole answer.
-  if (winsFavours === null) {
-    if (valueFavours === "you") return { call: "lean-yes", split: false };
-    if (valueFavours === "them") return { call: "lean-no", split: false };
+  if (winsFavors === null) {
+    if (valueFavors === "you") return { call: "lean-yes", split: false };
+    if (valueFavors === "them") return { call: "lean-no", split: false };
     return { call: "close", split: false };
   }
 
-  if (valueFavours === winsFavours) {
-    if (valueFavours === "you") return { call: "take", split: false };
-    if (valueFavours === "them") return { call: "decline", split: false };
+  if (valueFavors === winsFavors) {
+    if (valueFavors === "you") return { call: "take", split: false };
+    if (valueFavors === "them") return { call: "decline", split: false };
     return { call: "close", split: false };
   }
 
   // One is quiet. The one that spoke decides, but only to a lean.
-  if (valueFavours === "even" || winsFavours === "even") {
-    const speaking = valueFavours === "even" ? winsFavours : valueFavours;
+  if (valueFavors === "even" || winsFavors === "even") {
+    const speaking = valueFavors === "even" ? winsFavors : valueFavors;
     return { call: speaking === "you" ? "lean-yes" : "lean-no", split: false };
   }
 
   // A genuine split.
-  const decider: Favours | null =
+  const decider: Favors | null =
     statusKey === "competitor"
-      ? winsFavours
+      ? winsFavors
       : statusKey === "rebuilder"
-        ? valueFavours
+        ? valueFavors
         : null;
   if (decider === null) return { call: "close", split: true };
   return { call: decider === "you" ? "lean-yes" : "lean-no", split: true };
@@ -281,7 +281,7 @@ export function buildTradeOutcome(
   const theirShare = 100 - yourShare;
   const valueMarginPct = Math.abs(yourShare - theirShare);
 
-  const valueFavours: Favours =
+  const valueFavors: Favors =
     combined === 0 || valueMarginPct < EVEN_MARGIN_PCT
       ? "even"
       : valueIn > valueOut
@@ -302,8 +302,8 @@ export function buildTradeOutcome(
 
   const lineupDelta = gaps.lineup ? null : mine.lineupDelta;
 
-  const winsFavours = readWins(winsDelta, playoffDeltaPp, lineupDelta);
-  const { call, split } = decide(valueFavours, winsFavours, mine.statusKey);
+  const winsFavors = readWins(winsDelta, playoffDeltaPp, lineupDelta);
+  const { call, split } = decide(valueFavors, winsFavors, mine.statusKey);
 
   return {
     call,
@@ -311,9 +311,9 @@ export function buildTradeOutcome(
     summary: buildSummary({
       call,
       split,
-      valueFavours,
+      valueFavors,
       valueMarginPct,
-      winsFavours,
+      winsFavors,
       winsDelta,
       playoffDeltaPp,
       lineupDelta,
@@ -325,12 +325,12 @@ export function buildTradeOutcome(
     yourShare,
     theirShare,
     valueMarginPct,
-    valueFavours,
+    valueFavors,
     lopsided: valueMarginPct >= LOPSIDED_MARGIN_PCT,
     winsDelta,
     playoffDeltaPp,
     lineupDelta,
-    winsFavours,
+    winsFavors,
     split,
   };
 }

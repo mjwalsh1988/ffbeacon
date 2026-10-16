@@ -697,7 +697,7 @@ function AssetRow({
 
   if (!("name" in found)) {
     // Same three facts as the picker row, in the same order, so a pick a reader
-    // just added is recognisable as the one they chose rather than as a
+    // just added is recognizable as the one they chose rather than as a
     // shortened version of it.
     return (
       <div className={shell}>
@@ -1037,8 +1037,8 @@ function AssetPickerPanel({
  *
  * THE ROW SAYS IT IS IN, THREE WAYS
  *   A cyan border and wash on the whole card, a check on the button, and the
- *   word Remove where Add was. Colour is never the only signal, so the state
- *   survives with no colour perception at all, and the button's accessible name
+ *   word Remove where Add was. Color is never the only signal, so the state
+ *   survives with no color perception at all, and the button's accessible name
  *   spells it out for a reader who sees neither.
  *
  *   The name is the whole instruction rather than "Add" or "Remove". A screen

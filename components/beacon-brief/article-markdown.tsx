@@ -81,8 +81,8 @@ function parseInline(text: string, key: string): ReactNode[] {
           {...(external
             ? { target: "_blank", rel: "noopener noreferrer" }
             : {})}
-          // Inside running text a link needs a mark besides colour (WCAG
-          // 1.4.1), so it keeps a thin, faint underline under body-coloured
+          // Inside running text a link needs a mark besides color (WCAG
+          // 1.4.1), so it keeps a thin, faint underline under body-colored
           // text, and turns cyan on hover and focus: the reading stays calm
           // and a link is still findable.
           className="text-ink underline decoration-brand-cyan/70 decoration-1 underline-offset-[3px] transition-colors hover:text-brand-cyan hover:decoration-brand-cyan focus-visible:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

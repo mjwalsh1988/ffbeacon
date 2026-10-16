@@ -713,7 +713,7 @@ describe("rollout and rollback controls", () => {
 });
 
 describe("K and DEF stay on the original normalization", () => {
-  // A structural guard rather than a behavioural one: the K/DEF pools need a
+  // A structural guard rather than a behavioral one: the K/DEF pools need a
   // live database to exercise, but the thing that must not regress is a single
   // call site. If someone later routes them through the calibrated path, this
   // fails and says why.

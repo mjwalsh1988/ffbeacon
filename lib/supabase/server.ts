@@ -8,7 +8,7 @@ import type { Database } from "@/lib/database.types";
  * The request-scoped session client.
  *
  * Wrapped in React `cache()` so one render shares ONE instance. That is not a
- * micro-optimisation: every `createServerClient` builds its own GoTrueClient,
+ * micro-optimization: every `createServerClient` builds its own GoTrueClient,
  * and `auth.getUser()` on a fresh one is an HTTP round trip to GoTrue rather
  * than a local decode. A page whose layout, its own body and a lib helper each
  * called `createClient()` was paying three of those, plus three identical
@@ -67,7 +67,7 @@ export function createCachedReadClient() {
  * calls it three times was building three clients, each with its own connection
  * and its own GoTrueClient. It carries no cookies, so there is no per-caller
  * state to keep apart. Outside a request (a script, a cron body) `cache()`
- * degrades to a plain call, which is the behaviour those callers already had.
+ * degrades to a plain call, which is the behavior those callers already had.
  *
  * App code should import this from lib/supabase/admin.ts, which re-exports it
  * behind `import "server-only"`. This file cannot carry that guard itself: the

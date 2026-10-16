@@ -1,5 +1,5 @@
 /**
- * Individual defensive player (IDP) stat lines: the one normaliser, and the
+ * Individual defensive player (IDP) stat lines: the one normalizer, and the
  * one way to score a line under a preset (plan R-8).
  *
  * THE RULES.
@@ -65,7 +65,7 @@ export function normalizeActualIdpLine(stats: Record<string, unknown> | null | u
   return out;
 }
 
-/** Points for a normalised line under a scoring map. A plain dot product. */
+/** Points for a normalized line under a scoring map. A plain dot product. */
 export function scoreIdpLine(line: StatLine, scoring: IdpScoringMap): number {
   let total = 0;
   for (const [key, weight] of Object.entries(scoring)) {

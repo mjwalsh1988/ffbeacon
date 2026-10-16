@@ -68,7 +68,7 @@ type Recorded = { table: string; range?: [number, number] };
 function mockSupabase(opts: MockOptions) {
   const calls: Recorded[] = [];
   /** The server's hard cap. A request for more than this many rows gets this
-   *  many, which is exactly the behaviour an unpaged read walks into. */
+   *  many, which is exactly the behavior an unpaged read walks into. */
   const SERVER_MAX_ROWS = 1000;
 
   function builder(table: string) {

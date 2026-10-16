@@ -14,7 +14,7 @@
  * order ought to be.
  *
  * A MOVE IS OPTIMISTIC AND THE OTHERS ARE NOT. Reordering is a swap of two
- * neighbours, so the right answer is known locally and instantly, and a reader
+ * neighbors, so the right answer is known locally and instantly, and a reader
  * nudging a bookmark along three places should not watch it lurch. Adding,
  * renaming and removing all wait, because each can genuinely fail (a cap, a
  * blank name, a row that is already gone) and showing the reader a result we

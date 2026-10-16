@@ -150,7 +150,7 @@ export function FormatToggle({
   const inline = placement === "inline";
   // Inline is the touch layout: full width, and 44px tall so the trigger and
   // every option clear the minimum tap target. The header trigger stays 36px
-  // to look like its neighbours, and an invisible ::before strip 4px above and
+  // to look like its neighbors, and an invisible ::before strip 4px above and
   // below makes the part a finger can hit 44px tall.
   const triggerClass = inline
     ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent aria-disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -160,7 +160,7 @@ export function FormatToggle({
     : "absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl";
   // The focused option gets a 2px cyan outline drawn INSIDE the row (the menu
   // clips anything outside it). A background shift alone measured 1.07:1
-  // against its neighbours, which is not a focus indicator anyone can see.
+  // against its neighbors, which is not a focus indicator anyone can see.
   const itemClass = inline
     ? "flex min-h-11 w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-brand-cyan"
     : "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-brand-cyan";

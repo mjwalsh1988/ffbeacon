@@ -4,7 +4,7 @@
  * Guess combobox: the WAI-ARIA combobox the player uses to name the target.
  * Mirrors the house pattern in app/tools/trade-calculator/asset-autocomplete.tsx
  * (useId-wired ids, role=combobox input with aria-activedescendant, debounced
- * fetch effect with a cancelled flag, outside-click close, arrow/enter/escape
+ * fetch effect with a canceled flag, outside-click close, arrow/enter/escape
  * handling, onMouseDown commit, sr-only aria-live status) but is not a clone
  * import: this file is Signal Scout specific (player-only results, ruled-out
  * state, a much longer debounce to respect the search route's rate limit).
@@ -94,13 +94,13 @@ export function GuessCombobox({
       setPhase("idle");
       return;
     }
-    let cancelled = false;
+    let canceled = false;
     const controller = new AbortController();
     setPhase("loading");
     const timer = setTimeout(async () => {
       try {
         const result = await searchPlayers(trimmed, { signal: controller.signal });
-        if (cancelled) return;
+        if (canceled) return;
         if (result.ok) {
           setResults(result.data.results);
           setPhase("ok");
@@ -115,14 +115,14 @@ export function GuessCombobox({
         setResults([]);
         setPhase("error");
       } catch (err) {
-        if (cancelled) return;
+        if (canceled) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
         setResults([]);
         setPhase("error");
       }
     }, DEBOUNCE_MS);
     return () => {
-      cancelled = true;
+      canceled = true;
       clearTimeout(timer);
       controller.abort();
     };

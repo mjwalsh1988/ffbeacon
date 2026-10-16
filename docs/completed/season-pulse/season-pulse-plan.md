@@ -89,7 +89,7 @@ Fantasy (primary):
    from a player projected for little) and the letdowns (a small week from a
    player projected for a lot).
 5. Week by week grid. The top players at a position against every week played,
-   each cell coloured by how good the week was at that position, the number
+   each cell colored by how good the week was at that position, the number
    always printed.
 6. Starter weeks. How many of a player's weeks finished inside the starting
    range at his position (top 12 for QB, TE, K and DEF, top 24 for RB and WR),
@@ -220,10 +220,10 @@ schema and a review step, and are a separate piece of work.
 - Every bar has its figure printed beside it, and every grid is a real table.
   Nothing on these pages is a chart whose numbers live only in the graphic, so
   the disclosure pattern in `components/chart-kit.tsx` was not needed.
-- The heat grids print the number in every cell. Colour repeats it and never
+- The heat grids print the number in every cell. Color repeats it and never
   replaces it.
 - Position and sort controls are buttons with `aria-pressed`. The search field
-  is labelled and its result count is announced through a polite live region.
+  is labeled and its result count is announced through a polite live region.
 - Nothing visible is `aria-hidden` except icons and chart graphics.
 - Team logos and headshots are decorative; the name is always adjacent text.
 - No data is dropped at any width. A column hidden on a phone has its figures

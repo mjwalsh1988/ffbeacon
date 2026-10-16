@@ -563,7 +563,7 @@ export function ManagerPulseSettingsManager({
         description="How many rows each section shows. Changes what is rendered, not what is measured."
       >
         <Field
-          label="Favourites shown"
+          label="Favorites shown"
           value={settings.display.favouritesShown}
           onChange={(v) => patch("display", { favouritesShown: Math.trunc(v) })}
           step="1"
@@ -665,7 +665,7 @@ export function ManagerPulseSettingsManager({
       </Group>
 
       <Group
-        title="Behaviour"
+        title="Behavior"
         description="The thresholds behind the words we use for how a manager runs a season."
       >
         <Field

@@ -999,7 +999,7 @@ function WhoSection() {
       <Para>
         Almost every waiver mistake is the same mistake: bidding on a box score instead of a
         role. A receiver who caught two passes and took one of them eighty yards scored eighteen
-        points and is still the fourth option on his own offence. A back who carried it
+        points and is still the fourth option on his own offense. A back who carried it
         seventeen times for fifty-one yards scored nothing and just became his team&apos;s
         starter. The second one is the add, every time.
       </Para>
@@ -1191,7 +1191,7 @@ function MistakesSection() {
             icon: CircleDollarSign,
             tone: "danger",
             title: "Bidding round numbers",
-            body: "Everybody bids 10 and 20, so those are exactly the ties you are most likely to be in, and your league settles them with priority or a coin flip rather than in your favour. Make it 11.",
+            body: "Everybody bids 10 and 20, so those are exactly the ties you are most likely to be in, and your league settles them with priority or a coin flip rather than in your favor. Make it 11.",
           },
           {
             icon: Armchair,

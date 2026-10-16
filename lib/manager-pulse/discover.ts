@@ -154,7 +154,7 @@ export async function discoverLeagueSeasons(params: {
 /**
  * Cap a discovered list at `maxLeaguesPerRun`, MOST RECENT SEASON FIRST, and
  * at `maxLeaguesPerSeason` within any one season. Pure, so a run's cap
- * behaviour is testable without a Sleeper call, and reused by the capture
+ * behavior is testable without a Sleeper call, and reused by the capture
  * step, which needs the same cap applied to the same input.
  *
  * A manager in 200 leagues gets their most recent seasons' worth rather than

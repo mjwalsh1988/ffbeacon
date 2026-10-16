@@ -2,7 +2,7 @@
  * The heading that starts every section of a guide, in one place so the two
  * published guides open a section the same way.
  *
- * A beacon rule marks where the section begins, a small coloured eyebrow says
+ * A beacon rule marks where the section begins, a small colored eyebrow says
  * what kind of section it is, and the heading follows. The rule is decorative.
  * The eyebrow is read: on the course-style guides it carries the lesson number,
  * which is worth hearing. The heading carries the meaning and is what the

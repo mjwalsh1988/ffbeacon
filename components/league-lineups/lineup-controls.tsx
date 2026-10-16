@@ -179,7 +179,7 @@ export function LineupControls({
           </button>
         </div>
 
-        {/* WHY A STEPPER IS GREYED OUT, and why this is VISIBLE and CONDITIONAL.
+        {/* WHY A STEPPER IS GRAYED OUT, and why this is VISIBLE and CONDITIONAL.
             Both properties are load bearing and the first version of this file
             got both wrong.
 

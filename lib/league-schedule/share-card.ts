@@ -11,7 +11,7 @@
  * THE CARD IS A STILL IMAGE WITH NO ALT TEXT OF ITS OWN, which is the reason
  * for two rules that shape most of this file:
  *
- *   NOTHING IS SAID ONLY BY COLOUR OR ONLY BY POSITION. The side that is ahead
+ *   NOTHING IS SAID ONLY BY COLOR OR ONLY BY POSITION. The side that is ahead
  *   is named in a word, the state of the week is a word, and the basis of every
  *   number is a word. A tint is a scanning aid on top of a sentence, never
  *   instead of one.
@@ -53,7 +53,7 @@ export type ShareCardCell = {
   name: string;
   /** Sleeper id, so the renderer can find a headshot. */
   sleeperId: string;
-  /** Position code, which is what tells a team defence apart from a player. */
+  /** Position code, which is what tells a team defense apart from a player. */
   position: string;
   /** "QB, GB (vs SF)". Position leads, because the slot badge is shared. */
   meta: string;

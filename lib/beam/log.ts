@@ -1,7 +1,7 @@
 /**
  * Write one row per question to beam_queries, and scrub it on the way in.
  *
- * WHY LOG AT ALL. The most useful artefact BEAM produces in its first month is
+ * WHY LOG AT ALL. The most useful artifact BEAM produces in its first month is
  * the list of questions it could not answer, ordered by how often people asked
  * them. That list decides what gets built next, and it cannot come from the
  * feedback form because almost nobody fills in a form.

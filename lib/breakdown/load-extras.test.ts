@@ -11,7 +11,7 @@ import type { ProjectionRow } from "@/lib/power-pulse/load";
  * test catches and a page render does not: a missing number looks like missing
  * data, not like a bug.
  */
-describe("ADP flavour preference", () => {
+describe("ADP flavor preference", () => {
   it("asks for the dynasty superflex key first in a dynasty superflex format", () => {
     expect(adpKeyPreference("pts_ppr", true, true)[0]).toBe("dynasty_2qb");
   });

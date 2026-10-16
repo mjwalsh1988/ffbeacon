@@ -126,7 +126,7 @@ const FAQ: FaqAccordionItem[] = [
   {
     question: "Do I need an account?",
     answer:
-      "For the multi-league search, yes, because it runs against the leagues tied to the Sleeper username saved on your account. There is an account-free version of the neighbouring question though: open any Sleeper league in League Pulse and its lineups page lists that league's free agents, ranked against the roster you are looking at.",
+      "For the multi-league search, yes, because it runs against the leagues tied to the Sleeper username saved on your account. There is an account-free version of the neighboring question though: open any Sleeper league in League Pulse and its lineups page lists that league's free agents, ranked against the roster you are looking at.",
   },
   {
     question: "Does it work for ESPN or Yahoo leagues?",
@@ -571,7 +571,7 @@ function SleeperUnavailable() {
 
 /**
  * The legend, in the rail beside the tool. Every state a result row can be in,
- * as words with an icon, so the colours never have to carry the meaning on
+ * as words with an icon, so the colors never have to carry the meaning on
  * their own. Unanswered leagues are counted under the list rather than drawn as
  * rows, and the legend says so.
  */

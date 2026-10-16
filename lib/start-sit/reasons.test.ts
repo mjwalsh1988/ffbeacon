@@ -286,12 +286,12 @@ describe("buildStartSitReasons", () => {
     expect(buildStartSitReasons(defensive)).toEqual([]);
   });
 
-  it("floor fires when the confidence favours the last starter", () => {
+  it("floor fires when the confidence favors the last starter", () => {
     const fired = buildStartSitReasons(withFloor(baseInput()));
     expect(fired).toEqual(["If you need a safe floor, Bijan Robinson's is 12.1 points to Josh Jacobs's 8.1."]);
   });
 
-  it("ceiling fires instead of floor when the confidence favours the bench player", () => {
+  it("ceiling fires instead of floor when the confidence favors the bench player", () => {
     const fired = buildStartSitReasons(withCeiling(baseInput()));
     expect(fired).toEqual([
       "If you're chasing upside, Bijan Robinson's ceiling is 28.7 points to Josh Jacobs's 21.6.",

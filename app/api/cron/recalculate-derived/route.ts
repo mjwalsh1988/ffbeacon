@@ -57,8 +57,8 @@ const RUN_BUDGET_MS = 280_000;
  *
  * The roster-exposure rebuild is one aggregate over every roster row and
  * ITERATES NO LEAGUES, which is why it belongs here rather than on demand. It
- * is the denominator behind Manager Pulse favourites: without it, a player
- * everybody rosters reads as a preference, and every manager's favourites list
+ * is the denominator behind Manager Pulse favorites: without it, a player
+ * everybody rosters reads as a preference, and every manager's favorites list
  * would be the same list of good players. Measured at 3,704 rosters it is about
  * 310ms, but it grows with the number of leagues anyone has ever opened, which
  * is exactly why it is not computed per report.
@@ -106,7 +106,7 @@ export async function GET(req: Request) {
 
       // Non-fatal, like every other prune on this job. A failed rebuild leaves
       // the previous one in place, and Manager Pulse degrades to ranking
-      // favourites without the popularity denominator rather than breaking.
+      // favorites without the popularity denominator rather than breaking.
       let rosterExposure: unknown = null;
       try {
         const { data, error } = await supabase.rpc("rebuild_player_roster_exposure");
@@ -126,10 +126,10 @@ export async function GET(req: Request) {
       // A different question from the exposure rebuild above, and deliberately
       // a different table (see the header of migration 0292). That one is a
       // share of roster ROWS across every season, which tops out near 8 percent
-      // and normalises a favourites list. This one is a share of LEAGUES in one
+      // and normalizes a favorites list. This one is a share of LEAGUES in one
       // season, which is what "rostered in 41 percent" means on a waiver page.
       //
-      // Same shape as its neighbours: ONE AGGREGATE OVER ROSTER ROWS, ITERATING
+      // Same shape as its neighbors: ONE AGGREGATE OVER ROSTER ROWS, ITERATING
       // NO LEAGUE and making no Sleeper request, which is what keeps it on a
       // global cron rather than on demand. Non-fatal: a failed rebuild leaves
       // the previous counts in place, which are a day old rather than wrong.

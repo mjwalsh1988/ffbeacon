@@ -87,7 +87,7 @@ type AnyClient =
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
 /**
- * How many available players get projected and offered to the optimiser.
+ * How many available players get projected and offered to the optimizer.
  *
  * The free agent list is the whole ranked universe minus the league's rosters,
  * which in a twelve team league is several hundred names. Ranked order is a
@@ -538,8 +538,8 @@ export async function loadLineupView(
     if (value !== undefined) valueBySleeperId.set(sleeperId, value);
   }
 
-  // Everyone the optimiser seats this week, so the cut list can never offer one
-  // of them while the optimiser panel is telling the reader to start him.
+  // Everyone the optimizer seats this week, so the cut list can never offer one
+  // of them while the optimizer panel is telling the reader to start him.
   //
   // BUILT FROM THE FILL, NOT FROM THE DISPLAYED MOVES. The move list is filtered
   // by MIN_MOVE_GAIN, so a bench player the optimum genuinely seats by less
@@ -709,7 +709,7 @@ export async function loadLineupView(
  * players he is being compared against. Anything else would make the comparison
  * meaningless in exactly the way that is hardest to notice.
  *
- * THE BASELINE IS THE ONE THE OPTIMISER ALREADY USED. `buildLineup` hands back
+ * THE BASELINE IS THE ONE THE OPTIMIZER ALREADY USED. `buildLineup` hands back
  * the exact candidate list and slot tokens it filled with, and its own total,
  * so the "+4.2" under a free agent is measured against the very same optimum
  * the panel above the fold is showing. Reassembling that list here would mean
@@ -790,7 +790,7 @@ async function buildWaivers(args: {
     actualByPlayer: new Map(),
   };
 
-  // The baseline, straight from the fill the optimiser already ran.
+  // The baseline, straight from the fill the optimizer already ran.
   const projectableIndex: number[] = [];
   slots.forEach((slot, i) => {
     if (slot.projectable) projectableIndex.push(i);

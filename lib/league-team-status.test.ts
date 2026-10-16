@@ -226,7 +226,7 @@ describe("classifyTeamStatus", () => {
 
   it("pins the divergence threshold at the league sizes that actually exist", () => {
     // The gap is a PERCENTILE, so what it costs in places moves with the league.
-    // Only the 12-team case was pinned, which left the behaviour at the sizes
+    // Only the 12-team case was pinned, which left the behavior at the sizes
     // either side of it free to change without a test noticing.
     const gapAt = (teamCount: number, playoffTeams: number) => {
       const rank = Math.min(teamCount - 1, playoffTeams + 1);

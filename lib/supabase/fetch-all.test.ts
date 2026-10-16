@@ -79,7 +79,7 @@ describe("fetchAllRows", () => {
   });
 });
 
-/** A fake table that honours `id > after` and a limit, capped at 1000. */
+/** A fake table that honors `id > after` and a limit, capped at 1000. */
 function keysetTable(n: number, failAfter?: number) {
   const rows = Array.from({ length: n }, (_, i) => ({ id: i + 1 }));
   const calls: Array<number | null> = [];

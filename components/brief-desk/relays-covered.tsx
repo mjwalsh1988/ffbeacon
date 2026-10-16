@@ -25,7 +25,7 @@ const SHOWN_FIRST = 12;
 function RelayItem({ r }: { r: RelayCardData }) {
   return (
     <li className="rounded-card border border-line bg-surface/40 px-4 py-3">
-      {/* A block link with its own padding, not min-h-11 with centring: a
+      {/* A block link with its own padding, not min-h-11 with centering: a
           one-line headline and a two-line one then sit the same distance
           above the line under them. The padding keeps the 44px target. */}
       <Link

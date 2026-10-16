@@ -75,7 +75,7 @@ export const MANAGER_NAV_ITEMS: ManagerNavItem[] = [
   {
     id: "affinity",
     label: "Who they like",
-    hint: "Favourite players, and the ones they avoid",
+    hint: "Favorite players, and the ones they avoid",
     icon: "target",
   },
   {

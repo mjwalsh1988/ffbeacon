@@ -2,7 +2,7 @@
  * One Relay as a card: the structured headline of one accepted source post.
  *
  * Semantic shape, per docs/beacon-brief/relays-and-briefs-plan.md section 6.2:
- * an <article> labelled by its own heading, a header row of text chips (kind,
+ * an <article> labeled by its own heading, a header row of text chips (kind,
  * week, availability, "Update" when it follows an earlier Relay), the facts as
  * a <dl>, player and team pills as real links, and a footer carrying the
  * original-report credit with a real link and the permalink. Nothing visible

@@ -105,12 +105,12 @@ export type LineupGroup = {
 };
 
 /**
- * One swap the optimiser would make.
+ * One swap the optimizer would make.
  *
  * These come from a single optimal fill, so unlike a list of independent
  * "biggest upgrade" suggestions they are internally consistent: applying all of
  * them at once produces exactly `optimalTotal`, and `pointsGained` sums to
- * `pointsLeftOnBench`. That is the whole reason the optimiser is run once and
+ * `pointsLeftOnBench`. That is the whole reason the optimizer is run once and
  * diffed rather than asked one player at a time.
  */
 export type LineupMove = {
@@ -131,7 +131,7 @@ export type LineupMove = {
   requiresRosterMove: boolean;
 };
 
-/** The optimiser's verdict for one week. */
+/** The optimizer's verdict for one week. */
 export type LineupOptimization = {
   /** What the lineup as set is projected to score. Null when nothing is projected. */
   setTotal: number | null;
@@ -155,7 +155,7 @@ export type LineupOptimization = {
    */
   moves: LineupMove[];
   /**
-   * Points the optimiser found in swaps too small to be worth listing.
+   * Points the optimizer found in swaps too small to be worth listing.
    *
    * Zero in the ordinary case. Non-zero means the lineup is close enough to
    * optimal that the remaining moves sit inside the model's own noise, which is
@@ -244,7 +244,7 @@ export type LineupView = {
   /**
    * Upcoming, in progress, final or not settled, plus the words for it.
    *
-   * WHAT THE PAGE IS FOR, not decoration. `showsAdvice` turns the optimiser,
+   * WHAT THE PAGE IS FOR, not decoration. `showsAdvice` turns the optimizer,
    * the waiver panel and the cut list on; `showsResults` turns the report on
    * and makes actual points the headline figure on every row. See ./status.ts.
    */
@@ -266,7 +266,7 @@ export type LineupView = {
    * Said out loud on the page rather than left to be discovered. Before the
    * slate exists, "your week 4 lineup" and "your lineup right now" are the same
    * thing; once week 4 is published they are not, and a page that quietly
-   * showed one while labelling it the other would be wrong in a way a reader
+   * showed one while labeling it the other would be wrong in a way a reader
    * could not see.
    */
   usedRosterFallback: boolean;

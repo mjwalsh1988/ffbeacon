@@ -217,7 +217,7 @@ export function withinLimits(parts: {
  * Shorten a team name for a poll answer WITHOUT cutting a word in half.
  *
  * A poll answer is 55 characters and a team name can be anything a manager
- * typed. Dropping trailing whole words leaves something a reader recognises;
+ * typed. Dropping trailing whole words leaves something a reader recognizes;
  * slicing mid-word leaves "The Fighting Mongoo". When even the first word does
  * not fit, the answer is refused by the caller rather than mangled here.
  */

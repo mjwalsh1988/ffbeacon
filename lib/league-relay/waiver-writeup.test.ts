@@ -234,7 +234,7 @@ describe("buildWaiverWriteup", () => {
   });
 });
 
-describe("a missing projection is never a judgement (IDP-129)", () => {
+describe("a missing projection is never a judgment (IDP-129)", () => {
   const base = {
     league,
     faabBudget: 100,

@@ -72,7 +72,7 @@ describe("positionNoun", () => {
 });
 
 describe("positionHeading and positionNounMap", () => {
-  it("capitalises only the first letter", () => {
+  it("capitalizes only the first letter", () => {
     expect(positionHeading("RB")).toBe("Running backs");
     expect(positionHeading("DEF", "singular")).toBe("Team defense");
     expect(positionHeading("DEF", "plural", "short")).toBe("Defenses");
@@ -123,7 +123,7 @@ describe("one position noun map", () => {
 
   it("finds no second map from position codes to English nouns", () => {
     // A map entry like QB: "quarterback", LB: "linebacker" or DL: "Defensive
-    // linemen", for any position the helper knows. A colour map or an order
+    // linemen", for any position the helper knows. A color map or an order
     // map never has an English noun on the right. Widened on 2026-09-25: the
     // QB-only pattern missed two defensive-only maps in the IDP guide.
     const nouns = ["quarterback", "running back", "wide receiver", "tight end", "kicker", "team defense", "defensive linem[ae]n", "linebacker", "defensive back"];

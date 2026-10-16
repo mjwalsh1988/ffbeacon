@@ -70,9 +70,9 @@ export function TransactionRow({
     tradeSource ? `?source=${encodeURIComponent(tradeSource)}` : ""
   }`;
 
-  // Type-coloured top edge + a lifted surface. In a stacked feed the eye needs
+  // Type-colored top edge + a lifted surface. In a stacked feed the eye needs
   // an unambiguous "this is where the next one starts", and a plain hairline
-  // border between two same-coloured blocks does not provide one. This mirrors
+  // border between two same-colored blocks does not provide one. This mirrors
   // the beacon edge on the graded trade card so the two read as siblings.
   const edge =
     data.type === "trade"
@@ -265,7 +265,7 @@ function TradeSideCard({
           )}
         </div>
         {/* ARIA prohibits an accessible name on a paragraph (role=generic), so
-            the label here was honoured by some browsers and dropped by others.
+            the label here was honored by some browsers and dropped by others.
             The words live in the DOM instead. */}
         <p className="font-mono text-lg font-semibold text-ink">
           <span className="sr-only">Total value received, </span>
@@ -462,7 +462,7 @@ function MovesBody({
 
   // Group adds and drops under the roster that made the move. The common
   // waiver / free-agent shape is one manager adding a player and dropping
-  // another, so showing the team once with clearly-labelled Added / Dropped
+  // another, so showing the team once with clearly-labeled Added / Dropped
   // columns reads far cleaner than repeating "via Team" on every line.
   const byRoster = new Map<number, { added: string[]; dropped: string[] }>();
   const ensure = (rid: number) => {

@@ -124,7 +124,7 @@ describe("value movers", () => {
     expect(d.rows.map((r) => r.player_id)).toEqual(["p2"]);
   });
 
-  it("honours the limit", () => {
+  it("honors the limit", () => {
     expect(buildValueMoversDataset("up", dynasty, players, AT, 1).rows).toHaveLength(1);
   });
 

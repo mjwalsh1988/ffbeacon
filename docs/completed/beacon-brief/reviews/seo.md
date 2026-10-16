@@ -240,7 +240,7 @@ and use it for the `/brief` entry and in the `core` branch of
 `newestEditionAt`, which is correct for it. The homepage entry (line 279)
 should take the newer of the two, since `app/page.tsx` now shows both.
 
-### M5. A pre-season edition will be labelled "Off-season" and marked up as `Article` rather than `NewsArticle`
+### M5. A pre-season edition will be labeled "Off-season" and marked up as `Article` rather than `NewsArticle`
 
 Resolution: fixed in lib/brief-desk/edition-metadata.ts, lib/brief-desk/period.ts, app/brief/[slug]/page.tsx, components/brief-desk/edition-page.tsx and app/api/og/brief/[slug]/route.tsx.
 

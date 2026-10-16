@@ -60,7 +60,7 @@ Quoted intent, in the owner's words, and the reading this plan takes of each:
   to the league name but in its own column that vertically spans so it's just
   like a column in that row". Reading: a new first column (or first grid
   track) on every league list, holding a 48 px logo on desktop rows and a
-  40 px logo on phone rows, vertically centred against the full height of
+  40 px logo on phone rows, vertically centered against the full height of
   the row including any second line the row carries. Where a list is a native
   `<select>`, which cannot show an image, the select is replaced by a real
   list (Part 3, D12).
@@ -265,7 +265,7 @@ per-(ip, username) 10-second cooldown; FAAB and Breakdown go through their
 server actions and their `try_claim_rate_limit` buckets. The token bucket in
 `lib/sleeper-budget.ts` sits under all of it. Nothing bypasses anything.
 
-One consequence needs a specific behaviour: On The Clock's 10-second cooldown
+One consequence needs a specific behavior: On The Clock's 10-second cooldown
 means a reader who reloads the page twice quickly gets a 429 on the auto-run.
 That is a soft failure, not a reason to drop them back to the form:
 the card stays, a `role="status"` line says "Give it a few seconds and press
@@ -327,7 +327,7 @@ FAAB and Signal Check pick a league with a `<select>`. Both become
 per league, each row carrying the logo, the name, and the meta line the select
 used to carry in parentheses ("12 FAAB left", "syncs when picked", "(2026)").
 Arrow keys move between rows as a radiogroup does natively, so keyboard
-behaviour is not worse than the select it replaces, and the meta text is
+behavior is not worse than the select it replaces, and the meta text is
 inside the label so it is announced with the choice. The Breakdown picker,
 already a list of buttons, adopts the same component so the three tools read
 the same way.
@@ -346,7 +346,7 @@ it sits under a header cell whose text is `sr-only` "Logo". In the dashboard
 `<table>`, a new first `<th scope="col">` with `sr-only` "League logo" and a
 matching `<td>`. On phone rows, the `li` becomes a two-column grid
 (`grid-cols-[2.5rem_1fr]`) with the logo in column one spanning both rows
-(`row-span-2 self-center`), so the logo is vertically centred against the
+(`row-span-2 self-center`), so the logo is vertically centered against the
 name line AND the standing line beneath it. That is the "vertically spans"
 the owner described.
 
@@ -577,7 +577,7 @@ export function sleeperAvatarUrl(
 
 `components/sleeper-avatar.tsx` drops its private `AVATAR_BASE` and calls
 this. `lib/sleeper-avatar-url.test.ts`: both sizes, null and empty string
-return null, an id containing a slash or a dot returns null (defence against
+return null, an id containing a slash or a dot returns null (defense against
 a hostile `metadata.avatar`; Sleeper ids are 32 hex characters, and the
 function accepts `^[A-Za-z0-9]{1,64}$`).
 
@@ -656,7 +656,7 @@ export function SaveHandleForm({
 ```
 
 Calls `saveSleeperHandle` when saving; calls `onLookup(username)` when the
-inline checkbox is off. A tool's own submit behaviour (navigating to
+inline checkbox is off. A tool's own submit behavior (navigating to
 `?username=`, calling `connect`) lives in `onLookup`, so this form never knows
 which tool it is in. Client-side validation through `normalizeSleeperHandle`
 before either path, with the message from `manager-search-form.tsx` ("That
@@ -783,7 +783,7 @@ card is wanted.
 
 Replace `SleeperConnection` and `SaveUsernameForm` with `SleeperIdentityCard`
 in settings mode (`children` = `SaveHandleForm mode="settings"`), keeping the
-`lookupFailed` behaviour (the card opens the form and alerts). Delete
+`lookupFailed` behavior (the card opens the form and alerts). Delete
 `sleeper-connection.tsx` and `save-username-form.tsx`. The page reads the
 handle through `loadSavedSleeperHandle` and calls `getSleeperLeagues` with the
 cached id. The "Not connected" state (no handle) renders the pitch heading
@@ -833,7 +833,7 @@ unchanged. The response is unchanged.
 
 `username-gate.tsx`: gains the D5 checkbox in inline mode and the notice slot
 (the gate renders the notice under it). Its help text drops "Your username is
-never stored unless you sign in and save it" in favour of the notice, which
+never stored unless you sign in and save it" in favor of the notice, which
 says the same thing with a link.
 
 ### 5.4 FAAB Calculator, `/tools/faab`
@@ -1067,7 +1067,7 @@ Part 4.10. Depends on SH-T004, SH-T006.
 #### SH-T012 | `components/sleeper-handle/identity-card.tsx`
 
 Part 4.10. Depends on SH-T008. Accessibility review must verify: the heading
-level prop is honoured; `aria-expanded` and `aria-controls` are wired; focus
+level prop is honored; `aria-expanded` and `aria-controls` are wired; focus
 moves in on open and back on close; Escape closes; the status line is a
 single `role="status"` region that never carries a clock; the avatar is
 decorative with the name as adjacent text.
@@ -1191,7 +1191,7 @@ for `source === "url"`. Callers in `league-shell/*.tsx` pass the viewer.
 `teams/[roster_id]/page.tsx` (T044), `trade-ideas/page.tsx` (T045),
 `transactions/page.tsx` (T046). Each: `resolveSleeperViewer`, thread the
 viewer to `loadLeagueHeaderActions`, `matchViewerRoster` candidates gain the
-owner id, href builders honour `source`. Verification for each: signed in
+owner id, href builders honor `source`. Verification for each: signed in
 with a saved handle on a clean URL, the reader's team is highlighted and the
 switcher lists their other leagues; with `?username=other`, the other
 person's team is highlighted and the card says "from this link"; signed out
@@ -1199,7 +1199,7 @@ on a clean URL, nothing is highlighted, exactly as today.
 
 #### SH-T047 | `components/league-header-actions.tsx`
 
-Copy link honours `viewer.source`.
+Copy link honors `viewer.source`.
 
 ### Phase 4: logos on every list
 

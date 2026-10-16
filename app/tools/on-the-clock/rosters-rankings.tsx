@@ -145,7 +145,7 @@ export function RostersRankings({
 
   // The same classifier League Pulse uses, so a team reads the same way in both
   // places. Dynasty only: in a redraft league every team is competing by
-  // definition, and labelling one a rebuilder would be a different claim.
+  // definition, and labeling one a rebuilder would be a different claim.
   const statusFor = (rosterId: number): TeamStatus | null => {
     if (!isDynasty || !pulseAvailable) return null;
     const pulse = pulseById.get(rosterId);
@@ -296,7 +296,7 @@ function TeamRosterCard({
   const headingId = `otc-team-${team.rosterId}`;
   const ofCount = teamCount > 0 ? ` of ${teamCount}` : "";
   return (
-    // Labelled BY the heading rather than with a written-out summary. The old
+    // Labeled BY the heading rather than with a written-out summary. The old
     // aria-label repeated the rank, the owner, the value, the Pulse, and the
     // archetype, all of which are rendered as text inside, so entering the card
     // spoke the whole thing and then read it again.
@@ -310,7 +310,7 @@ function TeamRosterCard({
     >
       {/* Stacked on phones, one row from lg up. The four numbers used to sit as
           loose right-aligned text that wrapped under the name on a narrow
-          screen and read as unlabelled figures floating in the card; they are
+          screen and read as unlabeled figures floating in the card; they are
           bordered tiles now, each with its own icon and label at every width. */}
       <header className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center lg:gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -398,7 +398,7 @@ function TeamRosterCard({
 }
 
 /**
- * One labelled figure from the roster card header: icon, what the number is,
+ * One labeled figure from the roster card header: icon, what the number is,
  * the number, and an optional qualifier under it. Sized so two sit side by side
  * on a phone and all four line up in a row from lg.
  */

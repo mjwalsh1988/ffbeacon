@@ -281,7 +281,7 @@ export async function moveBookmark(
 }
 
 /** Show or hide the bar. Follows the reader to every device, unlike whether
- * the bar is minimised, which is per-device and lives in local storage. */
+ * the bar is minimized, which is per-device and lives in local storage. */
 export async function setBookmarkBarEnabled(
   enabled: unknown,
 ): Promise<BookmarkResult> {
@@ -322,7 +322,7 @@ async function barPreference(caller: Caller): Promise<boolean> {
  * Write positions 0..n-1 over the given order, in ONE request.
  *
  * It used to send one UPDATE per changed row in parallel, which is fine for a
- * move (two neighbours swap) and is not fine for a delete: removing the first
+ * move (two neighbors swap) and is not fine for a delete: removing the first
  * of forty bookmarks rewrote thirty-nine positions, so a single press fired
  * thirty-nine concurrent statements at the pooler to maintain a number nothing
  * renders. One upsert keyed on the primary key does the same work in one round

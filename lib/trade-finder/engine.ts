@@ -30,7 +30,7 @@
  *
  *   Under the first question there is a HARD FLOOR rather than a weighting: a
  *   deal that costs points off the starting lineup is not built at all. Ranking
- *   those last was the previous behaviour and it was not enough, because the
+ *   those last was the previous behavior and it was not enough, because the
  *   shortlist is walked with an arrow key, so a bad deal at position nine is
  *   still a deal put in front of somebody. See clearsContenderFloor in rank.ts,
  *   and the gate inside `build`, the closure in collect() that turns one
@@ -52,8 +52,8 @@
  *   what it produced.
  *
  * ANSWERING BEATS ANSWERING PERFECTLY
- *   The bands that decide whether a package is fair are judgements, and a
- *   judgement that returns nothing is not a careful answer, it is a missing one.
+ *   The bands that decide whether a package is fair are judgments, and a
+ *   judgment that returns nothing is not a careful answer, it is a missing one.
  *   So the search runs on the WIDER bands and records, for each deal, whether it
  *   would also have cleared the strict ones. Strict-clearing deals sort ahead of
  *   the rest at every level: inside the package chooser, in the ranking, and in
@@ -1122,7 +1122,7 @@ function collect(
           // way puts every pair containing the single best asset at the front,
           // so the fourteen kept were fourteen ways to trade the same player and
           // the reader was handed one idea over and over. The diagonal takes
-          // neighbours first, which spreads the lead asset across the roster.
+          // neighbors first, which spreads the lead asset across the roster.
           const head = candidates.slice(0, CONSOLIDATE_PAIR_DEPTH);
           const pairs: AssetRef[][] = [];
           for (let span = 1; span < head.length && pairs.length < COVERAGE_ANCHORS; span += 1) {

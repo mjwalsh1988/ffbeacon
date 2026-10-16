@@ -358,7 +358,7 @@ never to a timer. Everything below decorates or annotates it.
   "computing", restated into the live region at most once a minute (T022).
 - Three layers on one `role="progressbar"`: the fill (the only thing
   `aria-valuenow` describes); a striped segment `leaguesProcessing / total`
-  wide immediately after it; a bright band travelling along the fill on a 2.4 s
+  wide immediately after it; a bright band traveling along the fill on a 2.4 s
   loop, purple into cyan into white, glow underneath, CSS keyframes only,
   `aria-hidden`, still under `prefers-reduced-motion` (T024).
 - Liveness said out loud: `workerSeenAt` older than 20 s while capturing dims
@@ -682,7 +682,7 @@ successful poll, `failureBackoffMs` after a failed one. Remove
 terminal, because Phase 3 makes the drainer finish it and the poll must see it
 through. Until Phase 3 lands, `capture-progress.tsx`'s existing
 `router.refresh()` on "computing" still fires once (it is keyed on the status
-value, not on the poll stopping), so behaviour in the interim is unchanged.
+value, not on the poll stopping), so behavior in the interim is unchanged.
 
 Test: `components/manager-pulse/use-capture-progress.test.ts` (new, vitest with
 fake timers): a successful poll schedules the next at 2000 ms; a failed poll at
@@ -2371,7 +2371,7 @@ as the run's `sleeper_handle` or the request's user id prefix); oldest pending
 sum of `sleeper_calls` on jobs finished in that window. Register in
 `lib/manager-pulse-admin-nav.ts` and `components/admin/manager-pulse-subnav.tsx`.
 Every timestamp through `formatEastern`. Tables with captions, scroll regions
-labelled, nothing hidden on mobile.
+labeled, nothing hidden on mobile.
 
 #### MPS-T049 | app/admin/manager-pulse/runs/page.tsx: telemetry
 
@@ -2427,7 +2427,7 @@ Add the rules in Part 6 to the Manager Pulse section, in its voice.
   error that charges nothing; a failed week fails the job so it retries.
 - The report is computed by the drainer (`lib/manager-pulse/finalize.ts`),
   never inside a page render. The page reads a cache or shows progress.
-- A live report is labelled with its coverage above the fold, lives only in
+- A live report is labeled with its coverage above the fold, lives only in
   `manager_pulse_live_reports`, is never written to `manager_pulse_cache` or
   `manager_pulse_tendencies`, and is recomputed no more often than
   `shouldComputeLiveReport` allows.

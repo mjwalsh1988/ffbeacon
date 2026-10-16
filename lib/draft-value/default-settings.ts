@@ -100,7 +100,7 @@ export type DraftValueSettings = {
    * A points-above-replacement model and a real draft market disagree about
    * whole POSITIONS, not just about players. Ours puts elite quarterbacks
    * earlier than a one-QB room does, which is the long-running argument between
-   * value-over-replacement models and actual draft behaviour, and it is not
+   * value-over-replacement models and actual draft behavior, and it is not
    * something a steal list should be relaying. "The market is late on this
    * player" has to mean late relative to comparable players; a whole-position
    * offset is a strategy claim ("draft quarterbacks earlier than the room

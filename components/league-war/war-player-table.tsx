@@ -5,7 +5,7 @@
  *
  * A real semantic <table> with a caption, scope headers, aria-sort on the
  * active column, sort buttons inside the <th>, a name search, and a polite
- * live region that announces the settled count and sort. Modelled on
+ * live region that announces the settled count and sort. Modeled on
  * app/tools/on-the-clock/available-list.tsx, which is this project's reference
  * implementation for a sortable, searchable table.
  *
@@ -46,8 +46,8 @@ const ANNOUNCE_DELAY_MS = 500;
 const PAGE_SIZE = 25;
 
 /**
- * Tier styling. Every tier keeps a readable border and text colour, and the
- * LABEL is the tier: nothing here is conveyed by colour alone, and the badge
+ * Tier styling. Every tier keeps a readable border and text color, and the
+ * LABEL is the tier: nothing here is conveyed by color alone, and the badge
  * is plain text a screen reader reads verbatim.
  */
 const TIER_CLASS: Record<WarTier, string> = {

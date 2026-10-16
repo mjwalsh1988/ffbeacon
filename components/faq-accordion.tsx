@@ -10,7 +10,7 @@
  *
  * The number tile and the plus sign are decorative (aria-hidden). The plus
  * turns into a cross when the item is open, and the open item takes a cyan
- * border, so the state reads without colour as well as with it.
+ * border, so the state reads without color as well as with it.
  *
  * Presentational server component.
  */

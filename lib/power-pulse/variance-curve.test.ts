@@ -137,7 +137,7 @@ describe("cvForPoints", () => {
 });
 
 describe("curveFor", () => {
-  it("falls back to PPR for a scoring base it does not recognise", () => {
+  it("falls back to PPR for a scoring base it does not recognize", () => {
     expect(curveFor("pts_something_new", "WR")).toEqual(
       VARIANCE_CURVES.pts_ppr.WR,
     );

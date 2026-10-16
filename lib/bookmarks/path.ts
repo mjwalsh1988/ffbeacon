@@ -13,7 +13,7 @@
  *                            another ORIGIN, and it is the one that gets
  *                            missed, because it starts with a slash
  *   "javascript:alert(1)"    a scheme that executes rather than navigates
- *   "/path\to"               a backslash, which some browsers normalise to "/"
+ *   "/path\to"               a backslash, which some browsers normalize to "/"
  *                            AFTER a naive check has already passed it
  *   anything with whitespace or a control character, which is how the above
  *                            get smuggled past a check that only looks at the
@@ -49,7 +49,7 @@ import { MAX_BOOKMARK_PATH_LENGTH, MAX_BOOKMARK_LABEL_LENGTH } from "./types";
  *
  * The control ranges are written as escapes rather than as literal characters,
  * so that this line survives being copied through an editor or a diff that
- * quietly normalises invisible bytes.
+ * quietly normalizes invisible bytes.
  */
 const FORBIDDEN_CHARS = /[\s\\\u0000-\u001f\u007f-\u009f]/;
 

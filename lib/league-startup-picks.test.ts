@@ -38,7 +38,7 @@ type SelectionRow = {
 };
 
 /**
- * A Supabase stand-in for the two tables this module reads. It honours .range()
+ * A Supabase stand-in for the two tables this module reads. It honors .range()
  * so the paging path is genuinely exercised rather than assumed.
  */
 function stub(drafts: DraftRow[], selections: SelectionRow[], opts: { selectionsBlocked?: boolean } = {}) {
@@ -258,7 +258,7 @@ describe("loadStartupPickIndex, two drafts in one season", () => {
   it("sorts on the start_time COLUMN, not only the raw metadata epoch", async () => {
     // A row whose metadata predates the raw-object upsert, or is the '{}' column
     // default from migration 0027, still has the timestamptz column. Reading only
-    // metadata sorted that row last here and first in the slot labeller, which is
+    // metadata sorted that row last here and first in the slot labeler, which is
     // how the label and the valuation came off two different drafts.
     const laterNoMeta = { ...later, metadata: {} };
     const client = stub([laterNoMeta, earlier], [selection(1, "gibbs", "1394068769269088256")]);
@@ -375,7 +375,7 @@ describe("loadStartupPickIndex, a season running BOTH a startup and a rookie dra
 describe("loadStartupPickIndex, refusing to guess", () => {
   it("ignores an auction draft, whose pick numbers follow nomination order", async () => {
     // pick_no in an auction has no relationship to (round, seat), so the seat
-    // maths would return a real player at the wrong slot with full confidence.
+    // math would return a real player at the wrong slot with full confidence.
     const auction = draft({ type: "auction" });
     const client = stub([auction], [selection(1, "gibbs")]);
     const index = await loadStartupPickIndex(client, {

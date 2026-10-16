@@ -12,7 +12,7 @@ import { buildBeamAdminEmail, buildBeamAskerEmail } from "@/lib/email/beam-email
 /**
  * POST /api/beam/learn
  *
- * "Help BEAM learn this": the exit from a dead end. Modelled directly on
+ * "Help BEAM learn this": the exit from a dead end. Modeled directly on
  * /api/guide/submit, which already solved this exact problem for the Signal
  * Guide. Defenses, in order:
  *   1. Full same-origin check (Origin, then Referer, fail closed). Stricter than

@@ -154,7 +154,7 @@ export default async function ManagerPulsePage() {
           description="Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, and what they overpay for."
         />
 
-        {/* SignInCta carries its own <h2>, so this section is labelled by that
+        {/* SignInCta carries its own <h2>, so this section is labeled by that
             heading rather than a second, redundant one wrapping it. */}
         <section aria-labelledby="mp-signin-heading" className="mt-8">
           <div className="mx-auto max-w-2xl">

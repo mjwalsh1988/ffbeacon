@@ -59,7 +59,7 @@ describe("parseEspnGameLine", () => {
     expect(line?.openHomeSpread).toBeNull();
   });
 
-  it("keeps an away favourite positive, matching nfl_game_odds.home_spread", () => {
+  it("keeps an away favorite positive, matching nfl_game_odds.home_spread", () => {
     const item = {
       ...ATL_AT_GB.items[0],
       details: "ATL -3",

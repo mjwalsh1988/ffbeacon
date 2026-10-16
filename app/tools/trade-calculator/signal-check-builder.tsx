@@ -13,9 +13,9 @@ import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
 import { currentSection, trackEvent } from "@/lib/analytics";
 
 /**
- * Per-side colour. Side A is purple and Side B is cyan, matching the value
+ * Per-side color. Side A is purple and Side B is cyan, matching the value
  * balance bars in the result, so the side you built on the left is the side you
- * read on the left. Colour is never the only cue: each panel keeps its "Side A"
+ * read on the left. Color is never the only cue: each panel keeps its "Side A"
  * / "Side B" heading and a letter badge.
  */
 const SIDE_ACCENT: Record<SideKey, {

@@ -23,9 +23,9 @@
  * that mapping lives, so a future divergence is one entry.
  *
  * SPREAD SIGN. ESPN's `spread` number and its `details` string ("SEA -3.5") are
- * both quoted relative to the FAVOURITE, not always relative to the home team.
- * parseHomeSpread() reads which team `details` names and normalises to
- * home_spread, where NEGATIVE means the home team is favoured, matching how a
+ * both quoted relative to the FAVORITE, not always relative to the home team.
+ * parseHomeSpread() reads which team `details` names and normalizes to
+ * home_spread, where NEGATIVE means the home team is favored, matching how a
  * book quotes it and matching migration 0238's column comment. When `details`
  * cannot be parsed it falls back to the `homeTeamOdds` / `awayTeamOdds`
  * `favorite` booleans ESPN also publishes. When neither resolves it, the spread
@@ -69,8 +69,8 @@ export function normalizeEspnTeam(abbr: string): string {
 }
 
 /**
- * Normalise ESPN's favourite-relative spread to home_spread, where negative
- * means the home team is favoured.
+ * Normalize ESPN's favorite-relative spread to home_spread, where negative
+ * means the home team is favored.
  *
  * `details` (e.g. "SEA -3.5") is parsed first: the named team gets the signed
  * number, and the sign is flipped if that team is the away side. "PK" / "EVEN"
@@ -137,7 +137,7 @@ export type EspnOddsGame = {
   awayTeam: string; // our code
   kickoffAt: string | null;
   gameTotal: number | null;
-  homeSpread: number | null; // negative means home favoured
+  homeSpread: number | null; // negative means home favored
   provider: string | null;
   raw: unknown; // the original competition object, for metadata
 };
@@ -314,7 +314,7 @@ export async function getEspnScoreboard(
 //
 // The first item is the highest-priority book (DraftKings today). Its
 // homeTeamOdds.open / .close carry the home side's spread as an American
-// string ("-7.5"), which is already home-relative, so no favourite parsing is
+// string ("-7.5"), which is already home-relative, so no favorite parsing is
 // needed for those two; the top-level details/spread pair goes through
 // parseHomeSpread like the scoreboard's does, as the fallback for the close.
 // ---------------------------------------------------------------------------

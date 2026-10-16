@@ -147,8 +147,8 @@ const QUALITY_OVER_TOLERANCE = 0.25;
 /**
  * The second, wider set of bands.
  *
- * Every tolerance above is a judgement about what a real manager would answer,
- * and judgements that produce nothing at all are not serving the reader: the
+ * Every tolerance above is a judgment about what a real manager would answer,
+ * and judgments that produce nothing at all are not serving the reader: the
  * commonest complaint about this feature was not that a suggestion was bad, it
  * was that pressing the button returned "no trades to suggest" on a roster with
  * fourteen tradeable pieces in a twelve-team league. That is the search being
@@ -825,7 +825,7 @@ export function balancePackages(
   if (pinned) consider([...required]);
 
   // One more asset alongside whatever is pinned. A caller that capped maxAssets
-  // at the size of the pinned package has to be honoured here too; without the
+  // at the size of the pinned package has to be honored here too; without the
   // check this loop returned oversized packages and the constraint was a lie its
   // callers could not see.
   const gap = target - requiredValue;

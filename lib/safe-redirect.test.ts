@@ -51,7 +51,7 @@ describe("safeRedirectPath", () => {
     expect(safeRedirectPath("/ok ", FALLBACK)).toBe(FALLBACK);
   });
 
-  it("refuses a path that normalises to a protocol-relative form", () => {
+  it("refuses a path that normalizes to a protocol-relative form", () => {
     expect(safeRedirectPath("/..//example.com", FALLBACK)).toBe(FALLBACK);
     expect(safeRedirectPath("/./..//example.com/x", FALLBACK)).toBe(FALLBACK);
   });

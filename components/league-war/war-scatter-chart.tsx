@@ -21,7 +21,7 @@
  * star), so the two charts agree and so position is never carried by hue
  * alone.
  *
- * Accessibility: the <svg> is aria-hidden, the plot area is a labelled,
+ * Accessibility: the <svg> is aria-hidden, the plot area is a labeled,
  * focusable group, arrow keys walk the dots in x order, and the readout is
  * mirrored into a polite live region. Pointer travel is debounced so a sweep
  * announces once; a click, an arrow key and Enter are deliberate and announce
@@ -334,7 +334,7 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
           : "Click a dot, or focus the chart and use the arrow keys, to read a player's numbers."}
       </p>
       {/* Keyed on a counter so clicking the same dot twice, or pressing Enter
-          to hear the current one again, is honoured: a live region announces on
+          to hear the current one again, is honored: a live region announces on
           a change, and the text is identical. See the same note in
           components/league-war/positional-war-chart.tsx. */}
       <div aria-live="polite" className="sr-only">

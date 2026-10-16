@@ -1,7 +1,7 @@
 /**
  * Number and word formatting for BEAM answers.
  *
- * Small, boring, and centralised for one reason: an assistant that writes "1
+ * Small, boring, and centralized for one reason: an assistant that writes "1
  * touchdowns" has told the reader it is a template, and everything else it says
  * gets read as template output too. Agreement, separators, and rounding are
  * decided here so no presenter has to remember them.

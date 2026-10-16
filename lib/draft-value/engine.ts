@@ -302,12 +302,12 @@ export function projectOntoMarketScale(
 
 /**
  * The median raw gap within each position, which is what gets subtracted before
- * a player is ranked or categorised.
+ * a player is ranked or categorized.
  *
  * WHY THIS EXISTS. A points-above-replacement model and a real draft market
  * disagree about whole POSITIONS, not only about players. Ours puts elite
  * quarterbacks earlier than a one-QB room does. That is the long-running
- * argument between value-over-replacement models and actual draft behaviour, and
+ * argument between value-over-replacement models and actual draft behavior, and
  * a steal list is the wrong place to relay it: "the market is late on this
  * player" has to mean late relative to comparable players. A uniform +20 on
  * every quarterback is a strategy claim, and it belongs in the guide's prose,

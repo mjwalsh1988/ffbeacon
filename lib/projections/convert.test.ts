@@ -189,7 +189,7 @@ describe("toStatLine, tight end bonus_rec_te", () => {
     expect(line.bonus_rec_te).toBeUndefined();
   });
 
-  it("prices a TE premium league correctly because bonus_rec_te is present, matching Sleeper's own behaviour", () => {
+  it("prices a TE premium league correctly because bonus_rec_te is present, matching Sleeper's own behavior", () => {
     const line = toStatLine(teInput, DEFAULT_PROJECTION_SETTINGS);
     const plainPpr: ScoringSettings = {
       rec: 1,

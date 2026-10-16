@@ -1,6 +1,6 @@
 /**
  * The brand furniture every 1200x630 share card draws, in one place: the
- * colours, the logo lockup, the accent bar along the top edge, and the one
+ * colors, the logo lockup, the accent bar along the top edge, and the one
  * helper that sizes a headline so it cannot run into whatever sits under it.
  *
  * WHY THIS EXISTS. Twelve of the seventeen cards each carried their own copy
@@ -17,7 +17,7 @@ import { OG_FONT_FAMILY, OG_FONTS, OG_LOGO_DATA_URI, OG_WORDMARK } from "./asset
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 
-/** FF Beacon brand colours (CLAUDE.md). No DPC gold or violet, no #0c0c18. */
+/** FF Beacon brand colors (CLAUDE.md). No DPC gold or violet, no #0c0c18. */
 export const OG_COLORS = {
   bg: "#0F0F1A",
   bgBase: "#07070D",
@@ -71,7 +71,7 @@ export function OgAccentBar(): ReactElement {
 export function OgBrandMark({ size = 40 }: { size?: number }): ReactElement {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: Math.round(size * 0.3), flexShrink: 0 }}>
-      {/* Satori draws this into a PNG; next/image has nothing to optimise here. */}
+      {/* Satori draws this into a PNG; next/image has nothing to optimize here. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={OG_LOGO_DATA_URI} alt="" width={size} height={size} style={{ width: size, height: size }} />
       <p style={{ fontSize: Math.round(size * 0.72), fontWeight: 900, letterSpacing: -0.5, margin: 0 }}>{OG_WORDMARK}</p>

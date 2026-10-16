@@ -105,7 +105,7 @@ type FilterKey = "kind" | "week" | "team" | "player" | "view" | "date" | "month"
 export const HUB_KEYS: readonly FilterKey[] = ["view", "kind", "week", "team", "player", "date", "month"];
 
 /**
- * The query string the recognised filters produce ("?kind=injury&week=2"),
+ * The query string the recognized filters produce ("?kind=injury&week=2"),
  * or "" when none is set. `keys` limits which filters a route carries: a team
  * route carries kind and week but never a second team. The default view is
  * never written, so the bare hub keeps a bare canonical.

@@ -169,7 +169,7 @@ export const playerCompareStat: BeamCapability<Params, Result> = {
     const context = buildContext({
       formatDisplay: stat.aggregation.kind === "fantasy" ? ctx.formatDisplay : null,
       note: params.weeks
-        ? "Totalled from the weekly game logs for those weeks."
+        ? "Totaled from the weekly game logs for those weeks."
         : "Season totals from weekly game logs.",
     });
 

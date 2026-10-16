@@ -2,7 +2,7 @@
  * Fixture builders for the Trade Finder tests.
  *
  * A league is a lot of nested plain data, and a test that spells all of it out
- * says more about object shapes than about the behaviour under test. These
+ * says more about object shapes than about the behavior under test. These
  * builders take the two or three fields a given test actually cares about and
  * fill the rest with something ordinary, so each test reads as the scenario it
  * is describing.
@@ -77,7 +77,7 @@ export function team(overrides: Partial<FinderTeam> = {}): FinderTeam {
     // Null by default, which is what a league Power Pulse has not scored
     // looks like. A test that wants schedule-aware wins asks for it with
     // pulse() below, so every other test keeps the pre-Power-Pulse
-    // behaviour and cannot be moved by a default nobody chose.
+    // behavior and cannot be moved by a default nobody chose.
     pulse: overrides.pulse ?? null,
     players: overrides.players ?? [],
     picks: overrides.picks ?? [],

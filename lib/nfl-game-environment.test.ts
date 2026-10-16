@@ -2,7 +2,7 @@
  * Coverage for lib/nfl-game-environment.ts.
  *
  * The two things worth holding: the AWAY side's spread is the negation of the
- * stored home spread (a sign error here shows a favourite as an underdog on
+ * stored home spread (a sign error here shows a favorite as an underdog on
  * every road team in the league), and a team with no published line is
  * UNRANKED rather than ranked last.
  */
@@ -154,8 +154,8 @@ describe("environmentTier", () => {
 });
 
 describe("describeSpread", () => {
-  it("names the favourite, the underdog and the pick em", () => {
-    expect(describeSpread(-3.5)).toBe("Favoured by 3.5");
+  it("names the favorite, the underdog and the pick em", () => {
+    expect(describeSpread(-3.5)).toBe("Favored by 3.5");
     expect(describeSpread(3.5)).toBe("Underdog by 3.5");
     expect(describeSpread(0)).toBe("Even game");
   });

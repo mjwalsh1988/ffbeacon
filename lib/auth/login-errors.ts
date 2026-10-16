@@ -26,7 +26,7 @@ export type LoginErrorCode = keyof typeof LOGIN_ERROR_MESSAGES;
 
 const GENERIC: LoginErrorCode = "auth_failed";
 
-/** The message for a `?error=` value. Anything unrecognised gets the generic one. */
+/** The message for a `?error=` value. Anything unrecognized gets the generic one. */
 export function loginErrorMessage(code: unknown): string {
   if (typeof code === "string" && Object.prototype.hasOwnProperty.call(LOGIN_ERROR_MESSAGES, code)) {
     return LOGIN_ERROR_MESSAGES[code as LoginErrorCode];

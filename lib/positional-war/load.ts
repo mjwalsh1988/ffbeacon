@@ -230,7 +230,7 @@ export type WarUniversePlayer = {
   /**
    * Every position Sleeper lets him start at (players.eligible_positions).
    * Present only in a universe built with defenders included; absent, the
-   * optimiser reads his primary alone, exactly as before the switch.
+   * optimizer reads his primary alone, exactly as before the switch.
    */
   eligible?: string[];
 };

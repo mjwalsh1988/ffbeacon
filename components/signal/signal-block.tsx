@@ -319,7 +319,7 @@ export function FavoritesBlock({
 }
 
 /**
- * The favourite player link's accessible name: "Roquan Smith, linebacker,
+ * The favorite player link's accessible name: "Roquan Smith, linebacker,
  * BAL". The position is spelled out through positionNoun, the one copy, so a
  * screen reader never reads "L B" (plan IDP-212).
  */

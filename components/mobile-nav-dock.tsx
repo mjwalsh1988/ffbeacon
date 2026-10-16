@@ -14,7 +14,7 @@
  * So below the rail's breakpoint the page carries its own switcher. One control
  * takes the full width; two sit side by side and split it, which is the shape
  * the draft room uses (app/tools/on-the-clock/sidebar-sheet.tsx and
- * draft-view-sheet.tsx, the pair this generalises).
+ * draft-view-sheet.tsx, the pair this generalizes).
  *
  * THE BAR FOLLOWS YOU DOWN. Once you have scrolled past it, it re-attaches
  * under the site header so the sections stay one tap away, and it lets go again
@@ -150,7 +150,7 @@ export function MobileNavDock({
   /**
    * Keep focus out from under the docked bar.
    *
-   * When the browser scrolls a newly focused control into view it honours
+   * When the browser scrolls a newly focused control into view it honors
    * scroll-padding on the scrolling element, so one declaration covers every
    * link and control on the page below. 8.5rem is the bar's bottom edge (5.5rem
    * top plus its 3rem height), which also clears the 4.5rem site header

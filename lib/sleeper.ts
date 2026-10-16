@@ -703,7 +703,7 @@ export async function getSleeperDraftAutopickers(draftId: string): Promise<strin
   if (!DRAFT_ID_PATTERN.test(draftId)) return null;
 
   // Through the same budgeted fetch as every REST call, so this request takes
-  // a token from lib/sleeper-budget.ts and honours a paused budget. It used to
+  // a token from lib/sleeper-budget.ts and honors a paused budget. It used to
   // call fetch directly and was the one Sleeper request the budget never saw.
   const outcome = await fetchOutcome<{
     data?: { draft_autopickers?: unknown } | null;

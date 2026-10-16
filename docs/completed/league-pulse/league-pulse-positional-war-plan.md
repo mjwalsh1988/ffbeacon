@@ -40,13 +40,13 @@ Two consequences worth naming up front, because they simplify the build:
 
 The first revision left five items in a "phase 2" section and marked three tasks
 optional. All eight are now in scope and specified in **section 15**. They are
-labelled E1 through E8 and carry their own tasks, acceptance criteria, and tests.
+labeled E1 through E8 and carry their own tasks, acceptance criteria, and tests.
 
 | | Extension | Section |
 | --- | --- | --- |
 | E1 | Your team on the curve, plus an upgrade what-if that never borrows the WAR name | 15.1 |
 | E2 | `?war=rank` raw position rank axis | 15.2 |
-| E3 | Positional WAR as labelled context in Trade Ideas | 15.3 |
+| E3 | Positional WAR as labeled context in Trade Ideas | 15.3 |
 | E4 | Cross-league curve sharing, with a collision guard | 15.4 |
 | E5 | A shareable OG image of the curve, and the route it belongs to | 15.5 |
 | E6 | The rail summary card | 15.6 |
@@ -1480,12 +1480,12 @@ T-WAR-33 | pending | E1a: viewer roster join + ring markers + Yours column + per
          | depends on: T-WAR-32, T-WAR-20
          | verified: no
 
-T-WAR-34 | pending | E2: extract path maths into lib/positional-war/chart-geometry.ts (pure), both axis modes
+T-WAR-34 | pending | E2: extract path math into lib/positional-war/chart-geometry.ts (pure), both axis modes
          | files: lib/positional-war/chart-geometry.ts, lib/positional-war/chart-geometry.test.ts
          | depends on: T-WAR-19
          | verified: no
 
-T-WAR-35 | pending | E2: ?war=rank radiogroup toggle modelled on rank-mode-toggle.tsx, wired through the chart
+T-WAR-35 | pending | E2: ?war=rank radiogroup toggle modeled on rank-mode-toggle.tsx, wired through the chart
          | files: components/league-war/war-axis-toggle.tsx, components/league-war/positional-war-chart.tsx, app/leagues/[league_id]/page.tsx
          | depends on: T-WAR-34
          | verified: no
@@ -1587,7 +1587,7 @@ T-WAR-54 | pending | Security review sub-agent: RLS on 0211/0214, 0212/0215 colu
 T-WAR-30 and T-WAR-31 from the previous revision are folded into T-WAR-53 and
 T-WAR-54, which cover the same ground plus every extension surface.
 
-The settings block, its bounds, its merge behaviour, and its admin fieldset are
+The settings block, its bounds, its merge behavior, and its admin fieldset are
 specified in section 15.7. Every field in it is in the fingerprint, so an admin
 save invalidates every league on its next view without a fan-out and without a
 `modelVersion` bump.
@@ -1736,11 +1736,11 @@ whose `sleeperId` is in the set. This is why section 5.2 stores `sleeperId`.
 
 **What renders.**
 
-- Each overlaid point gets a ring marker: a stroked circle in the ink colour,
+- Each overlaid point gets a ring marker: a stroked circle in the ink color,
   drawn on top of the series marker, larger than it. Distinguishable from all six
-  series by shape and stroke rather than by hue, so it survives colour removal.
+  series by shape and stroke rather than by hue, so it survives color removal.
 - The `<details>` data table gains a **Yours** column carrying the literal text
-  `Yours` or empty. Never a colour-only or icon-only signal.
+  `Yours` or empty. Never a color-only or icon-only signal.
 - Under the legend, one line per position where the viewer holds a player:
 
   > Your best RB is RB6, worth 0.94 wins. RB1 is worth 1.73.
@@ -1762,7 +1762,7 @@ every League Pulse link.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | No `?roster=` and no `?username=` | No overlay, no summary lines, no empty-state noise. The chart is exactly as it is without E1a. |
 | `?username=` matches nobody in this league | Same as above. Do not guess, and do not show an error: a shared link from another league is a normal thing to click. |
@@ -1891,7 +1891,7 @@ rule's spirit while satisfying its letter.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | No viewer roster resolves | The panel does not render. There is nothing to ask. |
 | Power Pulse has no cached rows for the league | No baseline distributions for the other eleven teams. Render the panel disabled with `Team projections are still calculating.` Never substitute zeros. |
@@ -1952,7 +1952,7 @@ markers fan out left to right, which is itself the scarcity reading.
 **State.** `?war=rank` in the URL; absent means `depth`. Consistent with
 `?rank=`, `?picks=`, and `?source=`, which already travel on these pages.
 
-**UI.** A `role="radiogroup"` toggle modelled on
+**UI.** A `role="radiogroup"` toggle modeled on
 `components/power-pulse/rank-mode-toggle.tsx`, which already solves this exact
 problem for the rankings table: real radio semantics so a screen reader
 announces "Chart axis, Depth relative to starters, selected, 1 of 2", a
@@ -1973,7 +1973,7 @@ no reader to have chosen.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | A position's curve is shorter than the cap | The series ends. No padding, no zero-fill tail. |
 | `structural_demand > RANK_AXIS_CAP` (a very deep league at WR) | The marker sits off the right edge. Clamp the marker to the last plotted point and label it `WR62+`, and say in the axis note that the chart is truncated at 60. |
@@ -1996,7 +1996,7 @@ the marker x equals `1.0` in depth mode and `structural_demand` in rank mode.
 
 ---
 
-### 15.3 E3: Positional WAR as labelled context in Trade Ideas
+### 15.3 E3: Positional WAR as labeled context in Trade Ideas
 
 **Conclusion.** Valuable and safe, provided three constraints hold. This replaces
 the first draft's "a WAR column on the Trade Ideas verdict", which would have
@@ -2008,7 +2008,7 @@ created exactly the collision section 3 forbids.
    `league_positional_war_cache` for the league and season, and when there are no
    rows the note does not fire. Making a trade evaluation into a WAR compute
    trigger would put an expensive job behind a metered endpoint's cheap path.
-2. **Labelled.** The string is always `Positional WAR (league-wide)`, never bare
+2. **Labeled.** The string is always `Positional WAR (league-wide)`, never bare
    `WAR`, and it links the Signal Guide term.
 3. **Separated.** It renders in its own block on the asset card, never in the
    same column, row, or sentence as the roster-specific figures.
@@ -2066,7 +2066,7 @@ applied.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | No cached curve for the league | Map is empty, no note fires anywhere, no placeholder. |
 | The curve is stale relative to the trade's players | Acceptable. The note carries no timestamp because the card has no room for one; the Positional WAR panel is where provenance lives, and the Signal Guide link goes there. |
@@ -2097,7 +2097,7 @@ player outside the cap is a no-op.
 **Conclusion.** Ships, on the write path only, with a guard that converts the
 silent failure mode into a loud one. Section 6 established that the result is a
 pure function of the fingerprint's inputs, so sharing is sound; the risk was
-never the maths, it was a normalization bug serving league A's curve to league B
+never the math, it was a normalization bug serving league A's curve to league B
 with nothing visibly wrong.
 
 #### 15.4.1 The table
@@ -2217,11 +2217,11 @@ than one so a week-old fingerprint that somehow recurs still hits.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | Two leagues render concurrently with the same fresh fingerprint | Both compute, both upsert. `on conflict do update` makes the second a harmless overwrite of identical data. No lock, no coalescing: the work is bounded and a lock is a new failure mode. |
 | A hit whose `model_version` differs from the current one | Impossible, since `modelVersion` is in the fingerprint. Assert it anyway in the guard; a mismatch here means the fingerprint function has a bug. |
-| The curves table is empty (first deploy, or post-prune) | Every league computes. Identical to the behaviour without E4. |
+| The curves table is empty (first deploy, or post-prune) | Every league computes. Identical to the behavior without E4. |
 | The copy into `league_positional_war_cache` fails | Treated as an error verdict. The shared row stays; the next view retries the copy without recomputing. |
 
 **Acceptance criteria.**
@@ -2299,7 +2299,7 @@ Satori handles `<img>` with a data URI. Everything else on the card (wordmark,
 league name, legend, headline sentence, footer) is plain flexbox divs, which is
 what the other three routes already do.
 
-**The geometry must not be duplicated.** Extract the path maths out of
+**The geometry must not be duplicated.** Extract the path math out of
 `components/league-war/positional-war-chart.tsx` into a pure module:
 
 ```ts
@@ -2329,7 +2329,7 @@ same discipline the Schedules page follows when it reads projections from
 `league_power_pulse_cache.weekly` rather than recomputing them.
 
 This changes T-WAR-19: the chart component is built on top of the geometry
-module rather than owning the maths.
+module rather than owning the math.
 
 **Parameters.** The route accepts the league id and nothing else. The three
 existing OG routes accept `?source=`, and this one deliberately does not:
@@ -2366,7 +2366,7 @@ The headline sentence is the same deterministic template the rail summary uses
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | No cached curve for the league | Return the branded not-ready image the other routes already have a helper for, saying `Positional WAR is still calculating`. Never a broken or empty chart. |
 | League not found | The existing `notFoundImage` helper. |
@@ -2387,7 +2387,7 @@ The headline sentence is the same deterministic template the rail summary uses
 
 **Tests** (`lib/positional-war/chart-geometry.test.ts`,
 `app/api/og/war/route.test.ts`): geometry parity between modes and callers; the
-brand-colour assertion; the parameter-ignoring assertion; the empty-state branch.
+brand-color assertion; the parameter-ignoring assertion; the empty-state branch.
 
 ---
 
@@ -2437,7 +2437,7 @@ link targets it. The link needs `min-h-11` and a visible focus ring, matching
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | No cached curve | The card does not render at all. An empty finding card is worse than no card; the panel below already carries the honest empty state. |
 | A `settled` or `error` status | Same: no card. Diagnosis belongs in the panel and the admin view, not in the rail. |
@@ -2507,7 +2507,7 @@ meaningless.
 
 **Admin UI.** A new fieldset in
 `app/admin/power-pulse/power-pulse-settings-manager.tsx`, headed
-`Positional WAR`. Each control is a labelled number input whose `min`, `max`, and
+`Positional WAR`. Each control is a labeled number input whose `min`, `max`, and
 `step` match the zod bounds exactly, with `aria-describedby` on each pointing at
 a sentence saying what moving it does to the chart. `clampBelowReplacement` is a
 real checkbox with a described consequence, not a styled div. The server action
@@ -2524,7 +2524,7 @@ and an admin will otherwise assume they must bump the version.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | Stored document has no `war` key | Defaults, through the existing merge. |
 | An admin sets `displayDepthMultiple` below the current value | Curves shorten on next view. Already-cached longer curves are invalidated by the fingerprint, so no league shows a mixed-length chart. |
@@ -2625,7 +2625,7 @@ and is never user-controlled, and it is shown only to admins.
 
 **Edge cases.**
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | A league that has never been viewed | All four columns null. Excluded from the health view, since it is not a fault. |
 | `power_pulse_detail` longer than 500 characters | Truncated at write time. No stack traces, no connection strings. |

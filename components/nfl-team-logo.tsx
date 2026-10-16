@@ -3,7 +3,7 @@ import { ImageWithFallback } from "@/components/image-with-fallback";
 /**
  * An NFL team's logo, from the Sleeper CDN the site already loads player
  * photos from (next.config.ts allows sleepercdn.com). The same path
- * lib/og/assets.ts uses for a defence's image.
+ * lib/og/assets.ts uses for a defense's image.
  *
  * ALWAYS DECORATIVE. Every caller prints the team code as visible text right
  * beside the logo, so the image carries alt="" and the code carries the
@@ -12,7 +12,7 @@ import { ImageWithFallback } from "@/components/image-with-fallback";
  * The code is VALIDATED rather than trusted, the same rule lib/og/assets.ts
  * applies: it arrives from stored source data, so anything that is not two
  * to four letters renders nothing rather than letting a stored string choose
- * the path. A leading "@" (the away marker opponentLabel honours) is
+ * the path. A leading "@" (the away marker opponentLabel honors) is
  * stripped first.
  *
  * A logo that fails to load leaves an empty square of the same size, so the

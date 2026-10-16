@@ -209,7 +209,7 @@ export function CopyLinkButton({
       {/* Present in the DOM either way so the ref is stable, and out of the
           accessibility tree AND out of the tab order until the clipboard has
           actually failed. In the manual state it becomes a real, visible,
-          labelled field, because that is the state where a reader has to see
+          labeled field, because that is the state where a reader has to see
           and operate it. */}
       {/* NO useId, AND NO id/htmlFor PAIR. The label WRAPS the input, which is
           the implicit association and needs no generated id at all. The explicit

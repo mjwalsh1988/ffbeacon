@@ -38,7 +38,7 @@ function describeWeek(week: ScheduleWeekView): string {
   const open = " Tap any matchup for both lineups.";
   const playoffs = week.isPlayoffWeek ? " Playoff week." : "";
   // The glow on the panel is the only other thing saying which week is live,
-  // and a glow is a colour. The sentence carries it too, always.
+  // and a glow is a color. The sentence carries it too, always.
   const live = week.isCurrent ? " Live week." : "";
   const tail = `${open}${playoffs}${live}`;
 
@@ -91,7 +91,7 @@ export function WeekBoard({
                 isCurrent={week.isCurrent}
                 // ...but not the raised treatment: every card in this list is
                 // from the same week, so raising all six would raise none.
-                emphasise={false}
+                emphasize={false}
                 headingLevel={3}
               />
             </li>

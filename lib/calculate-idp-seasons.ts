@@ -101,7 +101,7 @@ export async function runCalculateIdpSeasons(
     written += rows.length;
 
     // The upsert above cannot remove a row, so a player the players sync has
-    // since relabelled (a DB now listed WR) would keep his old season here and
+    // since relabeled (a DB now listed WR) would keep his old season here and
     // stay inside the search relevance gate (IDP-201). Skipped when the run
     // produced nothing: an empty read is far more likely a bad moment than a
     // season with no defenders, and pruning on it would empty the table.

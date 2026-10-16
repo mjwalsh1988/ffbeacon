@@ -1,7 +1,7 @@
 /**
  * The frame a published guide renders inside.
  *
- * A guide used to run in a centred reading column, masthead included, which
+ * A guide used to run in a centered reading column, masthead included, which
  * left it narrower than its own index page and narrower than every tool beside
  * it. The masthead now spans the shell like every other page's does, and the
  * body takes the width with a rail beside it.
@@ -37,7 +37,7 @@ export function GuideShell({
   return (
     <PageBody>
       {/* The prose track fills the width it is given and stops at a readable
-          measure. Past that the pair centres as a unit rather than leaving the
+          measure. Past that the pair centers as a unit rather than leaving the
           rail stranded against the far edge of a very wide screen. */}
       <div className="grid gap-8 xl:grid-cols-[minmax(0,56rem)_18rem] xl:justify-center">
         <aside

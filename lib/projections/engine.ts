@@ -164,7 +164,7 @@ export type SleeperProjectionRow = {
 export type EngineSubject = {
   playerId: string;
   sleeperPlayerId: string;
-  /** Any position, including K and DEF, which are mirrored rather than modelled. */
+  /** Any position, including K and DEF, which are mirrored rather than modeled. */
   position: string;
   team: string | null;
 };
@@ -189,7 +189,7 @@ export type EngineInput = {
 export type EngineResult = {
   projections: BeaconProjection[];
   /**
-   * Why rows came out mirrored rather than modelled. Every one of these is a
+   * Why rows came out mirrored rather than modeled. Every one of these is a
    * legitimate outcome, not an error, but the counts are how anyone can tell
    * whether the model is actually doing anything.
    */
@@ -207,7 +207,7 @@ export type EngineResult = {
     /** Shares and volume existed but produced no opportunity worth pricing. */
     noOpportunity: number;
   };
-  modelled: number;
+  modeled: number;
 };
 
 type Draft = {
@@ -262,7 +262,7 @@ export function computeBeaconProjections(input: EngineInput): EngineResult {
     unavailable: 0,
     noOpportunity: 0,
   };
-  let modelled = 0;
+  let modeled = 0;
 
   const drafts: Draft[] = [];
 
@@ -342,7 +342,7 @@ export function computeBeaconProjections(input: EngineInput): EngineResult {
         settings,
       );
 
-      modelled += 1;
+      modeled += 1;
       drafts.push({
         subject,
         row,
@@ -442,7 +442,7 @@ export function computeBeaconProjections(input: EngineInput): EngineResult {
     );
   }
 
-  return { projections, mirrored, modelled };
+  return { projections, mirrored, modeled };
 }
 
 type StoredPoints = { ppr: number | null; halfPpr: number | null; std: number | null };
@@ -451,7 +451,7 @@ type StoredPoints = { ppr: number | null; halfPpr: number | null; std: number | 
  * The blended total in each base: our model's contribution weighted against
  * Sleeper's own published number.
  *
- * A mirrored row returns Sleeper's totals untouched. A modelled row returns
+ * A mirrored row returns Sleeper's totals untouched. A modeled row returns
  * `w * ours + (1 - w) * Sleeper's`, which is what blending a linear stat line
  * under linear scoring actually means.
  */
@@ -672,7 +672,7 @@ function toProjection(
     pointsHalfPpr: points.halfPpr,
     pointsStd: points.std,
     blendWeight: draft.blendWeight,
-    modelled: draft.beaconLine !== null,
+    modeled: draft.beaconLine !== null,
     availability: draft.row.availability,
   };
 }

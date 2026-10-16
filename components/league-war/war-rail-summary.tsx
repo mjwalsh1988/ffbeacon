@@ -16,8 +16,8 @@
  * page it links to about the shape of a league. It is aria-hidden and carries
  * no axis: every figure it plots is in the table beneath it, as real cells.
  *
- * COLOUR CARRIES NOTHING ON ITS OWN. Each row shows the position's series
- * colour AND its marker shape (the same circle, square, diamond, triangle,
+ * COLOR CARRIES NOTHING ON ITS OWN. Each row shows the position's series
+ * color AND its marker shape (the same circle, square, diamond, triangle,
  * cross and star the chart uses) AND its name in text, and the bar behind each
  * figure is the same number that is printed on top of it.
  *
@@ -254,8 +254,8 @@ export async function WarRailSummary({
               <tr key={row.position}>
                 <th scope="row" className="py-1 pr-2 text-left font-medium text-ink">
                   <span className="flex items-center gap-1.5">
-                    {/* The series marker, same shape and colour the chart uses,
-                        so the row and the line above it are recognisably the
+                    {/* The series marker, same shape and color the chart uses,
+                        so the row and the line above it are recognizably the
                         same position. Decorative: the label beside it is the
                         name. */}
                     <svg

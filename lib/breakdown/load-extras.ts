@@ -87,7 +87,7 @@ export type ExtrasContext = {
   scoringKey: ScoringKey;
   formatConfigId: string | null;
   valueSource: string | null;
-  /** Drives which of Sleeper's ADP flavours we read. */
+  /** Drives which of Sleeper's ADP flavors we read. */
   isDynasty: boolean;
   isSuperflex: boolean;
   /** Points added per projected reception in a TE-premium format. */
@@ -336,7 +336,7 @@ async function loadReliabilityWeeks(
 /**
  * Sleeper's ADP for both players, from the latest market snapshot.
  *
- * Sleeper publishes every flavour it runs in one `adp` object, keyed WITHOUT a
+ * Sleeper publishes every flavor it runs in one `adp` object, keyed WITHOUT a
  * prefix: `ppr`, `half_ppr`, `std`, `2qb`, `dynasty_ppr`, `dynasty_half_ppr`,
  * `dynasty_std`, `dynasty_2qb`, and the IDP variants. We ask for the closest
  * match to the active format first (a dynasty superflex reader should not be

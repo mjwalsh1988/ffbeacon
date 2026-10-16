@@ -49,7 +49,7 @@
  *      reserved for that: "points", "wins", "efficiency", "margin". Comments
  *      included, per lib/positional-war/naming.test.ts's own convention.
  *
- *   5. EVERY LIST CARRIES ITS OWN SAMPLE SIZE. A favourites list, a trade
+ *   5. EVERY LIST CARRIES ITS OWN SAMPLE SIZE. A favorites list, a trade
  *      list, a league-season list: each ships beside a count field naming how
  *      much evidence produced it, because a list with three entries and a
  *      list with three hundred are not the same claim.
@@ -405,7 +405,7 @@ export type ManagerRosterOps = {
   lineupEfficiencySampleSize: PoolableStat<number>;
   bestLineupRecord: PoolableStat<ManagerRecord>;
   winsLeftOnBench: PoolableStat<number>;
-  /** League-seasons ending in several weeks of zero moves and an incomplete lineup. A count, not a judgement. */
+  /** League-seasons ending in several weeks of zero moves and an incomplete lineup. A count, not a judgment. */
   abandonmentCount: PoolableStat<number>;
 };
 

@@ -106,15 +106,15 @@ describe("buildPreview", () => {
     weather: readWeather(null),
   };
 
-  it("says who is favoured and what each side is expected to score", () => {
+  it("says who is favored and what each side is expected to score", () => {
     const [line] = buildPreview(base);
     expect(line).toBe(
-      "The Bills are favoured by 6.5 at home. The Patriots are expected to score about 21 and the Bills about 27.5, a combined 48.5, one of the three highest this week.",
+      "The Bills are favored by 6.5 at home. The Patriots are expected to score about 21 and the Bills about 27.5, a combined 48.5, one of the three highest this week.",
     );
   });
 
-  it("names a road favourite as one", () => {
-    expect(buildPreview({ ...base, homeSpread: 3 })[0]).toMatch(/The Patriots are favoured by 3 on the road\./);
+  it("names a road favorite as one", () => {
+    expect(buildPreview({ ...base, homeSpread: 3 })[0]).toMatch(/The Patriots are favored by 3 on the road\./);
   });
 
   it("writes no scoring sentence when there is no line", () => {

@@ -103,11 +103,11 @@ Checked rather than assumed. Sources listed in Part 6.
   stable AND more predictive than actual touchdowns. Touchdown rate, yards per
   carry and yards per target regress hard. Targets, carries, snap share and air
   yards do not. This is the whole justification for a usage model.
-- **Usage stabilises in four to six games.** The working threshold for treating a
+- **Usage stabilizes in four to six games.** The working threshold for treating a
   target share as signal rather than noise is 4 to 6 games, and 3 to 4 games for
   calling a usage shift structural. By about week 5, current-season usage should
   dominate; by week 8 the prior season is a tiebreaker.
-- **Every projection source over-spreads.** Twelve seasons analysed by Fantasy
+- **Every projection source over-spreads.** Twelve seasons analyzed by Fantasy
   Football Analytics give calibration slopes below 1.0 at every position: QB
   0.67, TE 0.72, RB 0.79, WR 0.85. Preseason projections also carry about +21.6
   points of systematic optimism, worst at quarterback.
@@ -258,7 +258,7 @@ trail. Nothing reads it after this build except the admin view.
 | `away_team` | text not null | |
 | `kickoff_at` | timestamptz | |
 | `game_total` | numeric | the over/under |
-| `home_spread` | numeric | negative means home is favoured |
+| `home_spread` | numeric | negative means home is favored |
 | `home_implied_total` | numeric | `game_total / 2 - home_spread / 2` |
 | `away_implied_total` | numeric | `game_total / 2 + home_spread / 2` |
 | `provider` | text | the book ESPN quoted, for the audit trail |
@@ -435,11 +435,11 @@ Two multipliers come out of it, both clamped, both admin-tunable.
   `settings.beaconProjections.environment.totalWeight` (default 0.5, so a 10%
   richer environment adds about 5%). Applied to touchdown expectation more than
   to yardage, because scoring environment moves touchdowns hardest.
-- **Script.** A team favoured by `s` points runs more and throws less. The
+- **Script.** A team favored by `s` points runs more and throws less. The
   adjustment is linear in the spread and small:
   `rushShare += spreadWeight * s`, `passShare -= spreadWeight * s`, with
   `spreadWeight` defaulting to 0.004 per point and the result clamped to plus or
-  minus 8%. A 7-point favourite therefore shifts about 3% of its plays from
+  minus 8%. A 7-point favorite therefore shifts about 3% of its plays from
   passing to rushing, which is the right order of magnitude and deliberately not
   more.
 
@@ -460,7 +460,7 @@ share = sum(weight * playerCount) / sum(weight * teamCount)
 
 `seasonWeight` reuses the Power Pulse recency ladder (current 1.0, one back 0.45,
 two back 0.20, older 0.08). `halfLifeWeeks` defaults to 4, which puts the
-stabilisation research into the model directly: at a 4-week half life, the last
+stabilization research into the model directly: at a 4-week half life, the last
 four games carry about as much weight as everything before them combined, which
 is where the 4-to-6-game finding says the line sits.
 

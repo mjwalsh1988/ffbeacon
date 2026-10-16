@@ -1,5 +1,5 @@
 /**
- * Where the edge came from, generalised from two players to two to eight.
+ * Where the edge came from, generalized from two players to two to eight.
  *
  * For two players this is still the diverging chart: each bar is
  * `weight * (shareA - 0.5)`, and the bars sum to exactly `compositeA - 0.5`.

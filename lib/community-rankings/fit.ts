@@ -14,7 +14,7 @@
  *
  * CONNECTIVITY. Bradley-Terry only orders players linked by some chain of
  * comparisons. Components are found by union-find over pairs with weight above
- * zero (the virtual player links nobody) and each is fitted and normalised on
+ * zero (the virtual player links nobody) and each is fitted and normalized on
  * its own, so two groups nobody ranked against each other are never given an
  * invented order between them.
  */

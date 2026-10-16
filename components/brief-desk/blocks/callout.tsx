@@ -1,7 +1,7 @@
 /**
  * callout: a short aside with an icon, for a rule of thumb or a caveat. The
  * icon is decorative and the caption is the aside's accessible name; the tone
- * colours a border and is paired with the text, never the only signal.
+ * colors a border and is paired with the text, never the only signal.
  *
  * Server component.
  */

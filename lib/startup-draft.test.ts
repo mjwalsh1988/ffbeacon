@@ -48,7 +48,7 @@ describe("classifyDraftPool", () => {
     expect(classifyDraftPool({ formatSlug: null, rounds: 16 })).toBe("rookie");
   });
 
-  it("ignores a captured pool value it does not recognise", () => {
+  it("ignores a captured pool value it does not recognize", () => {
     expect(
       classifyDraftPool({ formatSlug: "dynasty-ppr-sflex", rounds: 23, capturedPool: "nonsense" }),
     ).toBe("startup");
@@ -148,7 +148,7 @@ describe("startupPickNoFor", () => {
       .toEqual({ seat: 1, pickNo: 13 });
   });
 
-  it("honours a third-round reversal", () => {
+  it("honors a third-round reversal", () => {
     // With reversal at 3, rounds 2 and 3 both run reversed, so seat 1 picks
     // last in round 3 (pick 36) rather than first.
     expect(

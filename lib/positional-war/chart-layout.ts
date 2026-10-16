@@ -179,7 +179,7 @@ export function estimateLabelWidth(label: string, fontSize: number): number {
 export type AxisTick = { x: number; label: string };
 
 /**
- * Drop x-axis labels that would overlap their neighbours.
+ * Drop x-axis labels that would overlap their neighbors.
  *
  * The x axis in depth mode carries "Replacement level" at x = 1.0, which is
  * the single most important thing on it and is also six times as wide as the

@@ -60,7 +60,7 @@ export type ProjectionsSummary = {
 /**
  * Where a finish sits in its own league, 0 for first and 1 for last.
  *
- * Normalising is the only way to compare a 3rd of 14 with a 3rd of 8. A
+ * Normalizing is the only way to compare a 3rd of 14 with a 3rd of 8. A
  * one-team league (which should not exist, but a half-synced league can look
  * like one) is treated as a win rather than a division by zero.
  */
@@ -73,7 +73,7 @@ export function finishPercentile(seed: number, teams: number): number {
  * Best first.
  *
  * Ordered on the raw seed, because "1st" is the thing a manager is looking for
- * and a normalised score would bury a first-place finish in a small league below
+ * and a normalized score would bury a first-place finish in a small league below
  * a second-place finish in a big one. Ties go to the bigger league: winning a
  * fourteen-team room is a larger claim than winning an eight-team one. Then the
  * name, so the order cannot shuffle between two renders of the same data.

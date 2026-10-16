@@ -4,7 +4,7 @@ import { buildMatchupRecap } from "./matchup-writeup";
 import { renderPlainText, renderWriteup } from "./render";
 import {
   COIN_FLIP_TAKES,
-  FAVOURITE_TAKES,
+  FAVORITE_TAKES,
   LOSS_TAKES,
   TRADE_CLOSERS,
   TRADE_TAKES,
@@ -20,7 +20,7 @@ const ALL_BANKS: Record<string, Line[]> = {
   ...Object.fromEntries(Object.entries(TRADE_TAKES).map(([k, v]) => [`trade.${k}`, v])),
   ...Object.fromEntries(Object.entries(WIN_TAKES).map(([k, v]) => [`win.${k}`, v])),
   ...Object.fromEntries(Object.entries(LOSS_TAKES).map(([k, v]) => [`loss.${k}`, v])),
-  favourite: FAVOURITE_TAKES,
+  favorite: FAVORITE_TAKES,
   underdog: UNDERDOG_TAKES,
   coinFlip: COIN_FLIP_TAKES,
   tradeClosers: TRADE_CLOSERS,

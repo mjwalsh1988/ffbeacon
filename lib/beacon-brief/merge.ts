@@ -4,7 +4,7 @@
  *
  * WHY THIS SITS BETWEEN THE MATCH AND THE REWRITE
  *
- * Recognising a duplicate is only half the saving. Most follow-up posts about a story
+ * Recognizing a duplicate is only half the saving. Most follow-up posts about a story
  * we have already covered add nothing a reader would act on. "More about Colts
  * Pro-Bowl RB Jonathan Taylor agreeing to 2-year, $44 million extension, via
  * @HolderStephen" restates the contract the article already reports, in fewer words,

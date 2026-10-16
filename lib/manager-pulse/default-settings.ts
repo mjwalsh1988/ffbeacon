@@ -13,7 +13,7 @@
  *
  * Bump `modelVersion` whenever a change alters what the report means, so a
  * stale cached report or tendency row is identifiable and rescores rather than
- * serving a mix of old and new behaviour.
+ * serving a mix of old and new behavior.
  */
 
 export type ManagerPulseCaptureSettings = {
@@ -155,15 +155,15 @@ export type ManagerPulseTendencySettings = {
 };
 
 /**
- * Thresholds that decide how a manager's week-to-week behaviour is described.
+ * Thresholds that decide how a manager's week-to-week behavior is described.
  *
  * These were local constants inside roster-ops.ts until it was pointed out that
  * they are exactly what this settings row exists for: a threshold that decides
- * whether we call somebody "front-loaded" or "faded" is a product judgement
+ * whether we call somebody "front-loaded" or "faded" is a product judgment
  * about language, not an implementation detail, and it must be adjustable
  * without a deploy like every other floor in this feature.
  */
-export type ManagerPulseBehaviourSettings = {
+export type ManagerPulseBehaviorSettings = {
   /** Below this many moves in a lens, no shape is claimed at all. */
   moveShapeMinMoves: number;
   /** Share of moves in the first half of the season above which it is front-loaded. */
@@ -222,7 +222,7 @@ export type ManagerPulseSettings = {
   draft: ManagerPulseDraftSettings;
   display: ManagerPulseDisplaySettings;
   tendency: ManagerPulseTendencySettings;
-  behaviour: ManagerPulseBehaviourSettings;
+  behaviour: ManagerPulseBehaviorSettings;
   wording: ManagerPulseWordingSettings;
   modelVersion: string;
 };

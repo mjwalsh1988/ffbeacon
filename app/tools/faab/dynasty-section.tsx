@@ -288,7 +288,7 @@ function Point({ heading, children }: { heading: string; children: React.ReactNo
  * than heights from a shared baseline.
  *
  * EVERY BAR CARRIES ITS SERIES NAME AS TEXT, in its own column to the left of
- * the bar, rather than relying on the legend and the hue. Colour alone is not a
+ * the bar, rather than relying on the legend and the hue. Color alone is not a
  * label, and "the top one of each pair" is not either: it fails the moment a
  * pair is dropped for thin data and the ordering a reader inferred shifts.
  */

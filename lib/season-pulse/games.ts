@@ -9,7 +9,7 @@
  * and for the same reason: a reader can check each sentence against the
  * numbers beside it, which a generated one would not allow.
  *
- * THE WORDS AVOID THE BETTING WINDOW. A spread is said as who is favoured and
+ * THE WORDS AVOID THE BETTING WINDOW. A spread is said as who is favored and
  * by how much, and an implied total as what a team is expected to score, the
  * way lib/nfl-game-environment.ts says it. The reader is setting a lineup.
  */
@@ -143,8 +143,8 @@ function scoringSentence(input: PreviewInput): string | null {
   const parts: string[] = [];
   if (homeSpread !== null) {
     if (homeSpread === 0) parts.push(`The ${away.nickname} and ${home.nickname} are rated even.`);
-    else if (homeSpread < 0) parts.push(`The ${home.nickname} are favoured by ${Math.abs(homeSpread)} at home.`);
-    else parts.push(`The ${away.nickname} are favoured by ${homeSpread} on the road.`);
+    else if (homeSpread < 0) parts.push(`The ${home.nickname} are favored by ${Math.abs(homeSpread)} at home.`);
+    else parts.push(`The ${away.nickname} are favored by ${homeSpread} on the road.`);
   }
   if (away.implied !== null && home.implied !== null && total !== null) {
     let place = "";

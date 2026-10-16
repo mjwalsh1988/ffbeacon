@@ -1,5 +1,5 @@
 /**
- * The Beacon Edge meter, generalised from two players to two to eight.
+ * The Beacon Edge meter, generalized from two players to two to eight.
  *
  * The headline still names the single clearest leader ("Toss-Up" when the top
  * two are within computeGroupEdge's own definition of a tie, `leader: null`).

@@ -153,7 +153,7 @@ const ALL_CAPS = new Set([
 
 /**
  * A slug turned back into something readable: hyphens become spaces, each word
- * is capitalised, and the handful of abbreviations we care about stay shouted.
+ * is capitalized, and the handful of abbreviations we care about stay shouted.
  * A segment that is all digits (a Sleeper league id, a season) is left alone.
  */
 export function humanizeSegment(segment: string): string {

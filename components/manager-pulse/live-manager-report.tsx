@@ -152,7 +152,7 @@ export function LiveManagerReport({
     if (versionRose) seenVersionRef.current = progress.partialVersion;
 
     const controller = new AbortController();
-    let cancelled = false;
+    let canceled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const fetchOnce = async () => {
@@ -163,7 +163,7 @@ export function LiveManagerReport({
         });
         if (!res.ok) return;
         const body: unknown = await res.json();
-        if (cancelled || !isReportApiResponse(body)) return;
+        if (canceled || !isReportApiResponse(body)) return;
 
         const report = isReportShape(body.report) ? body.report : null;
         if (report) {
@@ -194,7 +194,7 @@ export function LiveManagerReport({
     void fetchOnce();
 
     return () => {
-      cancelled = true;
+      canceled = true;
       controller.abort();
       if (retryTimer) clearTimeout(retryTimer);
     };

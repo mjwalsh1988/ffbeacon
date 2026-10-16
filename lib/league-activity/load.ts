@@ -35,7 +35,7 @@ import {
  *
  * NOTHING HERE COMPUTES ANYTHING. Every number a card shows was settled when
  * the event was written. No valuation runs on this path, no projection, no
- * lineup optimisation. That is what lets the panel sit above the power rankings
+ * lineup optimization. That is what lets the panel sit above the power rankings
  * without slowing the page down: it is one indexed read and some string work.
  */
 
@@ -72,7 +72,7 @@ export const ACTIVITY_DEFAULT_DAYS = 14;
  * The most cards one render will paint.
  *
  * A league that has been synced all season can hold a few thousand events, and
- * "show me everything" must not mean "serialise four thousand cards into the
+ * "show me everything" must not mean "serialize four thousand cards into the
  * page". When the cap bites, the footer says so rather than quietly stopping.
  */
 export const ACTIVITY_MAX_ROWS = 200;
@@ -226,7 +226,7 @@ export function parseWindowDays(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return ACTIVITY_DEFAULT_DAYS;
   if (n === ACTIVITY_WINDOW_ALL) return ACTIVITY_WINDOW_ALL;
-  // Snap to the ladder rather than honouring an arbitrary number, so a crafted
+  // Snap to the ladder rather than honoring an arbitrary number, so a crafted
   // link cannot ask for a window nobody designed a footer sentence for.
   return ACTIVITY_WINDOW_LADDER.includes(n as (typeof ACTIVITY_WINDOW_LADDER)[number])
     ? n

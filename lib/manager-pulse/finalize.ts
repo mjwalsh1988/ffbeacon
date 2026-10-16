@@ -464,7 +464,7 @@ export async function finalizeManagerPulseRun(
     }
 
     // A PARTIAL OPINION NEVER FEEDS TRADE IDEAS. The report itself is stored,
-    // labelled with its coverage, because a reader asked for it and is told
+    // labeled with its coverage, because a reader asked for it and is told
     // what it is missing. The tendency row is not: Trade Ideas reads it with no
     // reader in the loop to see a caveat, so a run that could not read every
     // league-season it set out to leaves the previous tendency row (if any)

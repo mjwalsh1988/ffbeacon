@@ -19,7 +19,7 @@ export async function SiteFooterWithLayout() {
 /**
  * What holds the footer's place while the layout is read: the same top margin,
  * border and ground, and nothing in it, the way AppRailFallback holds the
- * rail's. Not a second full footer, which would be serialised into every page's
+ * rail's. Not a second full footer, which would be serialized into every page's
  * payload beside the real one and could paint the Tools column in the wrong
  * order for a moment.
  */

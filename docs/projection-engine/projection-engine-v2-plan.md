@@ -70,7 +70,7 @@ The honest answer is that they are Sleeper's projections. The blend weight
 the walk-forward backtest), and production holds no `beaconProjections`
 override (the `league_power_pulse_settings` row carries only an IDP opponent
 block). Of the 38,255 `ffbeacon` rows stored for 2026, exactly 0 carry a
-non-zero `blend_weight`. The model runs nightly (4,696 player-weeks modelled on
+non-zero `blend_weight`. The model runs nightly (4,696 player-weeks modeled on
 the 2026-09-26 run) and its output is discarded at the blend.
 
 What the scoreboard says for 2026 weeks 1 to 3, PPR, played weeks only, graded
@@ -229,7 +229,7 @@ Measured 2026-09-27.
   defense-splits calc already read. Every derived table in 2.6 carries `team`
   as a real column so nothing else has to reach into jsonb for it.
 - `nfl_teams` already exists (abbreviation, name, conference, division,
-  colours). `nfl_stadiums.home_teams` refers to its abbreviations; no second
+  colors). `nfl_stadiums.home_teams` refers to its abbreviations; no second
   team master is created.
 - `player_weekly_projections.metadata` from Sleeper carries `game_id` and
   `date` (kickoff date) per player-week, so a projection row already knows
@@ -255,7 +255,7 @@ Measured 2026-09-27.
   line before kickoff (Sunday morning's information, inactives included),
   while the walk-forward grades our model on Tuesday's information. Every
   Sleeper-against-us comparison the first plan reported has that tilt in
-  Sleeper's favour, and nothing stored today can say what either source said
+  Sleeper's favor, and nothing stored today can say what either source said
   on Tuesday. Section 3.10 adds the snapshot table that fixes both.
 
 Implied team total against actual skill-position standard points, 2026 week 1,
@@ -318,7 +318,7 @@ harnesses and from the commercial shops that disclose anything:
   distribution. ESPN's Mike Clay: team volume, then dropback, carry and
   target shares, then efficiency regressed to the mean. Yahoo's four
   partners name pace, matchups, route participation, game script, weather,
-  defense adjusted for inactives, Bayesian modelling and simulation. Nobody
+  defense adjusted for inactives, Bayesian modeling and simulation. Nobody
   publishes an error figure; the third-party benchmarks above are all there
   is.
 - **Game script moves plays and carries, not shares** (3.1), **the seasonal
@@ -427,7 +427,7 @@ A fourth was answered on 2026-09-28:
 - **The Odds API replaces ESPN's scoreboard entirely.** Game lines, the line
   history and the moneyline come from The Odds API's free tier from Phase 1;
   kickoff times and pairings come from `nfl_games`; the ESPN weather note is
-  dropped in favour of the real forecast; `lib/nfl-odds.ts` is deleted and
+  dropped in favor of the real forecast; `lib/nfl-odds.ts` is deleted and
   no file in the repository names an ESPN host. The owner accepts the budget
   that implies: about 90 credits a month for daily lines and about 280 for
   the weekly props pull in Phase 7, roughly 370 of the 500 free credits, with
@@ -446,7 +446,7 @@ A fourth was answered on 2026-09-28:
   exports them, and a projection built from dozens of inputs is a new work,
   not an adaptation of their spreadsheet. On that reading, which is the
   ordinary one, the credit line is the whole obligation, and the owner
-  accepts it. The FTN participation file carries the same licence and is
+  accepts it. The FTN participation file carries the same license and is
   treated the same way (one entry, "FTN Data via nflverse") for its offline
   use in T054. Nothing from either file is ever shown on a page or included
   in an export, which is the rule that keeps the reading true.
@@ -457,7 +457,7 @@ A fourth was answered on 2026-09-28:
   "Attribution" section to `/terms` (T003) naming every external source the
   engine reads, and no per-surface credit line is added anywhere else.
   The section is also where ffopportunity and FTN are credited (the bullet
-  above), so every licence the engine touches is discharged on one page.
+  above), so every license the engine touches is discharged on one page.
 
 ### 0.9 Five weeks in: the 2026 review of 2026-10-13
 
@@ -489,7 +489,7 @@ five weeks and better in none. Together with the three September weeks in
 0.2 that is eight graded weeks pointing the same way, which is why the 1.0
 default in 3.8 ships in Phase 1 (T019) rather than waiting for Phase 6.
 
-**The pe-1 model alone**, same weeks, graded on modelled rows only, Sleeper
+**The pe-1 model alone**, same weeks, graded on modeled rows only, Sleeper
 restated on the same rows:
 
 | Position | n | Sleeper MAE | Model MAE | Model bias | Model corr | Sleeper corr |
@@ -629,13 +629,13 @@ Coordinates, altitude, field heading and time zone are seeded from the
 greerreNFL Stadiums CSV
 (`https://raw.githubusercontent.com/greerreNFL/Stadiums/main/data/stadiums.csv`,
 124 rows keyed by the nflfastR `stadium_id`, with `lat`, `lon`, `altitude` in
-metres, `heading` in compass degrees, and IANA `tz`). Two defects in that
+meters, `heading` in compass degrees, and IANA `tz`). Two defects in that
 file are known and worked around: its `roof_type` has only two values and
 marks every retractable roof "Outdoors", and its `BUF00` row is the OLD
 Highmark Stadium with a 2027 last-game date. Roof and surface are therefore
 OUR columns, hand-verified for 2026 against the current stadium list, and the
 new Highmark (opened 2026, Kentucky bluegrass, open air under a partial
-canopy, about 200 metres from the old footprint) gets its own row. `heading`
+canopy, about 200 meters from the old footprint) gets its own row. `heading`
 is kept because a 15 mph crosswind and a 15 mph headwind are different
 kicking conditions, and the wind direction the forecast gives us is only
 useful against the field's orientation.
@@ -699,8 +699,8 @@ temp, wind, away_qb_id, home_qb_id, away_qb_name, home_qb_name, away_coach,
 home_coach, referee, stadium_id, stadium`. `gametime` is 24-hour Eastern.
 `espn` is ESPN's event id, kept in `external_ids` as provenance only, since
 nothing in this plan calls an ESPN host. Verified 2026-09-27: the file holds
-all 272 games of 2026. Two sign and code conventions to normalise at the
-adapter: nflverse `spread_line` is POSITIVE when the home team is favoured
+all 272 games of 2026. Two sign and code conventions to normalize at the
+adapter: nflverse `spread_line` is POSITIVE when the home team is favored
 (ours is negative), and nflverse uses `LA` for the Rams where we use `LAR`.
 The 1999 to 2025 backfill also meets the codes of relocated and renamed
 franchises (`STL` to `LA` in 2016, `SD` to `LAC` in 2017, `OAK` to `LV` in
@@ -731,7 +731,7 @@ between the two is reported by the sync and the nflverse row wins.
 | `div_game` | boolean | |
 | `home_score` | integer | settled games only |
 | `away_score` | integer | |
-| `closing_spread_home` | numeric | nflverse `spread_line`, sign normalised so NEGATIVE means home favoured |
+| `closing_spread_home` | numeric | nflverse `spread_line`, sign normalized so NEGATIVE means home favored |
 | `closing_total` | numeric | nflverse `total_line` |
 | `home_moneyline` | integer | American odds |
 | `away_moneyline` | integer | |
@@ -777,7 +777,7 @@ ESPN rows already stored for 2026 weeks 1 to 5 are kept as history under
 | `fetched_at` | timestamptz not null | |
 | `hours_to_kickoff` | numeric | derived at write, for lead-time analysis |
 | `game_total` | numeric | |
-| `home_spread` | numeric | negative means home favoured |
+| `home_spread` | numeric | negative means home favored |
 | `home_moneyline` | integer | American odds; the win-probability input for 3.1 |
 | `away_moneyline` | integer | |
 | `metadata` | jsonb | the Odds API event object, bookmakers included, verbatim |
@@ -826,7 +826,7 @@ A view `nfl_game_weather_latest` (or a `latest_weather_id` column on
 `nfl_games` maintained by the sync; the column is simpler for PostgREST reads
 and is what the plan specifies) exposes the newest snapshot per game.
 
-**Provider choice.** Zero cost, and every licence checked for a public site
+**Provider choice.** Zero cost, and every license checked for a public site
 that carries advertising and takes donations (which is commercial use under
 every provider's terms). Seven candidates were evaluated and three of them
 were probed live on 2026-09-27; Part 8 lists the pages. The decision:
@@ -846,7 +846,7 @@ were probed live on 2026-09-27; Part 8 lists the pages. The decision:
   hourly periods, verified live) supplies the hourly temperature, wind speed
   and precipitation probability at kickoff for the sentence on the page. Rate
   limits are "reasonable" and undisclosed; a 429 is retried once after five
-  seconds and `Cache-Control` is honoured. Every weather variable in the table
+  seconds and `Cache-Control` is honored. Every weather variable in the table
   above is available from this one source for every US venue.
 - **For the nine international games: MET Norway Locationforecast 2.0**
   (`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=&lon=&altitude=`).
@@ -931,9 +931,9 @@ cross-checked:
   `https://www.ncei.noaa.gov/access/services/data/v1?dataset=global-hourly&stations={USAF}{WBAN}&startDate=2020-01-01&endDate=2025-12-31&dataTypes=WND,TMP,OC1,AA1&format=csv`,
   verified live to return a six-year single-station pull (74,757 rows, 7.8 MB)
   in one call. Fields: `WND` is direction, quality, type, speed in tenths of
-  a metre per second, quality; `TMP` is tenths of a degree Celsius; `OC1` is
-  gust in tenths of a metre per second, present only when a gust was
-  reported; `AA1` is period hours, depth in tenths of a millimetre, condition,
+  a meter per second, quality; `TMP` is tenths of a degree Celsius; `OC1` is
+  gust in tenths of a meter per second, present only when a gust was
+  reported; `AA1` is period hours, depth in tenths of a millimeter, condition,
   quality. Rows with quality codes other than 0, 1, 4 or 5 are dropped. The
   yearly CSV files at `https://www.ncei.noaa.gov/data/global-hourly/access/{year}/{USAF}{WBAN}.csv`
   are the fallback when the service is slow. ISD is global, so the London,
@@ -954,7 +954,7 @@ nflverse (nflreadr, nflfastR) publishes its datasets as GitHub release assets,
 CSV, gzipped CSV and parquet, rebuilt nightly in season, no key, no auth,
 plain HTTPS, under CC BY 4.0 (`nflverse-data` LICENSE.md, checked
 2026-09-27), so the Attribution section on `/terms` (T003) carries "Data
-from nflverse" with the licence named and linked and a note that we
+from nflverse" with the license named and linked and a note that we
 aggregate it, which is what CC BY 4.0 asks for and accepts through a linked
 page. Every player row carries `gsis_id`, and the join to our
 `players` table goes through the crosswalk in 2.9, because Sleeper's own
@@ -973,7 +973,7 @@ and formats are measured, not quoted. Datasets, in the order they pay off:
 | Weekly rosters | `weekly_rosters/roster_weekly_{season}.csv` (one row per team, week and player; columns include `team`, `position`, `depth_chart_position`, `status` (`ACT`, `RES`, `PUP`, `DEV`, `CUT` and so on), `gsis_id`, `espn_id`, `sportradar_id`, `yahoo_id`, `rotowire_id`, `pff_id`, `pfr_id`, `sleeper_id`, `draft_club`, `draft_number`, `entry_year`) | Three things at once: the identity crosswalk (2.9), the roster status that decides the row universe (3.0), and the HISTORICAL team and status of every player in every week, which is what the backtest needs to rebuild the row universe for 2020 to 2025 without Sleeper. About 2 MB a season | 2 |
 | Weekly player stats | `stats_player/stats_player_week_{season}.csv` (the successor to `player_stats_{season}`; about 3 MB a season) | per player-week, keyed by gsis: `targets`, `receiving_air_yards`, `target_share`, `air_yards_share`, `wopr`, `racr`, `receiving_epa`, `rushing_epa`, `passing_epa`, `passing_cpoe`, `pacr`, first downs by family, 2-point conversions by family, `receiving_10/16/20/40` and `rushing_10/12/20/40` gain buckets, fumbles by family, kicking by distance band (`fg_made_0_19` to `fg_made_60_`, `fg_missed_*`, `pat_*`), return yards, `special_teams_tds`. Cross-checks Sleeper's `player_stats` and supplies the air-yards share and EPA the engine has never had | 4 |
 | Weekly team stats | `stats_team/stats_team_week_{season}.csv` | the same families at team level, per game, including `attempts`, `carries`, `passing_air_yards`, first downs and 2-point tries. Team volume history without touching pbp; pace, PROE and red zone trips still need pbp | 4 |
-| Expected fantasy points | ffopportunity `ffverse/ffopportunity` releases `latest-data` and `v1.0.0-data`, `ep_weekly_{season}.csv` or `.parquet` (632 KB CSV, 210 KB parquet for 2026 on 2026-09-27; weeks 1 and 2 complete and the Thursday game of week 3 present). Its workflow runs Sunday 22:15, Monday 00:20, Monday and Tuesday 05:45 and Friday 05:45 UTC, September to February, so the Sunday games are in by Tuesday morning and the Monday game by Friday | per player-week, keyed by gsis: expected receptions, receiving, rushing and passing yards, touchdowns, first downs, 2-point conversions and interceptions from play-level probability models (`*_exp`, an xgboost fit on 2006 to 2020 pbp), the actuals beside them (`*_diff`), the team totals, and `total_fantasy_points_exp`. A RETROSPECTIVE measure of what each opportunity was worth, which is exactly the efficiency input 3.3 wants; it is not a forward projection and does not replace one. Licence: the code is GPL-3.0 (neither ported nor linked) and the models and data are CC BY-SA 4.0, discharged by one entry in the Attribution section on `/terms` (0.8, T003); the rows are read as a feature and are never shown on a page or exported. Our own simpler pbp-derived figure (T051b) sits beside it as a cross-check and as the fallback if the release ever stops | 4 |
+| Expected fantasy points | ffopportunity `ffverse/ffopportunity` releases `latest-data` and `v1.0.0-data`, `ep_weekly_{season}.csv` or `.parquet` (632 KB CSV, 210 KB parquet for 2026 on 2026-09-27; weeks 1 and 2 complete and the Thursday game of week 3 present). Its workflow runs Sunday 22:15, Monday 00:20, Monday and Tuesday 05:45 and Friday 05:45 UTC, September to February, so the Sunday games are in by Tuesday morning and the Monday game by Friday | per player-week, keyed by gsis: expected receptions, receiving, rushing and passing yards, touchdowns, first downs, 2-point conversions and interceptions from play-level probability models (`*_exp`, an xgboost fit on 2006 to 2020 pbp), the actuals beside them (`*_diff`), the team totals, and `total_fantasy_points_exp`. A RETROSPECTIVE measure of what each opportunity was worth, which is exactly the efficiency input 3.3 wants; it is not a forward projection and does not replace one. License: the code is GPL-3.0 (neither ported nor linked) and the models and data are CC BY-SA 4.0, discharged by one entry in the Attribution section on `/terms` (0.8, T003); the rows are read as a feature and are never shown on a page or exported. Our own simpler pbp-derived figure (T051b) sits beside it as a cross-check and as the fallback if the release ever stops | 4 |
 | Weekly injuries | `injuries/injuries_{season}.csv` (83 KB plain, 14 KB gzipped for 2026 on 2026-09-27; the workflow cron is 07:07 UTC and the file landed at 12:57 UTC on the audit day). Columns: `season`, `season_type`, `game_type`, `team`, `week`, `gsis_id`, `position`, `report_primary_injury`, `report_secondary_injury`, `report_status` (Out, Doubtful, Questionable, or blank), `practice_primary_injury`, `practice_secondary_injury`, `practice_status` (Did Not Participate, Limited, Full) | ONE row per listed player per week carrying the LATEST practice status and the game designation. There is NO Wednesday, Thursday, Friday breakdown in this file and no `date_modified` in 2025 or 2026: nflverse switched the source to the NFL's own API through `nflapi` on 2026-08-06 (nflverse-rosters PR 96), rebuilt 2025 under it on 2026-09-07, and closed the request to restore the timestamp as not planned (issue 100). 2023 and earlier still carry `date_modified`. The daily PATTERN therefore only exists if WE snapshot the file every day, which 3.5 does from Phase 5 on; history from 2009 supports a fit on the final designation plus the last practice status, and the pattern refinement is fitted on our own snapshots after a season | 5 |
 | Depth charts | `depth_charts/depth_charts_{season}.{csv,csv.gz,parquet}`. FORMAT AND PROVIDER CHANGED after 2024: 2024 and earlier are weekly rows (`club_code`, `week`, `depth_team`, `depth_position`, `gsis_id`; about 3 MB a season); 2025 and 2026 are ESPN DAILY SNAPSHOTS appended to one file, keyed by `dt` with `espn_id`, `gsis_id`, `pos_grp`, `pos_slot`, `pos_rank` and no week column ("from 2025 onwards, depth charts are not assigned a week"). 54 MB plain CSV after three weeks of 2026, 11 MB gzipped, 2.6 MB parquet; the full 2025 file is 53 MB plain and 10.6 MB gzipped. Refreshed 07:07 UTC | Historical starter identification for the redistribution fit, used in the ONE-TIME backfill (weekly file through 2024, the last snapshot before each week's first kickoff for 2025). In season the live depth chart comes from Sleeper's `depth_chart_order` and `depth_chart_position` (on 637 of 873 rostered skill players) and nflverse `weekly_rosters.depth_chart_position`, both snapshotted nightly into `player_week_availability` (3.5). The gzipped ESPN file fits the adapter cap and may be read weekly as a cross-check of Sleeper's order, but only the newest `dt` per team is kept and nothing nightly depends on it | 4 (backfill) |
 | Next Gen Stats | `nextgen_stats/ngs_receiving.csv.gz`, `ngs_passing.csv.gz`, `ngs_rushing.csv.gz` (one file per type, ALL seasons from 2016, week 0 rows are season summaries, only players above a minimum attempt threshold; nightly 3 to 5 AM Eastern) | receiving: `avg_intended_air_yards`, `avg_separation`, `catch_percentage`, `avg_yac_above_expectation`; passing: `avg_time_to_throw`, `aggressiveness`, `completion_percentage_above_expectation`; rushing: `efficiency`, `rush_yards_over_expected`. Role priors; the GWTTKB study finds these predict future fantasy points weakly on their own, so they condition the shrinkage prior rather than enter the line directly | 4 |
@@ -1051,7 +1051,7 @@ retried once).
 returns every upcoming game with several books for 3 credits, about 90
 credits a month. The consensus line is the MEDIAN across the books returned,
 which is what `nfl_game_odds` stores and the engine reads; `home_spread` is
-normalised so negative means home favoured, the implied team totals are
+normalized so negative means home favored, the implied team totals are
 derived exactly as today, and the moneyline (`h2h`) becomes the
 win-probability input 3.1 wanted and ESPN never gave us. The daily pull runs
 at 13:15 UTC, which on Sunday is 9:15 Eastern, so the Sunday-morning line is
@@ -1142,7 +1142,7 @@ nothing.
 - **NFLweather.com** publishes forecasts that its terms allow anyone to
   republish with attribution, has no `Disallow` in its robots file, and
   offers no API. It does not disclose its upstream provider, so republishing
-  its numbers would mean inheriting an unknown licence. It is not a data
+  its numbers would mean inheriting an unknown license. It is not a data
   source here; the National Weather Service gives us the same numbers at the
   origin.
 - **No live in-game data.** Projections are set before kickoff; the Lineups
@@ -1174,7 +1174,7 @@ Two free crosswalks cover it, and both are already reachable:
 `lib/player-identity.ts` (pure) resolves a `players` row to a gsis id in this
 order and records which leg matched: Sleeper's own `gsis_id`, nflverse's
 `sleeper_id`, DynastyProcess's `sleeper_id`, then `sportradar_id` through
-either file, then `espn_id`, and last a normalised name plus team plus
+either file, then `espn_id`, and last a normalized name plus team plus
 position match that is written only when it is unique and is flagged
 `identity_match: 'name'` so a reviewer can see it. The result is written into
 `players.external_ids` as `gsis`, `espn`, `pfr` and `sportradar` keys (the
@@ -1359,8 +1359,8 @@ position, the engine writes:
 
 The list is a contract, held by a test (T062f): every key present on any
 Sleeper row for a position in the current season is either emitted by the
-engine for that position or named in an explicit "not modelled" list with a
-reason, and every key `lib/league-format-tags.ts` recognises is in one of the
+engine for that position or named in an explicit "not modeled" list with a
+reason, and every key `lib/league-format-tags.ts` recognizes is in one of the
 two lists. A new Sleeper key fails the test until someone decides what it is.
 The keys are Sleeper's spellings because that is the vocabulary every
 league's `scoring_settings` uses; nothing about the engine's inputs is
@@ -1418,7 +1418,7 @@ rushAttempts    = plays * (1 - passRate)
 Every coefficient (`paceScale`, `scriptSlope`, the funnel shrink) is fitted in
 6.2 on 2020 to 2025 team-weeks with the closing line as the script input, and
 stored in settings. The current `environment.spreadWeight` and `scriptMax`
-retire in favour of the win-probability form; `totalWeight` stays as the
+retire in favor of the win-probability form; `totalWeight` stays as the
 multiplier on scoring rate from the implied total.
 
 Two orderings the research settles before the fit runs. First, the TOTAL
@@ -1426,7 +1426,7 @@ outranks the SPREAD: across 5,093 team-games ten points of game total moved
 targets and attempts about 4 percent while fourteen points of spread moved
 targets 0.6 percent, and the Fantasy Footballers' nflfastR study found
 receivers' share of team yards at 66.5 percent on 7-point underdogs against
-66 percent on favourites. Game script moves how many plays a team runs and
+66 percent on favorites. Game script moves how many plays a team runs and
 how many are carries; it barely moves who gets them. So the implied total
 drives `plays` and the scoring rate, the win-probability term is a carries
 adjuster on the pass-rush split, and neither touches a player's share.
@@ -1587,7 +1587,7 @@ snapshot. Outputs a multiplier set applied inside `convert.ts`:
 | Effect | Applies to | Starting coefficient, from the published measurements in Part 8; every one is refit in 6.2 before it ships |
 | --- | --- | --- |
 | Implied total | TD rates (as today) | ratio ^ 1.0, clamped 0.85 to 1.15 |
-| Win probability | pass/rush split (3.1) | fitted; the published within-player effect is RB +0.99 PPR, WR -0.50, QB -0.55 as a favourite against the same player as an underdog |
+| Win probability | pass/rush split (3.1) | fitted; the published within-player effect is RB +0.99 PPR, WR -0.50, QB -0.55 as a favorite against the same player as an underdog |
 | Wind, sustained at kickoff | completion rate, yards per attempt, pass TD rate, deep-target share, FG make rate, pass attempts (small) | knee at 10 mph, steeper above 15. Published: 10 mph and above, completion -1.8 points and yards per attempt -0.30 (PFF, 5,736 attempts); 20 mph and above, completion 60.3 to 54.7 percent, ANY/A 5.79 to 4.62, TD rate 4.29 to 3.58 percent (The Spax); totals fall about 0.26 points per mph over 7,276 games (nflanalytic: 44.7 at 0 to 5 mph, 40.5 at 16 plus); deep-pass share -6.2 points above 13 mph (4for4); FG make 83.8 to 76.9 percent at 20 plus even after attempts shorten about 7 yards |
 | Wind, gusts and direction | deep-target share, FG make rate | half the sustained coefficient on the gust excess; crosswind against `field_heading_deg` weighted above headwind for kicking (expert opinion, Roth; fitted, may be zero) |
 | Rain (probability times amount) | completion rate, catch rate, pass attempts, rush attempts, fumbles | published per game, both teams combined: passing -45 yards, -0.6 TD, -3 completion points, -2 attempts per team; rushing +15 yards, +1.5 carries per team; RB targets +7.7 percent in bad-weather games |
@@ -1622,7 +1622,7 @@ matters most and today's mirror cannot see it.
 ### 3.4b Team defense (`team-defense.ts`)
 
 Standing on our own means a DEF row per team per game, so the position the
-first plan declined is modelled here, and it is simpler than it looks because
+first plan declined is modeled here, and it is simpler than it looks because
 almost all of it is the OPPONENT's projection read from the other side:
 
 ```
@@ -1652,7 +1652,7 @@ small Poisson rate, and almost all of the DEF projection's information is the
 opponent's implied total. The bucket-probability treatment is what makes DEF
 scoring honest: a team implied to allow 21 points does not score in the 21
 to 27 bucket with certainty, it has about a 35 percent chance of it and real
-mass in the neighbours, and the expected points is the probability-weighted
+mass in the neighbors, and the expected points is the probability-weighted
 sum. The `yds_allow_*` buckets get the same treatment from the opponent's
 projected yards. The published DEF weekly MAE for Sleeper is 4.58 on 2026
 weeks 1 to 3 and the target for this module is parity within a season.
@@ -1749,7 +1749,7 @@ nothing downstream changes until it wants to.
 
 The shape has published evidence behind it now. Over 22,571 player-weeks
 (2021 to 2025) a standard deviation of `K[position] * sqrt(mean)` with a
-positive skew term matched the realised spread within 3 percent and put an
+positive skew term matched the realized spread within 3 percent and put an
 80 percent band at 83.9 percent coverage; the coefficient of variation for
 starters runs about 0.36 at QB, 0.54 at RB, 0.58 at WR and 0.63 at TE and
 falls as the mean rises, which is what a square-root law says. The
@@ -1832,11 +1832,11 @@ allowlist stays exactly `sleeper` and `ffbeacon`; the new `ffbeacon-model`
 source exists for grading and the scoreboard and is never handed to a reader,
 and `source-guard.test.ts` gains that assertion. The source is created in
 Phase 1 (T019b), not Phase 4: from that night the builder writes the pe-1
-model's own line and totals under it for every modelled row, so the scoreboard
+model's own line and totals under it for every modeled row, so the scoreboard
 grades the model that exists today and v2 inherits a live baseline rather
 than a backtest. A mirrored row (one the model could not produce) is NOT
 written under `ffbeacon-model`, for the same reason the backtest grades
-modelled rows only. The feature still ships with
+modeled rows only. The feature still ships with
 `enabled: false` and the scoreboard still promotes it. What changes is that
 the scoreboard will finally have a model worth promoting, and it will show
 that model alone beside the ensemble.
@@ -1847,7 +1847,7 @@ otherwise be a silent defect:
 - `projectionSourceDisplay` returns the raw slug for anything but the two
   known sources, and `app/leagues/[league_id]/lineups/page.tsx` hardcodes
   `projectionSource === "ffbeacon" ? "FF Beacon" : "Sleeper"`, so a third
-  source would be labelled "Sleeper" there. The admin scoreboard keeps its
+  source would be labeled "Sleeper" there. The admin scoreboard keeps its
   own label map. All three learn `ffbeacon-model` ("FF Beacon model") and the
   hardcode goes through `projectionSourceDisplay` (T062g).
 - The accuracy calc, the scoreboard and `player_projection_accuracy` already
@@ -1939,7 +1939,7 @@ lib/projections/
   kicker.ts                        FG attempts x make rate by band. PURE.
   team-defense.ts                  DEF line from the opponent's projection and defensive rates. PURE.
   universe.ts                      the row universe from nfl_games x weekly rosters x availability. PURE.
-  stat-line.ts                     the emitted key contract (3.0b) and the not-modelled list. PURE.
+  stat-line.ts                     the emitted key contract (3.0b) and the not-modeled list. PURE.
   distribution.ts                  mean -> percentiles, per stat and per total; threshold probabilities. PURE.
   ensemble.ts                      per-position, per-window weights; the ONLY module that sees Sleeper. PURE. (replaces blend.ts)
   independence.test.ts             guard: no other module imports a Sleeper row type or source constant
@@ -2092,7 +2092,7 @@ are budgeted at under 40 seconds more, and the per-stat distribution work is
 arithmetic on rows already in memory. `phaseTimings` already reports each
 phase and the budget is asserted in the cron-runs ledger. If the build ever
 crosses 200 seconds the week loop splits into two invocations (live week
-plus one, then the rest) before anything else is optimised.
+plus one, then the rest) before anything else is optimized.
 
 ### 4.5 Guards and lint
 
@@ -2124,7 +2124,7 @@ plus one, then the rest) before anything else is optimised.
   reader. Any new writer outside `lib/projections/` is added to
   `EXEMPT_FILES` with a reason.
 - `lib/projections/stat-line-contract.test.ts` (3.0b): every key on a Sleeper
-  row this season is emitted or explicitly not modelled.
+  row this season is emitted or explicitly not modeled.
 - `lib/projections/double-discount.test.ts` (3.5): a row carrying
   `play_probability` is never also given an injury multiplier.
 - `source-guard.test.ts` gains: `ffbeacon-model` never appears as a reader's
@@ -2149,7 +2149,7 @@ Deliberately few. The point of this build is the number, not new pages.
   snapshot, failed fetches, which provider answered), and an odds-history
   table per game under a disclosure. Same accessibility contract as the
   existing page: one h1, real `<table>` elements with `<caption>` and `scope`,
-  every control labelled, every timestamp through `formatEastern()`. The
+  every control labeled, every timestamp through `formatEastern()`. The
   server action and validator move with it; the Power Pulse page keeps only
   Power Pulse's own blocks.
 - `lib/nfl-game-environment.ts describeEnvironment()` gains one plain sentence
@@ -2173,7 +2173,7 @@ Deliberately few. The point of this build is the number, not new pages.
   ships and not before.
 - `/terms` gains an "Attribution" section (T003), shipped before the first
   nflverse or MET Norway byte is read, listing every external source the
-  engine uses: nflverse (CC BY 4.0, licence linked, "aggregated by FF
+  engine uses: nflverse (CC BY 4.0, license linked, "aggregated by FF
   Beacon"), ffopportunity by the ffverse project (CC BY-SA 4.0, linked, used
   as a model input), FTN Data via nflverse (CC BY-SA 4.0, used for offline
   validation), MET Norway (NLOD 2.0 and CC BY 4.0, linked), the National Weather
@@ -2181,11 +2181,11 @@ Deliberately few. The point of this build is the number, not new pages.
   (credit appreciated, not required), the greerreNFL stadium dataset, and
   DynastyProcess player ids. The terms and privacy pages are already linked
   from every page's footer, which is what makes a single section sufficient
-  under both licences. Same accessibility contract as the rest of the page:
+  under both licenses. Same accessibility contract as the rest of the page:
   a real heading in the existing hierarchy, a list, each source's name as a
-  link with the licence in plain words beside it. No per-surface credit line
+  link with the license in plain words beside it. No per-surface credit line
   is added anywhere else; `describeEnvironment`'s "Lines via The Odds API"
-  is a data-provenance sentence, not a licence credit, and stays.
+  is a data-provenance sentence, not a license credit, and stays.
 
 ---
 
@@ -2201,7 +2201,7 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
 - T000 this document; T001 progress.md seeded; T002 docs/README.md row and the
   data-sources doc updated with the new sources and their limits.
 - T003 The "Attribution" section on `app/terms/page.tsx` per 4.6: every
-  external source the engine will read, each with its licence in plain words
+  external source the engine will read, each with its license in plain words
   and a link, nflverse marked as aggregated. Ships before T022 (the first
   nflverse read) and T032 (the first MET Norway read); accessibility review
   confirms the heading level fits the page's hierarchy and every link has a
@@ -2230,7 +2230,7 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
 - T012 `lib/odds-api.ts` adapter (key from env, 20-second timeout, null on
   failure, credit accounting in the cron-runs result, the hard stop at
   `oddsApi.monthlyCreditStop`), `lib/sync-nfl-odds.ts` rewritten to take the
-  daily `spreads,totals,h2h` pull, compute the consensus median, normalise the
+  daily `spreads,totals,h2h` pull, compute the consensus median, normalize the
   spread sign, derive implied totals, match events to `nfl_games` and store
   `external_ids.odds_api`, set `fetched_at`, and write history rows on change
   and at first sight; `describeEnvironment` attribution reads "Lines via The
@@ -2242,7 +2242,7 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
   and a paired bootstrap (1,000 resamples over player-weeks) reporting the 90
   percent interval on the MAE difference against Sleeper. This is the harness
   every later phase reports through.
-- T014 Error decomposition in the backtest: for modelled rows, split the
+- T014 Error decomposition in the backtest: for modeled rows, split the
   squared error into the part explained by volume (projected minus actual
   targets and carries at actual efficiency) and the part explained by
   efficiency (actual volume at projected minus actual rates). Report by
@@ -2268,7 +2268,7 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
   nothing. Ships alone, the same day as T010.
 - T019b The `ffbeacon-model` source from Phase 1, per 3.9: the builder writes
   the pe-1 model's own stat line and totals under `source = 'ffbeacon-model'`
-  for every MODELLED row and nothing for a mirrored one; `modelled`,
+  for every MODELED row and nothing for a mirrored one; `modeled`,
   `blend_weight` and the mirrored reason go on the row's metadata as they do
   for `ffbeacon`. The resolver allowlist is unchanged and
   `source-guard.test.ts` asserts the new source is never resolvable. The
@@ -2415,7 +2415,7 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
   fitted on 2016 to 2025 plays (`--signal expected-points`); the report
   states both figures' error against actual points by position and their
   agreement with each other, so the fallback is known to be sane before it
-  is ever needed. The licence note from 2.6 sits in the file header and the
+  is ever needed. The license note from 2.6 sits in the file header and the
   Attribution entry (T003) ships first.
 - T052 Same file: Next Gen Stats (the three all-season files) into
   `player_week_opportunity` columns.
@@ -2473,9 +2473,9 @@ collide. Every task ends with the gate (`npm run typecheck`, `npm run lint`,
   `projectionSourceDisplay` learns the third source.
 - T062e `lib/projections/independence.test.ts` per principle 9.
 - T062f `lib/projections/stat-line.ts` and `stat-line-contract.test.ts`
-  (3.0b): the emitted key list per position, the not-modelled list with
+  (3.0b): the emitted key list per position, the not-modeled list with
   reasons, and the test that every key on a current-season Sleeper row and
-  every key `league-format-tags.ts` recognises is in one list or the other.
+  every key `league-format-tags.ts` recognizes is in one list or the other.
 - T062g The one hardcoded engine ternary in the Lineups page and the admin
   scoreboard's private label map replaced by `projectionSourceDisplay`;
   `source-guard.test.ts` gains the no-inline-ternary assertion.
@@ -2618,7 +2618,7 @@ switches Phase 1 adds. Rules it enforces:
 - Fit seasons and test seasons are separate: coefficients fitted on 2020 to
   2024 are tested on 2025; the final promotion run fits on 2020 to 2025 and
   is tested live on 2026 through the scoreboard.
-- The Sleeper column is labelled with the information it had. For 2020 to
+- The Sleeper column is labeled with the information it had. For 2020 to
   2025 it is Sleeper's LAST stored line (Sunday-morning information) and the
   footer says so; from the first season the snapshot table (3.10) covers, the
   harness pairs our Tuesday build against Sleeper's Tuesday snapshot and
@@ -2695,7 +2695,7 @@ decision. The first entry predates the build.
 SQL (played weeks, PPR, nulls coalesced to zero) and
 `npx tsx --env-file=.env.local scripts/backtest-projections.ts --season 2026`
 (walk-forward, 2024 and 2025 as history, no environment). Sample: 1,887
-graded skill-position weeks for the stored rows; 1,380 modelled rows for the
+graded skill-position weeks for the stored rows; 1,380 modeled rows for the
 pure model. Result: the full tables are in 0.9. Stored FF Beacon row worse
 than Sleeper in four of five weeks by 0.02 to 0.05 MAE and better in none;
 Sleeper's slope 0.97 to 1.00 at every skill position; pure model 1.5 points
@@ -2717,7 +2717,7 @@ Weather APIs and stadium data
 - National Weather Service API, disclaimer and FAQs: https://www.weather.gov/documentation/services-web-api,
   https://www.weather.gov/disclaimer, https://weather-gov.github.io/api/general-faqs,
   https://weather-gov.github.io/api/gridpoints
-- MET Norway Locationforecast 2.0, licence, terms and data model:
+- MET Norway Locationforecast 2.0, license, terms and data model:
   https://api.met.no/weatherapi/locationforecast/2.0/documentation,
   https://api.met.no/doc/License, https://api.met.no/doc/TermsOfService,
   https://docs.api.met.no/doc/locationforecast/datamodel.html,
@@ -2734,10 +2734,10 @@ Weather APIs and stadium data
   https://www.visualcrossing.com/weather-data-editions/,
   https://www.visualcrossing.com/resources/documentation/visual-crossing-weather-free-plan-free-weather-data-for-analysts-and-api-developers/,
   https://www.visualcrossing.com/weather-service-terms/
-- ECMWF open data, DWD open data licence, Environment Canada licence (evaluated, not used):
+- ECMWF open data, DWD open data license, Environment Canada license (evaluated, not used):
   https://www.ecmwf.int/en/forecasts/datasets/open-data,
   https://www.dwd.de/EN/service/legal_notice/legal_notice_node.html,
-  https://eccc-msc.github.io/open-data/licence/readme_en/
+  https://eccc-msc.github.io/open-data/license/readme_en/
 - NFLweather.com terms of use: https://www.nflweather.com/terms_of_use
 - Tomorrow.io pricing: https://www.tomorrow.io/weather-api/pricing/
 - OpenWeatherMap One Call: https://openweathermap.org/api/one-call-3, https://openweathermap.org/price
@@ -2823,14 +2823,14 @@ Data files read directly, headers and sizes measured:
 - nflverse dictionaries (CSV and JSON): https://api.github.com/repos/nflverse/nflreadr/contents/data-raw
 - nflverse injuries source switch: https://github.com/nflverse/nflverse-rosters/pull/96, https://github.com/nflverse/nflverse-rosters/issues/100, https://raw.githubusercontent.com/nflverse/nflverse-rosters/master/exec/update-injuries.R
 - nflverse depth chart provider (ESPN) and workflow: https://raw.githubusercontent.com/nflverse/nflverse-rosters/master/exec/update-depth-charts.R, https://raw.githubusercontent.com/nflverse/nflverse-rosters/master/.github/workflows/update_depth_charts.yaml
-- nflverse licence: https://api.github.com/repos/nflverse/nflverse-data (CC BY 4.0); FTN charting and participation terms: https://nflreadr.nflverse.com/reference/load_ftn_charting.html, https://raw.githubusercontent.com/nflverse/nflreadr/main/NEWS.md
+- nflverse license: https://api.github.com/repos/nflverse/nflverse-data (CC BY 4.0); FTN charting and participation terms: https://nflreadr.nflverse.com/reference/load_ftn_charting.html, https://raw.githubusercontent.com/nflverse/nflreadr/main/NEWS.md
 - nflverse team code mapping on relocation: https://nflreadr.nflverse.com/reference/clean_team_abbrs.html, https://nflreadr.nflverse.com/reference/team_abbr_mapping.html
-- ffopportunity releases, README, licence and workflow: https://github.com/ffverse/ffopportunity/releases, https://raw.githubusercontent.com/ffverse/ffopportunity/main/README.md, https://raw.githubusercontent.com/ffverse/ffopportunity/main/.github/workflows/ep-update-data.yaml, https://raw.githubusercontent.com/nflverse/nflreadr/main/data-raw/dictionary_ffopps.csv
+- ffopportunity releases, README, license and workflow: https://github.com/ffverse/ffopportunity/releases, https://raw.githubusercontent.com/ffverse/ffopportunity/main/README.md, https://raw.githubusercontent.com/ffverse/ffopportunity/main/.github/workflows/ep-update-data.yaml, https://raw.githubusercontent.com/nflverse/nflreadr/main/data-raw/dictionary_ffopps.csv
 - DynastyProcess player ids: https://github.com/dynastyprocess/data/raw/master/files/db_playerids.csv, https://nflreadr.nflverse.com/articles/dictionary_ff_playerids.html
 - Sleeper schedule and projections endpoints, fetched: https://api.sleeper.app/schedule/nfl/regular/2026, https://api.sleeper.app/projections/nfl/2026/18?season_type=regular&position[]=QB, https://api.sleeper.app/players/nfl/6794
 - The Odds API rate limit page: https://the-odds-api.com/guide/rate-limit.html
 - Vercel function duration, memory, limits and cron pricing: https://vercel.com/docs/functions/configuring-functions/duration, https://vercel.com/docs/functions/configuring-functions/memory, https://vercel.com/docs/functions/limitations, https://vercel.com/docs/cron-jobs/usage-and-pricing
-- GitHub Actions billing, limits and schedule behaviour: https://docs.github.com/en/billing/managing-billing-for-your-products/about-billing-for-github-actions, https://docs.github.com/en/actions/reference/limits, https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+- GitHub Actions billing, limits and schedule behavior: https://docs.github.com/en/billing/managing-billing-for-your-products/about-billing-for-github-actions, https://docs.github.com/en/actions/reference/limits, https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 
 Methodology, accuracy and feature evidence:
 
@@ -2857,8 +2857,8 @@ succeeded); how often Sleeper refreshes `injury_status` (undocumented); the
 day of the game week on which nflverse's closing lines populate (blank four
 days out, filled by Sunday); whether Node's `fetch` forwards `If-None-Match`
 across the GitHub release redirect the way curl does (expected yes, tested
-only with curl); and the licence DynastyProcess intends for `db_playerids.csv`
-(the repository is GPL-3.0 with no separate data licence; the site already
+only with curl); and the license DynastyProcess intends for `db_playerids.csv`
+(the repository is GPL-3.0 with no separate data license; the site already
 consumes the file nightly for two columns). Two items the first draft listed
 are now settled: the Sleeper schedule endpoint carries the date and no time,
 and `games.csv` holds all 272 games of 2026.
@@ -2909,7 +2909,7 @@ fix. Items are ordered by how much of the build they would have broken.
 
 1. **The gsis join was not exact.** Assumed: every Sleeper player carries a
    gsis id. True: 16 of 32 projected QBs, 11 of 63 RBs, 18 of 96 WRs, 15 of
-   47 TEs, 14 of 33 Ks. Without a fix, Phases 4 and 5 would have modelled a
+   47 TEs, 14 of 33 Ks. Without a fix, Phases 4 and 5 would have modeled a
    third of the league and silently mirrored the rest. Closed by 2.9 (a
    crosswalk through nflverse weekly rosters' `sleeper_id` and
    `sportradar_id` and DynastyProcess's id file, written into
@@ -3004,7 +3004,7 @@ fix. Items are ordered by how much of the build they would have broken.
     participation data covers 2016 to 2025, not 2020 to 2023 (T054).
 
 19. **ESPN is gone, by decision (2026-09-28).** The audit surfaced the
-    licence exposure and offered the swap as optional; the owner made it
+    license exposure and offered the swap as optional; the owner made it
     required. The Odds API's free tier supplies game lines from Phase 1
     (T012), `nfl_games` supplies kickoffs, the ESPN weather note is dropped,
     `lib/nfl-odds.ts` is deleted, an ESPN-host lint rule is added, and the

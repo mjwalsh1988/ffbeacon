@@ -224,7 +224,7 @@ export type FlushResult = { ok: boolean; removedTierBreaks: number[] };
 /**
  * Write a run's board into user_ranking_board_players: remove the players no
  * longer on it, upsert everyone else at their rank, record who was LEFT OFF
- * (a judgement the community merge reads), and keep every tier line at its
+ * (a judgment the community merge reads), and keep every tier line at its
  * rank unless the tier pass produced new ones.
  *
  * Runs on the reader's own session client, so the owner-only RLS policies are

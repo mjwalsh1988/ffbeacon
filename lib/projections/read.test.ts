@@ -36,7 +36,7 @@ type FilterState = {
   gt: Record<string, unknown>;
   in: Record<string, unknown[]>;
   is: Record<string, unknown>;
-  /** Columns a `.not(col, "is", null)` filter excludes nulls on. Only that form is modelled. */
+  /** Columns a `.not(col, "is", null)` filter excludes nulls on. Only that form is modeled. */
   notNull: string[];
   limit?: number;
   head?: boolean;

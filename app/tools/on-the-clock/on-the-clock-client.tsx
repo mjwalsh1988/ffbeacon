@@ -741,7 +741,7 @@ export function OnTheClockClient({
    *
    * The rail sits a long way from the room, so a press has to take the reader
    * with it. The view's region gets focus, which is what tells a screen reader
-   * that something changed and gives it a labelled place to start reading, and
+   * that something changed and gives it a labeled place to start reading, and
    * it is scrolled to the top of the room so a sighted drafter is not left
    * looking at the page header. The old strip needed neither: it sat directly
    * above the panel it switched, and the tab-to-panel relationship carried the
@@ -753,7 +753,7 @@ export function OnTheClockClient({
    * be scrolled to, and both calls would fail silently.
    *
    * `preventScroll` on the focus call, then an explicit scroll, so the region's
-   * scroll-margin is honoured and the site header does not cover what we just
+   * scroll-margin is honored and the site header does not cover what we just
    * moved to.
    */
   const pendingViewFocus = useRef<View | null>(null);
@@ -1250,7 +1250,7 @@ export function OnTheClockClient({
 
   // NO per-run cancellation here, deliberately. The effect's cleanup fires when
   // the recommended players change, which happens constantly in a live draft,
-  // and a run cancelled that way had already marked its ids as requested. That
+  // and a run canceled that way had already marked its ids as requested. That
   // stranded those players with no history for the rest of the session and left
   // the loading flag stuck on. A late response is harmless instead: the cache
   // is a keyed merge, so it can only ever add the right rows under the right
@@ -1910,7 +1910,7 @@ export function OnTheClockClient({
   // top-level one this file used to carry: it is the only thing in this file
   // that needs it, and a static import brings in the whole browser client
   // (GoTrue, WebSocket code) whether or not a draft ever goes live
-  // (PERF-T031). `cancelled` guards the case where the league or realtime
+  // (PERF-T031). `canceled` guards the case where the league or realtime
   // flag changes again before the import resolves, so a stale response never
   // opens a channel for a league this effect has already moved on from. -----
   useEffect(() => {
@@ -1920,10 +1920,10 @@ export function OnTheClockClient({
     }
     const draftId = league.draftId;
     setLiveStatus("connecting");
-    let cancelled = false;
+    let canceled = false;
     let cleanupChannel: (() => void) | null = null;
     void import("@/lib/supabase/client").then(({ createClient }) => {
-      if (cancelled) return;
+      if (canceled) return;
       const supabase = createClient();
       const channel = supabase
         .channel(`otc-draft-${draftId}`)
@@ -1974,7 +1974,7 @@ export function OnTheClockClient({
     });
 
     return () => {
-      cancelled = true;
+      canceled = true;
       if (cleanupChannel) cleanupChannel();
     };
   }, [league, realtimeEnabled, snapshot]);
@@ -1991,12 +1991,12 @@ export function OnTheClockClient({
     if (heavyEngines) return;
     const draftDone = draftStatusForEngines === "complete";
     if (view === "pick" && !draftDone) return;
-    let cancelled = false;
+    let canceled = false;
     void import("@/lib/on-the-clock/heavy-engines").then((mod) => {
-      if (!cancelled) setHeavyEngines(mod);
+      if (!canceled) setHeavyEngines(mod);
     });
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, [view, draftStatusForEngines, heavyEngines]);
 
@@ -2034,7 +2034,7 @@ export function OnTheClockClient({
     // from a cleanup. `pulseInputs` gets a new identity whenever the board or the
     // simulation is rebuilt, which happens on Realtime updates that carry no new
     // pick at all (the sync upserts every row, so Postgres emits an UPDATE for
-    // unchanged ones). With a cleanup flag, that re-run cancelled the in-flight
+    // unchanged ones). With a cleanup flag, that re-run canceled the in-flight
     // request and then returned at the guard above without firing a replacement:
     // the response was dropped, and because the loading flag is cleared inside
     // the discarded continuation, the room sat on "Loading weekly projections"

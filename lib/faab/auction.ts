@@ -9,7 +9,7 @@
  * the runner-up. None of that moves when the reader's roster changes.
  *
  * So this simulates the rest of the league instead. Each rival decides whether
- * to bid, draws an amount around its own centre, and the highest rival bid is
+ * to bid, draws an amount around its own center, and the highest rival bid is
  * the number the reader has to beat. Run it a few thousand times and the share
  * of runs a bid of b clears is the reader's chance of winning at b, which is
  * the one figure the tool was missing and no competitor publishes.
@@ -102,7 +102,7 @@ function clamp(value: number, min: number, max: number): number {
  * Deliberately NOT lib/power-pulse/math.ts normalDraw, which floors its result
  * at zero because a fantasy team cannot score negative points. Here the draw is
  * the exponent of a lognormal, so its negative half is what makes a rival bid
- * BELOW its centre. Flooring it would have made every rival in the league bid
+ * BELOW its center. Flooring it would have made every rival in the league bid
  * high and quietly halved every reader's win chance.
  */
 function standardNormal(rng: () => number): number {
@@ -168,10 +168,10 @@ function rivalBid(
       input.scarcityShare == null
         ? 1
         : 1 + (Math.max(0, settings.scarcityPremiumPct) / 100) * clamp(input.scarcityShare, 0, 1);
-    const centre = rival.centerPct * clamp(settings.worthToBidRatio, 0, 1) * scarcity;
-    // Lognormal around the centre: a bid can be a multiple of the expected
+    const center = rival.centerPct * clamp(settings.worthToBidRatio, 0, 1) * scarcity;
+    // Lognormal around the center: a bid can be a multiple of the expected
     // price but never negative, which is how overbids actually look.
-    pct = centre * Math.exp(settings.bidSigma * standardNormal(rng));
+    pct = center * Math.exp(settings.bidSigma * standardNormal(rng));
   } else if (input.strayCell) {
     pct = drawFromCell(input.strayCell, rng());
   } else {

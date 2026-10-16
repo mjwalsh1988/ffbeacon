@@ -190,8 +190,8 @@ export function DonateForm({
   }
 
   /**
-   * The selected state is a border colour, a tint and a text colour, and
-   * Windows High Contrast overrides all three with system colours, so selected
+   * The selected state is a border color, a tint and a text color, and
+   * Windows High Contrast overrides all three with system colors, so selected
    * and unselected would render identically with the real radio clipped out of
    * sight. The `forced-colors:` outline restores a visible marker in that mode
    * only, and costs nothing anywhere else.

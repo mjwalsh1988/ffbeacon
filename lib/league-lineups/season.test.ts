@@ -29,7 +29,7 @@ describe("buildSeasonSeries", () => {
   });
 
   it("takes efficiency from the gradable pair, not from the official one", () => {
-    // An IDP league scores 40 points in slots the optimiser cannot touch. Using
+    // An IDP league scores 40 points in slots the optimizer cannot touch. Using
     // official over (official plus pointsLeft) would read 140/150 = 93%; the
     // honest figure is the gradable 100/110 = 91%.
     const series = buildSeasonSeries({

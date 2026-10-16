@@ -24,7 +24,7 @@ import { useTooltipDismiss } from "@/components/info-tooltip";
  * THE POINTER TARGET IS 44px AND THE ICON IS NOT. A roster row is about 38px
  * tall and the name beside it needs every pixel of width it can get, so a 44px
  * BOX would either double the height of the card or truncate every name on a
- * phone. The button instead carries a 44 by 44 overlay pinned to its centre and
+ * phone. The button instead carries a 44 by 44 overlay pinned to its center and
  * taken out of flow, so the target meets the minimum while the row keeps its
  * density. The overlay reaches about 3px into the row above and below; with one
  * badge per row and at most one badge in that band, there is nothing there for

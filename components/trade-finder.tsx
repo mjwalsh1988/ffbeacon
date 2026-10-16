@@ -64,7 +64,7 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   only way to see anything else was "Not interested". That button records a
  *   real opinion and it was also the Next button, which meant a reader who
  *   merely wanted to look past a deal had to declare it refused. And the search
- *   button, labelled "Find another trade", re-ran a deterministic search with
+ *   button, labeled "Find another trade", re-ran a deterministic search with
  *   unchanged inputs and handed back the same trade. It looked like navigation
  *   and it was a no-op.
  *
@@ -79,7 +79,7 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   ordered that way on screen because that is the order of specificity, and the
  *   engine resolves conflicts the same way: a named player settles the side he
  *   is on and stands the position ask on that side down, because "get me this
- *   quarterback" and "get me a running back" cannot both be honoured and the
+ *   quarterback" and "get me a running back" cannot both be honored and the
  *   name is the more specific request. The ask on the OTHER side survives, which
  *   is the combination managers actually type.
  *
@@ -939,7 +939,7 @@ export function TradeFinder(props: {
               {/* Says what it does. This used to read "Find another trade" and
                   re-ran a deterministic search with unchanged inputs, which
                   handed back the trade already on screen. The sentence that sat
-                  beside it explained the arrows, which are their own labelled
+                  beside it explained the arrows, which are their own labeled
                   controls twenty pixels lower. */}
               <button
                 type="submit"
@@ -1028,7 +1028,7 @@ export function TradeFinder(props: {
       )}
 
       {!pending && !error && shownSuggestion && (
-        // A named region, labelled by the card's own headline, so the deal is
+        // A named region, labeled by the card's own headline, so the deal is
         // one thing a screen reader can jump to and step out of rather than a
         // run of paragraphs between two buttons.
         <section ref={cardRef} aria-labelledby={headingId} className="space-y-3">

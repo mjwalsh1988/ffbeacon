@@ -22,7 +22,7 @@
  *
  * Nothing visible is aria-hidden. Logos and photos are decorative (alt="")
  * because the team and player names are always the adjacent text. The team
- * colour strip is decoration.
+ * color strip is decoration.
  *
  * Every piece of data shows at every breakpoint: the tables scroll sideways
  * inside a focusable region on a phone rather than dropping a column.

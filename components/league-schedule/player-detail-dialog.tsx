@@ -219,7 +219,7 @@ export function PlayerDetailDialog({
 }
 
 /**
- * One labelled fact. Exported so the Lineups section builds its extra rows out
+ * One labeled fact. Exported so the Lineups section builds its extra rows out
  * of the same component rather than a lookalike that drifts a padding value.
  */
 export function Row({ term, value }: { term: string; value: string }) {

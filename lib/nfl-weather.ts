@@ -79,7 +79,7 @@ const HOUR_MS = 3_600_000;
 /** Kickoff hour plus the three after it. */
 export const GAME_WINDOW_HOURS = 4;
 
-/** The credit MET Norway's licence asks for, and where it links. */
+/** The credit MET Norway's license asks for, and where it links. */
 export const MET_NORWAY_ATTRIBUTION = "Weather data from MET Norway";
 export const MET_NORWAY_ATTRIBUTION_URL = "https://api.met.no/";
 
@@ -544,7 +544,7 @@ const MET_SIMPLE_SYMBOLS: Record<string, string> = {
  * about the weather, so it is dropped. Their published list spells two codes
  * "lightssleetshowersandthunder" and "lightssnowshowersandthunder", with the
  * extra s; both are read as "light". A code outside the published grammar
- * comes back capitalised as is rather than dropped, and an empty one is null.
+ * comes back capitalized as is rather than dropped, and an empty one is null.
  */
 export function describeMetSymbol(code: string | null | undefined): string | null {
   if (typeof code !== "string") return null;

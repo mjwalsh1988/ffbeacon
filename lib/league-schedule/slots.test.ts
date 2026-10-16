@@ -80,7 +80,7 @@ describe("alignedStartingSlots", () => {
     expect(idp.every((s) => s.projectable === false)).toBe(true);
   });
 
-  it("keeps an unrecognised token rather than shifting every slot below it", () => {
+  it("keeps an unrecognized token rather than shifting every slot below it", () => {
     const slots = alignedStartingSlots(["QB", "EDGE", "RB", "BN"]);
     expect(slots.map((s) => s.token)).toEqual(["QB", "EDGE", "RB"]);
     // The RB has to stay at index 2, because Sleeper's starters array puts them
@@ -137,7 +137,7 @@ describe("isProjectableSlot", () => {
     expect(isProjectableSlot("DEF")).toBe(true);
   });
 
-  it("is false for IDP slots and anything we do not recognise", () => {
+  it("is false for IDP slots and anything we do not recognize", () => {
     expect(isProjectableSlot("IDP_FLEX")).toBe(false);
     expect(isProjectableSlot("LB")).toBe(false);
     expect(isProjectableSlot("EDGE")).toBe(false);

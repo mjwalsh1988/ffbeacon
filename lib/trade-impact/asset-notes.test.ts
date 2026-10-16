@@ -10,7 +10,7 @@ import type { ImpactGaps, ResolvedAsset, TeamImpact } from "./types";
 import { TradeOutcomePanel } from "@/components/trade-ideas/trade-outcome";
 
 /**
- * Positional WAR as labelled context on the asset card (extension E3).
+ * Positional WAR as labeled context on the asset card (extension E3).
  *
  * Three things are pinned here, matching the three constraints in
  * docs/league-pulse/league-pulse-positional-war-plan.md section 15.3: the template renders
@@ -223,7 +223,7 @@ function within(inner: [number, number], outer: [number, number]): boolean {
 }
 
 describe("TradeOutcomePanel: the Positional WAR block sits outside the wins container", () => {
-  it("renders the block, labelled, next to a working Signal Guide link", () => {
+  it("renders the block, labeled, next to a working Signal Guide link", () => {
     const mine = team({
       incoming: [playerAsset({ sleeperId: "101", position: "RB" })],
       outgoing: [pickAsset()],
@@ -245,7 +245,7 @@ describe("TradeOutcomePanel: the Positional WAR block sits outside the wins cont
 
     expect(html).toContain("Positional WAR (league-wide)");
     expect(html).toContain(positionalWarSentence(WAR_CONTEXT));
-    // A real, working link (constraint 2), not a colour or an icon standing in
+    // A real, working link (constraint 2), not a color or an icon standing in
     // for one (the accessibility rule).
     expect(html).toMatch(/<a[^>]+href="\/leagues\/999999"[^>]*>What is Positional WAR\?<\/a>/);
   });

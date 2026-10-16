@@ -8,7 +8,7 @@ import type { WeekImpact } from "@/lib/trade-impact/types";
  *   each one, and nothing anywhere on it named the quantity, the direction, or
  *   the scale. A reader could see that week 11 was taller than week 12 and had
  *   no way to learn what "taller" meant. It now carries a title, a one line
- *   explanation, a colour key in words, a labelled zero line with "Better" above
+ *   explanation, a color key in words, a labeled zero line with "Better" above
  *   it and "Worse" below, the tallest bar's value called out so the scale is
  *   fixed to something, and the change printed on every bar. Nothing about the
  *   drawing has to be inferred any more.
@@ -68,7 +68,7 @@ function fmtProbPair(before: number | null, after: number | null): string {
 function flipLabel(week: WeekImpact): string | null {
   const { winProbBefore: before, winProbAfter: after } = week;
   if (before === null || after === null) return null;
-  if (before < 0.5 && after >= 0.5) return "Now favoured";
+  if (before < 0.5 && after >= 0.5) return "Now favored";
   if (before >= 0.5 && after < 0.5) return "Now underdog";
   return null;
 }
@@ -108,7 +108,7 @@ export function ImpactWeeks({
           below.
         </p>
 
-        {/* The key, in words as well as colour. */}
+        {/* The key, in words as well as color. */}
         <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-muted">
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-sm bg-brand-cyan" />
@@ -255,7 +255,7 @@ export function ImpactWeeks({
                   <td className="py-2 pr-2 text-xs text-ink-muted">
                     {week.opponentName ?? "No opponent"}
                     {/* The flip sits with the matchup because that is what
-                        changed hands. It is a word, not a colour. */}
+                        changed hands. It is a word, not a color. */}
                     {flip && (
                       <span className="mt-1 inline-block rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-ink-muted">
                         {flip}

@@ -59,7 +59,7 @@ const LOOKAHEAD_WEEKS = 2;
 /**
  * How far back an unsettled, never-scored week is chased before we accept that
  * it is never going to settle. A week that DID score is chased regardless of
- * age, because that one is a real result waiting to be finalised.
+ * age, because that one is a real result waiting to be finalized.
  */
 const SETTLE_LOOKBACK_WEEKS = 3;
 

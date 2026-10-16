@@ -39,7 +39,7 @@ const TEAMS = new Map([
 ]);
 
 describe("line arithmetic", () => {
-  it("quotes the favourite, home-relative in and favourite-relative out", () => {
+  it("quotes the favorite, home-relative in and favorite-relative out", () => {
     expect(spreadText("GB", "ATL", -4.5)).toBe("GB -4.5");
     expect(spreadText("CLE", "CAR", 2.5)).toBe("CAR -2.5");
     expect(spreadText("GB", "ATL", 0)).toBe("PK");

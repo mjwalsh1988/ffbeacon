@@ -14,7 +14,7 @@ import {
  * sentences that would pass no matter what the keyword lists said.
  *
  * The property under test is AGREEMENT, not correctness. Whether Aaron Donald working
- * out for the Rams is best labelled a transaction is arguable. Whether both posts
+ * out for the Rams is best labeled a transaction is arguable. Whether both posts
  * about it land on the same label is not: if they disagree, two articles publish.
  */
 

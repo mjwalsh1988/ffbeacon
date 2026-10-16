@@ -25,7 +25,7 @@ type AnySupabase =
  * leagues really do hold more than one draft for a season, and one production
  * league carries two completed 23-round 2026 startups whose seat maps DISAGREE.
  * This used to keep whichever row the database returned last, so the slot a pick
- * was labelled with could change between two renders of the same page. Both the
+ * was labeled with could change between two renders of the same page. Both the
  * read and the tiebreak now live in lib/league-drafts.ts and are shared with
  * lib/league-startup-picks.ts, so a pick's label and its valuation can never be
  * read off two different drafts.

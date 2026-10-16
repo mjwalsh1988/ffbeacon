@@ -174,7 +174,7 @@ export type NflWeatherSyncResult = {
  *
  * ESPN's venue id on the schedule row is the answer whenever it is there. When
  * the row carries NO venue id and the game is not at a neutral site, the home
- * team's own stadium for that season is used. A venue id we do not recognise
+ * team's own stadium for that season is used. A venue id we do not recognize
  * resolves to nothing: it says the game is somewhere, and that somewhere is
  * not in nfl_stadiums, so the home stadium would be a guess (a relocated game
  * is exactly the case where it is wrong).

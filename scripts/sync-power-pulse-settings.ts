@@ -29,7 +29,7 @@
  * WHY IT MUST RUN AFTER THE DEPLOY, NEVER BEFORE
  * Running it against the OLD code would apply the new variance figures to the
  * old model AND stamp every cache it then writes as pp-3. The real deploy would
- * arrive to find caches already labelled pp-3 and would not recompute a single
+ * arrive to find caches already labeled pp-3 and would not recompute a single
  * league, which is precisely the staleness the version exists to prevent.
  *
  * CONCURRENCY

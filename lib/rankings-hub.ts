@@ -31,7 +31,7 @@ export function wantsRankingsHub(view: QueryValue): boolean {
 
 /**
  * The query string carried from the hub onto a format board: the source and the
- * position filter, which are reader choices the board honours, and nothing else.
+ * position filter, which are reader choices the board honors, and nothing else.
  * Values are encoded by URLSearchParams, so nothing a visitor types can break out of
  * the query string; the board validates both values itself.
  */

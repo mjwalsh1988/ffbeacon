@@ -327,7 +327,7 @@ export async function makeBoardPrimary(boardId: string): Promise<BoardsResult> {
   return { ok: true, boards: await loadProfileBoards(supabase, user.id) };
 }
 
-/** Reorder a secondary up or down by swapping sort values with its neighbour. */
+/** Reorder a secondary up or down by swapping sort values with its neighbor. */
 export async function moveBoardOrder(
   boardId: string,
   direction: "up" | "down",
@@ -447,7 +447,7 @@ export async function revalidateBoardCache(boardId: string): Promise<void> {
  *
  * Deletes rows removed since the last save, then upserts the rest in board
  * order (rank_position = index + 1, matching what the reader sees). The breaks
- * are normalised against the saved length, so a line that fell off the end of
+ * are normalized against the saved length, so a line that fell off the end of
  * a shortened board is dropped rather than stored. Ownership is re-verified
  * from scratch and every id is validated before it reaches the database; the
  * owner-only RLS policies are the backstop.
@@ -613,7 +613,7 @@ export type ImportedBoardPlayer = {
  * Replace the whole board with an imported rankings list: deletes every
  * existing row, then inserts the imported set. The source's published tiers
  * become tier BREAKS (a line wherever the source's tier changes between two
- * neighbours), and the tier labels reset, because a label named for the old
+ * neighbors), and the tier labels reset, because a label named for the old
  * tier 2 would now sit on whatever the source put there.
  *
  * The board also records where it came from (plan decision 5): the format the

@@ -342,7 +342,7 @@ function TryIt({
   );
 }
 
-/** A small invented-numbers table, labelled as invented in its caption. */
+/** A small invented-numbers table, labeled as invented in its caption. */
 function ExampleTable({
   caption,
   head,

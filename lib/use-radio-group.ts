@@ -4,7 +4,7 @@ import { useRef, type KeyboardEvent } from "react";
 import { nextRadioIndex } from "@/lib/keyboard-navigation";
 
 /**
- * Keyboard behaviour for a group of role="radio" buttons, per the WAI-ARIA
+ * Keyboard behavior for a group of role="radio" buttons, per the WAI-ARIA
  * radio group pattern: the group is ONE Tab stop (the checked option, or the
  * first available one when nothing is checked), and the arrow keys move focus
  * and selection together, wrapping, skipping any option that cannot be picked.

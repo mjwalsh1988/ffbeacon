@@ -285,7 +285,7 @@ Gotchas found this session
   UNCOMMITTED in the working tree, by instruction. The IDP switch is OFF and no
   production data or settings were changed.
 - DONE (details in progress.md, IDP-401, IDP-402, IDP-4R):
-  IDP-401 ESLint installed and customised; `npm run lint` is part of the gate
+  IDP-401 ESLint installed and customized; `npm run lint` is part of the gate
   (typecheck, lint, test, build) and passes with zero errors and warnings.
   IDP-402 backtest: `npm run backtest:idp`, report in
   docs/idp/idp-accuracy-backtest.txt.
@@ -389,7 +389,7 @@ Gotchas found this session
   or Who Should I Start, which guard no player at all (IDP-317R item 10).
 - Carried from phase 2 and still open: the items listed under "Carried INTO
   phase 3" further down this file, except IDP-308 and the IDP-305 link, which
-  phase 3 closed. The DE/DT position normalisation in the players sync was NOT
+  phase 3 closed. The DE/DT position normalization in the players sync was NOT
   done in phase 3.
 
 ### Session rules that still bind
@@ -433,7 +433,7 @@ the phase 3 block at the end of progress.md.
   LineupSlot.playedAs.
 - Callers wired: Power Pulse engine + orchestrator, Schedules (slots.ts,
   matchup.ts, data.ts), Lineups (build.ts, simulate.ts, data.ts,
-  season-data.ts, board, swap dialog, optimiser panel, page), lib/projections/
+  season-data.ts, board, swap dialog, optimizer panel, page), lib/projections/
   read.ts (includeDefenders opt-in), NEW lib/idp/free-agents.ts, NEW
   lib/league-lineups/defender-protection.ts (R-5), advice.ts, Positional WAR
   (replacement, engine, load with offense/defense slices at the query and
@@ -486,7 +486,7 @@ the phase 3 block at the end of progress.md.
    variance tests, lib/league-lineups status/weeks, lib/league-schedule
    lineups/insights, lib/positional-war war, chart-geometry, table, tiers,
    upgrade, scatter-geometry, chart-layout, share). For each: add the IDP case
-   where behaviour changed, otherwise record "reviewed, unchanged" in
+   where behavior changed, otherwise record "reviewed, unchanged" in
    progress.md. Also run the guard tests: lib/idp/points-guard.test.ts,
    lib/projections/source-guard and raw-column-guard, lib/positional-war/
    naming.test.ts (WAR token rule), lib/site.test.ts (noun-map ledger: two
@@ -569,7 +569,7 @@ Carried INTO phase 3 (each is recorded in progress.md with its reason):
   memberships; 21 draft grade "N of M" omits unvalued offensive picks; 22 On
   The Clock detail repeats "No market value"; 34 Brief desk snap share is 0-1
   under a % header (pre-existing); 41 offensive team-card span aria-labels
-  (pre-existing); 53 guide figure colours are hardcoded hex; 54 the OG team
+  (pre-existing); 53 guide figure colors are hardcoded hex; 54 the OG team
   card's defender footer needs a visual check; C6 the accuracy rebuild is
   delete-then-insert and leaves a partial table mid-run (pre-existing); C7
   defense-splits recentSeasons swallows an error; a covering index for the
@@ -724,7 +724,7 @@ session, are NOT COMMITTED, and are written up in full at the end of
 progress.md. Migration 0291 IS applied to production and
 lib/database.types.ts is regenerated, so the tree and the database agree.
 
-What is left: FB-R03 (finish the review coverage) and the three judgement
+What is left: FB-R03 (finish the review coverage) and the three judgment
 calls, FB-R05, FB-R07 and FB-R08, all still recommended to leave. The FB-R04
 work is itself unreviewed by anyone but its author and is the newest code in
 the tree, so if one reviewer gets scoped at anything, scope it at that diff.
@@ -835,7 +835,7 @@ and both guides are built, checked and committed.
 
 Of the eight follow-ups, four are closed: FB-R01, FB-R02, FB-R04 and FB-R06,
 the last two in the 2026-09-20 session and NOT COMMITTED. What remains is
-FB-R03, the unfinished review coverage, and the three judgement calls FB-R05,
+FB-R03, the unfinished review coverage, and the three judgment calls FB-R05,
 FB-R07 and FB-R08.
 
 ### VERIFY FIRST results
@@ -970,7 +970,7 @@ on the card between 75% and 100% of the whole budget.
 WHAT THE REVIEW DID NOT REACH. Record these as unreviewed, not as clean:
 
 - Most of the new result UI beyond its structure: bid-hero, goal-toggle
-  keyboard and announcement behaviour, impact-grid, drop-options, week-strip,
+  keyboard and announcement behavior, impact-grid, drop-options, week-strip,
   signal-list, market-card, bid-actions. In particular NOBODY has checked the
   400px layout, prefers-reduced-motion, the live-region wording against plan
   7.14, or "no data hidden at any breakpoint" on the responsive utilities in
@@ -983,7 +983,7 @@ WHAT THE REVIEW DID NOT REACH. Record these as unreviewed, not as clean:
 - loadAuctionHistory and groupAuctions against plan 7.5, beyond their tests.
 - The guide side beyond structure, and specifically section 5 of the guide
   plan, which lists the exact passages in /guides/faab-strategy that had to
-  change because they described the old behaviour.
+  change because they described the old behavior.
 - An independent AI-writing pass over the build's strings. Each agent ran the
   check on its own copy and named what it fixed; nobody checked another's.
 
@@ -1057,7 +1057,7 @@ After this tree deploys: `npm run backfill:relays -- --apply` then
 Migrations 0284 to 0288 are applied to production through the Supabase MCP
 and lib/database.types.ts is regenerated.
 
-Production data changed by the build (both authorised by plan section 20):
+Production data changed by the build (both authorized by plan section 20):
 the Relay backfill (643 published, then 16 more after the grounding rules
 were tightened; 64 hidden for the owner in /admin/brief-desk/relays; 194
 dropped by the gates; 212 folded) and the archive of 492 legacy articles with
@@ -1065,8 +1065,8 @@ dropped by the gates; 212 folded) and the archive of 492 legacy articles with
 
 ### Facts a new session needs
 
-- The Supabase MCP server was authorised through the owner's browser
-  (organisation FF Beacon). A new session may need to re-run the authenticate
+- The Supabase MCP server was authorized through the owner's browser
+  (organization FF Beacon). A new session may need to re-run the authenticate
   flow; the owner has to open the URL, or Claude in Chrome can.
 - Migrations start at 0289 (0288 is the last file).
 - BRIEF_DESK_TOKEN is in .env.local and .env.local.example. It still has to

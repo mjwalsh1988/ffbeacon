@@ -124,7 +124,7 @@ describe("assignRelayWeek without a start date", () => {
     expect(out).toMatchObject({ season: "2026", week: 7, phase: "regular" });
   });
 
-  it("normalises a playoff week counted from 1 to the continuing count", () => {
+  it("normalizes a playoff week counted from 1 to the continuing count", () => {
     const out = assignRelayWeek(
       { season: "2026", season_type: "post", week: 2 },
       "2027-01-20T12:00:00Z",

@@ -161,7 +161,7 @@ is the one head-term play I would make.
 - Split-page titles match the query shape, not the brand voice: "TEP in Fantasy
   Football: What Tight End Premium Means" rather than "Understanding TEP".
 - Keep the glossary's own title on the terms head term, but accept it is not
-  going to win it, and stop optimising for that.
+  going to win it, and stop optimizing for that.
 
 ### E. Accept and measure the zero-click reality
 

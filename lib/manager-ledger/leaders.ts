@@ -5,7 +5,7 @@
  * decisions beyond the number itself, so the cards and the tiles can be
  * restyled without touching which team wins what.
  *
- * MODELLED ON `buildPulseLeaders` in lib/league-power-pulse-data.ts, and for
+ * MODELED ON `buildPulseLeaders` in lib/league-power-pulse-data.ts, and for
  * the same reason: a ranking table answers "who is first" and cannot answer
  * "who is the most interesting". The superlatives are where a reader finds
  * their own league's story, and they are the part people screenshot.

@@ -47,7 +47,7 @@ describe("winsPerPoint", () => {
 
   it("is worth more in a close matchup than in a decided one", () => {
     const close = winsPerPoint([evenWeek()]) as number;
-    // A 60-point favourite. Another point a week barely moves a game already won.
+    // A 60-point favorite. Another point a week barely moves a game already won.
     const decided = winsPerPoint([
       { mean: 170, sigma: 25, opponentMean: 110, opponentSigma: 25 },
     ]) as number;

@@ -42,13 +42,13 @@ import { redactStripeEvent } from "@/lib/donate/redact";
  * So the codes here are chosen for their meaning to whoever reads the Event
  * deliveries tab, not to steer Stripe: 400 says this request was never valid,
  * 500 says try us again, 200 says we are finished with this event whether or not
- * an email went out. The one place the choice genuinely changes behaviour is
+ * an email went out. The one place the choice genuinely changes behavior is
  * that anything answered 200 is never retried, which is why a receipt that might
  * still be recoverable is answered 500 instead.
  */
 
 // The signature is computed over the RAW request body, so this must run on
-// Node with the body read as text. Parsing and re-serialising the JSON changes
+// Node with the body read as text. Parsing and re-serializing the JSON changes
 // byte order and the signature can never match again.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

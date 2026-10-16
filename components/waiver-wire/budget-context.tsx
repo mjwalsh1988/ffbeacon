@@ -99,7 +99,7 @@ export function BidInDollars({
 }
 
 /**
- * The control. A labelled number field plus three one-tap presets, and a live
+ * The control. A labeled number field plus three one-tap presets, and a live
  * region that says what changed, because the effect lands on cards the reader
  * may not be looking at.
  */

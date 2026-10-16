@@ -38,8 +38,8 @@ import {
  * `aria-label` summary, so a screen reader hears the entry once. See the note
  * at the bottom of lib/league-activity/types.ts.
  *
- * COLOUR CARRIES NOTHING ON ITS OWN. The accent rail, the tinted icon tile and
- * the win/loss colouring all repeat in text: the eyebrow names the kind, the
+ * COLOR CARRIES NOTHING ON ITS OWN. The accent rail, the tinted icon tile and
+ * the win/loss coloring all repeat in text: the eyebrow names the kind, the
  * column headings say "Winner" and "Loser", and every icon is aria-hidden.
  */
 export function ActivityCard({
@@ -72,7 +72,7 @@ export function ActivityCard({
         style={{ backgroundImage: accent.rail }}
       />
       {/* A soft wash under the header so the icon tile does not float on flat
-          colour. Sized to the header band, not the whole card. */}
+          color. Sized to the header band, not the whole card. */}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-24"
@@ -334,7 +334,7 @@ function AssetRow({
           }`}
         >
           {/* The glyph repeats what the visually hidden word says, so the row is
-              never colour-only. */}
+              never color-only. */}
           {isIn ? (
             <Plus aria-hidden="true" className="h-3 w-3" />
           ) : (
@@ -363,7 +363,7 @@ function AssetRow({
 /**
  * Before and after.
  *
- * A definition list, because that is what this is: a labelled term with two
+ * A definition list, because that is what this is: a labeled term with two
  * values. The old value is struck through AND prefixed with a visually hidden
  * "was", so the change survives a screen reader that does not announce
  * line-through styling.

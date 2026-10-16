@@ -260,7 +260,7 @@ export type UpcomingGame = {
   kickoffAt: string | null;
   away: TeamSide;
   home: TeamSide;
-  /** Home spread; negative means the home side is favoured. */
+  /** Home spread; negative means the home side is favored. */
   homeSpread: number | null;
   total: number | null;
   /** Where it is played, from the forecast row's stadium or the schedule row. */

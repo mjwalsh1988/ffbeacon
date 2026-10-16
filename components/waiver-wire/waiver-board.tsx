@@ -73,7 +73,7 @@ const EMPTY_COPY: Record<BoardEmptyReason, { heading: string; body: string }> = 
   },
   "no-projections": {
     heading: "This week's projections have not landed",
-    body: "We hold the players and we hold who rosters them, but nobody on the list has a projection for this week yet. Projections publish a few days ahead of each slate, so this page fills in on its own. Nothing here is a judgement about the players.",
+    body: "We hold the players and we hold who rosters them, but nobody on the list has a projection for this week yet. Projections publish a few days ahead of each slate, so this page fills in on its own. Nothing here is a judgment about the players.",
   },
   "no-roster-rates": {
     heading: "The availability numbers have not been built",

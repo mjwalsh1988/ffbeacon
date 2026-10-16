@@ -5,7 +5,7 @@
  * counts toward the verdict, which is the honest way to answer "who is better"
  * when the answer genuinely depends on what the reader is trying to do.
  *
- * Generalised for the Head to head tab (two to eight players): the lens now
+ * Generalized for the Head to head tab (two to eight players): the lens now
  * lives entirely in this component's own client state instead of the URL, so a
  * click never changes the page's address and never round-trips to the server.
  * That only works because every lens's numbers are already computed server-side
@@ -14,7 +14,7 @@
  * one is visible, the exact pattern breakdown-tabs.tsx already uses for the
  * tab list itself: every panel stays mounted, only `hidden` moves. Passing a
  * function as `children` would not survive the server/client boundary (a
- * closure is not serialisable), so the caller renders all three panels ahead
+ * closure is not serializable), so the caller renders all three panels ahead
  * of time and hands them over as plain nodes.
  *
  * Default lens is "This week": the board's headline verdict above these tabs

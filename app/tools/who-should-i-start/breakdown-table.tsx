@@ -1,5 +1,5 @@
 /**
- * The Head to head table, generalised from a two-player comparison to two to
+ * The Head to head table, generalized from a two-player comparison to two to
  * eight players.
  *
  * Every row still comes from the single METRICS registry
@@ -15,14 +15,14 @@
  * - At sm and up: a real <table>, following the pattern stats-compare.tsx
  *   already established for the Stats tab's own N-column comparison. The
  *   category is a th scope="row", each player is a th scope="col", a text
- *   "Best" badge marks the top cell (never colour alone, and every tied cell
+ *   "Best" badge marks the top cell (never color alone, and every tied cell
  *   is badged), and the whole table sits in its own horizontal-scroll region
  *   (tabIndex 0, role="region", an accessible name) so every column stays
  *   reachable at any width up to eight players.
  * - Below sm: each row collapses to the category label followed by a 2-up
  *   grid of cells, one per player, wrapping to more rows as the player count
  *   grows past two. Every cell names its player, its value and its "Best"
- *   badge directly (no reliance on column position or colour alone), which is
+ *   badge directly (no reliance on column position or color alone), which is
  *   what makes the collapse legible without the header row a wide table gets.
  */
 

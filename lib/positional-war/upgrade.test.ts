@@ -17,7 +17,7 @@
  * simulateWithReplacements, and lib/power-pulse/simulate.ts simulateSeason all
  * run their actual implementations against the fake data. That is what makes
  * the determinism test and the baseline-separation test meaningful: they are
- * proving something about the real pipeline, not about a mock's behaviour.
+ * proving something about the real pipeline, not about a mock's behavior.
  * lib/positional-war/load.test.ts already spies on a named export directly
  * (no vi.mock wrapper needed) for the same reason; this file follows that
  * pattern for computeLineupSwap and simulateWithReplacements so individual
@@ -653,7 +653,7 @@ describe("E1b-3: a malformed payload consumes no rate-limit slot", () => {
 });
 
 // ---------------------------------------------------------------------------
-// E1b-5: five per minute, honoured by the action.
+// E1b-5: five per minute, honored by the action.
 // ---------------------------------------------------------------------------
 
 describe("E1b-5: six presses in one minute produce five answers and one refusal", () => {

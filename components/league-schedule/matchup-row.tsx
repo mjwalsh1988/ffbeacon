@@ -47,7 +47,7 @@ export function MatchupRow({
   sleeperLeagueId,
   linkUsername,
   isCurrent,
-  emphasise,
+  emphasize,
   headingLevel = 3,
 }: {
   matchup: ScheduleMatchup;
@@ -66,9 +66,9 @@ export function MatchupRow({
    * the whole reason these are two props rather than one.
    *
    * Defaults to `isCurrent`, so a caller mixing weeks in one list gets the
-   * behaviour it expects with no extra prop.
+   * behavior it expects with no extra prop.
    */
-  emphasise?: boolean;
+  emphasize?: boolean;
   headingLevel?: 3 | 4;
 }) {
   const Heading = (`h${headingLevel}` as const) as "h3" | "h4";
@@ -79,7 +79,7 @@ export function MatchupRow({
     linkUsername,
   );
 
-  const raised = emphasise ?? isCurrent;
+  const raised = emphasize ?? isCurrent;
 
   const homeProb = matchup.homeWinProb;
 

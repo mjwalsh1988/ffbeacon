@@ -89,7 +89,7 @@ const SETTLED_REASON_TESTS: Array<(reason: string) => boolean> = [
  * leagues.power_pulse_status. This is a lookup over an already-exhaustive set
  * of reason strings, not new calculation logic.
  *
- * A skipped reason this function does not recognise classifies as 'skipped'
+ * A skipped reason this function does not recognize classifies as 'skipped'
  * rather than 'settled': skipped carries the shorter backoff, so an
  * unclassified reason is retried soon rather than possibly parked forever.
  * The cost of an unnecessary extra retry is one recompute; the cost of a
@@ -453,7 +453,7 @@ export async function refreshPowerPulse(
  * for the same scaling reasons as this model, so a league that has never had
  * one simply gets an empty map and every roster keeps the perfect-lineup
  * assumption. A failed read is treated the same way, because degrading to the
- * previous behaviour is always safe and throwing here would fail a league page.
+ * previous behavior is always safe and throwing here would fail a league page.
  */
 async function loadMeasuredEfficiency(
   supabase: ServiceClient,

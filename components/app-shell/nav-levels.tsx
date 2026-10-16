@@ -18,7 +18,7 @@
  *   - The parked level carries `inert`, so it is out of the tab order and out
  *     of the accessibility tree for as long as it is off screen. A reader can
  *     never land on a link that is not visible.
- *   - Level two is a `role="group"` labelled by a heading that stays in the
+ *   - Level two is a `role="group"` labeled by a heading that stays in the
  *     accessibility tree even when the rail is a strip of icons, so the section
  *     you are inside is always named.
  *   - The section button is a real disclosure: `aria-expanded` on all of them,
@@ -125,7 +125,7 @@ export function NavLevels({
       // section has a page of its own, then the children. The section name
       // itself rides on the Back button's accessible name, because a polite
       // region queued in the same tick as a focus move is routinely dropped in
-      // favour of the focus announcement.
+      // favor of the focus announcement.
       const rows = (section.children?.length ?? 0) + (section.href ? 2 : 1);
       setAnnouncement(`${rows} items.`);
     },
@@ -165,7 +165,7 @@ export function NavLevels({
   );
 
   const isRail = variant === "rail";
-  // The left edge is 2px on every row, coloured only on the current one, so the
+  // The left edge is 2px on every row, colored only on the current one, so the
   // rows never shift sideways as the current row moves. It is a border rather
   // than a bar laid over the row, so it follows the corner radius.
   const rowBase = isRail

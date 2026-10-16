@@ -274,4 +274,4 @@ neither had built yet.
 Two agents reported problems they could not fix rather than reaching across a file
 boundary or papering over them. One found the double read of the finder league;
 one found the bye-week branch and supplied the exact fix needed. Both were fixed
-by whoever owned the file. That is the behaviour worth keeping.
+by whoever owned the file. That is the behavior worth keeping.

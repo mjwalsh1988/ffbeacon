@@ -442,7 +442,7 @@ export class CronTimeBudgetError extends Error {
 
 /**
  * Race `work` against a timer. On timeout the returned promise rejects with
- * CronTimeBudgetError; `work` itself is not cancelled (nothing in a Supabase
+ * CronTimeBudgetError; `work` itself is not canceled (nothing in a Supabase
  * or fetch call chain here takes a signal), but the ledger gets a terminal
  * row while the function is still alive to write it.
  */
@@ -485,7 +485,7 @@ async function boundedLedgerWrite(write: () => PromiseLike<unknown>, what: strin
  * rather than the normal two-write running/finalize dance, EXCEPT once an
  * hour, when one row still lands so cron-health's missed-job check keeps
  * seeing the job alive (see isHeartbeatMinute in lib/cron-health.ts). A
- * caller that never passes `quietWhen` gets the original behaviour: an
+ * caller that never passes `quietWhen` gets the original behavior: an
  * immediate "running" row, updated to a terminal status when `fn` settles,
  * every single time.
  */
@@ -726,7 +726,7 @@ function describeError(err: unknown): string {
     } catch {
       // Circular, or something with a throwing getter. Fall through.
     }
-    return "Unrecognised error object with no message";
+    return "Unrecognized error object with no message";
   }
   return String(err);
 }

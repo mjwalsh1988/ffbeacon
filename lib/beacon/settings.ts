@@ -65,7 +65,7 @@ export interface BeaconSettings {
   /**
    * Consecutive drift checks one board must trip before the alert emails. The
    * metrics are computed and recorded every run regardless; this governs only
-   * the email. 1 restores the original every-trip behaviour.
+   * the email. 1 restores the original every-trip behavior.
    */
   calibrationDriftAlertStreak: number;
   /** The raw rows, for the run's weights_snapshot. */

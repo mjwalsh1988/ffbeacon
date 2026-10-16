@@ -203,7 +203,7 @@ export const playerSeasonStat: BeamCapability<Params, Result> = {
       // with a format would imply that passing yards change between leagues.
       formatDisplay: isFantasy ? ctx.formatDisplay : null,
       note: params.weeks
-        ? "Totalled from the weekly game logs for those weeks."
+        ? "Totaled from the weekly game logs for those weeks."
         : "Season totals from weekly game logs.",
     });
 

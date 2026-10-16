@@ -83,13 +83,13 @@ describe("value balance", () => {
       NO_GAPS,
     );
     expect(o.valueMarginPct).toBeLessThan(EVEN_MARGIN_PCT);
-    expect(o.valueFavours).toBe("even");
+    expect(o.valueFavors).toBe("even");
   });
 
   it("splits an empty package evenly instead of dividing by zero", () => {
     const o = buildTradeOutcome(team(), NO_GAPS);
     expect(o.yourShare).toBe(50);
-    expect(o.valueFavours).toBe("even");
+    expect(o.valueFavors).toBe("even");
     expect(Number.isFinite(o.valueMarginPct)).toBe(true);
   });
 
@@ -157,7 +157,7 @@ describe("the call when one measure is quiet", () => {
       }),
       NO_GAPS,
     );
-    expect(o.valueFavours).toBe("even");
+    expect(o.valueFavors).toBe("even");
     expect(o.call).toBe("lean-yes");
     expect(o.split).toBe(false);
   });
@@ -178,8 +178,8 @@ describe("the split, which is the whole point of the module", () => {
   it("is reported as a split", () => {
     const o = buildTradeOutcome(team(splitDeal), NO_GAPS);
     expect(o.split).toBe(true);
-    expect(o.valueFavours).toBe("you");
-    expect(o.winsFavours).toBe("them");
+    expect(o.valueFavors).toBe("you");
+    expect(o.winsFavors).toBe("them");
   });
 
   it("breaks toward value for a rebuilder", () => {
@@ -221,7 +221,7 @@ describe("what it does when a measure is missing", () => {
     );
     expect(o.winsDelta).toBeNull();
     expect(o.playoffDeltaPp).toBeNull();
-    expect(o.winsFavours).toBe("you");
+    expect(o.winsFavors).toBe("you");
     expect(o.call).toBe("lean-yes");
   });
 
@@ -230,7 +230,7 @@ describe("what it does when a measure is missing", () => {
       team({ incoming: [playerAsset(8000)], outgoing: [playerAsset(4000, "p2")] }),
       { lineup: true, simulation: true, picks: false },
     );
-    expect(o.winsFavours).toBeNull();
+    expect(o.winsFavors).toBeNull();
     expect(o.call).toBe("lean-yes");
     expect(o.summary).toContain("no season left to measure");
   });
@@ -250,12 +250,12 @@ describe("what it does when a measure is missing", () => {
       team({ incoming: [playerAsset(5000)], outgoing: [playerAsset(5000, "p2")] }),
       NO_GAPS,
     );
-    expect(measured.winsFavours).toBe("even");
+    expect(measured.winsFavors).toBe("even");
     const unmeasured = buildTradeOutcome(
       team({ incoming: [playerAsset(5000)], outgoing: [playerAsset(5000, "p2")] }),
       { lineup: true, simulation: true, picks: false },
     );
-    expect(unmeasured.winsFavours).toBeNull();
+    expect(unmeasured.winsFavors).toBeNull();
   });
 });
 

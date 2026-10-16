@@ -33,7 +33,7 @@ describe("researchPrecheck", () => {
 
   it("researches when the gate is turned off", () => {
     // The documented escape hatch. Turning bb_research_gate_enabled off has to
-    // restore the pre-0186 behaviour exactly, not skip everything.
+    // restore the pre-0186 behavior exactly, not skip everything.
     const d = researchPrecheck({ ...ON, gateEnabled: false });
     expect(d.research).toBe(true);
     expect(d.why).toBe("gate_off");

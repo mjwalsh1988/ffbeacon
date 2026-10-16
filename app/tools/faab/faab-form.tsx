@@ -262,7 +262,7 @@ export function FaabForm({
       {/* Setup on the left, the bid on the right, from lg up. Both columns are
           there before a player is picked too: the right one holds the empty
           state that explains what it will show, which is a better use of the
-          space than centring the form and leaving half the page blank.
+          space than centering the form and leaving half the page blank.
           `items-start` plus a sticky right column keeps the recommendation on
           screen while the league setup below it is adjusted, which is the loop
           this tool exists for.

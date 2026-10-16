@@ -5,7 +5,7 @@
  * read on the page:
  *
  *   1. THE MOVES ADD UP. `pointsGained` across every move sums to exactly
- *      `pointsLeftOnBench`. This is the whole reason the optimiser is run once
+ *      `pointsLeftOnBench`. This is the whole reason the optimizer is run once
  *      and diffed rather than asked one player at a time, and it is the one
  *      thing a reader can check with their own eyes.
  *   2. SLOT INDICES SURVIVE THE IDP GAP. A league with an IDP slot in the
@@ -227,7 +227,7 @@ describe("buildLineup: the lineup as set", () => {
   });
 });
 
-describe("buildLineup: the optimiser", () => {
+describe("buildLineup: the optimizer", () => {
   it("finds no moves when the lineup is already the best one", () => {
     const built = buildLineup(buildInput({ roster: optimalRoster(), starters: OPTIMAL_STARTERS }));
     expect(built.optimization.moves).toEqual([]);

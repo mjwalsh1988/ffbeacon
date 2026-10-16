@@ -31,7 +31,7 @@
  * below it rather than behind it; see app/globals.css for why that is done in
  * CSS rather than from here.
  *
- * WHY THE MINIMISED STATE IS NOT REACT STATE. See ./collapsed-state.ts: it is
+ * WHY THE MINIMIZED STATE IS NOT REACT STATE. See ./collapsed-state.ts: it is
  * an attribute on <html>, set by a blocking script before the first paint, so
  * the bar is the right height in the first frame instead of snapping shut after
  * hydration. `inert` follows React, which lags that attribute by a hydration,

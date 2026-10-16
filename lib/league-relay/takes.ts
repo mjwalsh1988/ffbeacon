@@ -81,7 +81,7 @@ export const TRADE_TAKES: Record<Exclude<Grade, "even">, Line[]> = {
     { heat: 0.3, text: "{name} blinked first, and it shows." },
     { heat: 0.4, text: "{name} needed this to work out and it did not quite." },
     { heat: 0.5, text: "{name} brought a decent offer and somehow left with less." },
-    { heat: 0.5, text: "{name} is going to defend this in the chat, and it will be a long defence." },
+    { heat: 0.5, text: "{name} is going to defend this in the chat, and it will be a long defense." },
     { heat: 0.6, text: "{name} got talked into something. It happens. It happened." },
     { heat: 0.7, text: "{name} should not be accepting trades before coffee." },
     { heat: 0.8, text: "{name} lost a negotiation they started, which takes some doing." },
@@ -192,9 +192,9 @@ export const LOSS_TAKES: Record<"big" | "normal" | "close", Line[]> = {
 /* Previews                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** For the clear favourite in a preview. */
-export const FAVOURITE_TAKES: Line[] = [
-  { heat: 0, text: "{name} goes in as the clear favourite." },
+/** For the clear favorite in a preview. */
+export const FAVORITE_TAKES: Line[] = [
+  { heat: 0, text: "{name} goes in as the clear favorite." },
   { heat: 0.2, text: "{name} should handle this." },
   { heat: 0.3, text: "{name} is the pick, and it is not a hard one." },
   { heat: 0.4, text: "{name} has every reason to be confident." },
@@ -208,7 +208,7 @@ export const UNDERDOG_TAKES: Line[] = [
   { heat: 0, text: "{name} needs a big week to pull this off." },
   { heat: 0.2, text: "{name} needs some help." },
   { heat: 0.3, text: "{name} needs a ceiling game from somebody, and soon." },
-  { heat: 0.4, text: "{name} is not favoured, and the projections are being polite about it." },
+  { heat: 0.4, text: "{name} is not favored, and the projections are being polite about it." },
   { heat: 0.5, text: "{name} is going to need two players to have career days." },
   { heat: 0.6, text: "{name} has a path to winning. It is narrow and poorly lit." },
   { heat: 0.7, text: "{name} might want to start praying to the injury report." },

@@ -48,7 +48,7 @@ export type SwitcherLeague = {
  * THE MOBILE PICKER SHOWS NO LOGO, AND THAT IS DELIBERATE. A native <option>
  * cannot carry an image, and the native picker is here precisely because it IS
  * the accessibility feature on a phone: the platform wheel, the platform
- * keyboard behaviour, the platform screen reader. Swapping it for a styled list
+ * keyboard behavior, the platform screen reader. Swapping it for a styled list
  * to gain a decorative image would trade a real affordance for a picture. This
  * is the one place on the site where a league list shows a logo at one
  * breakpoint and not another (D12), and nothing a reader can ACT on is missing:

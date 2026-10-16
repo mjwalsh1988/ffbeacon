@@ -160,8 +160,8 @@ export function BottomSheet({
           paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
         }}
       >
-        {/* Top bar: drag handle centred, close button on the right. The
-            spacer on the left is what keeps the handle centred against the
+        {/* Top bar: drag handle centered, close button on the right. The
+            spacer on the left is what keeps the handle centered against the
             button's width without absolute positioning. */}
         <div
           className={`flex shrink-0 items-center pt-2 ${showClose ? "gap-2 px-2 pb-1" : "justify-center"}`}

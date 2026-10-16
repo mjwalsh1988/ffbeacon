@@ -19,14 +19,14 @@ Do these in order before writing any code.
    - Every timestamp shown to a human goes through `lib/datetime.ts` (America/New_York).
    - Every new table ships its RLS policies in the same migration; regenerate `lib/database.types.ts` after every schema change.
    - Every read of `player_weekly_projections` or `player_projection_accuracy` names exactly one source, resolved through `lib/projections/source.ts resolveProjectionSourceForWindow`.
-   - Never run the optimiser per player inside `lib/positional-war/`; never trigger a Power Pulse, Positional WAR or Manager Ledger compute from this feature. Read their caches only.
+   - Never run the optimizer per player inside `lib/positional-war/`; never trigger a Power Pulse, Positional WAR or Manager Ledger compute from this feature. Read their caches only.
    - Sub-agents: never pass `name` or `team_name` to the Agent tool.
 2. DO NOT COMMIT. DO NOT PUSH. DO NOT CREATE A BRANCH. The owner reviews and commits by hand. This holds for every task in this document, including the last one, and including when a tool or template suggests committing. When the build is finished, stop with the working tree dirty and report.
 3. Read this whole document once, then `lib/faab/*.ts`, `app/tools/faab/*.tsx`, `app/admin/faab/*`, and the section 5 file map.
 4. Add the tasks in section 9 to `progress.md` (format in 9.1) before starting them, and update each one as it completes.
 5. The Supabase MCP server may fail to connect. If it does, apply migrations with the MCP when it is available; if it is not, stop and tell the owner rather than applying SQL another way. Read-only analysis queries may use a scratch script with `@supabase/supabase-js` and `SUPABASE_SECRET_KEY` (the planning session did this; see 3.4).
 6. After each phase, run the three review sub-agents CLAUDE.md requires (implementation, accessibility, security) and fix what they find before marking tasks complete.
-7. If anything in this document conflicts with the code as you find it, the code wins for facts (names, signatures) and this document wins for intent. Note the conflict in progress.md and in the final report. If the conflict changes behaviour the owner will see, ask before choosing.
+7. If anything in this document conflicts with the code as you find it, the code wins for facts (names, signatures) and this document wins for intent. Note the conflict in progress.md and in the final report. If the conflict changes behavior the owner will see, ask before choosing.
 
 ---
 
@@ -35,7 +35,7 @@ Do these in order before writing any code.
 1. Readers choose the goal. A two-option control on every result: "Good value" and "Make sure I win". Both modes, both league types. Default is "Good value", except it defaults to "Make sure I win" when the chopped model says the reader is in real danger of elimination this week (7.12.8).
 2. The rivals table shows real team names (the same labels `loadTeamNames` already produces; they are public on `/leagues/[id]`).
 3. Publish anonymous bid statistics from synced leagues on the public page. Aggregates only: percentages and sample sizes. Never a league name, league id, team name, manager handle or a single identifiable claim.
-4. Chopped and guillotine leagues (Sleeper Chopped, Yahoo Death Leagues, ESPN Knockout, FFPC Chop Classic, Fantasy Life Guillotine Leagues, MFL Chop Leagues, NFFC Eliminator) are IN THIS ROUND, with their own bidding math (7.12), not a relabelled standard model.
+4. Chopped and guillotine leagues (Sleeper Chopped, Yahoo Death Leagues, ESPN Knockout, FFPC Chop Classic, Fantasy Life Guillotine Leagues, MFL Chop Leagues, NFFC Eliminator) are IN THIS ROUND, with their own bidding math (7.12), not a relabeled standard model.
 5. No commit, no push (section 0, item 2).
 6. A separate chopped/guillotine/death league guide plus a section in the existing FAAB strategy guide, per `docs/faab/chopped-guillotine-guide-seo-plan.md`.
 
@@ -266,11 +266,11 @@ Severity: HIGH changes the number in common cases, MEDIUM in specific cases, LOW
 - A8 MEDIUM. Playoff weeks worth nothing (`league-faab.ts:204-207`); title odds computed and ignored by `upgradeStrengthOf`.
 - A9 MEDIUM. Manual mode reads breakouts as "Not an upgrade" (`manual.ts:131`); `outlook.ts:299` hardcodes the regular season end at week 14.
 - A10 MEDIUM. Dynasty value invisible to league mode (market value only guards the cut list).
-- A11 MEDIUM. Superflex QB scarcity not modelled directly; manual mode has no superflex input; Positional WAR cache unused.
+- A11 MEDIUM. Superflex QB scarcity not modeled directly; manual mode has no superflex input; Positional WAR cache unused.
 - A12 MEDIUM. Empty-the-clip thresholds (3.5 points a week or 12 odds points) rarely reachable early.
 - A13 LOW. `backtest.ts` compares distributions, not auction outcomes.
 - A14 LOW. Cut guard picks the value source by priority (`league-load.ts:257-308`) instead of the reader's source.
-- B1 to B7 (presentation): no win chance on the hero rung; collapsed rungs read as broken; one dense explanation paragraph; rivals summarised in one line; no copy or share; `h4` with no `h3` (`bid-result.tsx:120`); fallback and projection models look different without saying why.
+- B1 to B7 (presentation): no win chance on the hero rung; collapsed rungs read as broken; one dense explanation paragraph; rivals summarized in one line; no copy or share; `h4` with no `h3` (`bid-result.tsx:120`); fallback and projection models look different without saying why.
 - C1 to C3 (content): explainer answers five questions; our bid data is unused on the page; title and H1 fine.
 
 ### 6.2 Chopped leagues (all HIGH unless noted)
@@ -288,7 +288,7 @@ Severity: HIGH changes the number in common cases, MEDIUM in specific cases, LOW
 ### 7.1 Vocabulary (used in code, copy and this doc)
 
 - Worth: the most the player is worth to THIS reader, as a share of the league's full budget. Becomes "Walk away above".
-- Price: what it is likely to take to beat every other bidder. Modelled as a distribution of the highest rival bid.
+- Price: what it is likely to take to beat every other bidder. Modeled as a distribution of the highest rival bid.
 - Win chance at b: probability the reader's bid b beats every rival, including the tiebreak.
 - Goal: `"value"` or `"sure"`. Picks the target win chance.
 - League kind: `"standard"` (redraft, keeper, dynasty, best ball) or `"chopped"` (Sleeper type 3, or manual chopped).
@@ -306,7 +306,7 @@ export type AuctionSettings = {
   runs: number;                  // 4000, int 500..20000
   participation: number;         // 0.7, 0..1: chance an interested rival bids at all
   strayBidRate: number;          // 0.06, 0..1: chance an uninterested rival bids anyway
-  bidSigma: number;              // 0.55, 0.1..1.5: lognormal spread of a rival bid around its centre
+  bidSigma: number;              // 0.55, 0.1..1.5: lognormal spread of a rival bid around its center
   heatShrink: number;            // 20, samples at which a league's own heat gets half weight
   tendencyShrink: number;        // 8, same for one manager
   heatClamp: [number, number];   // [0.5, 2.5]
@@ -319,7 +319,7 @@ export type GoalSettings = {
   defaultGoal: GoalKey;          // "value"
   valueTarget: number;           // 0.6
   sureTarget: number;            // 0.9
-  sureMaxOverWorthPct: number;   // 25: "sure" may exceed worth by at most this %, labelled
+  sureMaxOverWorthPct: number;   // 25: "sure" may exceed worth by at most this %, labeled
 };
 
 export type CalendarBand = { fromWeek: number; toWeek: number | null; multiplier: number };
@@ -370,7 +370,7 @@ export type ChoppedSettings = {
   priceByAliveFraction: Array<{ minFraction: number; multiplier: number }>;
                                  // [{0.5,1.0},{0.3,0.45},{0,0.15}] ordered high to low
   dangerThreshold: number;       // 0.2: P(chopped this week) that flips the default goal to sure
-  dangerWeight: number;          // 0.5: how much a rival's own danger raises its bid centre
+  dangerWeight: number;          // 0.5: how much a rival's own danger raises its bid center
   substituteShare: number;       // 0.9: a free agent projecting >= this share of the candidate is a substitute
   substituteDiscount: number;    // 0.5: participation /= (1 + discount * substitutes)
   paceTargets: Array<{ throughWeek: number; holdPct: number }>;
@@ -487,7 +487,7 @@ export type AuctionRival = {
   rosterId: number;
   budgetPct: number;          // remaining budget as share of T
   interested: boolean;
-  centerPct: number;          // bid centre if it bids, share of T (already includes heat, tendency, calendar, danger)
+  centerPct: number;          // bid center if it bids, share of T (already includes heat, tendency, calendar, danger)
   waiverPosition: number | null;  // lower = higher priority (VERIFY FIRST, see below)
 };
 export type AuctionInput = {
@@ -510,7 +510,7 @@ Algorithm, per run (runs from settings, RNG from `createRng(seed)`):
 4. Record the maximum rival amount and the waiver position of whoever holds it (lowest position among tied top bidders).
 Then sort the maxima. `winChanceAt(b)` = share of runs with max below b, plus for runs with max equal to b, 1 if `yourWaiverPosition` is known and lower than the top bidder's position, else 0.5. Runs with no bids count as a win for any b at or above the league minimum bid.
 
-Rival interest and centre (league mode, standard):
+Rival interest and center (league mode, standard):
 - For every alive rival, `computeLineupSwap` as today (no drop search). `netPointsPerWeek >= market.rivalNeed.minPointsPerWeek` means interested.
 - Rival worth: `upgradeStrengthOf({ ...marginal with odds null }, settings.marginal) * settings.marginal.maxPctFromUpgrade`.
 - `centerPct = rivalWorth * heat * tendency_k * calendarMultiplier(week)`.
@@ -562,10 +562,10 @@ In order:
 6. Injuries (A6): for the reader's roster, when a projection row's `availability` is "out" for a week, the player is out that week (already true in `projectPlayerWeek`); when there is no row for a future week and the player's status is OUT or DOUBTFUL, carry the current-week multiplier forward ONLY for weeks where the source published nothing (`carryOutFromSource`). Add a report field `injuredStarters: { name, status, weeksOut: number | null }[]` for the roster's optimal starters who are out this week.
 7. Teammate injury signal (new in `signals.ts`): candidate has `depthOrder >= 2`, and a teammate at the same position with `depthOrder` 1 has status OUT, IR, PUP, SUS or DOUBTFUL. Needs the depth and status of the candidate's NFL teammates: add `loadTeamDepth(supabase, team, position)` to `league-load.ts` reading `players` where `team = X` and `position = Y` (metadata sleeper depth_chart_order and injury_status). Multiplier `1 + teammateSignal.maxAdjustPct/100 * (depthOrder === 2 ? 1 : 0.5)`. Label "His starter is out", detail names the teammate and status.
 8. Breakout blend (A9): when the opportunity signal fires "His role just grew", blend the candidate's projected points toward `recentPointsPerGame` (mean fantasy points over the last `recentGames` games under league scoring, from `player_stats`) with `blendWeight`, and add notice "Projection adjusted for his new role". League mode and manual mode.
-9. Positional WAR (A11): `loadPositionalWarView(supabase, league.id, season)`; if the candidate appears in a curve, report `positionalWar: { value, positionRank, position }` and show it in the impact grid labelled "Positional WAR". No compute; absent view shows nothing.
+9. Positional WAR (A11): `loadPositionalWarView(supabase, league.id, season)`; if the candidate appears in a curve, report `positionalWar: { value, positionRank, position }` and show it in the impact grid labeled "Positional WAR". No compute; absent view shows nothing.
 10. Money: `money.budgets` filtered to alive rosters (all rosters in standard leagues). `T = money.totalBudget ?? fallbackBudget`. When `money.totalBudget` is null, rivals' budgets are unknown: run the manual-style priors curve (7.8 rule 11) instead of the simulation and keep the existing notice.
 11. Auction: history via 7.5 (seasons from `market.history.lookbackSeasons`), heat and tendencies via 7.6, rivals via 7.7, simulate once with seed `pulseSettings.simulation.seed`.
-12. Ladder via 7.8. Remove `market.history.blendWeight` blending (A2) and the `urgency` signal (A3); the calendar now enters rival centres only.
+12. Ladder via 7.8. Remove `market.history.blendWeight` blending (A2) and the `urgency` signal (A3); the calendar now enters rival centers only.
 13. Report additions (7.13).
 
 ### 7.10 Manual mode
@@ -628,13 +628,13 @@ Run the reader's swap with `computeLineupSwap` (mustDrop fixed, drop guard with 
 - `strength = w1*clamp(surviveGain/bigSurvivePoints,0,1.25) + w2*clamp(winGain/bigWinPoints,0,1.25) + w3*clamp(weeksGain/bigWeeksAlive,0,1.25)`, clamped 0 to 1.
 - `worthPct = strength * chopped.maxPctFromUpgrade * playerSignals * priceByAliveFraction(aliveFraction)`.
 
-The alive-fraction multiplier sits on worth as well as on rival centres because money in a chopped league loses value as the field shrinks and the pool fills with starters (4.2: Jefferson minus 22%, St. Brown minus 77%; Eliminator medians 28.9% to 12.8% to 0%).
+The alive-fraction multiplier sits on worth as well as on rival centers because money in a chopped league loses value as the field shrinks and the pool fills with starters (4.2: Jefferson minus 22%, St. Brown minus 77%; Eliminator medians 28.9% to 12.8% to 0%).
 
 #### 7.12.6 Rivals in a chopped league
 
 - Every alive roster other than the reader is a rival.
 - Interest: `computeLineupSwap` per rival as in standard mode.
-- Centre: `rivalWorth * heat * tendency * priceByAliveFraction(aliveFraction) * (1 + dangerWeight * dangerShare_k)` where `dangerShare_k = pChoppedThisWeek_k / max over alive of pChoppedThisWeek`. Heat and tendency use chopped priors cells (league kind `chopped`, phase by alive fraction).
+- Center: `rivalWorth * heat * tendency * priceByAliveFraction(aliveFraction) * (1 + dangerWeight * dangerShare_k)` where `dangerShare_k = pChoppedThisWeek_k / max over alive of pChoppedThisWeek`. Heat and tendency use chopped priors cells (league kind `chopped`, phase by alive fraction).
 - Substitutes: load the league's free agents at the candidate's position (`loadLeagueFreeAgents`, then project the top 40 by rank with the same projection path) and count those whose rest-of-season mean is at least `substituteShare` of the candidate's. Pass `participationScale = 1 / (1 + substituteDiscount * substitutes)` to `simulateAuction`.
 - Tiebreak: Sleeper rolling waiver priority, as standard.
 
@@ -677,7 +677,7 @@ Pace: `holdPct = remaining / T * 100`; target from `paceTargets` (first entry wi
 ### 7.13 Report and view changes
 
 - `LeagueFaabReport` gains: `leagueKind: "standard" | "chopped"`, `goalDefault: GoalKey`, `ladder: BidLadder` (new shape), `rivals: RivalRow[]`, `injuredStarters`, `positionalWar`, `chopped: ChoppedRead | null`, `heat: { value: number; samples: number } | null`, `priorsFallback: string | null`.
-- `RivalRow = { rosterId: number; teamName: string; budget: number; wouldStart: boolean; style: "Spends big" | "Typical" | "Holds money" | "Not enough history"; likelyBid: { low: number; high: number } | null }` where likely bid is centre x exp(-bidSigma) to centre x exp(bidSigma), in dollars, capped at budget. Only rivals who would start him are listed, sorted by likely high bid; the rest are summarised as "N other teams would not start him".
+- `RivalRow = { rosterId: number; teamName: string; budget: number; wouldStart: boolean; style: "Spends big" | "Typical" | "Holds money" | "Not enough history"; likelyBid: { low: number; high: number } | null }` where likely bid is center x exp(-bidSigma) to center x exp(bidSigma), in dollars, capped at budget. Only rivals who would start him are listed, sorted by likely high bid; the rest are summarized as "N other teams would not start him".
 - `MarketRead`: drop `comparable` and `urgencyMultiplier`; add `calendarMultiplier`, `aliveCount`.
 - `BidView` in `bid-result.tsx` mirrors these plus `mode: "league" | "manual"` and `leagueKind`.
 - `MultiLeagueRow` unchanged in shape; its list shows bid, win chance and walk away.
@@ -700,7 +700,7 @@ Order on screen:
 1. Heading row: player name as `h3` (fixes B6; section headings inside are `h4`), subtitle "{league}, week {n}" or "{teams}-team, {format}, manual", confidence pill ("Strong read", "Reasonable read", "Thin read").
 2. `GoalToggle`: a `fieldset` with legend "What matters more?" and two native radios, "Good value" and "Make sure I win". Switching reads `bidsByGoal` and re-renders; no server call. The live region announces the new bid.
 3. `BidHero`: "Bid {dollars}" in the gradient mono figure; beside it "{winChance}% chance to win"; under it "Worth up to {walkAway} to you. Above that, let him go." When over worth on the sure goal: "That is {n} over his worth to you, the price of making sure." When `priceAboveWorth`: headline string from 7.8 plus "Bid {walkAway} and let him go above it."
-4. `WinChanceChart`: `ChartFigure` titled "Your chance to win at each bid", `titleLevel={4}`. SVG step line of win chance from 0 to the reader's budget, x in dollars, y 0 to 100%; vertical marks at the bid, stretch and walk away with text labels; shaded band for the rivals' top bid p50 to p75. `summary` sentence: "Bidding {bid} wins about {w}% of the time; {walk} wins about {w2}%. The most likely top rival bid is {p50} to {p75}." `table`: rows every 5% of budget (and the three marked bids) with columns Bid, Chance to win. Hover tooltip per step. Colours from chart-kit series constants; text in ink tokens.
+4. `WinChanceChart`: `ChartFigure` titled "Your chance to win at each bid", `titleLevel={4}`. SVG step line of win chance from 0 to the reader's budget, x in dollars, y 0 to 100%; vertical marks at the bid, stretch and walk away with text labels; shaded band for the rivals' top bid p50 to p75. `summary` sentence: "Bidding {bid} wins about {w}% of the time; {walk} wins about {w2}%. The most likely top rival bid is {p50} to {p75}." `table`: rows every 5% of budget (and the three marked bids) with columns Bid, Chance to win. Hover tooltip per step. Colors from chart-kit series constants; text in ink tokens.
 5. `BidReasons`: `h4` "Why this number", an `ul` of three to five one-line reasons generated by `lib/faab/reasons.ts` (pure, deterministic templates, each citing a figure in the report, a null figure means the reason does not fire, ordered by effect size). Templates in 7.14.1.
 6. `ChoppedCard` (chopped only): `h4` "Survival". A `dl` with: chance you are chopped this week (before to after), chance you win the league, expected weeks alive, teams left, money left in the league and your share and rank, pace line.
 7. `RivalTable`: `h4` "Who else wants him". A real `table` with `caption` "Teams that would start {player}, and what they can spend". Columns: Team, Budget left, Bid style, Likely bid. Team names are real (owner decision 2). Below: "N other teams would not start him."
@@ -715,7 +715,7 @@ FAAB: bid {bid} of {budget} on {player} ({winChance}% to win). Walk away above {
 
 Live region: exactly one `role="status" aria-live="polite"` per mode (the existing ones), message: "{headline}. Bid {bid} FAAB, {winChance} percent chance to win, walk away above {walkAway}." Chopped appends ", chance of being chopped this week {after} percent."
 
-Accessibility (non-negotiable, audited by sub-agent): no `aria-hidden` on any figure; units in the same text node or sr-only inside the same element; 44 px targets; focus visible; `prefers-reduced-motion` stops the win bar animation; heading order h2 section, h3 result, h4 parts; every chart has a table; the goal toggle is a native radio group; colour never the only signal (tone chips have words).
+Accessibility (non-negotiable, audited by sub-agent): no `aria-hidden` on any figure; units in the same text node or sr-only inside the same element; 44 px targets; focus visible; `prefers-reduced-motion` stops the win bar animation; heading order h2 section, h3 result, h4 parts; every chart has a table; the goal toggle is a native radio group; color never the only signal (tone chips have words).
 
 Design: FF Beacon tokens only (dark default, purple #A855F7, cyan #22D3EE, Geist and Geist Mono). One gradient figure per card (the bid). Tone chips: good, bad, neutral with words. Mobile keeps every figure (stacked cells).
 
@@ -762,13 +762,13 @@ Changes to `app/tools/faab/page.tsx` and `written-sections.tsx`:
   - "How does FAAB work in dynasty?" Budgets usually do not roll over or reset on Sleeper unless the commissioner does it, and a young player's long-term value counts. With a dynasty league connected the calculator blends his market value into the bid, more for a rebuilding team than for a contender.
   - "How is superflex different?" A second starting quarterback is scarce, and our data has quarterbacks going for the whole budget after an injury. Pick Superflex in the setup so the calculator prices quarterbacks against a superflex replacement level.
   - "How does FAAB work in chopped and guillotine leagues?" The lowest scorer is eliminated each week and the whole roster goes to waivers, so budgets are big and the goal is surviving the week. Prices fall as teams are eliminated because fewer rivals chase a pool full of starters. Connect a Sleeper chopped league or pick Chopped or guillotine in the setup, and read our chopped league strategy guide. (Link to the new guide.)
-- `/guides/faab-strategy` quotes the calculator's current behaviour (the early-season discount, the old bid bands, the old rung names). Those passages must change in the same build; the exact edits are section 5 of `docs/faab/chopped-guillotine-guide-seo-plan.md`.
+- `/guides/faab-strategy` quotes the calculator's current behavior (the early-season discount, the old bid bands, the old rung names). Those passages must change in the same build; the exact edits are section 5 of `docs/faab/chopped-guillotine-guide-seo-plan.md`.
 - Explainer step 4 renamed "Get a bid and your chance to win" with body describing goal toggle and walk away.
 - Notes: add "Works for chopped and guillotine leagues" (tone cyan) with a link to the new guide.
 
 ### 7.17 Admin
 
-`app/admin/faab/faab-settings-manager.tsx` gains sections (same `SectionCard` / `CollapsibleSection` patterns, every input labelled):
+`app/admin/faab/faab-settings-manager.tsx` gains sections (same `SectionCard` / `CollapsibleSection` patterns, every input labeled):
 - "Auction model" (badge "League mode"): runs, participation, stray bid rate, bid spread, heat and tendency shrink and clamps, earliest week counted, odd-number nudge.
 - "Goals": default goal, value target, sure target, most over worth for "make sure".
 - "Time of season": the calendar bands editor (add, remove, contiguous validation message).
@@ -796,7 +796,7 @@ Remove the "Time of season" urgency fields and the history blend field once noth
 - `lib/faab/priors-read.test.ts`: `pickCell` fallback order, `priorCdf` monotone and bounded.
 - `lib/faab/tendency.test.ts`: heat shrink, clamps, no-sample defaults, labels.
 - `lib/faab/auction.test.ts`: deterministic for a seed; win chance non-decreasing; nobody interested gives near 1 at min bid; budget caps respected; tie handled with and without waiver positions; more interested rivals lowers win chance at a fixed bid.
-- `lib/faab/ladder.test.ts` rewritten: goals, caps, over-worth labelling, odd nudge, bench-only, nobody-bids, dump triggers, manual priors path.
+- `lib/faab/ladder.test.ts` rewritten: goals, caps, over-worth labeling, odd nudge, bench-only, nobody-bids, dump triggers, manual priors path.
 - `lib/faab/reasons.test.ts`: each template fires only with its figure, and no output contains the code points U+2013, U+2014, U+2018, U+2019, U+201C, U+201D or U+2026 (write the test regex with escape sequences, never the literal characters).
 - `lib/chopped/league.test.ts`, `lib/chopped/survival.test.ts` (seeded; equal teams give about 1/N chop chance; a much stronger team rarely chopped; tie rule; expected weeks bounded), chopped strength and worth.
 - `lib/faab/settings.test.ts`: every new zod rule.
@@ -893,7 +893,7 @@ Phase 8, finish
   - League: connect a standard Sleeper league we hold; confirm rivals table with real team names, heat reason when applicable, IR roster no longer forces a cut.
   - League: a chopped league from our data; confirm eliminated teams absent from rivals and money, survival card present, default goal flips when in danger.
   - Keyboard only: reach every control, toggle goal, copy bid; screen reader announcement matches 7.14.
-  - 400 px width: every figure visible or behind a labelled disclosure, no horizontal scroll.
+  - 400 px width: every figure visible or behind a labeled disclosure, no horizontal scroll.
   - `prefers-reduced-motion`: no animation.
   - Times displayed Eastern.
 - Search the diff for banned characters: em dash, en dash, curly quotes, ellipsis character.

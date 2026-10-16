@@ -97,7 +97,7 @@ describe("environmentEffect", () => {
     expect(effect.scoring).toBe(SETTINGS.environment.totalMin);
   });
 
-  it("gives a favoured team (negative spread) a POSITIVE rushShift, toward more rushing", () => {
+  it("gives a favored team (negative spread) a POSITIVE rushShift, toward more rushing", () => {
     const env: GameEnvironment = { team: "AAA", opponent: "BBB", impliedTotal: null, spread: -7 };
     const effect = environmentEffect(env, SETTINGS);
     expect(effect.rushShift).toBeGreaterThan(0);
@@ -111,7 +111,7 @@ describe("environmentEffect", () => {
     expect(effect.rushShift).toBeCloseTo(-7 * SETTINGS.environment.spreadWeight, 10);
   });
 
-  it("clamps rushShift at scriptMax for a large favourite", () => {
+  it("clamps rushShift at scriptMax for a large favorite", () => {
     const env: GameEnvironment = { team: "AAA", opponent: "BBB", impliedTotal: null, spread: -30 };
     const effect = environmentEffect(env, SETTINGS);
     expect(effect.rushShift).toBe(SETTINGS.environment.scriptMax);

@@ -20,7 +20,7 @@
  * authoritative and is noise, so below the threshold the tile says how many
  * games we have rather than printing a percentage.
  *
- * Generalised from a fixed pair to two-to-eight players (section 2.7 of
+ * Generalized from a fixed pair to two-to-eight players (section 2.7 of
  * docs/seo/who-should-i-start-and-site-seo-plan.md): the tab takes the group's
  * `sides` and its `extras` map directly, in the group's own order, and renders
  * one card plus one strip (one row of the differential chart) per player.

@@ -1,6 +1,6 @@
 /**
  * The `relay` half of the classify call: the JSON schema fragment the model
- * must satisfy, the prompt section that describes it, and the normaliser that
+ * must satisfy, the prompt section that describes it, and the normalizer that
  * turns the model's object into a RelayExtraction the rest of the pipeline can
  * trust.
  *

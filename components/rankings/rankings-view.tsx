@@ -737,7 +737,7 @@ function FilterLink({
  * The instructions differ by device because the control does. The breakpoint
  * matches site-header.tsx exactly: below md the toggles live in the navigation
  * drawer (components/app-shell/app-mobile-nav.tsx),
- * at md and up they live in the PreferencesMenu popover labelled "Values".
+ * at md and up they live in the PreferencesMenu popover labeled "Values".
  * Only one sentence is in the DOM's accessibility tree at a time (Tailwind's
  * `hidden` sets display:none, which removes it from the tree as well as the
  * screen), so a screen reader hears the directions for the device in hand and

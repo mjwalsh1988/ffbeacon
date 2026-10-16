@@ -27,7 +27,7 @@ import type { LeagueCategoryGroup } from "@/lib/league-category";
  *   and a selection pointing at a tab that no longer exists would hide every
  *   panel at once. So the selection is a REQUEST, and the active tab is derived
  *   from it each render, falling back to the first tab that does exist. No
- *   effect, no synchronising, nothing to get out of step.
+ *   effect, no synchronizing, nothing to get out of step.
  *
  * Panels all stay mounted with `hidden` on the inactive ones, which keeps every
  * tab's aria-controls pointing at a real element. That is the same amount of DOM

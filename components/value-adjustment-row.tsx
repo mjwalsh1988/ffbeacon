@@ -55,7 +55,7 @@ export function ValueAdjustmentRow({
         {/*
           Says only what is true on every trade that earns a credit. "Credit for
           holding the best asset" is the obvious wording and it is wrong: the
-          favoured side is the one whose value is concentrated, which is usually
+          favored side is the one whose value is concentrated, which is usually
           but not always the side holding the single biggest piece.
         */}
         <span className="block text-xs text-ink-subtle">

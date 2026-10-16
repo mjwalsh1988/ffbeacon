@@ -61,7 +61,7 @@
  * variation, both ends are clamped, and this is a FALLBACK that only applies to
  * players with fewer than eight graded weeks. It is wrong in the same direction
  * for every team in a league, so it barely moves a within-league ranking. It
- * would still be better to normalise the placement points to the canonical base
+ * would still be better to normalize the placement points to the canonical base
  * before reading the curve, which is the fix if this is ever revisited.
  *
  * Every figure here comes from player_stats, 2023 through 2025, regular season,

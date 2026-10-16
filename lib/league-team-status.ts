@@ -29,7 +29,7 @@
  *   The value-divergence rule used to hand back "Rebuilder" for any team under
  *   the contender line whose assets outran its wins. It asked nothing about
  *   whether the team was losing. A roster projected to take the fourth seed in a
- *   seven-team bracket came back labelled Rebuilder because its value rank sat
+ *   seven-team bracket came back labeled Rebuilder because its value rank sat
  *   two places above its Pulse rank, and "Rebuilder" in plain English means a
  *   team that is not trying to win this year. Divergence now produces its own
  *   band, and it can only fire while the team is still in the picture.

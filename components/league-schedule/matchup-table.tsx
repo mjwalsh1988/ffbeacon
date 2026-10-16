@@ -33,7 +33,7 @@
  *   for a multi-level header and needs no ids.
  *
  * WHY THE TABLE SURVIVES A PHONE
- *   Three columns fit at 360px because the centre column is fixed at 56px and
+ *   Three columns fit at 360px because the center column is fixed at 56px and
  *   each player cell is a two line stack: name on the first line, position,
  *   opponent and points on the second. The headshot drops from 32px to 24px and
  *   nothing else changes. No column is hidden, no data moves to a separate
@@ -41,7 +41,7 @@
  *   unusually long team name can never push the page sideways.
  *
  * WHY A NULL PROJECTION IS NEVER A ZERO
- *   "No projection" is what an IDP slot, a bye, and an unrecognised player all
+ *   "No projection" is what an IDP slot, a bye, and an unrecognized player all
  *   get. A 0.0 in that cell would read as a real forecast of nothing, would sum
  *   into a total, and would be believed. The totals in the footer say in words
  *   how many slots they leave out for the same reason.
@@ -106,7 +106,7 @@ function pairSlots(home: MatchupSide, away: MatchupSide | null): PairedRow[] {
  *
  * Deliberately faint. Twelve rows of it down a table is a lot of surface, and
  * anything stronger turns the comparison into a striped block where the eye
- * lands on the colour rather than on the numbers. It is a scanning aid and
+ * lands on the color rather than on the numbers. It is a scanning aid and
  * nothing else: both figures are already in the row, both cells carry a full
  * accessible name, and the tint is applied to a `td` with no role of its own, so
  * nothing announces it and nothing is lost without it.
@@ -220,7 +220,7 @@ export function MatchupTable({
   // navigation and has every reason to read that last figure as points they have
   // already left on their bench today. It is a forecast of a gap, not a measured
   // one, so it is held back rather than dressed up, which is the same call
-  // CLAUDE.md makes for the Lineups optimiser panel.
+  // CLAUDE.md makes for the Lineups optimizer panel.
   const inProgress = showsResults && !isFinal;
   const rows = groupRows(pairSlots(home, away));
   const colCount = away ? 3 : 2;

@@ -7,7 +7,7 @@
  *   1. A DYNASTY ROSTER IS NEVER TOLD TO CUT A VALUABLE PLAYER. Losing him for
  *      nothing to a waiver claim is the worst outcome this page could talk
  *      somebody into, and it is irreversible.
- *   2. NOBODY THE OPTIMISER SEATS IS OFFERED AS A CUT. Two panels on one screen
+ *   2. NOBODY THE OPTIMIZER SEATS IS OFFERED AS A CUT. Two panels on one screen
  *      telling a reader to start a player and to release him is not a bug they
  *      can reason their way past.
  */
@@ -171,7 +171,7 @@ describe("buildDropOptions", () => {
     expect(result.unjudged).toBeNull();
   });
 
-  it("never offers somebody the optimiser is seating this week", () => {
+  it("never offers somebody the optimizer is seating this week", () => {
     const result = buildDropOptions({
       benchable: [lineupPlayer("a"), lineupPlayer("b")],
       restOfSeasonPerWeek: new Map([

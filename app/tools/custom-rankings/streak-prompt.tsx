@@ -8,7 +8,7 @@ import type { CardPlayer } from "@/lib/ranking-boards/card-text";
 import { PlaceAtRank } from "./place-at-rank";
 
 /**
- * The three-win prompt (plan sections 5.2 and 13.5). A decision, so a centred
+ * The three-win prompt (plan sections 5.2 and 13.5). A decision, so a centered
  * dialog. It replaces the question the reader was on, so it takes focus and
  * its heading says why it appeared. Escape and the close button mean "keep
  * comparing": the prompt must never leave the run stuck with no question open.

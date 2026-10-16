@@ -2,7 +2,7 @@
  * The matching behind the glossary's "Find a term" box.
  *
  * Pure and client-safe, so the box can run it on every keystroke without a
- * server call and the tests can pin its behaviour.
+ * server call and the tests can pin its behavior.
  *
  * People type the question the way they would type it into a search engine:
  * "what does bn mean in fantasy football". The filler words are stripped

@@ -35,7 +35,7 @@ import type { FaabResult, FaabSettings, GoalKey } from "@/lib/faab/types";
  * other reads ONE market cell for the reader's situation, once per distinct
  * situation: the whole set is about two thousand rows and the browser needs
  * exactly one of them. Everything else, the replacement level, the ladder,
- * the whole win curve, recomputes in the browser from the pure maths in
+ * the whole win curve, recomputes in the browser from the pure math in
  * lib/faab/priors-math.ts, so dragging the budget or flipping the bid style
  * is instant and the goal toggle never touches the network.
  *

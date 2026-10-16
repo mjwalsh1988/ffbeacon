@@ -998,7 +998,7 @@ function HeadToHeadPanel({
 
 /**
  * The current board URL with the named overrides applied. Only the params
- * the board itself owns are considered; an unrecognised key already present
+ * the board itself owns are considered; an unrecognized key already present
  * in `params` is dropped rather than carried through blind, matching
  * lib/start-sit/picker-url.ts buildStartSitHref's own owned-params list.
  */

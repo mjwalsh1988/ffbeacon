@@ -1666,7 +1666,7 @@ T420 | completed | Docs
   heading outline H1 > H2 > H3 with no skips; table caption describes every column;
   score cells carry aria-labels naming rank and value; rank-mode control uses real
   radiogroup/radio semantics; bottom sheet traps focus, restores it, and locks body
-  scroll; the driver list is an <ol> with an sr-only tone word so colour is never
+  scroll; the driver list is an <ol> with an sr-only tone word so color is never
   the only signal; details/summary used for the methodology disclosure.
 - Mobile-first: 4 columns hide below md (Value rank, Proj., Playoffs, Lineup) and all
   4 are rendered in the bottom sheet, verified by DOM inspection.
@@ -1678,7 +1678,7 @@ T420 | completed | Docs
 - Player news is NOT an input. news_items has 0 rows and nothing writes to it.
   Injury status and depth-chart order (already synced on players.metadata.sleeper)
   cover the practical case. A real news signal needs an ingestion source first.
-- Weekly outcomes are modelled as independent; no QB-to-receiver stack correlation.
+- Weekly outcomes are modeled as independent; no QB-to-receiver stack correlation.
 - The playoff bracket reseeds each round rather than using Sleeper's fixed bracket.
 - Backtest against completed seasons not yet run (2 completed 2025 leagues available).
 
@@ -1766,7 +1766,7 @@ T426 | completed | Saved Sleeper handle searches itself on the League Pulse entr
 T427 | completed | Shared value formatter lifted out of the team card
      | files: lib/format-value.ts, components/team-card.tsx
      | depends on: none
-     | verified: yes (single definition, team card behaviour unchanged)
+     | verified: yes (single definition, team card behavior unchanged)
 
 T428 | completed | One definition of projected-finish order
      | files: lib/power-pulse/projected-order.ts, lib/power-pulse/projected-order.test.ts,
@@ -1852,7 +1852,7 @@ T434 | completed | Wire the figure and the button into all four renderers plus t
   roster sits 6th of 12 by Power Pulse and projects to finish 2nd, and another sits
   8th of 10 by Pulse while holding the 2nd most value in its league.
 - Accessibility (self-audited, no sub-agent dispatched per session instruction):
-  trophy colour is never the only signal, the ordinal is spelled out beside it and
+  trophy color is never the only signal, the ordinal is spelled out beside it and
   the screen-reader sentence names the measure; the FF Beacon mark stays decorative
   and only appears when the FF Beacon source is selected; Sync keeps a 44px tap
   target and announces through one polite region rather than one per row.
@@ -1867,7 +1867,7 @@ T434 | completed | Wire the figure and the button into all four renderers plus t
 - A league whose Sleeper scoring matches none of the 8 active formats
   (format_config_id null, "Unmatched") cannot produce an exact-match value row, so a
   Rebuilder there shows its projected finish instead of its roster value. Correct
-  behaviour, but the tag's own explanation still quotes a value rank picked by the
+  behavior, but the tag's own explanation still quotes a value rank picked by the
   looser fallback chain in lib/league-team-status.ts, so the sentence can name a rank
   whose number is not shown. Pre-existing; fixing it means changing the tag on every
   surface that renders it.
@@ -1906,7 +1906,7 @@ T436 | completed | Projected finish and roster value render as pills, not loose 
      |   mark, the value, a rule, and the rank for rebuilders. Sits beside the status
      |   tag on a wrapping row rather than under it, so the two read as one unit.
      |   Confirmed in the production CSS bundle that Tailwind emitted the arbitrary
-     |   medal colours and grid-cols-subgrid)
+     |   medal colors and grid-cols-subgrid)
 
 T437 | completed | Sync control condensed to a gradient pill
      | files: components/league-sync-button.tsx
@@ -2203,7 +2203,7 @@ T452 | completed | mergeBulkSyncState unit tests
   "search_path = public, pg_temp", matching the hardened bb_claim_jobs. The four
   remaining warnings (pg_trgm in public, and three pre-existing SECURITY DEFINER
   functions) all predate this work.
-- RLS + grants + RPC behaviour verified against prod inside begin/rollback; both
+- RLS + grants + RPC behavior verified against prod inside begin/rollback; both
   tables confirmed back to 0 rows afterwards.
 
 ## Trade Finder (League Pulse tab + My Sleeper Leagues panel)
@@ -2404,7 +2404,7 @@ T463 | completed | Accessibility fixes from the review pass
      |
      |   outline-none on the focus target removed the ring with no replacement,
      |   against the project rule. It carries a focus-visible ring now. The
-     |   result is also a labelled <section> tied to the card heading, and the
+     |   result is also a labeled <section> tied to the card heading, and the
      |   working column has an h2, so the card's h3 no longer skips a level on
      |   the page. Inside the SidePanel the panel title is already an h2, so the
      |   same h3 is correct there without changing anything)
@@ -2449,7 +2449,7 @@ T465 | completed | Acceptance-band fix for rebuilding teams
      |   AND value has nothing to say yes to. True for a contender, wrong for a
      |   rebuilder: sending a 27-year-old back away for a pick and a 22-year-old
      |   costs points on Sunday, and that is not a side effect of the deal, it IS
-     |   the deal. The engine was labelling the most standard trade in dynasty
+     |   the deal. The engine was labeling the most standard trade in dynasty
      |   football a long shot.
      |
      |   The lineup penalty now applies only to teams whose timeline is this
@@ -2534,7 +2534,7 @@ T468 | completed | Rewrite the pitch as a message to the other manager
      |   Value is described as a share rather than in points: 91 points down on a
      |   6,500-point trade is a rounding error and the first version said nothing
      |   at all, because 91 is more than 1. When they ARE visibly behind it says
-     |   nothing, since apologising for the shortfall inside the message that
+     |   nothing, since apologizing for the shortfall inside the message that
      |   proposes the trade argues against the trade.
      |
      |   The message is also previewable on the card behind a collapsed details
@@ -2611,7 +2611,7 @@ T470 | completed | Consolidation replaces pile-on inside Signal Check
      |   format, threaded through all five runPipeline callers. Null is handled:
      |   the curve falls back to the trade's own best asset.
      |
-     |   Confidence takes a small hit when a verdict leans on a modelled
+     |   Confidence takes a small hit when a verdict leans on a modeled
      |   adjustment and a larger one when the solver had to cap, because those
      |   are the two cases where the number is least certain. The explanation
      |   drops its "receives the strongest individual asset" sentence when the
@@ -3223,7 +3223,7 @@ cannot make a page view run an unbounded loop twice.
 ACCESSIBILITY
 Panel is a real disclosure (aria-expanded + aria-controls, content hidden when
 closed) under an h3, so the manual calculator keeps the page's reading order.
-Every input labelled; errors are role="alert"; results announce through one
+Every input labeled; errors are role="alert"; results announce through one
 short polite live region rather than re-reading the card. The week strip is a
 wrapping list where each entry carries its own sr-only sentence, because
 "Wk 7 +4.2" is not a sentence. Nothing is hidden at any breakpoint: the
@@ -3313,7 +3313,7 @@ and where the startable line falls. The week strip shows points added in league
 mode and matchup difficulty in manual mode.
 
 ACCESSIBILITY
-The league block is a labelled section with a real h2 rather than a disclosure
+The league block is a labeled section with a real h2 rather than a disclosure
 button, so it sits in the page outline where its prominence suggests. The "or"
 is role="separator" with an accessible name. Both paths announce through their
 own short polite live region. Every figure keeps its sr-only sentence. Nothing
@@ -3434,7 +3434,7 @@ back and receiver had spilled to 0.7, the TE-premium multiplier stacked another
 tight end in a 12-team league and clamping to the end of a shallow pool, which
 made every remaining tight end look scarce.
 
-`lib/on-the-clock/recommend-points.test.ts` pins both behaviours: the heuristic
+`lib/on-the-clock/recommend-points.test.ts` pins both behaviors: the heuristic
 takes the tight end, the points engine takes the receiver.
 
 ### Tasks
@@ -3784,9 +3784,9 @@ T546 | completed | the Grades tab was dead in every live draft
      | verified: yes
 T547 | completed | the pulse effect could drop its response and pin "Loading projections"
      | files: app/tools/on-the-clock/on-the-clock-client.tsx
-     | The effect stamped its signature before firing and cancelled through a
+     | The effect stamped its signature before firing and canceled through a
      | cleanup flag. A re-run with an UNCHANGED signature (the sync upserts every
-     | pick row, so Postgres emits updates carrying no new pick) cancelled the
+     | pick row, so Postgres emits updates carrying no new pick) canceled the
      | in-flight request and then returned at the guard without firing a
      | replacement. On a first load that meant no projections for the session.
      | Supersession is tracked by the signature now, not by a per-effect boolean.
@@ -4469,7 +4469,7 @@ T577 | completed | apply the review findings
      | default verbosity, so the sign (the entire meaning) was inaudible. Now
      | words: "14 picks later" or "14 picks earlier".
      | Admin field hints are tied to their inputs with aria-describedby, the
-     | eight setting groups are labelled regions, a save failure announces as an
+     | eight setting groups are labeled regions, a save failure announces as an
      | alert, and the save button uses aria-disabled so Chrome does not throw
      | keyboard focus to body mid-save. Null stat pills are dropped rather than
      | reading "Goes at unknown". The player link now clears the 44px floor.
@@ -4582,8 +4582,8 @@ T580 | completed | compact the On The Clock ADP and projection columns
      | info icon. Hover, keyboard focus, and tap all open it; Escape and outside
      | click close it.
      | ADP column is now the number plus a chip like (+28). Projection column is
-     | the number plus (53%). Both color coded: emerald when it favours the
-     | reader, rose when it does not, grey inside the neutral band.
+     | the number plus (53%). Both color coded: emerald when it favors the
+     | reader, rose when it does not, gray inside the neutral band.
      | NO aria-live region, deliberately. The full sentence is the trigger
      | button's aria-label, so a screen reader speaks it the moment the control
      | takes focus, whether or not the bubble is painted. That is the contract
@@ -4948,9 +4948,9 @@ T594 | completed | move Ask BEAM out of /tools into a site-wide header panel
      | the mascot greets you in the empty state, your question renders as your
      | own message, answers sit under BEAM's avatar, the composer is a pinned
      | rounded field with a circular send button, and the transcript follows the
-     | newest turn. Announcement, focus and clarification behaviour from T592
+     | newest turn. Announcement, focus and clarification behavior from T592
      | are unchanged: one polite live region, the transcript itself never live.
-     | The BEAM glyph is now the mascot's face drawn in one colour, built from
+     | The BEAM glyph is now the mascot's face drawn in one color, built from
      | the logo's peak and arc so it sits next to the wordmark. Line art rather
      | than shrunken artwork, because the header button is 20 CSS px.
      | The ask-beam Signal Guide page key was removed with the route. Its nine
@@ -5307,14 +5307,14 @@ T605 | completed | give the whole site the League Pulse dashboard chrome
      | sections into the site rail through rail-sections.tsx, opened on
      | arrival, so every site section is one Back press away. Deletes
      | league-side-nav.tsx and league-mobile-nav.tsx.
-     | Caught while checking the result in a browser: the palette names a colour
-     | `base`, and Tailwind turns every colour into a `text-*` utility, so there
-     | were two rules called `.text-base` and the colour one won inside a
+     | Caught while checking the result in a browser: the palette names a color
+     | `base`, and Tailwind turns every color into a `text-*` utility, so there
+     | were two rules called `.text-base` and the color one won inside a
      | breakpoint. Anything written `text-sm sm:text-base` therefore went from
-     | readable grey to #07070D against a #07070D page at the sm breakpoint:
+     | readable gray to #07070D against a #07070D page at the sm breakpoint:
      | invisible text, above one screen width only. `textColor` is now redefined
      | outside `extend` to drop that one entry, so `text-base` means a font size
-     | and nothing else. Every other colour still has its `text-*` utility, and
+     | and nothing else. Every other color still has its `text-*` utility, and
      | `bg-base` and `border-base` are untouched.
      | Also caught in the browser: the blocking script writes data-sidebar on
      | <html>, which React reported as a hydration mismatch on every load. The
@@ -5342,7 +5342,7 @@ T605 | completed | give the whole site the League Pulse dashboard chrome
      | The header and the layout each read the session and user_preferences
      | separately: two round trips per page to learn one thing. Both go through
      | getNavViewer, which is React-cached, and buildNavTree is cached on the
-     | same object so the tree is serialised once rather than twice.
+     | same object so the tree is serialized once rather than twice.
      | ink-subtle measured about 3.8:1 and carried real 10px and 11px text
      | (stat-tile labels, drawer hints, the source and format labels). Raised
      | to #8A8A9C, about 5.4:1.
@@ -5351,7 +5351,7 @@ T605 | completed | give the whole site the League Pulse dashboard chrome
      | The bar was suppressed wholesale on league routes, taking the
      | BreadcrumbList with it, and nothing under /leagues publishes one. The
      | visible trail and the structured data are separate decisions now.
-     | Two buttons used `text-base` for its colour meaning and lost their dark
+     | Two buttons used `text-base` for its color meaning and lost their dark
      | text when the collision was fixed; both now name the hex.
      | The Signal Guide trigger and the On The Clock docked bar are both fixed
      | to the viewport at bottom-left, which from lg up is where the rail is.
@@ -5404,7 +5404,7 @@ T606 | completed | move the draft room's view switcher into the site rail
      | reader gets no feedback at all beyond aria-current, and a drafter is left
      | looking at the page masthead.
      | Panels become `role="region"` with their own `aria-label` rather than
-     | `role="tabpanel"` labelled by the pressed control: the rail is
+     | `role="tabpanel"` labeled by the pressed control: the rail is
      | display:none below lg, and an aria-labelledby pointing into it would
      | resolve to nothing on a phone.
      | Registration happens inside the draft room return, after the connect and
@@ -5425,7 +5425,7 @@ T606 | completed | move the draft room's view switcher into the site rail
      | scrolled, so it had never fired.
      | Nothing on the page named the view any more. The rail is collapsed to
      | icons by default and hidden below lg, so the name is now a chip in the
-     | command header, and each region is labelled by a visually hidden heading
+     | command header, and each region is labeled by a visually hidden heading
      | rather than an aria-label, which puts it back in heading navigation.
      | The focus-and-scroll ran in a frame scheduled beside setView, which
      | assumed the commit landed first. A hidden element takes no focus and
@@ -5437,7 +5437,7 @@ T606 | completed | move the draft room's view switcher into the site rail
      | NavNode became a union, so a row carries an href or an onSelect and never
      | neither, and the server tree is typed as SiteNavNode, which has no
      | onSelect at all and so cannot grow a function that Next would refuse to
-     | serialise.
+     | serialize.
      | register and clear were one effect, so every re-registration blanked the
      | rail and restored it, correct only because React batches. Split.
      | The drawer restored focus on every dismissal path except a row press.
@@ -5577,7 +5577,7 @@ T612 | completed | FAAB full width for real, and open the rail by default
      | The two-column split is unconditional too. The right column already had
      | something to show before a player is picked: ManualResult renders an
      | empty state explaining what will appear there, which is a better use of
-     | the space than centring the form and leaving half the page blank.
+     | the space than centering the form and leaving half the page blank.
      | The container's top margin is the gap under the hero, so it goes when the
      | hero does and the tool sits directly under the breadcrumb bar.
      | Rail default flipped from collapsed to expanded. Only an explicit "0" in
@@ -5737,7 +5737,7 @@ T619 | completed | Beacon Brief articles take the dashboard width
      | one surface from the index through to a story.
      | The prose does not take the new width. A column that wide is unreadable
      | at body size, so the article, the related grid, and the back link keep the
-     | measure they had and sit centred in the space the rail leaves.
+     | measure they had and sit centered in the space the rail leaves.
      | The rail's data comes from the same loadSidebar the listing pages call.
      | It is a published-content read like the rest of the page, so the route is
      | still prerendered and still revalidates on its 5-minute timer.
@@ -5751,7 +5751,7 @@ T620 | completed | published guides take the shell width
      |        app/guides/fantasy-football-draft-guide/page.tsx,
      |        app/guides/fantasy-football-terms/page.tsx
      | depends on: T619
-     | Both guides ran in a centred reading column, masthead included, which
+     | Both guides ran in a centered reading column, masthead included, which
      | left a guide narrower than its own index page and narrower than every
      | tool beside it. The masthead spans the shell now, like every other page's.
      | The prose does not take that width, because a line of body copy across a
@@ -5761,7 +5761,7 @@ T620 | completed | published guides take the shell width
      | scrolling inside itself. Below xl the rail leads the content, which is
      | where a contents list belongs on a phone and where the glossary's jump
      | list already sat. One copy of it either way, so no anchor id is ever in
-     | the document twice. Past 56rem the pair centres as a unit rather than
+     | the document twice. Past 56rem the pair centers as a unit rather than
      | leaving the rail stranded at the far edge of a very wide screen.
      | The draft guide's format switcher moves into that rail. It is what the
      | whole board answers to, and in the flow it scrolled away on the first
@@ -5787,7 +5787,7 @@ T620 | completed | published guides take the shell width
 T621 | completed | About and the author page take the shell width
      | files: app/about/page.tsx, app/author/michael/page.tsx
      | depends on: T620
-     | Both pages ran every section in a centred 80rem column, masthead
+     | Both pages ran every section in a centered 80rem column, masthead
      | included, so on a wide screen they sat in the middle of a shell the tools
      | beside them fill. The mastheads span the shell now, and each section uses
      | the shell's own gutters, so the banded backgrounds and their content line
@@ -5897,7 +5897,7 @@ T624 | completed | Games and Signal Scout join the full-width scheme
      | Signal Scout's leaderboards sat in a 20rem column on the LEFT from lg,
      | which put a board of other people's scores between the reader and the
      | game. They are on the right now, from xl, in the same 340px track and with
-     | the same sticky behaviour as every other rail: pinned under the header,
+     | the same sticky behavior as every other rail: pinned under the header,
      | capped at the viewport, scrolling inside itself, focusable so that scroll
      | reaches the keyboard.
      | Moving it also simplified the markup. The old layout rendered the game
@@ -5940,7 +5940,7 @@ T624 | completed | Games and Signal Scout join the full-width scheme
      | while a round runs, so the visually hidden h1 that was holding that slot
      | is gone. It has two states, one for a live round and one for the reveal.
      | The scouting file is an actual file now: a header strip with a CLASSIFIED
-     | stamp, the silhouette under its scanline, and three labelled fields whose
+     | stamp, the silhouette under its scanline, and three labeled fields whose
      | values are blacked out, with the redactions aria-hidden and one plain line
      | carrying the same meaning to a screen reader.
      | The hint buttons read as buttons: the tier name in the heavy uppercase the
@@ -6146,7 +6146,7 @@ T627 | completed | Slot alignment, labels, and display order for league lineups
      | Both are correct for their own caller, and both carry a cross-reference
      | comment so a future reader does not "unify" them and silently reintroduce
      | the slot-shift bug T626 fixed.
-     | An unrecognised token is never dropped: it renders in the IDP group with
+     | An unrecognized token is never dropped: it renders in the IDP group with
      | its own label and projectable=false. Dropping it would break alignment.
      | verified: yes
 
@@ -6175,7 +6175,7 @@ T630 | completed | Bench and taxi upgrade calculation
      | as independent moves rather than the same starter replaced four times.
      | The single-swap gains deliberately do NOT sum to `pointsLeftOnBench`:
      | taking one swap changes what the next is worth. The total comes from the
-     | optimal lineup and both are labelled.
+     | optimal lineup and both are labeled.
      | verified: yes
 
 T631 | completed | Schedule insights: SOS, all-play luck, stretches, spotlight
@@ -6219,10 +6219,10 @@ T645 | completed | Extract the before/after season simulation out of FAAB
      | `simTeamsFrom` term for term. Net 16 insertions, 37 deletions in FAAB.
      | verified: yes
 
-T647 | completed | Multi-asset roster swap, generalised from the FAAB marginal
+T647 | completed | Multi-asset roster swap, generalized from the FAAB marginal
      | files: lib/trade-impact/roster-swap.ts, lib/trade-impact/roster-swap.test.ts
      | depends on: T646
-     | computeLineupSwap generalised from "add one, drop one" to "add N, remove
+     | computeLineupSwap generalized from "add one, drop one" to "add N, remove
      | M", on the same exact-optimal machinery. An incoming player with no
      | projection for a week is simply not a candidate that week, because a
      | missing week is a bye and not a zero. An outgoing bench player costs
@@ -6338,7 +6338,7 @@ T643 | completed | Empty, partial, and error states for the schedule
      | middle column, so a row reads as "QB, Josh Allen projected 22.4, Patrick
      | Mahomes projected 21.8". Two stacked lists would ask a screen reader user
      | to hold twelve names in their head to compare anything.
-     | The table stays a table at 360px: 56px centre column, two-line player
+     | The table stays a table at 360px: 56px center column, two-line player
      | cells, headshots 32 to 24. The only responsive hide in the set is
      | TeamSeason's win-probability column, and the same value in the same words
      | renders in the result cell below sm.
@@ -6348,7 +6348,7 @@ T643 | completed | Empty, partial, and error states for the schedule
      | field verbatim), so "vs" would have been printed on every AWAY game too.
      | Home and away is a real distinction to a fantasy manager and inventing it
      | is worse than omitting it. A bare code now renders as itself; a leading "@"
-     | is still honoured for the day game_id gets parsed into a venue. Added
+     | is still honored for the day game_id gets parsed into a venue. Added
      | `opponentWords` for accessible names ("against SF") so the phrasing reads
      | as running text without claiming a venue either.
      | Agent deviations accepted: no player-profile link in the dialog, because
@@ -6468,7 +6468,7 @@ T661 | completed | Trade Ideas page, both modes, rate limited on the render path
      | kind="rate-limited" in the evaluation slot and the league, tabs, builder,
      | and rail render normally. A 429 for the whole document would punish a
      | reader for using the feature correctly and take the navigation with it.
-     | `mode !== "build"` is byte-for-byte the previous behaviour: same streamed
+     | `mode !== "build"` is byte-for-byte the previous behavior: same streamed
      | TradeFinderSection, same suggestion browser.
      | Build mode's league read is wrapped in React.cache keyed on primitives, so
      | the builder's asset lists, the rail's figures, and the identity resolution
@@ -6845,20 +6845,20 @@ T674 | completed | Schedules rename, readable win probability, tighter sticky ba
      | comparison down a single axis instead of four separate readings.
      |
      | 5. Win probability was unreadable and the reason is worth recording: a 6px
-     | track split cyan and purple, two saturated brand colours of similar
+     | track split cyan and purple, two saturated brand colors of similar
      | lightness on a dark background, sit at nearly the same visual weight, so
      | an 80/20 split and a 60/40 split looked about the same. The reader was
      | doing arithmetic off the caption because the drawing told them nothing.
      | components/league-schedule/win-prob-bar.tsx makes the NUMBERS the headline
-     | (large, tinted, above each team name), marks the favourite with a word so
-     | it survives greyscale, doubles the track height with inline labels, and
-     | draws a dashed centre line at 50 because a split reads far more precisely
+     | (large, tinted, above each team name), marks the favorite with a word so
+     | it survives grayscale, doubles the track height with inline labels, and
+     | draws a dashed center line at 50 because a split reads far more precisely
      | against a fixed reference than in isolation. Used on the matchup header
      | and on every week card.
      |
      | 6. The team-season win probability column got the same treatment at row
      | scale: a large tinted percentage over a filled meter with the same dashed
-     | centre mark, tinted by which side of even it falls on.
+     | center mark, tinted by which side of even it falls on.
      |
      | 7. Nothing said the cards were clickable. The whole card was a link through
      | a stretched anchor on the heading, which works and is invisible. Each card
@@ -6869,7 +6869,7 @@ T674 | completed | Schedules rename, readable win probability, tighter sticky ba
      | one would put two identical destinations in the reader's list.
      | verified: yes (tsc clean, next build clean, 135 files / 1980 tests green)
 
-T675 | completed | A coloured state edge on every matchup, both schedule views
+T675 | completed | A colored state edge on every matchup, both schedule views
      | files: components/league-schedule/{format,matchup-row,week-board,
      |        team-season}.tsx
      | depends on: T674
@@ -6877,9 +6877,9 @@ T675 | completed | A coloured state edge on every matchup, both schedule views
      | same background behind the same one pixel border, so the eye had to find
      | the gap rather than the edge. `stateEdgeClass` puts a 4px rule down the
      | left of each one and lets it carry the game's state: FF Beacon purple for
-     | a game still to play, cyan for the live week, and a flat grey for a
-     | finished one. Grey reads as settled precisely because it is the only one
-     | of the three that is not a brand colour.
+     | a game still to play, cyan for the live week, and a flat gray for a
+     | finished one. Gray reads as settled precisely because it is the only one
+     | of the three that is not a brand color.
      | Applied to the week cards and to the week cell of each team-season row.
      | On the row it sits on the cell rather than the <tr>, because a border on a
      | table row is not painted under border-collapse in every engine. Card gap
@@ -6888,10 +6888,10 @@ T675 | completed | A coloured state edge on every matchup, both schedule views
      | card on purpose, so that during the live week six cards do not all glow
      | and cancel each other out. That would have meant the cyan edge never
      | appeared. `isCurrent` now always carries the true week state and drives the
-     | edge, and a new `emphasise` prop controls the raised treatment separately.
+     | edge, and a new `emphasize` prop controls the raised treatment separately.
      | It defaults to `isCurrent`, so a future list mixing weeks needs no extra
      | prop. Two decisions, two props.
-     | Colour is reinforcement only: every card already carries a Final / This
+     | Color is reinforcement only: every card already carries a Final / This
      | week / Projected chip and every row already carries the outcome as a word.
      | verified: yes (tsc clean, next build clean, 1980 tests green)
 
@@ -7106,9 +7106,9 @@ T682 | completed | Pick a player off a list instead of out of a dropdown
      | A PICK READS AS ITS THREE FACTS, through one formatter
      | (lib/trade-ideas/pick-label.ts) used by the picker row, the row in a built
      | side, and the verdict, so the same pick cannot be named three ways.
-     | "2027 R1", the pool as a coloured pill, then "(via @handle)" in subtle
+     | "2027 R1", the pool as a colored pill, then "(via @handle)" in subtle
      | text. The holder is deliberately absent: the side of the trade already
-     | says it. Colour is never the only signal, the pill says its own word, and
+     | says it. Color is never the only signal, the pill says its own word, and
      | the whole thing carries ONE aria-label ("2027 first round pick, projected
      | early in the round, via @handle") rather than three fragments and an "R1"
      | read as a letter and a number.
@@ -7134,14 +7134,14 @@ T683 | completed | An added row stays put, lights up, and offers Remove
      | meant closing the drawer to undo it. A row now stays exactly where it was,
      | takes a cyan border and wash, and its button becomes Remove. Nothing moves,
      | the mistake is visible, and the fix is the button you just pressed.
-     | THE STATE IS SAID THREE WAYS, so colour is never carrying it alone: the
+     | THE STATE IS SAID THREE WAYS, so color is never carrying it alone: the
      | card lights, the icon turns from a plus to a check, and the word changes.
      | The button's accessible name changes with it, from "Add X to what you send"
      | to "Remove X from what you send", which says the state and the next action
      | in one breath. Deliberately not aria-pressed: a toggle announces "pressed"
      | and leaves the reader to work out what pressed means.
      | THE LIST DOES NOT RE-SORT when a row is pressed. Moving a row the instant
-     | it is touched is the behaviour this change exists to remove.
+     | it is touched is the behavior this change exists to remove.
      | REMOVE KEEPS WORKING AT THE CAP. Add goes dead at six assets a side; Remove
      | must not, because removing is how you get back under the cap without
      | leaving the drawer. The disabled Add explains that in its own label.
@@ -7205,11 +7205,11 @@ T684 | completed | Lead with the answer, then show the working
      | measures the lineup with him gone, not the weeks he used to fill.
      | Found in the browser and fixed: a 44 percent tight end, the main piece of a
      | three-for-one, was reading as an ordinary throw-in with no notes at all.
-     | Centrepiece is now "biggest thing on its side AND at least 40 percent",
+     | Centerpiece is now "biggest thing on its side AND at least 40 percent",
      | because a share alone gets both ends wrong (0.6 misses the main piece of a
      | three-for-one; 0.4 alone crowns both halves of a 55/45 pair).
-     | Colour is never the answer on its own: the call is a word before it is a
-     | colour, every tone chip carries its own label, and the balance bar is
+     | Color is never the answer on its own: the call is a word before it is a
+     | color, every tone chip carries its own label, and the balance bar is
      | aria-hidden with a sentence stating the same split, the pattern
      | app/tools/signal-check/trade-margin-graph.tsx set.
      | The panel sits ABOVE the tabs and outside them, because the call is true of
@@ -7688,7 +7688,7 @@ T-WAR-09 | completed | Flex configuration tests F1 through F9 + ordering invaria
      |   invariant, seated = exact top k, and exact teamCount * dedicatedSlotCount for
      |   non-flex positions)
 
-T-WAR-34 | completed | E2: extract path maths into lib/positional-war/chart-geometry.ts (pure), both axis modes
+T-WAR-34 | completed | E2: extract path math into lib/positional-war/chart-geometry.ts (pure), both axis modes
      | files: lib/positional-war/chart-geometry.ts, lib/positional-war/chart-geometry.test.ts
      | depends on: T-WAR-05
      | notes: built BEFORE the chart component rather than extracted from it, so the
@@ -7780,7 +7780,7 @@ T-WAR-50 | completed | E8: classify the nine return shapes, write verdicts, add 
      |   on every page view and the panel said "still calculating" forever with no way
      |   for anyone to learn why.
      |   The classifier is a lookup over the existing reason strings, matched by exact
-     |   string or prefix because several carry a dynamic suffix. An unrecognised reason
+     |   string or prefix because several carry a dynamic suffix. An unrecognized reason
      |   degrades to 'skipped', the sooner-retrying verdict, so a future added reason is
      |   retried rather than parked forever.
      |   Settled triple encoded as `<reason> [settled season=2026 week=9 playoffStart=15]`.
@@ -7795,7 +7795,7 @@ T-WAR-50 | completed | E8: classify the nine return shapes, write verdicts, add 
      |   is what E8-2 asserts. Documented in the code.
      | verified: yes (24 tests green: the nine-shape classification, the bypass table,
      |   write ordering asserted by call index, the early return, force bypassing, and an
-     |   unrecognised reason classifying as skipped)
+     |   unrecognized reason classifying as skipped)
 
 T-WAR-51 | completed | E8: status-aware Power Pulse empty states, deferring to PreDraftNotice where it already applies
      | files: app/leagues/[league_id]/power-pulse/page.tsx
@@ -7832,7 +7832,7 @@ T-WAR-38 | completed | E3: naming guard revised to the proximity rule (done earl
      | notes: the three constraints hold. READ ONLY: the page reads
      |   league_positional_war_cache and never imports the writer, so a trade evaluation
      |   cannot become a compute trigger behind a metered endpoint's cheap path.
-     |   LABELLED: the string is always "Positional WAR (league-wide)".
+     |   LABELED: the string is always "Positional WAR (league-wide)".
      |   SEPARATED: the block is a sibling of the notes list, never inside it.
      |   Template: `Positional WAR (league-wide): ${war.toFixed(2)}. ${position}${positionRank} of ${structuralDemand} who start in this league.`
      |   Deterministic, every figure present in the input, no thresholds and no adjectives.
@@ -7929,12 +7929,12 @@ T-WAR-19 | completed | components/league-war/positional-war-chart.tsx: SVG, norm
 T-WAR-20 | completed | components/league-war/positional-war-panel.tsx + lib/league-positional-war-data.ts
 T-WAR-27 | completed | E6: rail summary card, scarcest and deepest, cache()-shared read, anchors to the chart panel
 T-WAR-33 | completed | E1a: viewer roster join + ring markers + Yours column + per-position summary + past-the-cap line
-T-WAR-35 | completed | E2: ?war=rank radiogroup toggle modelled on rank-mode-toggle.tsx, wired through the chart
+T-WAR-35 | completed | E2: ?war=rank radiogroup toggle modeled on rank-mode-toggle.tsx, wired through the chart
      | files: lib/league-positional-war-data.ts, components/league-war/{selection,overlay,summary}.ts,
      |   components/league-war/{positional-war-chart,positional-war-panel,war-axis-toggle,war-rail-summary}.tsx,
      |   components/league-war/{rail-summary,overlay,summary}.test.ts, components/dashboard-panel.tsx
      | depends on: T-WAR-14, T-WAR-18, T-WAR-34
-     | notes: the chart is built ON TOP of buildChartGeometry and owns no path maths, so
+     | notes: the chart is built ON TOP of buildChartGeometry and owns no path math, so
      |   the page and the shared card cannot disagree about a league.
      |   The svg is aria-hidden; every fact it carries is in the visually hidden summary,
      |   the legend text, or the always-present data table. Hiding a series through the
@@ -7942,7 +7942,7 @@ T-WAR-35 | completed | E2: ?war=rank radiogroup toggle modelled on rank-mode-tog
      |   The readout is a FOCUS readout as well as a hover readout, in an aria-live
      |   region, so it is reachable by keyboard.
      |   The viewer overlay is a ring marker distinguishable by shape and stroke rather
-     |   than hue, so it survives colour removal, plus a literal "Yours" text column in
+     |   than hue, so it survives color removal, plus a literal "Yours" text column in
      |   the table. IR and taxi players ARE marked: the model is player-independent so
      |   they have a real rank, and a reader who owns an injured RB1 wants to see that.
      |   Panel gained an optional headingFocusable prop (tabIndex={-1} on the heading) so
@@ -8095,7 +8095,7 @@ both timestamps. `refreshPositionalWar`'s 28 tests still pass unchanged.
 That force run also re-proved the sharing path from a different direction: the
 same league recomputed with `--force` came back `shared=true` in 1,113ms,
 because another league had already computed that fingerprint. Forcing bypasses
-the freshness gate, not the compute sharing, which is the intended behaviour.
+the freshness gate, not the compute sharing, which is the intended behavior.
 
 THIRD BUG FOUND AND FIXED, again by checking against production rather than by
 a test. The admin league-health view's systemic-break signature was "succeeded_at
@@ -8147,7 +8147,7 @@ T-WAR-48 | completed | E1b: upgrade panel UI, both labels, never one column, Sig
 
 NAMING GUARD FIX, found while the upgrade panel landed: the guard flagged a JSX
 comment carrying the task id `T-WAR-48`, because the hyphens put word boundaries
-either side of the token and `isCommentLine` did not recognise `{/*` as a
+either side of the token and `isCommentLine` did not recognize `{/*` as a
 comment opener. An ordinary reference to the plan was reading as an unqualified
 metric name. Added `{/*` to the comment detector, with the reason recorded in
 the code so the next person does not remove it.
@@ -8660,7 +8660,7 @@ T702 | completed | Pin search_path on the three trigger functions
      | files: supabase/migrations/0223_draft_tracker_functions_pin_search_path.sql
      | depends on: T699, T700
      | Supabase lint 0011. All three already schema-qualify every table, so the
-     | empty path changes no behaviour, and the trigger set was re-exercised
+     | empty path changes no behavior, and the trigger set was re-exercised
      | end to end afterwards to prove it.
      | Advisors now report zero findings against anything in this feature.
      | verified: yes
@@ -8826,7 +8826,7 @@ T711 | completed | The consistency cleanups
      | naming a source the board would not use.
      | Source display names are no longer lowercased into sentences (they are
      | proper nouns out of source_registry); orderPhrase exists for that.
-     | The breadcrumb showed the raw uuid, split on hyphens and capitalised.
+     | The breadcrumb showed the raw uuid, split on hyphens and capitalized.
      | SlideUpDialog gained an optional labelledBy so a dialog with a visible
      | heading is not named twice. Additive, every existing caller unchanged.
      | Both pages redirect rather than assert on a missing session: Next renders
@@ -8998,7 +8998,7 @@ T-WAR-71 | completed | The trade value against wins scatterplot
      |        components/league-war/war-scatter-chart.tsx
      | X is current trade value at the league's resolved format and the reader's
      | chosen source; Y is Positional WAR, which does not vary by source. Each
-     | position keeps its line-chart marker SHAPE as well as its colour, so
+     | position keeps its line-chart marker SHAPE as well as its color, so
      | position is never carried by hue alone.
      | A player with no published value is NOT plotted at zero: he is excluded,
      | counted in a stated line, and still listed in the table. A zero would
@@ -9105,9 +9105,9 @@ T-WAR-76 | completed | The overview rail: two findings, and one of them is a cha
      | sparkline of every position's curve (top 12 ranks, drawn by the same
      | buildChartGeometry the full chart and the OG card use, so the rail cannot
      | disagree with the page it links to), then a row per position carrying the
-     | series marker shape, the series colour, the position name, a bar, what
+     | series marker shape, the series color, the position name, a bar, what
      | the best one adds, and how many the league starts. Ordered by what the
-     | best one is worth, so the hardest position to replace leads. Colour
+     | best one is worth, so the hardest position to replace leads. Color
      | carries nothing alone: shape, name and printed figure all repeat it, and
      | the sparkline is aria-hidden with every value it draws present as a real
      | table cell below it.
@@ -9182,7 +9182,7 @@ T-WYR-01 | completed | Would You Rather: the trade voting game, end to end
      | The pool (would_you_rather_trades) holds only trades Signal Check has
      | already graded successfully, so serving is a cheap read. Topped up
      | inline when thin, in bulk by `npm run wyr:pool`, and from the admin
-     | panel. Startup draft trades are included and labelled, with each pick
+     | panel. Startup draft trades are included and labeled, with each pick
      | shown as the player taken at that seat.
      | Discord: one hourly cron, and the SCHEDULE lives in the admin panel, in
      | America/New_York. Ticking three hours is three posts a day; ticking one
@@ -9368,7 +9368,7 @@ RD-T033 | completed | Trade surfaces lead with wins in redraft
      | files: components/trade-verdict.tsx or equivalent
      | depends on: RD-T030
      | verified: yes
-RD-T034 | completed | Value labelled as leverage, not score, in redraft
+RD-T034 | completed | Value labeled as leverage, not score, in redraft
      | files: as found
      | depends on: RD-T030
      | verified: yes
@@ -9510,7 +9510,7 @@ DOCUMENTED, not fixed: the variance anchors are measured under the three
 canonical scoring bases while the placement points are the league's literal
 scoring, so a six-point-passing-touchdown league flattens quarterbacks onto the
 elite figure. Bounded, same direction for every team in a league, and only
-affects the fallback path. The fix is to normalise placement points to the
+affects the fallback path. The fix is to normalize placement points to the
 canonical base before reading the curve.
 
 DOCUMENTED, not fixed: `sync-power-pulse-settings.ts` reads then writes with no
@@ -9685,8 +9685,8 @@ formatters in `lib/datetime.ts` were rebuilt per call (65 ms per 600, measured).
 FIXED (low): the unused GIN index on `roster_ids` dropped (zero scans, and the
 planner correctly declines it); dedupe uniqueness moved to `(league_id,
 dedupe_key)` so the guarantee is structural rather than string-prefixed; the
-`roster_positions` normalisers differed between the two snapshot sides; an
-unrecognised Sleeper transaction type deep-linked to an empty list; a result
+`roster_positions` normalizers differed between the two snapshot sides; an
+unrecognized Sleeper transaction type deep-linked to an empty list; a result
 could read "in 2 days"; a truncated full page was a dead end.
 
 FIXED (tests): 21 added, covering the empty-array guards, roster churn, clock
@@ -9768,7 +9768,7 @@ PE-T012 | completed | lib/calculate-defense-splits.ts writes the new columns
        from the adjustment only, so a future ingestion gap degrades rather than
        silently dropping games from one side of the ledger. generosity_rank now ranks
        on the ADJUSTED figure, because the raw order answers which defense had the
-       easiest schedule, which is not the question the rank is labelled with.
+       easiest schedule, which is not the question the rank is labeled with.
      | verified: yes (tsc clean; ran against production, 1728 rows across 2025, 2024,
        2023 in 23s)
 PE-T013 | completed | lib/projections/defense-seasons.ts + opponentMultiplier walks
@@ -9804,7 +9804,7 @@ PE-T015 | completed | Settings: opponent.positionReliability, priorGames, useAdj
        positionReliability merges one level deep like injury.multipliers and
        variance.defaultCv, so a partial admin save cannot drop a position. Admin form
        gained a toggle, a prior-games field and one field per position, all through the
-       existing labelled Field and Toggle components.
+       existing labeled Field and Toggle components.
      | verified: yes (validate bounds tested: 0 to 1 per position, priorGames 0 to 100,
        useAdjusted boolean; tsc clean; full suite green)
 PE-T016 | completed | Recalculate live and measure the adjusted year-over-year
@@ -9842,7 +9842,7 @@ PE-T020 | completed | Migration 0238: nfl_game_odds + RLS
      | files: supabase/migrations/0238_nfl_game_odds.sql, lib/database.types.ts
      | notes: unique on (source, season, season_type, week, home_team) because a team
        plays at most one home game a week, which is exact and provider-independent.
-       home_spread negative means home favoured. Implied totals stored, not derived on
+       home_spread negative means home favored. Implied totals stored, not derived on
        read, so a null input yields a null total rather than a confident half of nothing.
        metadata jsonb preserves the ESPN competition object per the source-preservation rule.
      | verified: yes (RLS: relrowsecurity true, exactly 2 policies
@@ -9851,7 +9851,7 @@ PE-T020 | completed | Migration 0238: nfl_game_odds + RLS
        anon INSERT blocked, 0 forged rows; types regenerated, 123 tables)
 PE-T021 | completed | lib/nfl-odds.ts, ESPN scoreboard adapter, WSH to WAS alias
      | files: lib/nfl-odds.ts, lib/nfl-odds.test.ts
-     | notes: ESPN quotes its spread relative to the FAVOURITE named in the details
+     | notes: ESPN quotes its spread relative to the FAVORITE named in the details
        string, not to the home team, so parseHomeSpread parses that string, falls back
        to the favorite booleans, and returns null rather than guessing a sign. A sign
        error here would silently invert every game script in the model and never show up
@@ -9884,7 +9884,7 @@ PE-T024 | completed | lib/projections/volume.ts, implied totals into volume and 
      | files: lib/projections/volume.ts, lib/projections/volume.test.ts
      | notes: environmentEffect returns volume, scoring and rushShift. Scoring moves on
        a doubled exponent because a richer environment produces more touchdowns per
-       play, not only more plays. A NEGATIVE spread means favoured and a favourite runs
+       play, not only more plays. A NEGATIVE spread means favored and a favorite runs
        more, so the sign flip is deliberate and pinned by a test; a sign error there
        would invert every game script and never show up in a total.
        A missing line returns EXACTLY 1 on both multipliers. A missing line is an
@@ -9976,7 +9976,7 @@ PE-T035 | completed | lib/projections/engine.ts, computeBeaconProjections, pure
        TWO REAL BUGS FOUND BY VERIFYING AGAINST PRODUCTION RATHER THAN BY READING:
        (1) Every kicker and defense came out 0.00, across 1,119 rows. The engine was
        re-deriving points from the stat line under canonical scoring, and canonical
-       scoring has no keys for fgm or pts_allow. Even for the four modelled positions
+       scoring has no keys for fgm or pts_allow. Even for the four modeled positions
        the re-derivation was wrong: a live 2026 quarterback row dot-products to 20.36
        while Sleeper publishes 23.26, because Sleeper scores keys the canonical map does
        not. Fixed by anchoring on Sleeper's PUBLISHED total and applying our model as a
@@ -10023,7 +10023,7 @@ PE-T038 | completed | scripts/build-beacon-projections.ts + cron + npm script
        blend partner from sync-weekly-projections at 12:00, and game environment from
        sync-nfl-odds at 13:00. Building earlier would build on yesterday's inputs.
      | verified: yes (ran against production: 18,508 rows for 2026 weeks 1 to 18,
-       mirroring Sleeper's 18,508 exactly. 3,202 modelled from our own usage; 15,306
+       mirroring Sleeper's 18,508 exactly. 3,202 modeled from our own usage; 15,306
        mirrored (9,376 because Sleeper says the player is out or uncovered, 4,672 with
        too little history, 1,258 kickers and defenses we do not model).
        PARITY CHECK against Sleeper, per position: K and DEF differ on ZERO of 1,119
@@ -10045,7 +10045,7 @@ PE-T040 | completed | lib/projections/source.ts + lib/projections/read.ts
        player, and runs projectPlayerWeek per week.
        loadProjections in lib/power-pulse/load.ts gained an OPTIONAL sixth `source`
        parameter, applied to both the count and the page query only when supplied.
-       Omitting it is byte-for-byte the old behaviour, so every existing caller is
+       Omitting it is byte-for-byte the old behavior, so every existing caller is
        unaffected and their tests pass untouched.
        A null week is absent and is not counted; a stored "out" zero IS a real week and
        is. perWeek averages over the weeks that carried a projection, never over the
@@ -10098,7 +10098,7 @@ PE-T046 | completed | Migrate lib/league-relay/load.ts
      | verified: yes
 PE-T047 | completed | Guard against a module reading a projected points column raw
      | files: lib/projections/raw-column-guard.test.ts
-     | notes: scans lib, app and components for the three column names, modelled on
+     | notes: scans lib, app and components for the three column names, modeled on
        lib/positional-war/naming.test.ts. The allow-list carries a reason per entry and
        covers the generated types, the canonical raw loader the shared reader itself
        calls, three surfaces already adjusted through their own bespoke full-pool
@@ -10190,7 +10190,7 @@ PE-T061 | completed | Admin controls for the projection model
      | notes: two sections on /admin/power-pulse: the on switch, blend cap, games to
        reach it, usage half life, efficiency prior, odds toggle and calibration toggle;
        plus the four per-position calibration slopes. Every control goes through the
-       existing labelled Field and Toggle components, so labels, aria-describedby hints
+       existing labeled Field and Toggle components, so labels, aria-describedby hints
        and 44px targets come for free. The copy says out loud that the feature should
        stay off until the scoreboard earns it.
      | verified: yes (tsc clean; full suite 3,598 green)
@@ -10282,7 +10282,7 @@ both now fixed and both measured:
      leading columns are equalities.
   RESULT: stats phase 130,269 ms to 16,536 ms, total build 160 s to 34 s, from
   53% of the 300 second cron ceiling to 11%. Output byte-identical: 18,508 rows,
-  3,202 modelled, 0 dropped, same mirror breakdown.
+  3,202 modeled, 0 dropped, same mirror breakdown.
 
 FIXED (high, performance): lib/draft-value/build.ts called the whole
 loadAdjustedProjections bundle INSIDE the per-format loop. The data does not vary
@@ -10344,7 +10344,7 @@ reliably announced and there is no form element, so constraint validation never
 fires either. Every new field now carries a hint.
 
 FIXED (medium, accessibility): the Checkbox control was 20 by 20 against the
-project's absolute 44 by 44 rule. Centring it inside a 44px row did not make
+project's absolute 44 by 44 rule. Centering it inside a 44px row did not make
 anything 44px tall. The label now wraps the row and carries the target.
 
 FIXED (medium, observability): the odds cron had maxDuration 60 against three
@@ -10420,7 +10420,7 @@ PE-T080 | completed | Walk-forward backtest of the 2025 season
        week we were allowed to see, and grades against week W. assertNoLookahead
        re-checks that slice on every week rather than trusting the loop, because a
        lookahead bug would not throw, it would just return a flattering number.
-       BeaconProjection gained a `modelled` flag so the isolating column grades
+       BeaconProjection gained a `modeled` flag so the isolating column grades
        only rows OUR model produced. A mirrored row is Sleeper's number wearing
        our name, and scoring it as ours would credit us with his work.
        THE RESULT, and it is not the flattering one. Pooled, 2025, PPR, 6,097
@@ -10461,7 +10461,7 @@ PE-T081 | completed | Act on the backtest: blend default to 0
        claim a model that has not earned it.
        Two guards on the default: one test drives the blending mechanism with its
        own explicit non-zero weight, so it keeps testing blending regardless of the
-       shipped value, and a second asserts that at the shipped default a modelled
+       shipped value, and a second asserts that at the shipped default a modeled
        player's stored total is still Sleeper's own number. The first test had been
        reading SETTINGS.blend.max and would have silently stopped testing anything
        the day the default hit zero.
@@ -10567,8 +10567,8 @@ ML-T009 | completed | Power Pulse lineup realism setting (OFF by default)
      | notes: Power Pulse projects every remaining week from buildOptimalLineup,
        so it assumes all twelve managers set a perfect lineup for the rest of the
        season. Measured, real managers start 76% to 90% of what was available.
-       The correction is now available and DISABLED by default: it is a judgement
-       call, not a bug fix, it is partly a claim about future behaviour, and it is
+       The correction is now available and DISABLED by default: it is a judgment
+       call, not a bug fix, it is partly a claim about future behavior, and it is
        noisy early. When off, no ledger read happens at all and the model is
        byte-identical to what shipped. The mean is discounted; sigma is not,
        because a manager who benches points scores fewer, not more predictable.
@@ -10675,7 +10675,7 @@ ML-T011 | completed | Review round: implementation, accessibility, security, per
        against a real 2025 league and a preseason league, all four leagues
        recomputed under ledger-3)
 
-ML-T012 | completed | Designed empty state with a labelled sample of the filled-in page
+ML-T012 | completed | Designed empty state with a labeled sample of the filled-in page
      | files: components/manager-ledger/ledger-empty.tsx,
        lib/league-manager-ledger-data.ts, lib/manager-ledger/empty-state.test.ts,
        app/leagues/[league_id]/decisions/page.tsx
@@ -10776,7 +10776,7 @@ T712 | completed | Every projection read names the source it reads
      | filter cost 15 ms warm and 2367 ms cold on the warm path of EVERY league
      | route (5091 buffers, 18,565 rows discarded). With it, 0.082 ms and 3
      | buffers. Measured before and after on prod.
-     | source-guard.test.ts is the repo-wide guard that keeps this true, modelled
+     | source-guard.test.ts is the repo-wide guard that keeps this true, modeled
      | on raw-column-guard.test.ts, with an allow-list that names a reason per
      | entry. It rejects a literal `undefined` in the source position and sees
      | through a namespaced call, which were the two one-line ways around it.
@@ -10818,7 +10818,7 @@ T714 | completed | Lineups: one team, one week, and what to change about it
      | depends on: T712
      | Starters grouped by position block, then bench, IR and taxi, with the
      | projection, the matchup multiplier, the game's implied team total, the
-     | beat rate and the Positional WAR behind each player. Then the optimiser,
+     | beat rate and the Positional WAR behind each player. Then the optimizer,
      | a cut list and free agent suggestions framed by what the team is playing
      | for (a redraft league is always contending; there is no next season).
      | No new model. Slots, set lineup, projections, optimal fill, rest-of-season
@@ -10830,7 +10830,7 @@ T714 | completed | Lineups: one team, one week, and what to change about it
      | nfl_game_odds had one consumer, the projection builder, and showed
      | nowhere. lib/nfl-game-environment.ts is the read path that puts the
      | implied team total on a screen: the size of the pie, beside the slice.
-     | The optimiser is run ONCE and diffed on membership, not slot assignment,
+     | The optimizer is run ONCE and diffed on membership, not slot assignment,
      | so reshuffles are silently ignored. Review caught two real bugs in that
      | diff: pairing by value alone printed "start the running back over the
      | quarterback" with a gain belonging to neither swap (now paired by slot
@@ -10876,7 +10876,7 @@ T715 | completed | Lineups: hear every metric, and try the change before you mak
      | The optimum does not depend on which nine are seated, so the remaining
      | bench gap is optimalTotal minus the new set total with no second fill.
      | Bench only: IR and taxi cannot start, and a starter-to-starter shuffle is
-     | worth exactly zero, which the optimiser panel already says out loud.
+     | worth exactly zero, which the optimizer panel already says out loud.
      | A settled week offers no button at all. The lineup cannot be changed and
      | the Decisions page already grades that week on what players actually did.
      | The button's accessible name IS the row header, so it is the spelled-out
@@ -10892,7 +10892,7 @@ T715 | completed | Lineups: hear every metric, and try the change before you mak
      | SlideUpDialog gained desktopPlacement. Desktop dialogs slide in from the
      | right as a full-height panel now, leaving the page a reader was reading
      | in place; mobile still rises from the bottom edge. The two Signal Scout
-     | confirms keep the centred placement, because a decision is meant to cover
+     | confirms keep the centered placement, because a decision is meant to cover
      | the page and a full-height rail holding two sentences is mostly empty.
      | Review caught six real things. The slot button failed WCAG 2.5.3 Label in
      | Name on every abbreviated slot in every league: the visible label is "QB"
@@ -10959,7 +10959,7 @@ T716 | completed | Every projection surface follows the engine, not a hardcoded 
      | per-stat beat/miss comparison grades exactly that, but WHICH engine is
      | resolved and both headings render its display name. The Positional WAR
      | footnote does the same. A heading that says "Sleeper" over our numbers is
-     | worse than an unadjusted number honestly labelled.
+     | worse than an unadjusted number honestly labeled.
      | lib/projections/current-source.ts is the one resolver for surfaces that
      | need to NAME the engine rather than query with it: global, hourly, and
      | zero queries while the feature is off.
@@ -10997,7 +10997,7 @@ T716 | completed | Every projection surface follows the engine, not a hardcoded 
      | `player_projection_accuracy` currently holds sleeper rows only, so every
      | beat rate, availability rate and reliability multiplier falls to its
      | neutral 1.0 default the moment the engine is enabled. That is the
-     | behaviour the already-shipped Power Pulse path has had since it started
+     | behavior the already-shipped Power Pulse path has had since it started
      | scoping accuracy by source; this change makes four more surfaces agree
      | with it. Run `npm run calculate:projection-accuracy` after the ffbeacon
      | builder and before flipping the switch.
@@ -11013,7 +11013,7 @@ T717 | completed | Lineups after the whistle: a report, not a stale forecast
      |   lib/manager-ledger/{types,lineup,default-settings}.ts
      | depends on: T715
      | The page had one mode and a played week got the wrong one: a projection
-     | as the headline for a game already on the scoreboard, an optimiser
+     | as the headline for a game already on the scoreboard, an optimizer
      | offering changes, and a waiver panel for a week nobody can be claimed
      | for. It has two now, and lib/league-lineups/status.ts decides which.
      | "In progress" means points are on the board, not that the calendar says
@@ -11024,12 +11024,12 @@ T717 | completed | Lineups after the whistle: a report, not a stale forecast
      | live week DISPLAYS real points; the optimum stays graded on projections
      | until the week settles, or a Sunday afternoon tells a manager they left
      | forty points on the bench because three starters play at four o'clock.
-     | The optimiser panel does not render at all mid-week for that reason.
+     | The optimizer panel does not render at all mid-week for that reason.
      | On a settled week the score is the big number and the projection sits
      | under it with the difference signed. Both, always: a 22 point week and a
      | 22 point week that was supposed to be 9 are different Sundays.
-     | "Best you had" is the optimiser's deficit added to Sleeper's own total,
-     | never optimalTotal printed raw. The optimiser grades over gradable slots
+     | "Best you had" is the optimizer's deficit added to Sleeper's own total,
+     | never optimalTotal printed raw. The optimizer grades over gradable slots
      | only, so the raw figure sits BELOW the official score in an IDP league.
      | The season half is the Manager Ledger's, read and not rebuilt. That
      | needed LedgerWeek to keep setPoints, optimalPoints and ungradedSlots,
@@ -11061,7 +11061,7 @@ T717 | completed | Lineups after the whistle: a report, not a stale forecast
      | a table and a panel that both used the gradable one. Three efficiencies
      | on one screen, two of them disagreeing. rollUpEfficiency sums the
      | gradable pair.
-     | The optimiser rendered in the "unsettled" phase, directly under a banner
+     | The optimizer rendered in the "unsettled" phase, directly under a banner
      | saying there is nothing to grade.
      | Two scrolling regions had no tabIndex, so a keyboard user could not
      | scroll either chart at all, and the dashed "best lineup" outline was
@@ -11201,7 +11201,7 @@ MP-T015 | completed | lib/manager-pulse/settings.ts + validate.ts
 
 MP-T016 | completed | lib/manager-pulse/fingerprint.ts, pure and clock-free
      | files: lib/manager-pulse/fingerprint.ts, lib/manager-pulse/fingerprint.test.ts
-     | notes: display settings deliberately excluded (changing how many favourites
+     | notes: display settings deliberately excluded (changing how many favorites
        render does not change the report), capture settings excluded (they change
        what we fetch, which shows up as a different league-season set anyway).
      | verified: yes (32 tests across the two files; Date.now mocked and asserted
@@ -11270,7 +11270,7 @@ MP-T019a | completed | Orchestrator fix: points-against rank, and its inversion
 
 MP-T020 | completed | lib/manager-pulse/drafting.ts: reach, shape, keepers, the clock
      | files: lib/manager-pulse/drafting.ts, lib/manager-pulse/drafting.test.ts
-     | notes: whole-draft pace is computed and labelled a fact about the ROOM, with the
+     | notes: whole-draft pace is computed and labeled a fact about the ROOM, with the
        rule stated in the module header. Per-pick timing requires BOTH endpoints of a
        gap to carry a non-null observation_gap_ms, uses the median rather than the mean,
        reports the MAX gap as the error bar, and drops anything over six hours (an
@@ -11278,11 +11278,11 @@ MP-T020 | completed | lib/manager-pulse/drafting.ts: reach, shape, keepers, the 
        figure.
      | verified: yes (17 tests)
 
-MP-T021 | completed | lib/manager-pulse/affinity.ts: favourites, avoids, repeat drafts
+MP-T021 | completed | lib/manager-pulse/affinity.ts: favorites, avoids, repeat drafts
      | files: lib/manager-pulse/affinity.ts, lib/manager-pulse/affinity.test.ts
      | notes: a player acquired twice in one league-season counts once, at the higher
        weight; summing would make a manager who cut and re-added someone look twice as
-       keen. Favourites rank by exposure against how commonly the player is rostered
+       keen. Favorites rank by exposure against how commonly the player is rostered
        generally, and a player with an unknown rate is excluded rather than assumed
        unusual.
      | known gap: the avoid opportunity check uses one CURRENT league-wide roster rate
@@ -11317,7 +11317,7 @@ MP-T023a | completed | Orchestrator fix: roster-ops thresholds moved into settin
      | notes: the module shipped four local constants (move-shape floor, the two shape
        thresholds, the abandonment quiet-week floor). Those are exactly what the
        settings row exists for: the number that decides whether we call somebody
-       "faded" is a judgement about what we are willing to say about a person. Moved
+       "faded" is a judgment about what we are willing to say about a person. Moved
        into a new `behaviour` settings group with bounds, zod validation, a cross-field
        check that the faded threshold stays below the front-loaded one (otherwise the
        bands overlap and whichever branch runs first silently wins), and four fields in
@@ -11359,8 +11359,8 @@ MP-T024a | completed | Orchestrator fix: player_roster_exposure, the missing den
        lib/database.types.ts
      | notes: the loader correctly refused to compute leagueWideRosterRate, since the
        only honest options were one query per player or a full scan of every roster on
-       the site. But that field is the DENOMINATOR of the favourites list: without it
-       every manager's favourites are just a list of good players, and the affinity
+       the site. But that field is the DENOMINATOR of the favorites list: without it
+       every manager's favorites are just a list of good players, and the affinity
        module excludes null-rate players, so the list would have been permanently
        empty. Built it as a pre-calculated table instead, the same shape as
        player_value_trends.
@@ -11452,7 +11452,7 @@ MP-T028 | completed | Report sections 6.1 to 6.4 plus the shared frame, tile and
        those words. The agent also declined to write "on a 120 second clock" because
        DraftPaceFact carries only the clock SHARE, not the raw timer, and stating a
        clock length we do not have would have been reverse-engineered rather than read.
-     | notes: points against is labelled "Their opponents' scoring. Not something the
+     | notes: points against is labeled "Their opponents' scoring. Not something the
        manager controlled."
      | notes: affinity player rows render the same array twice, a table at sm and up
        and stacked cards below, so all four values survive every breakpoint.
@@ -11641,8 +11641,8 @@ MP-R001 | completed | Security review (Opus) and its fixes
 
 MP-R002 | completed | A capture.test.ts assertion updated to the new security contract
      | files: lib/manager-pulse/capture.test.ts
-     | notes: one test asserted that an unrecognised handle spends no rate-limit slot,
-       which is exactly the behaviour the review said to remove. Rewritten to assert
+     | notes: one test asserted that an unrecognized handle spends no rate-limit slot,
+       which is exactly the behavior the review said to remove. Rewritten to assert
        the new contract, with the reasoning in the test so nobody reverts it as a
        regression, plus a second test that an already-resolved caller is not charged
        twice.
@@ -11706,7 +11706,7 @@ MP-R006 | completed | Migration 0259: count distinct rosters, not roster entries
        trip the table's own CHECK. The failure would have been silent: the rebuild is
        one transaction so the old table survives, and the nightly job logs and
        continues, so the exposure table would simply freeze while Manager Pulse kept
-       ranking favourites against stale rates. Latent, not fired: production has no
+       ranking favorites against stale rates. Latent, not fired: production has no
        duplicates today.
      | verified: yes (applied, rebuild run, 2242 rows)
 
@@ -11787,7 +11787,7 @@ MP-R011 | completed | Implementation review (Opus): the settings and engine find
        written into it.
      | notes: affinity.ts commented that a null roster rate carries through as null
        directly above a `?? 0`. A zero rate would rank an unknown player at the TOP of
-       Favourites, since the score is exposure times (1 minus rate). Now `?? 1`, which
+       Favorites, since the score is exposure times (1 minus rate). Now `?? 1`, which
        sends an unknown to the bottom: the honest failure direction.
      | verified: yes (231 tests across manager-pulse, admin and bulk-sync types)
 
@@ -11853,7 +11853,7 @@ MP-R014 | completed | Orchestrator fix: LIKE wildcards in the by-handle cache re
        where `%` would have deleted every stored report. Validation does not help here:
        it is the validated character set that is dangerous. Now escaped through a
        likeLiteral helper, with the reasoning written above it.
-     | verified: yes (escape behaviour checked directly: a_b -> a\_b, 100%x -> 100\%x)
+     | verified: yes (escape behavior checked directly: a_b -> a\_b, 100%x -> 100\%x)
 
 MP-FINAL | completed | Final verification
      | notes: npx tsc --noEmit exits 0. npx vitest run is 271 files, 4226 tests, all
@@ -11885,7 +11885,7 @@ MPS-T000 to MPS-T053 | completed | Manager Pulse speed build, per
        drain the queue, and a second inline drainer would break the guarantee
        that the in-process token bucket is the site's Sleeper budget. It calls
        wakeLeagueSyncWorker("bulk-sync-enqueue") instead, which keeps the head
-       start and honours the lease.
+       start and honors the lease.
      | notes: DEVIATION the plan did not anticipate. lib/sleeper-budget.ts
        imports node:async_hooks, so lib/sleeper.ts can no longer be imported by
        a client component: `next build` failed with UnhandledSchemeError twice.
@@ -11963,7 +11963,7 @@ MPS-REVIEW | completed | Four independent Opus reviews, and the fixes they found
        or the split would have smuggled the section tree out of that guard.
      | notes: the stripe contrast was fixed twice. The first pass used the alphas
        named in the review and measured 2.24:1, still under the 3:1 threshold;
-       recomputed against the real track colour and raised to 0.75 / 0.50, which
+       recomputed against the real track color and raised to 0.75 / 0.50, which
        measure 3.19:1 and 3.38:1. The numbers are in a comment so the next change
        recomputes rather than guesses.
      | notes: also fixed: no rate limit on either run route (one bucket, fails
@@ -11999,7 +11999,7 @@ SH-T001 to SH-T060 | completed | Saved Sleeper handle: every tool opens on the
        identity card naming the handle behind a Change disclosure. A reader with
        no saved handle sees the form as before plus a notice that an account
        skips the step. Every league list on the site gained the league's own
-       Sleeper logo in its own column, vertically centred across both lines of a
+       Sleeper logo in its own column, vertically centered across both lines of a
        phone row.
      | notes: the defect the build exists to prevent, and the reason for the
        one-resolver rule: the ten league deep views match a reader to a roster by
@@ -12130,7 +12130,7 @@ PERF-T001 | completed | Field data: @vercel/speed-insights mounted in the root l
      | notes: `<SpeedInsights />` from `@vercel/speed-insights/next` sits beside
        `<Analytics />` at the end of `<body>`. Page views were the only field data
        the site had, so no audit could quote a real reader's LCP or INP. This is
-       the one change that makes the next audit measurable rather than modelled.
+       the one change that makes the next audit measurable rather than modeled.
      | verified: npx tsc --noEmit clean
 
 PERF-T002 | completed | scripts/measure-bundle.ts, run as npm run measure:bundle
@@ -12468,7 +12468,7 @@ PERF-T060 | completed | One RPC per worker tick, and a quiet ledger
        the function says the lease is held by somebody else, which is different
        from an empty claim, and the worker reads the two apart.
      | notes: `recordCronRun` gained a quietWhen predicate. A pass that claimed
-       nothing, finalised nothing, reaped nothing, completed no request and
+       nothing, finalized nothing, reaped nothing, completed no request and
        computed no live report writes no ledger row, with one heartbeat row an
        hour so cron-health still sees the job alive. This job ticks every minute
        and cron_runs had reached 76 MB.
@@ -12693,7 +12693,7 @@ PERF-T031 | completed, target missed and said so | On The Clock stops shipping a
        use was one Realtime channel, and it was dragging GoTrue and WebSocket
        code (242 kB raw across two chunks) onto the route for every reader,
        live draft or not. `createClient` is now destructured from an await
-       import inside the realtime effect, with a `cancelled` flag for the case
+       import inside the realtime effect, with a `canceled` flag for the case
        where the league or the snapshot changes before the import resolves. The
        real dependency array, the real subscription body and the real cleanup
        (removeChannel, not unsubscribe) are unchanged.
@@ -12862,7 +12862,7 @@ PERF-R004 | fixed | The header fallback showed phantom account controls to signe
        async again for that read, and the comment says why that is not a
        regression: what this split removed was the AUTH ROUND TRIP, not the
        cookie read. The cookie is a layout hint and nothing else; it can be
-       stale or forged and it decides only how wide a grey box is.
+       stale or forged and it decides only how wide a gray box is.
      | residual, stated rather than papered over: an admin's Admin link has no
        placeholder, because admin status is not knowable from a cookie. At lg
        and up its arrival still nudges the account controls.
@@ -12915,7 +12915,7 @@ PERF-R008 | fixed, and the write-up corrected | The idle worker tick is not thre
      | NOT FIXED, and this is a decision: the reap select and the finalize
        select still run every minute. Getting to three means changing what a
        tick DOES (running them every Nth tick, or gating them on the pending
-       count), which is a behaviour change to live queue infrastructure and is
+       count), which is a behavior change to live queue infrastructure and is
        not what this task was scoped to. Part 9's "3" is recorded as MISSED at
        5, not quietly met.
 
@@ -13091,7 +13091,7 @@ PERF-R017 | fixed | Search lost 293 of 812 ranked players, because a high limit 
      | test: `lib/player-search.test.ts` gained a case that feeds 2,500 ranked
        ids and asserts a player in the third page is still found, that more than
        one request was made, and that every request carries a range of at most
-       1,000. The test double now honours `.range()` so the cap can actually be
+       1,000. The test double now honors `.range()` so the cap can actually be
        exercised; before this it returned every row regardless, which is why the
        old suite passed while the site was broken.
      | note, unrelated to the bug and worth knowing: "Kenneth Gainwell" finds
@@ -13123,7 +13123,7 @@ T718 | completed | Bookmarks: save any page, and get it back in one press
      | href, so lib/bookmarks/path.ts and three CHECK constraints both refuse
      | protocol-relative ("//evil.example", the one that looks like a path),
      | absolute URLs to any other host, javascript: and data:, backslashes
-     | (which some browsers normalise to "/" AFTER a naive check passes), and
+     | (which some browsers normalize to "/" AFTER a naive check passes), and
      | any whitespace or control character. Tested both ways, in the suite and
      | against prod inside a rollback.
      | The icon is DERIVED from the path, never stored, so a bookmark saved a
@@ -13211,7 +13211,7 @@ T719 | completed | Bookmarks: a league is not the tool, and each page of one is 
      |   reachable signed out and the button renders nothing for a visitor with
      |   no account; an auto track collapses instead of leaving a dead gutter.
      | - the league detail sheet, which is the mobile route into a league,
-     |   carries the same control as a labelled button under Open league.
+     |   carries the same control as a labeled button under Open league.
      | - the deep view already had one, and it is unchanged.
      | A LEAGUE PATH IS NOW CANONICAL. `?username=` is the shareable-link
      | mechanism and `?name=` is a first-paint title hint; neither says which
@@ -13220,7 +13220,7 @@ T719 | completed | Bookmarks: a league is not the tool, and each page of one is 
      | league would store two different rows, and the bar could never mark a
      | league page as current for anyone who arrived from the list. `?tab=teams`
      | is NOT stripped: that genuinely is a different page, so the Teams tab,
-     | Lineups, Transactions and the rest are each their own bookmark, labelled
+     | Lineups, Transactions and the rest are each their own bookmark, labeled
      | "<League>: <Section>".
      | The strip is scoped to /leagues/ paths only. On The Clock uses
      | ?username= to choose whose drafts to show, so a bookmark that dropped it
@@ -13241,7 +13241,7 @@ T719 | completed | Bookmarks: a league is not the tool, and each page of one is 
      | Individual Brief stories, player profiles and drafts were already
      | bookmarkable and already carried their real titles rather than their
      | slugs, through the breadcrumb label each of those pages registers. A test
-     | now holds the whole guarantee: fourteen representative pages normalise to
+     | now holds the whole guarantee: fourteen representative pages normalize to
      | fourteen distinct bookmarks, with exactly one intended collision, the
      | league reached with and without the viewer params.
      | The store learned `signedIn` as a fact separate from the list, because
@@ -13314,7 +13314,7 @@ SEO-T903 | completed | Add loadDefenseRanks to lib/power-pulse/load.ts
      | depends on: none
      | notes: loadDefenseRanks(supabase, scoring, season) returns a Map keyed
        `${team}|${position}` to { rank, of }, with the pure core exported as
-       rankDefenseRows. Rank 1 is the defence allowing the most points. It
+       rankDefenseRows. Rank 1 is the defense allowing the most points. It
        ranks on shrunk_multiplier ?? multiplier, the same figure
        opponentMultiplier applies to a projection, and deliberately not on the
        table's generosity_rank column, which ranks a different, unshrunk
@@ -13410,7 +13410,7 @@ SEO-T910 | completed | lib/start-sit/load.ts, the three-wave read through loadAd
        tightening the rule.
      | notes: bye fix: a player is on bye only when the week's slate is
        complete (MIN_COMPLETE_SLATE_TEAMS = 26 teams in the odds map), the
-       team, normalised through normalizeEspnTeam (which carries the WSH and
+       team, normalized through normalizeEspnTeam (which carries the WSH and
        WAS alias), is absent, and the adjusted points are null.
        detectOnBye(team, byTeam, points). Six cases added. The fix agent ran
        git stash and git stash pop against the standing rule while other
@@ -13431,7 +13431,7 @@ SEO-T911 | completed | lib/start-sit/toughest-calls.ts with tests and the unstab
        rankings query (position_rank up to 36, well under the row cap) and one
        loadAdjustedProjections call for the whole field; both guards pass with
        no allow-list entry. Deviations: rankingsSource added to the key
-       (different value sources rank players differently); defence ranks,
+       (different value sources rank players differently); defense ranks,
        game environment and availability are not read, because the verdict
        line and confidence use only points and sigma. Found in review: without
        availability a ruled-out player with a projection could appear as a
@@ -13439,7 +13439,7 @@ SEO-T911 | completed | lib/start-sit/toughest-calls.ts with tests and the unstab
      | verified: vitest lib/start-sit and lib/projections, 303 passed; tsc
        clean in its files. Final reviews pending.
 
-## Generalising the pairwise breakdown engine
+## Generalizing the pairwise breakdown engine
 
 SEO-T912 | completed | Add scalar() to every Metric in lib/breakdown/metrics.ts
      | files: lib/breakdown/metrics.ts
@@ -13488,7 +13488,7 @@ SEO-T914 | completed | loadBreakdown takes a slug list; loadBreakdownPair wrappe
      | depends on: SEO-T913
      | notes: a private loadBreakdownCore(slugs) reads every side in one
        parallel wave. loadBreakdownPair is the old two-player function,
-       unchanged in behaviour, and BEAM's player-compare-verdict and the pair
+       unchanged in behavior, and BEAM's player-compare-verdict and the pair
        OG route now call it (player-compare-stat never used these loaders).
        loadBreakdown(slugs, params) validates two to eight slugs and returns {
        group, extras (Map by playerId), context } with all three lenses.
@@ -13545,7 +13545,7 @@ SEO-T918 | completed | start-sit-card.tsx
        matchupPhrase, ENVIRONMENT_TIER_LABEL and BeaconValue. Bye replaces the
        week block with "On bye"; "out" keeps it and says "Ruled out for Week
        N". Deviations: matchup wording is the existing matchupPhrase
-       (American spelling); the defence rank is stated without "of N" because
+       (American spelling); the defense rank is stated without "of N" because
        the projection carries no total; POSITION_PLURAL and the injury tone
        are local copies of private helpers. Open for the accessibility
        reviewer: Panel renders a named section, so each card nests a region
@@ -13614,7 +13614,7 @@ SEO-T921 | completed | toughest-calls.tsx grid
        app/tools/beacon-breakdown, 331 passed; tsc clean in its files. Final
        reviews pending.
 
-SEO-T922 | completed | Generalise the Head to head tab to N players (table, ranked bars, lens button group)
+SEO-T922 | completed | Generalize the Head to head tab to N players (table, ranked bars, lens button group)
      | files: app/tools/beacon-breakdown/breakdown-table.tsx, beacon-edge-meter.tsx, edge-contribution-chart.tsx, lens-switch.tsx, breakdown-summary.tsx
      | depends on: SEO-T913
      | notes: BreakdownTable({ sides, edge, valueIsBeacon }) with row headers,
@@ -13639,7 +13639,7 @@ SEO-T922 | completed | Generalise the Head to head tab to N players (table, rank
        components, 257 passed; tsc clean in its files (page.tsx pending
        SEO-T928). Final reviews pending.
 
-SEO-T923 | completed | Generalise the Projections tab to N series and extend POSITION_SERIES to eight entries
+SEO-T923 | completed | Generalize the Projections tab to N series and extend POSITION_SERIES to eight entries
      | files: app/tools/beacon-breakdown/projections-tab.tsx, components/chart-kit.tsx
      | depends on: SEO-T914
      | notes: ProjectionsTab({ sides, extras, projectionSourceDisplay }), the
@@ -13648,7 +13648,7 @@ SEO-T923 | completed | Generalise the Projections tab to N series and extend POS
        Record keyed by the six positions and feeds five Positional WAR files,
        so it cannot take two more keys; chart-kit.tsx gains an ordered
        eight-entry PLAYER_SERIES instead (the six existing styles, then solid
-       grey #A8A8B8 with a plus marker at 8.35:1 and dotted #F4F4F8 with a
+       gray #A8A8B8 with a plus marker at 8.35:1 and dotted #F4F4F8 with a
        hexagon at 17.85:1 against the #0B0B14 panel; the site ships dark mode
        only, so one background). Schedule strip and range bars are N rows.
        Follow-up for SEO-T928: the market and reliability tabs must use
@@ -13657,7 +13657,7 @@ SEO-T923 | completed | Generalise the Projections tab to N series and extend POS
        lib/breakdown, 257 passed; tsc clean in its files (page.tsx call site
        pending SEO-T928). Final reviews pending.
 
-SEO-T924 | completed | Generalise the Reliability tab to N
+SEO-T924 | completed | Generalize the Reliability tab to N
      | files: app/tools/beacon-breakdown/reliability-tab.tsx
      | depends on: SEO-T914
      | notes: ReliabilityTab({ sides, extras }) renders N cards and N strips in
@@ -13665,14 +13665,14 @@ SEO-T924 | completed | Generalise the Reliability tab to N
        table disclosure. The empty sentence reads "None of these players has
        enough graded games yet". The heading "Can you count on him?" became
        "them" (the pronoun rule). Follow-up for SEO-T928: the tab carries a
-       local eight-entry series whose seventh and eighth colours are not
+       local eight-entry series whose seventh and eighth colors are not
        contrast-checked; it moves to the shared POSITION_SERIES that SEO-T923
        extends.
      | verified: vitest app/tools/beacon-breakdown and lib/breakdown, 119
        passed; tsc clean in its file (page.tsx call site pending SEO-T928).
        Final reviews pending.
 
-SEO-T925 | completed | Generalise the Market tab to N
+SEO-T925 | completed | Generalize the Market tab to N
      | files: app/tools/beacon-breakdown/market-tab.tsx
      | depends on: SEO-T914
      | notes: MarketTab({ sides: MarketSide[], sourceDisplay, formatDisplay })
@@ -13685,7 +13685,7 @@ SEO-T925 | completed | Generalise the Market tab to N
        passed; tsc clean in its file (page.tsx call site pending SEO-T928).
        Final reviews pending.
 
-SEO-T926 | completed | Generalise the Stats tab to N
+SEO-T926 | completed | Generalize the Stats tab to N
      | files: app/tools/beacon-breakdown/stats-compare.tsx, stats-data.ts, load-stats.ts
      | depends on: SEO-T914
      | notes: StatsCompare({ players }) and loadBreakdownStats(supabase,
@@ -13700,7 +13700,7 @@ SEO-T926 | completed | Generalise the Stats tab to N
        in its files (page.tsx call sites pending SEO-T928). Final reviews
        pending.
 
-SEO-T927 | completed | Generalise the Your lineup tab to N
+SEO-T927 | completed | Generalize the Your lineup tab to N
      | files: app/tools/beacon-breakdown/league-tab.tsx, lib/breakdown/league-mode.ts, lib/breakdown/league-impact.ts
      | depends on: SEO-T914
      | notes: calculateLeagueImpact takes candidateSleeperIds (two to eight,
@@ -13713,7 +13713,7 @@ SEO-T927 | completed | Generalise the Your lineup tab to N
        league-tab-headline.ts. The weekly grid is one named, focusable scroll
        row per player. Deviation: the two-tone purple and cyan pairing only
        meant something for two players, so the best side now carries a "Best
-       fit" badge (icon, word and colour).
+       fit" badge (icon, word and color).
      | verified: new tests assert the shared-read counts at N = 3 and 4 and
        two-player wording parity; vitest lib/breakdown,
        app/tools/beacon-breakdown and lib/power-pulse, 305 passed; tsc clean in
@@ -13766,7 +13766,7 @@ SEO-T930 | completed | app/api/og/start-sit/route.tsx
      | depends on: SEO-T909, SEO-T910
      | notes: GET /api/og/start-sit?p=&start=&week=&format=&source=, nodejs,
        1200 by 630, pure layout helpers in layout.ts with tests. Slugs are
-       normalised and pattern-checked before the "og_breakdown" claim (20 per
+       normalized and pattern-checked before the "og_breakdown" claim (20 per
        minute), validate first and claim second, as the pair route does. It
        runs loadStartSitBoard and computeStartSit, so the card cannot disagree
        with the page. Bad or unknown input returns the branded fallback card.
@@ -13876,7 +13876,7 @@ SEO-T934 | completed | Stale comments and docs citing the old path
        the performance audit (a dated row, so the new path sits beside the
        old). The positional WAR plan and the two dated bundle snapshots stay
        as history. Two live hrefs it found (the methodology page and the trade
-       calculator's written sections) are behaviour, moved under SEO-T933.
+       calculator's written sections) are behavior, moved under SEO-T933.
      | verified: tsc clean outside the in-flight page. Final reviews pending.
 
 SEO-T935 | completed | Accessibility audit of the board (sub-agent), fix findings
@@ -13907,7 +13907,7 @@ SEO-T940 | completed | git mv app/tools/signal-check to app/tools/trade-calculat
        orchestrator ran tsc afterwards.
      | verified: tsc clean apart from stale .next/types entries that still
        name app/tools/signal-check (build output, regenerated by next build).
-       Redirect behaviour is checked with curl -I after deploy, per plan 2.15.
+       Redirect behavior is checked with curl -I after deploy, per plan 2.15.
        Final reviews pending.
 
 SEO-T941 | completed | Every URL reference for the trade calculator (plan section 3 step 4)
@@ -14148,7 +14148,7 @@ SEO-T970 | completed | Decisions OG image, transactions title casing and shared 
      | files: app/leagues/[league_id]/decisions/page.tsx, app/leagues/[league_id]/transactions/page.tsx
      | depends on: none
      | notes: Decisions now carries /api/og/league/[league_id] in openGraph
-       and twitter, like its siblings. Transactions has a capitalised title
+       and twitter, like its siblings. Transactions has a capitalized title
        and one title and one description reused across the three blocks.
      | verified: as SEO-T960.
 
@@ -14213,7 +14213,7 @@ SEO-T975 | completed | Delete PRIMARY_NAV; align /join canonical and description
      | verified: tsc clean in its files. Final reviews pending.
 
 SEO-T976 | completed | Methodology page /guides/how-ff-beacon-works, linked from every tool page
-     | files: app/guides/how-ff-beacon-works/page.tsx, lib/guides catalogue, tool pages
+     | files: app/guides/how-ff-beacon-works/page.tsx, lib/guides catalog, tool pages
      | depends on: none
      | notes: /guides/how-ff-beacon-works: title "How FF Beacon Works",
        description 140 characters, relative canonical, Article and
@@ -14226,7 +14226,7 @@ SEO-T976 | completed | Methodology page /guides/how-ff-beacon-works, linked from
        trade-calculator pages plus both written-sections files, anchors all
        different; a card on /guides; a breadcrumb label. Orchestrator review
        found two problems, fixed by a follow-up agent: the page said betting
-       lines are not modelled, which is false for the FF Beacon engine (it
+       lines are not modeled, which is false for the FF Beacon engine (it
        feeds implied team totals into volume and script); and the page was
        registered with a one-off sitemap entry instead of PUBLISHED_GUIDES,
        which also feeds llms.txt and the footer.
@@ -14310,7 +14310,7 @@ SEO-T990 | completed | Sub-agent review: implementation against the plan
        deviation judged unjustified.
      | verified: full suite 5016 passing across 330 files; tsc clean.
 SEO-T991 | completed | Sub-agent review: SEO accuracy
-     | notes: SEO accuracy review. Medium: /api/og/start-sit coloured the SIT
+     | notes: SEO accuracy review. Medium: /api/og/start-sit colored the SIT
        badge amber (signal.warning), where the page's badge is ink.muted per
        plan 2.14, so the share image read SIT as a warning; not DPC gold, but
        wrong semantics; fixed under SEO-T995. Low: the card row's aria-label
@@ -14320,7 +14320,7 @@ SEO-T991 | completed | Sub-agent review: SEO accuracy
        marketing copy; the sitemap; robots on leagues, brief tag and brief
        player; descriptions (the only strings over 150 are admin copy and UI
        card text); every JSON-LD block; player tab canonicals; the trade
-       calculator title and FAQ; IndexNow and its key file; board OG colours.
+       calculator title and FAQ; IndexNow and its key file; board OG colors.
      | verified: 313 relevant tests passing.
 SEO-T992 | completed | Sub-agent review: accessibility (includes SEO-T935)
      | notes: accessibility review, includes SEO-T935. Findings: (1) high,
@@ -14333,7 +14333,7 @@ SEO-T992 | completed | Sub-agent review: accessibility (includes SEO-T935)
        visible Best pill announces best twice. (4) low, AnalysisSkeleton in
        page.tsx pulses with no motion-reduce guard. Clean: picker, week select,
        the single role=status verdict, the scroll region and list toggle, card
-       structure and colour-plus-word badges, FAQ disclosures, the seven
+       structure and color-plus-word badges, FAQ disclosures, the seven
        loading boundaries, the Lineups link, PLAYER_SERIES contrast. No data
        hidden at any breakpoint.
      | verified: read-only walk of the markup in browse and table modes.
@@ -14410,7 +14410,7 @@ SEO-T995 | completed | Fix the review findings that are related and make sense
        constant and its comment removed); the card row label is "Start/sit
        player cards". Accessibility: the Beacon Edge headline is an h3; the
        table cell's sr-only label no longer repeats "best"; the skeleton pulse
-       honours motion-reduce; guessed pronouns rewritten in league-tab,
+       honors motion-reduce; guessed pronouns rewritten in league-tab,
        market-tab, projections-tab, written-sections, the methodology page and
        the draft guide (a grep of those files finds no he, him or his).
        Performance: resolveSeasonClock wrapped in React cache();
@@ -14522,7 +14522,7 @@ DSN-T006 | completed | Board: verdict panel, row fill, confidence and reasons si
      | notes: the role="status" verdict now sits in a gradient panel with an
        icon tile and a static "The verdict" eyebrow (still the only live
        region). From lg the cards grow to share the row (300px to 26rem) and
-       the row centres with justify-content: safe center. Confidence and Why
+       the row centers with justify-content: safe center. Confidence and Why
        are panels with icon tiles, side by side from lg. The "Week N, season.
        Projections updated" line is a pill with a clock icon (formatEastern
        unchanged).
@@ -14544,7 +14544,7 @@ DSN-T008 | completed | Who Should I Start written sections redesign
      | depends on: DSN-T001, DSN-T002
      | notes: four calculation steps as step cards with h3s; the format
        section with a side panel naming the reader's format and one line per
-       format; a position jump nav; each position as a card with a coloured
+       format; a position jump nav; each position as a card with a colored
        position tile, factor chips drawn from its own paragraph, and closest
        calls beside the prose from lg; the five-sentence method as a numbered
        list ("And" dropped from the last sentence); the FAQ beside its
@@ -14579,7 +14579,7 @@ DSN-T010 | completed | Sub-agent reviews: accessibility, and implementation plus
      | notes: implementation and security review: no high findings. Content
        preserved word for word apart from the intended splits; every h2 and id
        unchanged; the team logo URL validation holds. Fixed: factor lists were
-       labelled "What the tool weighs", which overclaims the engine (now "Key
+       labeled "What the tool weighs", which overclaims the engine (now "Key
        factors"); a sentence fragment inside the methodology tile; LinkTile
        title and body ran together as one link name (sr-only full stop added
        in components/link-tile.tsx, which also improves About and the author
@@ -14763,12 +14763,12 @@ AD-T005 | completed | ToolExplainer component and six written explainers (FAAB, 
 
 AD-T006 | completed | Guide: Positional WAR explained, for beginners, first person
      | files: app/guides/positional-war-explained/page.tsx, lib/guides/published.ts, lib/nav-tree.ts, lib/site.ts, lib/breadcrumbs.ts, app/guides/page.tsx, app/api/og/guide/[slug]/route.tsx, app/author/michael/page.tsx, app/page.tsx
-     | notes: Every mechanical claim checked against lib/positional-war/*. The naming rule holds (lib/positional-war/naming.test.ts passes). Worked numbers are invented and labelled so in the table caption.
+     | notes: Every mechanical claim checked against lib/positional-war/*. The naming rule holds (lib/positional-war/naming.test.ts passes). Worked numbers are invented and labeled so in the table caption.
      | verified: yes. tsc clean; full vitest run passing; renders on the dev server; Opus review applied.
 
 AD-T007 | completed | Guide: FAAB strategy, how much to bid on the waiver wire, first person
      | files: app/guides/faab-strategy/page.tsx, plus the same registries as AD-T006
-     | notes: Bid ranges follow the calculator's default bid curve bands; timing follows lib/faab/market.ts urgency; drop rules follow lib/faab/marginal.ts. Worked example is invented and labelled so.
+     | notes: Bid ranges follow the calculator's default bid curve bands; timing follows lib/faab/market.ts urgency; drop rules follow lib/faab/marginal.ts. Worked example is invented and labeled so.
      | verified: yes. tsc clean; full vitest run passing; renders on the dev server; Opus review applied.
 
 AD-T008 | completed | Homepage founder section rewritten in the first person
@@ -14794,7 +14794,7 @@ AD-T011 | completed | Guide: Superflex strategy, eight lessons with diagrams, th
 
 AD-T012 | completed | Guide refresh: FAAB strategy rebuilt as eight lessons with four diagrams, a bid worksheet and a pre-bid checklist
      | files: app/guides/faab-strategy/page.tsx, app/guides/faab-strategy/faab-figures.tsx, app/guides/faab-strategy/faab-classroom.tsx, lib/guides/published.ts (updatedAt), app/guides/page.tsx (bullets), app/page.tsx (lessons), app/api/og/guide/[slug]/route.tsx (badge)
-     | notes: Every paragraph of the original prose and the FAQ kept. Bid bands drawn from lib/faab/default-settings.ts, the dollar calendar from lib/faab/market.ts urgencyMultiplier (0.85 through week 3 rising to 1.40 from week 12, by default), the ladder rungs from the worked example. The worksheet's rival-count shape is invented and labelled so. Implementation review caught that the original worked example (6 points a week, 12 odds points) crossed the all-in thresholds the same page quotes; the example now adds about 3 a week and 8 odds points, so the 27/36/40 ladder is consistent with the rule. Not committed.
+     | notes: Every paragraph of the original prose and the FAQ kept. Bid bands drawn from lib/faab/default-settings.ts, the dollar calendar from lib/faab/market.ts urgencyMultiplier (0.85 through week 3 rising to 1.40 from week 12, by default), the ladder rungs from the worked example. The worksheet's rival-count shape is invented and labeled so. Implementation review caught that the original worked example (6 points a week, 12 odds points) crossed the all-in thresholds the same page quotes; the example now adds about 3 a week and 8 odds points, so the 27/36/40 ladder is consistent with the rule. Not committed.
      | verified: yes. tsc clean; full vitest run passing; rendered on the dev server; accessibility review applied (atomic counter).
 
 AD-T013 | completed | Guide refresh: Positional WAR explained rebuilt as seven lessons with five diagrams, a move-the-line box and a which-question quiz
@@ -14881,7 +14881,7 @@ BD-T023 | completed | Player profile news panel reads relay_players
      | files: components/player-profile/beacon-brief-tab.tsx, lib/player-profile.ts, components/player-profile/quick-news.tsx
 BD-T024 | completed | scripts/backfill-relays.ts (one-time), dry run first, then applied
      | files: scripts/backfill-relays.ts, lib/relays/write.ts (assessRelay), lib/relays/grounding.ts, lib/relays/grounding.test.ts, package.json
-     | notes: Applied 2026-09-17 over 1,131 candidate posts: 643 published, 82 hidden (grounding), 194 dropped by the gates, 212 folded into their root story, 0 failed; by week: 2026 week 1 108, week 2 35, off-season 582. No Discord job was queued (asserted). The hidden list showed three false-positive patterns (sentence-initial verbs, spelled-out positions, hyphenated forms), so the grounding check gained a sentence-start stem rule, position-word licensing and hyphen splitting, with tests; a --recheck-hidden mode then re-ran the check on the 80 hidden rows and published 16, cancelling the card each publish queued. 64 stay hidden for the owner in the Relays manager.
+     | notes: Applied 2026-09-17 over 1,131 candidate posts: 643 published, 82 hidden (grounding), 194 dropped by the gates, 212 folded into their root story, 0 failed; by week: 2026 week 1 108, week 2 35, off-season 582. No Discord job was queued (asserted). The hidden list showed three false-positive patterns (sentence-initial verbs, spelled-out positions, hyphenated forms), so the grounding check gained a sentence-start stem rule, position-word licensing and hyphen splitting, with tests; a --recheck-hidden mode then re-ran the check on the 80 hidden rows and published 16, canceling the card each publish queued. 64 stay hidden for the owner in the Relays manager.
      | verified: yes. Dry run on 12 rows read, full run log kept in the session scratchpad, tests passing.
 BD-T024b | completed | Migration 0286: legacy_article_redirects
      | files: supabase/migrations/0286_legacy_article_redirects.sql, lib/database.types.ts
@@ -14996,7 +14996,7 @@ BD-T090 | completed | Five Opus reviews: implementation, security, accessibility
 BD-T091 | completed | Session pickup after the context cut-off: the review items marked "left" that were mechanical, and the build record
      | files: lib/relays/feed-params.ts (new), app/brief/(feed)/page.tsx, app/brief/(feed)/category/[slug]/page.tsx, app/brief/(feed)/team/[abbr]/page.tsx, app/brief/(feed)/player/[slug]/page.tsx, app/brief/(feed)/tag/[tag]/page.tsx, components/beacon-brief/brief-feed.tsx, components/relays/latest-brief-panel.tsx, app/admin/brief-desk/relays/page.tsx, lib/brief-desk/bundle.ts, lib/brief-desk/validate-draft.ts, lib/brief-desk/validate-draft.test.ts, app/brief/editions/page.tsx, app/about/page.tsx, docs/beacon-brief/relays-and-briefs-plan.md (section 22), handoff.md
      | depends on: BD-T090
-     | notes: Verified first that nothing was cut off: tsc clean and the full suite green on the tree as left. Then: the four filter routes carry the kind and week filters (a11y m13) through one shared parser; an unrecognised ?team= or ?player= on the hub renders the empty state instead of the whole feed (impl m28); the hub title is absolute and both hub descriptions are under 155 characters (SEO m1); the inert live regions on the two result counts are gone (a11y m7); the panel's second periodLabel export is renamed (impl m30); the bundle memo key carries the value and projection sources and source_display is null rather than "this source" (impl m10, m14); the validator warns on an FAQ outside three to six (impl m44); the About page counts editions only and says nothing under five (SEO m4). Section 22 now records the modules beyond section 17, the schema details, the block placement, the rate-limit key and the items left for their own pass.
+     | notes: Verified first that nothing was cut off: tsc clean and the full suite green on the tree as left. Then: the four filter routes carry the kind and week filters (a11y m13) through one shared parser; an unrecognized ?team= or ?player= on the hub renders the empty state instead of the whole feed (impl m28); the hub title is absolute and both hub descriptions are under 155 characters (SEO m1); the inert live regions on the two result counts are gone (a11y m7); the panel's second periodLabel export is renamed (impl m30); the bundle memo key carries the value and projection sources and source_display is null rather than "this source" (impl m10, m14); the validator warns on an FAQ outside three to six (impl m44); the About page counts editions only and says nothing under five (SEO m4). Section 22 now records the modules beyond section 17, the schema details, the block placement, the rate-limit key and the items left for their own pass.
      | verified: yes. tsc clean; vitest passing (see handoff.md for the counts).
 BD-T092 | completed | Second review pass (security, accessibility, performance, SEO) and its fixes; the implementation reviewer produced no report
      | files: docs/beacon-brief/reviews/security-pass-2.md, accessibility-pass-2.md, performance-pass-2.md, seo-pass-2.md (each with a Resolutions section), lib/relays/load.ts, lib/relays/feed-params.ts, lib/relays/legacy-redirect.ts, lib/memo-ttl.ts, lib/beacon-brief-feed.ts, lib/sitemap/sections.ts, lib/player-profile.ts, lib/brief-desk/bundle.ts, lib/brief-desk/publish.ts, lib/brief-desk/edition-data.ts, lib/brief-desk/slug.ts, lib/llms/llms-txt.ts, lib/llms/llms-full-txt.ts, app/admin/brief-desk/actions.ts, app/admin/brief-desk/relays/page.tsx, app/admin/brief-desk/page.tsx, app/admin/brief-desk/editions/page.tsx, app/api/brief-desk/bundle/route.ts, app/api/brief-desk/drafts/route.ts, app/brief/(feed)/page.tsx and the four filter routes, app/brief/editions/page.tsx, app/brief/[slug]/page.tsx, app/brief/rss.xml/route.ts, app/author/michael/page.tsx, components/relays/relay-card.tsx, components/brief-desk/blocks/{action-list,value-movers,injury-timeline,top-scorers}.tsx, components/chart-kit.tsx, components/beacon-brief/brief-pagination.tsx, components/admin/brief-desk/{edition-review,relays-manager}.tsx, tailwind.config.ts, next.config.ts
@@ -15021,7 +15021,7 @@ BD-T095 | completed | Post-deploy backfill and archive, duplicate Relays linked 
 T720 | completed | Dynasty strategy guide (/guides/dynasty-strategy): eight lessons on contend or rebuild, one live figure, four interactives, registered everywhere guides are listed
      | files: app/guides/dynasty-strategy/page.tsx, app/guides/dynasty-strategy/dynasty-figures.tsx, app/guides/dynasty-strategy/dynasty-classroom.tsx, lib/guides/dynasty-age-market.ts, lib/guides/dynasty-age-market.test.ts, lib/guides/published.ts, app/guides/page.tsx, lib/nav-tree.ts, components/app-shell/nav-icons.ts, lib/site.ts, lib/breadcrumbs.ts, app/api/og/guide/[slug]/route.tsx, app/page.tsx, app/author/michael/page.tsx, lib/guides/fantasy-football-terms.ts, components/rankings/rankings-view.tsx, app/guides/fantasy-football-trade-guide/page.tsx
      | depends on: none
-     | notes: 2026-09-18. Picked from Search Console: 46 "dynasty" queries at positions 30 to 55 with no strategy page to land on. The lane box and the bands figure call lib/league-team-status.ts directly. The live figure counts the age of the top 24 players per position in the reader's resolved dynasty format and source. Published figures (4for4, ESPN, Fantasy Life, PFF, Dynasty Nerds, Footballguys, Sleeper help centre) were each read at the source before quoting, and are linked in a Sources section. Dynasty rankings boards and six glossary terms now link to the guide. Not committed.
+     | notes: 2026-09-18. Picked from Search Console: 46 "dynasty" queries at positions 30 to 55 with no strategy page to land on. The lane box and the bands figure call lib/league-team-status.ts directly. The live figure counts the age of the top 24 players per position in the reader's resolved dynasty format and source. Published figures (4for4, ESPN, Fantasy Life, PFF, Dynasty Nerds, Footballguys, Sleeper help center) were each read at the source before quoting, and are linked in a Sources section. Dynasty rankings boards and six glossary terms now link to the guide. Not committed.
      | verified: yes. tsc clean; 136 tests passing across lib/guides, lib/llms, team status and bookmarks; page, homepage spotlight, /guides card, nav, OG image and phone width checked in Chrome on the dev server, no console errors on the guide; dev server stopped afterwards. Accessibility, implementation and security sub-agent reviews run and every finding fixed (security had none).
 T721 | completed | Google Analytics 4 beside Vercel Analytics and Speed Insights: the tag, ten conversion events, the sign-in cookie, CSP and the privacy policy
      | files: lib/analytics.ts, lib/analytics.test.ts, components/google-analytics.tsx, components/analytics-events.tsx, components/donate/donation-complete-tracker.tsx, app/layout.tsx, app/auth/callback/route.ts, app/login/login-form.tsx, components/donate/donate-launcher.tsx, components/donate/donate-form.tsx, app/donate/thanks/page.tsx, components/copy-link-button.tsx, components/copy-image-button.tsx, components/trade-finder.tsx, app/tools/league-pulse/league-pulse-form.tsx, app/tools/manager-pulse/manager-search-form.tsx, app/tools/trade-calculator/signal-check-builder.tsx, app/tools/trade-calculator/sleeper-import-panel.tsx, app/games/would-you-rather/would-you-rather-client.tsx, app/tools/who-should-i-start/start-sit-picker.tsx, app/games/signal-scout/signal-scout-client.tsx, app/tools/faab/manual-result.tsx, app/tools/faab/league-panel.tsx, app/tools/on-the-clock/on-the-clock-client.tsx, lib/security-headers.ts, app/privacy/page.tsx, .env.local.example
@@ -15046,7 +15046,7 @@ T724 | completed | Bookmark bar hydration mismatch: a fixed track id instead of 
 T725 | completed | Fantasy football playoffs guide (/guides/fantasy-football-playoffs): eight lessons, six figures, three interactives, teaching-model odds with tests
      | files: app/guides/fantasy-football-playoffs/page.tsx, app/guides/fantasy-football-playoffs/playoff-figures.tsx, app/guides/fantasy-football-playoffs/playoff-classroom.tsx, lib/guides/playoff-odds.ts, lib/guides/playoff-odds.test.ts, lib/guides/playoff-luck-example.ts, lib/guides/playoff-luck-example.test.ts, lib/guides/fantasy-football-playoffs.test.ts
      | depends on: none
-     | notes: 2026-09-18. Not picked from Search Console: no query containing playoff, odds, deadline, standings or tiebreak reached the site in 90 days, so this is a bet on outside demand plus the Power Pulse pairing. Lessons: how playoffs work, what odds mean, luck against quality, buy/hold/sell, playoff schedules, FAAB and roster spots, win-or-go-home lineups, when you are out; then mistakes, a worked example, a checklist, eight FAQs and twelve sources. Platform rules (Sleeper, ESPN, Yahoo) and published figures (Alex Cates, Tony ElHabr, Establish The Run) read at the source. The worksheet and swing figure use a closed-form teaching model (lib/guides/playoff-odds.ts) cross-checked by a seeded simulation test; the luck figure runs buildLuckRows and the lineup figure runs winProbability over invented teams; the matchup figure reads the shipped opponent defaults, pinned by a test. Every number is sourced or labelled invented. Not committed.
+     | notes: 2026-09-18. Not picked from Search Console: no query containing playoff, odds, deadline, standings or tiebreak reached the site in 90 days, so this is a bet on outside demand plus the Power Pulse pairing. Lessons: how playoffs work, what odds mean, luck against quality, buy/hold/sell, playoff schedules, FAAB and roster spots, win-or-go-home lineups, when you are out; then mistakes, a worked example, a checklist, eight FAQs and twelve sources. Platform rules (Sleeper, ESPN, Yahoo) and published figures (Alex Cates, Tony ElHabr, Establish The Run) read at the source. The worksheet and swing figure use a closed-form teaching model (lib/guides/playoff-odds.ts) cross-checked by a seeded simulation test; the luck figure runs buildLuckRows and the lineup figure runs winProbability over invented teams; the matchup figure reads the shipped opponent defaults, pinned by a test. Every number is sourced or labeled invented. Not committed.
      | verified: yes. tsc clean, full vitest suite passing, next build clean. Checked in Chrome on the dev server at 929px and 500px (Chrome would not go narrower): worksheet, quiz and checklist announce through polite live regions, one h1, no skipped heading levels, Article + FAQPage + BreadcrumbList JSON-LD, no horizontal overflow, no console errors. Accessibility, implementation and security sub-agent reviews run; every finding fixed.
 T726 | completed | Playoff guide registered everywhere guides are listed
      | files: lib/guides/published.ts (entry plus navLabel on every guide, guidesNewestFirst), app/guides/page.tsx, lib/nav-tree.ts, lib/site.ts (site search), lib/breadcrumbs.ts, app/api/og/guide/[slug]/route.tsx, app/author/michael/page.tsx, app/page.tsx
@@ -15181,7 +15181,7 @@ FB-T18 | completed | Reason templates plus tests (no banned code points)
 FB-T19 | completed | Wire auction, heat, tendency, rivals and calendar into calculateLeagueFaab; drop history blend and urgency
      | files: lib/faab/league-faab.ts, lib/faab/market.ts, lib/faab/types.ts
      | depends on: FB-T14, FB-T16, FB-T17
-     | notes: 2026-09-19. calculateLeagueFaab now builds rival bid centres from their own lineup swaps times heat, tendency and the calendar, simulates the auction once, and reports rivals, reasons, heat, priorsFallback and positionalWar. History blend removed (A2); the calendar replaces the urgency discount (A3) and moves rival centres only, never the reader's own worth.
+     | notes: 2026-09-19. calculateLeagueFaab now builds rival bid centers from their own lineup swaps times heat, tendency and the calendar, simulates the auction once, and reports rivals, reasons, heat, priorsFallback and positionalWar. History blend removed (A2); the calendar replaces the urgency discount (A3) and moves rival centers only, never the reader's own worth.
      | verified: yes
 
 FB-T20 | completed | Manual mode controls and priors-based pricing
@@ -15289,7 +15289,7 @@ FB-T36 | completed | Bid hero and win chance chart
 FB-T37 | completed | Bid reasons and rival table
      | files: app/tools/faab/bid-reasons.tsx, app/tools/faab/rival-table.tsx
      | depends on: FB-T35, FB-T18
-     | notes: 2026-09-19. Reasons list and the rival table, a real table with a caption, real team names per owner decision 2, and the not-interested teams summarised as a count.
+     | notes: 2026-09-19. Reasons list and the rival table, a real table with a caption, real team names per owner decision 2, and the not-interested teams summarized as a count.
      | verified: yes
 
 FB-T38 | completed | Chopped card
@@ -15391,7 +15391,7 @@ FB-G02 | completed | Lesson 2 survival chart
 FB-G03 | completed | Lessons 4 and 5 with measured tables from faab_market_priors
      | files: app/guides/chopped-league-strategy/page.tsx, lib/guides/faab-market-figures.ts, lib/guides/faab-market-figures.test.ts
      | depends on: FB-T11, FB-T33
-     | notes: 2026-09-19. money-heading and how-much-heading inserted into LESSONS and TOC_ITEMS, so the page renumbered itself to six lessons. Measured band table read live through loadPriorCellsCached and the new lib/guides/faab-market-figures.ts, with priors.minCellSamples from the live settings and "Not enough data yet" below it. Today: alive_50p 324 claims over 16 leagues (median 0.2 percent, top quarter 3.2, top tenth 20, 43 percent free), alive_30_50 53 claims over 1 league, alive_lt30 31 claims over 1 league, and the copy says the last two are one room. Published comparisons (Fantasy Life 2024 medians, NFFC Eliminator 2025 bands, Charchian's pace targets, Masters and Gretch) are attributed in the sentences that use them; the worked example is labelled invented.
+     | notes: 2026-09-19. money-heading and how-much-heading inserted into LESSONS and TOC_ITEMS, so the page renumbered itself to six lessons. Measured band table read live through loadPriorCellsCached and the new lib/guides/faab-market-figures.ts, with priors.minCellSamples from the live settings and "Not enough data yet" below it. Today: alive_50p 324 claims over 16 leagues (median 0.2 percent, top quarter 3.2, top tenth 20, 43 percent free), alive_30_50 53 claims over 1 league, alive_lt30 31 claims over 1 league, and the copy says the last two are one room. Published comparisons (Fantasy Life 2024 medians, NFFC Eliminator 2025 bands, Charchian's pace targets, Masters and Gretch) are attributed in the sentences that use them; the worked example is labeled invented.
      | verified: yes
 FB-G04 | completed | Danger check interactive plus calculator URL params
      | files: app/guides/chopped-league-strategy/page.tsx
@@ -15501,7 +15501,7 @@ FB-R03 | pending | Finish the review coverage the final pass did not reach
        stale-cell deletion, whether the admin replay and rebuild actions call
        requireAdmin (the building agent says both do), and the guide copy
        against section 5 of the guide plan, which lists the exact passages
-       that had to change because they described the old behaviour.
+       that had to change because they described the old behavior.
      | verified: no
 FB-R04 | completed | Power Pulse and Schedules still simulate playoffs on chopped leagues
      | files: supabase/migrations/0291_power_pulse_chopped_survival.sql,
@@ -15520,7 +15520,7 @@ FB-R04 | completed | Power Pulse and Schedules still simulate playoffs on choppe
        already existed for the FAAB build and takes exactly the weekly
        distributions Power Pulse builds anyway.
        WHAT CHANGED IN THE MODEL. LeagueRow carries `chopped` from
-       isChoppedLeague, so disable_elimination is honoured and a chopped league
+       isChoppedLeague, so disable_elimination is honored and a chopped league
        with elimination switched off keeps the ordinary model. Every bracket
        figure (playoff, bye, title and last-place odds, expected and projected
        wins, losses, ties, SOS points and rank, the schedule component and its
@@ -15539,7 +15539,7 @@ FB-R04 | completed | Power Pulse and Schedules still simulate playoffs on choppe
        and weeks left; Projected champion becomes Last one standing and ranks
        on survival; the standings table becomes a survival order with no seeds
        and no cut line; two new league leaders (Most likely last standing,
-       Closest to the chop); the rail card says Survival favourite; the
+       Closest to the chop); the rail card says Survival favorite; the
        methodology panel states the chopped weights and the chopped model; the
        Schedules board computes no win probability and carries a new
        ScheduleEmpty kind saying the pairings decide nothing; the single
@@ -15589,7 +15589,7 @@ FB-R07 | pending | The bid search scans every simulation run per dollar
        fix if it is ever needed: precompute a sorted cumulative array of the
        run maxima once and binary search it.
      | verified: no
-FB-R08 | completed | No ESLint config anywhere in the repo (closed 2026-09-25 by IDP-401: ESLint installed, customised, and part of the gate)
+FB-R08 | completed | No ESLint config anywhere in the repo (closed 2026-09-25 by IDP-401: ESLint installed, customized, and part of the gate)
      | files: package.json, a new eslint config
      | depends on: none
      | notes: Recommended someday, so the gate exists at all. npm run lint
@@ -15612,7 +15612,7 @@ PW-T01 | completed | One content width per tool page
      | depends on: none
      | notes: The FAAB page showed three widths down one screen and nothing
        said which one was the page: the form capped itself at 88rem and
-       centred, ToolExplainer capped itself at 80rem and centred inside that,
+       centered, ToolExplainer capped itself at 80rem and centered inside that,
        and MarketStats had no cap at all so it ran the full width of the
        dashboard column. The same defect, with different numbers, was on the
        trade calculator (90rem builder, uncapped explainer, 80rem closing
@@ -15647,7 +15647,7 @@ LS-T01 | completed | One resolver for where a league is in its season
        with no elimination week against it.
        A league can be complete with NO champion (season over, bracket never
        played or never captured) and that is reported as its own state rather
-       than rounded to either neighbour. The third place game (p equal to 3) is
+       than rounded to either neighbor. The third place game (p equal to 3) is
        never read as the final. 14 tests.
      | verified: yes (unit tests, plus three real production leagues checked)
 
@@ -15750,7 +15750,7 @@ Goldens captured at git hash 2368cac07730f876dda57843d4049a221b8e0ccc.
 
 IDP-101 | completed | Golden fixtures before any engine change
 IDP-102 | completed | Position constants and the one noun helper (lib/site.ts)
-IDP-103 | completed | Colour tokens for DL, LB, DB and every accent map
+IDP-103 | completed | Color tokens for DL, LB, DB and every accent map
 IDP-104 | completed | Migration 0296: typed IDP columns on player_stats
 IDP-105 | completed | Migration 0297: players.eligible_positions
 IDP-106 | completed | Migration 0298: finishes offense-only rebuild plus idp123 finishes
@@ -15799,8 +15799,8 @@ IDP-102 | completed | Position constants and the one noun helper
      | notes: Both BEAM copies now delegate; interpret/index.ts keeps its own rule (unknown code reads as empty) via a two-line wrapper, so its clarify prompts do not change. Copy that moved: the start/sit reason says "team defenses" rather than "defenses"; the Positional WAR OG line says "Team defense" rather than "Defense"; the projected-champion card now spells out "running back" etc. where it printed the bare code. The guard (no second QB-to-"quarterback" map) found 22 maps the plan did not list; they are allow-listed in lib/site.test.ts as a debt ledger with a reason each (mostly deliberate wording variants on offense-only surfaces, plus ones phase 2/3 tasks rework). New files cannot join.
      | verified: yes (typecheck green, 389 files / 5,921 tests pass, goldens green)
 
-IDP-103 | completed | Colour tokens for DL, LB, DB and every accent map
-     | files: tailwind.config.ts (position.dl #A3E635, .lb #E879F9, .db #818CF8), lib/on-the-clock/position-colors.ts (IdpColorKey, AnyPositionColorKey, positionColorKey, nine-key BADGE/CELL/ROW), components/player-profile/player-hero.tsx, positional-finishes.tsx, app/api/og/player/[slug]/route.tsx (K, DEF and IDP accents added; no card falls to grey), app/api/og/start-sit/route.tsx, app/api/og/faab/route.tsx, app/api/og/team/[league_id]/[roster_id]/route.tsx, app/api/og/matchup/.../share/route.tsx (IDP group now the LB hue), components/league-activity/activity-visuals.ts, components/waiver-wire/player-card.tsx, board-rail.tsx, components/manager-pulse/drafting-section.tsx, components/chart-kit.tsx (DL/LB/DB series, three new markers: pentagon, triangle-down, hourglass), components/chart-kit.test.ts, NEW lib/on-the-clock/position-colors.test.ts
+IDP-103 | completed | Color tokens for DL, LB, DB and every accent map
+     | files: tailwind.config.ts (position.dl #A3E635, .lb #E879F9, .db #818CF8), lib/on-the-clock/position-colors.ts (IdpColorKey, AnyPositionColorKey, positionColorKey, nine-key BADGE/CELL/ROW), components/player-profile/player-hero.tsx, positional-finishes.tsx, app/api/og/player/[slug]/route.tsx (K, DEF and IDP accents added; no card falls to gray), app/api/og/start-sit/route.tsx, app/api/og/faab/route.tsx, app/api/og/team/[league_id]/[roster_id]/route.tsx, app/api/og/matchup/.../share/route.tsx (IDP group now the LB hue), components/league-activity/activity-visuals.ts, components/waiver-wire/player-card.tsx, board-rail.tsx, components/manager-pulse/drafting-section.tsx, components/chart-kit.tsx (DL/LB/DB series, three new markers: pentagon, triangle-down, hourglass), components/chart-kit.test.ts, NEW lib/on-the-clock/position-colors.test.ts
      | notes: PositionColorKey itself stays SIX, deliberately: lib/draft-tracker/types.ts aliases BoardPosition to it, and widening it would have quietly admitted defenders to the draft tracker (R-11). The defender keys sit beside it (AnyPositionColorKey, positionColorKey), and positionColorKey also resolves Sleeper sub-positions (DE, OLB, CB, SS ...). The plan said the team and FAAB OG maps index with no fallback; both already had one (`?? INK_MUTED`, `?? CYAN`), so no change there beyond the new keys. The plan asked for a contrast check on the light surface too; the product has no light theme (chart-kit.tsx header says so), so the assertion covers the two dark chart surfaces (#0B0B14 and #0F0F1A) at 3:1 for all nine. Measured: lime 12.99, fuchsia 7.96, indigo 6.57 against #0B0B14. The top-pickup card uses POSITION_BADGE so it picked the classes up with no edit.
      | verified: yes (chart-kit and position-colors tests 15 pass, typecheck green)
 
@@ -15866,13 +15866,13 @@ IDP-110 | completed | Backfill typed IDP columns, then close the gap
      | verified: yes
 
 IDP-114 | completed | IDP projections in the one weekly fetch (hazards A, D, G, I)
-     | files: lib/sleeper.ts (exported IDP_PROJECTION_POSITIONS; weekly URL asks for all nine; season/market URL untouched; optional positions param used only by the history backfill), lib/sync-weekly-projections.ts (hasPublishedPoints counts idp_* figures, isDefenderProjectionRow, dedupeProjectionRows, defender stat_line normalised and projected_pts_* null), NEW lib/sync-weekly-projections.idp.test.ts, lib/sleeper-fetch.test.ts (URL test), lib/projections/raw-column-guard.test.ts (allow-list entry for the new test, see below)
+     | files: lib/sleeper.ts (exported IDP_PROJECTION_POSITIONS; weekly URL asks for all nine; season/market URL untouched; optional positions param used only by the history backfill), lib/sync-weekly-projections.ts (hasPublishedPoints counts idp_* figures, isDefenderProjectionRow, dedupeProjectionRows, defender stat_line normalized and projected_pts_* null), NEW lib/sync-weekly-projections.idp.test.ts, lib/sleeper-fetch.test.ts (URL test), lib/projections/raw-column-guard.test.ts (allow-list entry for the new test, see below)
      | notes: DEVIATION: the plan says a defender row "with a game and no stats is out". Kept the existing classifier instead: with an injury designation it is "out" (a real zero), without one it is "unprojected" (no opinion, null), exactly as offense is treated and for the reason written on classifyRow (Sleeper's silence is not a forecast of zero). ADP-only rows with no game are "bye" and dropped (R-26). The two-way DB/WR player is classed as offense (offensive fantasy position wins, the players sync's own rule) and his two rows are merged. ALLOW-LIST: the new test names the three projected_pts columns to assert they stay null for a defender; it tests an EXEMPT writer and reads nothing, the same situation as the existing build-beacon-projections test entry. The plan's "no new allow-list entry" referred to the accuracy module (IDP-115), which needed none.
        Live run (npm run sync:weekly-projections, 2026-09-24): 32,977 rows stored across weeks 3 to 18. Week 3: defenders 772 projected (the plan measured 772), 129 out, 391 unprojected, 0 with a stored point figure, 0 carrying team-defense keys, 771 with idp_tkl; offense 475 projected / 95 out / 528 unprojected. "cleared 199" per week was checked: the combined URL returns every offensive row the old six-position URL returns (3,305 of 3,305 for week 18), so those 199 are players absent from Sleeper's feed altogether, re-touched by the existing stale sweep every run.
      | verified: yes (9 tests in the idp test file, URL test, guards green)
 
 IDP-115 | completed | IDP accuracy under idp123 (hazard H)
-     | files: lib/calculate-projection-accuracy.ts (ScoringBase gains idp123, scoringKeysFor, actualIdp123 from typed columns, projectedIdp123 from stat_line, second defender read joined to players.position, literal ACTUAL_SELECT, summarizeSource comment), lib/calculate-projection-accuracy.test.ts, app/admin/projections/page.tsx (labelled note: defenders are not on the PPR scoreboard and why)
+     | files: lib/calculate-projection-accuracy.ts (ScoringBase gains idp123, scoringKeysFor, actualIdp123 from typed columns, projectedIdp123 from stat_line, second defender read joined to players.position, literal ACTUAL_SELECT, summarizeSource comment), lib/calculate-projection-accuracy.test.ts, app/admin/projections/page.tsx (labeled note: defenders are not on the PPR scoreboard and why)
      | notes: The PPR scoreboard (lib/projection-scoreboard.ts) needs no code change: it grades projected_pts_*, which are null for every defender, so defenders never enter it; the admin page now says so in words. Both projection guard tests stay green with no allow-list entry for this module.
      | verified: yes (4 new tests; lib/projections 197 tests pass; typecheck green). First real run happens in IDP-116 after the backfill.
 
@@ -15918,18 +15918,18 @@ IDP-120 | completed | Widen PulsePosition and pin every six-position site
 
 IDP-121 | completed | Guard test: no defender module reads stored points columns
      | files: NEW lib/idp/points-guard.test.ts
-     | notes: Roots lib/idp/ (everything), lib/player-profile/defender*, lib/guides/idp-*; columns pts_ppr, pts_half_ppr, pts_std, pts_idp matched on word boundaries; test files are not scanned (they carry real Sleeper payloads as fixtures to prove the normaliser DROPS those keys). Vacuity check asserts lib/idp/stat-line.ts is in the scanned set. No allow-list.
+     | notes: Roots lib/idp/ (everything), lib/player-profile/defender*, lib/guides/idp-*; columns pts_ppr, pts_half_ppr, pts_std, pts_idp matched on word boundaries; test files are not scanned (they carry real Sleeper payloads as fixtures to prove the normalizer DROPS those keys). Vacuity check asserts lib/idp/stat-line.ts is in the scanned set. No allow-list.
      | verified: yes (3 tests)
 
 IDP-122 | completed | Name IDP players in League Pulse loaders (names only, no projections)
      | files: lib/power-pulse/load.ts (loadPlayers opts.positions defaulting to OFFENSE_POSITIONS; selects eligible_positions into PlayerRow.eligible; NAMING_POSITIONS; projectablePlayerIds), lib/league-schedule/data.ts, lib/league-lineups/data.ts (roster read; the free-agent read keeps the default), lib/league-lineups/season-data.ts, lib/manager-ledger/load.ts, lib/power-pulse/load.test.ts (3 tests)
-     | notes: The three schedule/lineups loaders also derive their projection and accuracy id lists from projectablePlayerIds (offense only). Without that, a named defender in an IDP-scoring league would have picked up a projection on the bench now that defender projection rows exist, which is phase 3 behaviour. Every candidate-building caller (Power Pulse, Positional WAR upgrade, Trade Ideas impact, FAAB, breakdown league impact) keeps the offense default.
+     | notes: The three schedule/lineups loaders also derive their projection and accuracy id lists from projectablePlayerIds (offense only). Without that, a named defender in an IDP-scoring league would have picked up a projection on the bench now that defender projection rows exist, which is phase 3 behavior. Every candidate-building caller (Power Pulse, Positional WAR upgrade, Trade Ideas impact, FAAB, breakdown league impact) keeps the offense default.
        LIVE CHECK, "NFL IDP - Deep rosters" (sleeper 1315039157147402240, 2026), running the real loadPlayers over every rostered id: BEFORE 1,968 ids, 846 resolved, 1,122 rendering "Unknown player" (exactly the league's rostered defenders); AFTER (NAMING_POSITIONS) 1,968 resolved, 0 unknown.
      | verified: yes (load tests 18 pass; typecheck green)
 
 IDP-123 | completed | Cut list never offers an unknown or unprojected player first
      | files: lib/league-lineups/advice.ts (unknown players and defenders skipped and counted; unjudgedSentence; null perWeek sorts LAST; DropResult.unjudged), lib/league-lineups/data.ts (dropUnjudged), app/leagues/[league_id]/lineups/page.tsx, components/league-lineups/roster-moves.tsx (DropPanel renders the unjudged sentence under the list or the note), lib/league-lineups/advice.test.ts
-     | notes: Defenders are skipped as well as unknown players: after IDP-122 a defender is named but has no projection and no market value, so under the old sort he would have become the FIRST cut suggestion in every dynasty IDP league (a starting linebacker offered as the emptiest seat). He is counted and the panel says "N defensive players are not listed: League Pulse does not project defenders yet ...". Phase 3 (R-5) replaces the skip with the seat test. CHANGED EXISTING BEHAVIOUR, per the plan: an offensive player with no rest-of-season projection now sorts last instead of first; the test that pinned "at the very top" was rewritten with the reason in a comment.
+     | notes: Defenders are skipped as well as unknown players: after IDP-122 a defender is named but has no projection and no market value, so under the old sort he would have become the FIRST cut suggestion in every dynasty IDP league (a starting linebacker offered as the emptiest seat). He is counted and the panel says "N defensive players are not listed: League Pulse does not project defenders yet ...". Phase 3 (R-5) replaces the skip with the seat test. CHANGED EXISTING BEHAVIOR, per the plan: an offensive player with no rest-of-season projection now sorts last instead of first; the test that pinned "at the very top" was rewritten with the reason in a comment.
      | verified: yes (lineups tests 130 pass)
 
 IDP-124 | completed | FAAB priors by IDP position
@@ -16054,11 +16054,11 @@ IDP-206 | completed | Defender game log, career table, finishes, this-week proje
 
 IDP-207 | completed | Partial-grade trade valuation everywhere (R-19)
      | files: NEW lib/trade-grading/partial.ts (assessPartialGrade, partialGradeNote, NO_VERDICT_LABEL, NO_VERDICT_REASON) + partial.test.ts, lib/trade-analyzer.ts (TradePlayer.unpriced/unresolved, TradeAnalysis.partial/unpricedCount/unresolvedCount, "No verdict" variant), components/transaction-row.tsx, app/api/og/trade/[transaction_id]/route.tsx, lib/signal-check/types.ts, value-engine.ts, pipeline.ts, explanation.ts, builder-view.ts, freeze.ts, copy.ts (missingValueNote), app/tools/trade-calculator/trade-result.tsx, v/[shareId]/page.tsx, import-actions.ts (notice), app/api/og/signal-check/[shareId]/route.tsx, components/signal-check-trade-card.tsx, app/games/would-you-rather/verdict-panel.tsx, lib/would-you-rather/round.ts, pool.ts (partial and ungraded refused, the phase 1 carry), lib/league-relay/trade-writeup.ts, lib/manager-pulse/load.ts, lib/on-the-clock/trade-history.ts, app/tools/on-the-clock/trade-history.tsx, lib/would-you-rather/tally.test.ts (fixture)
-     | notes: One rule in one module, used by the site analyzer, Signal Check and On The Clock. Unpriced = a DL/LB/DB with no value; unresolved = an id with no player row; counted apart. A side with no priced piece and a defender on it gets "No verdict" (no margin bar, no share-page margin, no relay "too close to call", ungraded in Manager Pulse). The generic "had no FF Beacon value" note now fires only for a non-defender missing value, so a linebacker is never described as missing data. Frozen share payloads carry noValue, unpriced, partial, unpricedCount and graded as OPTIONAL fields so older rows still render. On The Clock's trade history can only recognise a defender through a made pick (it has no name or position for a traded player who is off the value board); that limit is unchanged and stated here. The trade analyzer itself queries Supabase, so its partial rule is covered through the shared module and the Signal Check pipeline tests rather than an analyzer fake.
+     | notes: One rule in one module, used by the site analyzer, Signal Check and On The Clock. Unpriced = a DL/LB/DB with no value; unresolved = an id with no player row; counted apart. A side with no priced piece and a defender on it gets "No verdict" (no margin bar, no share-page margin, no relay "too close to call", ungraded in Manager Pulse). The generic "had no FF Beacon value" note now fires only for a non-defender missing value, so a linebacker is never described as missing data. Frozen share payloads carry noValue, unpriced, partial, unpricedCount and graded as OPTIONAL fields so older rows still render. On The Clock's trade history can only recognize a defender through a made pick (it has no name or position for a traded player who is off the value board); that limit is unchanged and stated here. The trade analyzer itself queries Supabase, so its partial rule is covered through the shared module and the Signal Check pipeline tests rather than an analyzer fake.
      | verified: yes (8 new tests; full suite 411 files / 6,072 tests)
 
 IDP-208 | completed | Manager Pulse position figures
-     | files: lib/manager-pulse/types.ts (ManagerPosition, MANAGER_POSITIONS, readManagerPosition; DraftPositionShape and PlayerExposure keyed on it), input-types.ts, load.ts, drafting.ts, trading.ts (value figures narrow to the six through readTradePosition), components/manager-pulse/drafting-section.tsx (nine bars, positions spelled out for screen readers), affinity-section.tsx (defender chip colour), trading-section.tsx (sentence: defensive players are left out of appetite), lib/manager-pulse/drafting.test.ts (2 tests)
+     | files: lib/manager-pulse/types.ts (ManagerPosition, MANAGER_POSITIONS, readManagerPosition; DraftPositionShape and PlayerExposure keyed on it), input-types.ts, load.ts, drafting.ts, trading.ts (value figures narrow to the six through readTradePosition), components/manager-pulse/drafting-section.tsx (nine bars, positions spelled out for screen readers), affinity-section.tsx (defender chip color), trading-section.tsx (sentence: defensive players are left out of appetite), lib/manager-pulse/drafting.test.ts (2 tests)
      | notes: First-rounds shape and "who they like" include DL/LB/DB; position appetite and overpays stay on the six, because no value source prices a defender, and the appetite chart says so. Cached reports keep their old shape until their next finalize.
      | verified: yes (manager-pulse 354 tests; typecheck green)
 
@@ -16073,18 +16073,18 @@ IDP-210 | completed | League cards IDP tag (R-28)
      | verified: yes (3 tests; typecheck green)
 
 IDP-211 | completed | Draft tools stay offense-only with honest defender picks (R-11)
-     | files: lib/on-the-clock/draft-grade.ts (defensivePickCounts; DraftGradeInput.picks; market evidence "Graded on N of M picks; K defensive picks have no value"), lib/on-the-clock/draft-snapshot.ts and app/tools/on-the-clock/on-the-clock-client.tsx (pass the picks), lib/on-the-clock/player-brief.ts (refused brief for a defender, DEFENDER_BRIEF_REFUSAL), app/tools/on-the-clock/draft-board.tsx and pick-list.tsx (the phase 1 carry: the live room no longer computes an ADP value mark for a defender pick; the list says "Defensive pick, not graded"; defender picks take the DL/LB/DB hue instead of grey), NEW lib/on-the-clock/idp-draft.test.ts (4 tests)
+     | files: lib/on-the-clock/draft-grade.ts (defensivePickCounts; DraftGradeInput.picks; market evidence "Graded on N of M picks; K defensive picks have no value"), lib/on-the-clock/draft-snapshot.ts and app/tools/on-the-clock/on-the-clock-client.tsx (pass the picks), lib/on-the-clock/player-brief.ts (refused brief for a defender, DEFENDER_BRIEF_REFUSAL), app/tools/on-the-clock/draft-board.tsx and pick-list.tsx (the phase 1 carry: the live room no longer computes an ADP value mark for a defender pick; the list says "Defensive pick, not graded"; defender picks take the DL/LB/DB hue instead of gray), NEW lib/on-the-clock/idp-draft.test.ts (4 tests)
      | notes: The existing filters were already correct and are now pinned by tests: board-loader toDraftPosition, the draft tracker's normalizePositionColor, draft value's toStealPosition all drop DL/LB/DB. A defender pick syncs with its playerId set: lib/players/sleeper-map.ts mapSleeperToPlayerIds has no position filter (read, not changed). The brief refusal is server-side; the room only requests briefs for board players, who are offense, so the sentence is a guard against a crafted request rather than a screen anyone reaches today. MEASURED (the plan said R-11's "no IDP ADP we trust" was unmeasured): draft_market_adp holds 1,513 defender rows (DL 561, DB 490, LB 462) beside 7,595 offensive ones. Nothing reads them for a defender today; whether to trust them is a phase 4 question.
      | verified: yes (On The Clock 408 tests; typecheck green)
 
-IDP-212 | completed | Signal favourites noun and chip
+IDP-212 | completed | Signal favorites noun and chip
      | files: components/signal/signal-block.tsx (favoritePlayerLabel; chip under the name), app/my-beacon/signal/favorites-editor.tsx (chip in the selected card and the typeahead rows), NEW components/signal/signal-block.test.tsx (2 tests)
-     | notes: Accessible name "Roquan Smith, linebacker, BAL". The change applies to every favourite, so an offensive favourite now reads "quarterback" too; that is the positionNoun rule, not a defender special case. The optional typeahead restriction to the R-15 set was not done: the picker already includes every player, and narrowing it would remove choices people have made.
+     | notes: Accessible name "Roquan Smith, linebacker, BAL". The change applies to every favorite, so an offensive favorite now reads "quarterback" too; that is the positionNoun rule, not a defender special case. The optional typeahead restriction to the R-15 set was not done: the picker already includes every player, and narrowing it would remove choices people have made.
      | verified: yes
 
 IDP-213 | completed | Brief desk (R-21)
      | files: lib/brief-desk/datasets.ts (WeekLine typed IDP fields, IDP_LINE_COLUMNS, idp123Points, idpLineCells; box_score_lines gives a defender defensive columns only and says so in the source note), lib/brief-desk/bundle.ts (IDP columns read beside the offensive ones; season totals carry idp123; rank_at_position ranks a defender on idp123; value carries coverage "not_covered"; a defender's week_line holds his defensive line only), lib/brief-desk/types.ts, lib/brief-desk/instructions-seed.ts (rule 13), NEW supabase/migrations/0302_brief_desk_idp_instruction.sql (APPLIED), lib/brief-desk/datasets.test.ts (2 tests)
-     | notes: The live bd_brief_instructions row was byte-identical to the old seed (md5 af2bdd42... on both), so migration 0302 replaced it, guarded on that hash so an owner edit could never be overwritten; read back afterwards, rule 13 present. top_scorers stays offense-only by construction (DATASET_POSITIONS is the six). The offensive week_line record reads exactly as before (the new null IDP keys are left out of it). Migration 0301 stays reserved for IDP-214 as the plan says, hence 0302 here. HOUSEKEEPING: this task found that Python text-mode writes on this machine had turned 61 edited files to CRLF; all were converted back to LF (git would have normalised them on commit anyway, core.autocrlf=true).
+     | notes: The live bd_brief_instructions row was byte-identical to the old seed (md5 af2bdd42... on both), so migration 0302 replaced it, guarded on that hash so an owner edit could never be overwritten; read back afterwards, rule 13 present. top_scorers stays offense-only by construction (DATASET_POSITIONS is the six). The offensive week_line record reads exactly as before (the new null IDP keys are left out of it). Migration 0301 stays reserved for IDP-214 as the plan says, hence 0302 here. HOUSEKEEPING: this task found that Python text-mode writes on this machine had turned 61 edited files to CRLF; all were converted back to LF (git would have normalized them on commit anyway, core.autocrlf=true).
      | verified: yes (brief desk 70 tests; row read back)
 
 IDP-214 | completed | BEAM full IDP support (R-20)
@@ -16133,7 +16133,7 @@ IDP-224 phase gate (2026-09-24): npm run typecheck green; npx vitest run 417 fil
 IDP-224 review round (one reviewer, per the owner). 56 findings. The reviewer fixed 24 itself, including a BLOCKER: BEAM's exact-name tier tied star players with same-named defenders (LB Justin Jefferson, DB DeVonta Smith, DB Lamar Jackson and others), so "how did Justin Jefferson do" would have asked which one; now a defender loses an exact-name tie to an offensive player unless a hint (tackles, "linebacker") points at him. Other fixes: defender weeks with gp 0 read "did not play" (not special teams); the "played" week is per team; slate read in parallel; no-verdict trades no longer show a 0% spread or an even bar; the search pool reads offense and defense separately (defenders had pushed ranked names out of the window); the gate failing no longer breaks header search; Brief desk IDP column labels; team card and dashboard accessible names; guide factual fixes; guide loaders throw rather than cache partial data; a safer idp-seasons prune (deletes only keys the run did not produce).
 CRON SPEED (applied by the reviewer, output provably identical: same rows, same order): accuracy reads split into four uuid ranges run concurrently (defender projections 21.8 s to about 9 to 12 s, actuals 60 s to 19 to 42 s, measured read-only on production); offense and defender projection reads concurrent; settings and positions read early; defense-splits season reads concurrent. Estimated accuracy step 120-145 s down to about 60-85 s. Not measured end to end (a full run writes).
 Fixed by me after the review: guide claims that were unsourced (lesson 7 replacement-drop, lesson 9 role longevity, "interceptions swing") replaced with what lesson 4 and 5 measure; Discord CTA no longer implies League Pulse handles defenders; the FAQ names no projection engine; "measured on six seasons" removed; stacking verdict no longer claims assisted tackles score; summary says "ranked seasons"; "ast" now "asst"; no-verdict results carry no confidence label and store a null margin.
-OPEN, for the owner or phase 3 (full detail in the reviewer's list): 8 PositionChip and hero use an aria-hidden code plus sr-only noun twin (the pattern CLAUDE.md warns about on the Lineups board); a cross-surface call. 10 reader IDP leagues read is capped at 200 memberships. 21 draft grade "N of M" omits unvalued offensive picks. 22 On The Clock detail repeats "No market value". 31 BEAM "sacks"/"interceptions" hints do not include defenders. 32 "idp" lexicon word omitted. 33 rankings-top still queries for DL/LB/DB. 34 Brief desk snap share 0-1 under a % header (pre-existing). 41 offensive team-card span aria-labels (pre-existing). 48, 49 guide fallbacks print "0" or "not enough data" mid-sentence. 51 switcher row key. 53 guide figure colours hardcoded. 54 OG team card defender footer needs a visual check. 55 plan gaps: top 12 plus Custom sliders in the switcher, two prose-only figures, collapsed-header "offensive players" qualifier. C6 accuracy delete-then-insert leaves a partial table mid-run (pre-existing). C7 defense-splits recentSeasons swallows an error. Suggested covering index for the accuracy scan (not applied; test on a branch).
+OPEN, for the owner or phase 3 (full detail in the reviewer's list): 8 PositionChip and hero use an aria-hidden code plus sr-only noun twin (the pattern CLAUDE.md warns about on the Lineups board); a cross-surface call. 10 reader IDP leagues read is capped at 200 memberships. 21 draft grade "N of M" omits unvalued offensive picks. 22 On The Clock detail repeats "No market value". 31 BEAM "sacks"/"interceptions" hints do not include defenders. 32 "idp" lexicon word omitted. 33 rankings-top still queries for DL/LB/DB. 34 Brief desk snap share 0-1 under a % header (pre-existing). 41 offensive team-card span aria-labels (pre-existing). 48, 49 guide fallbacks print "0" or "not enough data" mid-sentence. 51 switcher row key. 53 guide figure colors hardcoded. 54 OG team card defender footer needs a visual check. 55 plan gaps: top 12 plus Custom sliders in the switcher, two prose-only figures, collapsed-header "offensive players" qualifier. C6 accuracy delete-then-insert leaves a partial table mid-run (pre-existing). C7 defense-splits recentSeasons swallows an error. Suggested covering index for the accuracy scan (not applied; test on a branch).
 Final gate: typecheck green; 417 files / 6,112 tests pass; npm run build exit 0, 57 of 57 pages.
 IDP phase 2 COMPLETE, NOT COMMITTED. Stop here for owner review; phase 3 starts in a new session.
 
@@ -16214,16 +16214,16 @@ RC-T06 | completed | Gate and report
 
 # IDP across FF Beacon, phase 3 (IDP-3xx). Plan: docs/idp/idp-guide-and-data-plan.md section 8
 
-Session of 2026-09-24 (sixth pass). Phase 3 only: League Pulse behind the IDP switch. NOT COMMITTED, NOT PUSHED, NO BRANCH, by instruction. Owner asked for ONE independent reviewer sub-agent at the end (bugs, security, speed, accessibility, plan adherence), fixes applied, then stop. The switch stays OFF. Phase 1 and 2 goldens are the proof the OFF path is unchanged; every new behaviour is tested with the switch on.
+Session of 2026-09-24 (sixth pass). Phase 3 only: League Pulse behind the IDP switch. NOT COMMITTED, NOT PUSHED, NO BRANCH, by instruction. Owner asked for ONE independent reviewer sub-agent at the end (bugs, security, speed, accessibility, plan adherence), fixes applied, then stop. The switch stays OFF. Phase 1 and 2 goldens are the proof the OFF path is unchanged; every new behavior is tested with the switch on.
 
 IDP-301 | completed | The switch and the threading (R-25)
      | files: lib/power-pulse/default-settings.ts (settings.idp.enabled false; idpEnabledFrom), lib/power-pulse/validate.ts (idp object), app/admin/power-pulse/power-pulse-settings-manager.tsx (Defensive players section, checkbox plus hint), NEW lib/power-pulse/idp-reads.ts (idpReadsFor, leagueStartsDefenders, scoringKeysArg, IDP_SCORING_KEY), lib/power-pulse/load.ts (projectablePlayerIds takes includeDefenders), lib/league-power-pulse.ts, lib/league-power-pulse.test.ts (3 tests)
      | notes: The flag is read once per request (idpEnabledFrom) and handed to idpReadsFor, which decides the candidate positions, the accuracy/split keys and the slot map for one league. Defenders load only when the switch is on AND the league starts a slot a defender can fill (R-12), so an ordinary league issues the identical reads whatever the switch says (tested). Off: loadAccuracy and loadDefenseSplits get the single string key they always did. The admin hint says what actually happens: turning it on changes the stored document, which changes the effective model version, so EVERY league rescores on next view, and only IDP leagues get a different answer (the plan's sentence said "every IDP league", which is not what the version mechanism does). Remaining loaders are threaded in their own tasks below.
      | verified: yes (typecheck; orchestrator tests)
 
-IDP-302 | completed | Multi-eligibility candidates and playedAs in the optimiser
+IDP-302 | completed | Multi-eligibility candidates and playedAs in the optimizer
      | files: lib/power-pulse/lineup.ts (SlotEligibilityMap; startingSlots, countStartingSlots and buildOptimalLineup take the map, defaulting to the OFF map; LineupCandidate.eligible; pulseEligibility; playedAsFor; per-candidate slot union memoised by the sorted list), lib/power-pulse/types.ts (LineupSlot.playedAs), lib/power-pulse/lineup.test.ts (6 tests)
-     | notes: Kuhn augmenting paths unchanged: eligibility is still a fixed slot set per candidate. A candidate with no list (every candidate while the switch is off; callers set eligible only with the ON map) reads the primary's bucket array directly, the exact path the fill took before. playedAs: the primary when the slot takes it (so IDP_FLEX credits the primary), else the first other eligible position the slot takes. LineupSlot is not serialised in any golden, so adding playedAs left all 11 goldens byte-identical.
+     | notes: Kuhn augmenting paths unchanged: eligibility is still a fixed slot set per candidate. A candidate with no list (every candidate while the switch is off; callers set eligible only with the ON map) reads the primary's bucket array directly, the exact path the fill took before. playedAs: the primary when the slot takes it (so IDP_FLEX credits the primary), else the first other eligible position the slot takes. LineupSlot is not serialized in any golden, so adding playedAs left all 11 goldens byte-identical.
      | verified: yes (lineup tests; 11 goldens green)
 
 IDP-307 | completed | Power Pulse engine and UI
@@ -16281,7 +16281,7 @@ IDP-314 | completed | Defender profile "This week" links into League Pulse
      | notes: With the switch off the list is empty and the panel is unchanged. Links go to /leagues/{sleeper id}/lineups; the page picks the reader's team from their saved handle as usual.
      | verified: typecheck green; tests not yet re-run for this task
 
-PHASE 3 STATUS at session end (2026-09-24, sixth pass): IDP-301 to IDP-314 completed as recorded above. PENDING: IDP-315, IDP-316, IDP-317, then the ONE reviewer the owner asked for, fixes, and the plain-language report. Typecheck green after IDP-314. The full suite and npm run build have NOT been run since IDP-301; per-area vitest runs were green after every task. Several edited files have mixed CRLF and LF line endings (edits by sed and node scripts); normalise them before the review (see handoff.md). NOT COMMITTED, NOT PUSHED.
+PHASE 3 STATUS at session end (2026-09-24, sixth pass): IDP-301 to IDP-314 completed as recorded above. PENDING: IDP-315, IDP-316, IDP-317, then the ONE reviewer the owner asked for, fixes, and the plain-language report. Typecheck green after IDP-314. The full suite and npm run build have NOT been run since IDP-301; per-area vitest runs were green after every task. Several edited files have mixed CRLF and LF line endings (edits by sed and node scripts); normalize them before the review (see handoff.md). NOT COMMITTED, NOT PUSHED.
 
 Session of 2026-09-24 (seventh pass), continuing phase 3.
 
@@ -16294,7 +16294,7 @@ IDP-315 | completed | Updated tests sweep
 
 IDP-316 | completed | Non-IDP invariant and the IDP league report
      | files: NEW scripts/verify-idp-invariant.ts, NEW scripts/verify-idp-invariant.test.ts (10), package.json (verify:idp-invariant), NEW docs/idp/phase-3-invariant-report.txt (the full output)
-     | notes: Builds each engine's INPUTS through the orchestrators' own loaders and calls the pure engines (computePowerPulse, computeCurves, computeLedger) with the switch off and on. Calls nothing that writes: no calculateLeague*, refresh*, pulseLeague or syncLeagueMatchups. So Power Pulse reads the head-to-head slate as stored rather than refreshing it first; both runs read the same slate, so that cannot cause a difference. The one Sleeper request is getNflState. The universe read for Positional WAR is memoised per window inside the run. Outputs are compared exactly (the simulation is seeded), with Maps and Sets sorted and every version-named key dropped. League names are printed with typographic punctuation made plain (plainName), so the saved report is ASCII punctuation. Run on production 2026-09-24, twice (the second after the review fixes below): 549 leagues this season, 31 start a defensive slot (the plan's "40" counted other seasons). ALL 20 SAMPLED ORDINARY LEAGUES IDENTICAL on all three engines, both runs, including a chopped league, a best ball league and a superflex TEP league. THE 31 IDP LEAGUES, switch off then on: Power Pulse scored all of them (32 man shows 0.00 expected wins for every team in both states, which is not an IDP effect and was left alone); the average team gains between 6.1 and 208.8 projected points a week depending on how many defensive slots the league starts (median league 35.7). Playoff odds move most for a team whose defenders are thin compared with its league: in 37 BGR Dyn 2020 (11 defensive slots) roster 8 goes from 88.3% to 20.7% because it gains 81 points a week where its rivals gain 90 to 135; in LAFF roster 1 gains 3.6 points against its rivals' 20 to 25 and drops from 53.6% to 11.8%. Offensive Positional WAR figures shrink slightly in every IDP league (for example QB rank 1 0.84 to 0.79 in LAFF), because the reference team now scores more a week and a point is therefore worth a little less of a win. Every IDP league gains its defensive curves. Manager Ledger: 19 leagues grade both ways and their gradable slot count rises to include the defensive slots (Dynasty Gurus 10 to 11, NFL IDP - Deep rosters 20 to 42); the rest have no settled week yet. FOUND, PRE-EXISTING AND LIVE TODAY: the one all-defense league (Fourth & Violence) gets a Power Pulse table of 0.0 points a week for every team with playoff odds of 100 or 0 percent while the switch is off, because no slot they start can be filled. That is the phase 1 OFF behaviour, not a phase 3 change; switching on fixes it. Fourth & Violence also has no Positional WAR curve and no gradable ledger slot while off.
+     | notes: Builds each engine's INPUTS through the orchestrators' own loaders and calls the pure engines (computePowerPulse, computeCurves, computeLedger) with the switch off and on. Calls nothing that writes: no calculateLeague*, refresh*, pulseLeague or syncLeagueMatchups. So Power Pulse reads the head-to-head slate as stored rather than refreshing it first; both runs read the same slate, so that cannot cause a difference. The one Sleeper request is getNflState. The universe read for Positional WAR is memoised per window inside the run. Outputs are compared exactly (the simulation is seeded), with Maps and Sets sorted and every version-named key dropped. League names are printed with typographic punctuation made plain (plainName), so the saved report is ASCII punctuation. Run on production 2026-09-24, twice (the second after the review fixes below): 549 leagues this season, 31 start a defensive slot (the plan's "40" counted other seasons). ALL 20 SAMPLED ORDINARY LEAGUES IDENTICAL on all three engines, both runs, including a chopped league, a best ball league and a superflex TEP league. THE 31 IDP LEAGUES, switch off then on: Power Pulse scored all of them (32 man shows 0.00 expected wins for every team in both states, which is not an IDP effect and was left alone); the average team gains between 6.1 and 208.8 projected points a week depending on how many defensive slots the league starts (median league 35.7). Playoff odds move most for a team whose defenders are thin compared with its league: in 37 BGR Dyn 2020 (11 defensive slots) roster 8 goes from 88.3% to 20.7% because it gains 81 points a week where its rivals gain 90 to 135; in LAFF roster 1 gains 3.6 points against its rivals' 20 to 25 and drops from 53.6% to 11.8%. Offensive Positional WAR figures shrink slightly in every IDP league (for example QB rank 1 0.84 to 0.79 in LAFF), because the reference team now scores more a week and a point is therefore worth a little less of a win. Every IDP league gains its defensive curves. Manager Ledger: 19 leagues grade both ways and their gradable slot count rises to include the defensive slots (Dynasty Gurus 10 to 11, NFL IDP - Deep rosters 20 to 42); the rest have no settled week yet. FOUND, PRE-EXISTING AND LIVE TODAY: the one all-defense league (Fourth & Violence) gets a Power Pulse table of 0.0 points a week for every team with playoff odds of 100 or 0 percent while the switch is off, because no slot they start can be filled. That is the phase 1 OFF behavior, not a phase 3 change; switching on fixes it. Fourth & Violence also has no Positional WAR curve and no gradable ledger slot while off.
      | verified: yes (pure tests; production run, exit 0)
 
 IDP-317 | completed | Phase 3 verification and the review
@@ -16304,7 +16304,7 @@ IDP-317 | completed | Phase 3 verification and the review
 
 IDP-317R | completed | Review round (one reviewer, findings and fixes)
      | files: components/league-war/war-player-table.tsx, war-dashboard.tsx, war-rail-summary.tsx, summary.ts, summary.test.ts, app/leagues/[league_id]/positional-war/actions.ts, lib/positional-war/upgrade.test.ts, lib/trade-impact/evaluate.ts, lib/faab/idp-free-agents.ts, app/leagues/[league_id]/trade-ideas/page.tsx, lib/idp/free-agents.ts, lib/idp/free-agents.test.ts, lib/power-pulse/engine.ts, lib/power-pulse/engine.idp.test.ts, lib/manager-ledger/moves.test.ts
-     | notes: 1 MAJOR, accessibility, FIXED: the Positional WAR table hardcoded id "war-table-search", so with a Defense section on the page two inputs shared an id and the second label pointed at the first input; both tables also shared their region label, caption, button text and CSV name, and the Defense caption claimed a trade value. The table now takes the group, the id comes from useId, and the defense table says "defensive" in its search label, region label, button and file name; its caption says no value source prices defenders. The offense wording is byte-for-byte what it was. 2 minor, security order, FIXED: the upgrade action claimed its rate-limit slot before refusing a position with no stored curve, so a crafted LB request burned a slot. New gate 2b refuses it before the claim using the request-memoised view read that runUpgradeWhatIf repeats; test added (no slot claimed). 3 minor, OFF-path, FIXED: the trade evaluation counted defenders into the "judged on projected wins only" caveat with the switch off, when he was not judged at all; now counted only when defenders are loaded. 4 minor, FIXED: the Positional WAR summary still said "Sleeper does not project LB, DB"; now "League Pulse does not project", the same correction IDP-304 made on Schedules. 5 minor, performance, FIXED: the Trade Ideas builder check and the FAAB defender loader each read the leagues row before learning the switch was off; both now read the memoised settings first and return with no read of their own. 6 minor, KEPT AS A DELIBERATE OFF-PATH COPY CHANGE (correcting IDP-305's note "The OFF board is unchanged", which was true of the data and not of the footnotes): on an IDP league with the switch off the Lineups board now says its totals leave out N slots "League Pulse does not project yet, including every defensive slot" instead of "Sleeper publishes no projections for those positions", which has been false since phase 1, and it carries the "What is IDP scoring?" guide link the plan asked for. 7 minor, FIXED: the League Pulse rail card's "your best" line used the offense-only set to find an owned player past the chart, so a reader's linebacker could vanish when LB is scarcest; it now passes every plotted position as the panel does, and its small chart draws the offensive curves the page's first chart draws (all curves in an all-defense league). 8 minor, FIXED: IDP free agents were admitted by primary position only, so a DL eligible at LB never appeared in an LB-only league; the read now takes every defensive primary with eligible_positions, admits him where he would play and ranks him in that group while showing his own primary; test added. 9 minor, FIXED: Power Pulse depth averaged over DL, LB and DB whenever the switch was on, so an unstartable benched DL added a zero drop; a defensive position now counts only when a starting slot takes it (the offensive list is unchanged); test added, both goldens unchanged. 10 plan adherence: IDP-316 is now recorded above. IDP-303 has no entry of its own because its work landed inside IDP-301 (loadPlayers positions, loadAccuracy and loadDefenseSplits under two keys) and IDP-305 (read.ts includeDefenders); read.ts eligibleByPlayer was NOT added, deliberately: every consumer already receives eligibility on the players map from loadPlayers, and a second copy keyed by player would be one more thing to keep in step. The IDP-307 chopped case exists in lib/power-pulse/engine.idp.test.ts ("a chopped IDP league's weekly mean includes the defensive slots") rather than chopped.test.ts. The IDP-310 "claimed defender is named" case is added to moves.test.ts. R-5 cut protection is NOT added to the Positional WAR upgrade what-if or the Who Should I Start league tab, deliberately: neither guards ANY player from being the modelled drop (upgrade.test.ts pins "configures no drop guard"), offense included, and R-5 exists to stand in for the value guard a defender cannot have, so there is nothing for it to stand in for on those two surfaces.
+     | notes: 1 MAJOR, accessibility, FIXED: the Positional WAR table hardcoded id "war-table-search", so with a Defense section on the page two inputs shared an id and the second label pointed at the first input; both tables also shared their region label, caption, button text and CSV name, and the Defense caption claimed a trade value. The table now takes the group, the id comes from useId, and the defense table says "defensive" in its search label, region label, button and file name; its caption says no value source prices defenders. The offense wording is byte-for-byte what it was. 2 minor, security order, FIXED: the upgrade action claimed its rate-limit slot before refusing a position with no stored curve, so a crafted LB request burned a slot. New gate 2b refuses it before the claim using the request-memoised view read that runUpgradeWhatIf repeats; test added (no slot claimed). 3 minor, OFF-path, FIXED: the trade evaluation counted defenders into the "judged on projected wins only" caveat with the switch off, when he was not judged at all; now counted only when defenders are loaded. 4 minor, FIXED: the Positional WAR summary still said "Sleeper does not project LB, DB"; now "League Pulse does not project", the same correction IDP-304 made on Schedules. 5 minor, performance, FIXED: the Trade Ideas builder check and the FAAB defender loader each read the leagues row before learning the switch was off; both now read the memoised settings first and return with no read of their own. 6 minor, KEPT AS A DELIBERATE OFF-PATH COPY CHANGE (correcting IDP-305's note "The OFF board is unchanged", which was true of the data and not of the footnotes): on an IDP league with the switch off the Lineups board now says its totals leave out N slots "League Pulse does not project yet, including every defensive slot" instead of "Sleeper publishes no projections for those positions", which has been false since phase 1, and it carries the "What is IDP scoring?" guide link the plan asked for. 7 minor, FIXED: the League Pulse rail card's "your best" line used the offense-only set to find an owned player past the chart, so a reader's linebacker could vanish when LB is scarcest; it now passes every plotted position as the panel does, and its small chart draws the offensive curves the page's first chart draws (all curves in an all-defense league). 8 minor, FIXED: IDP free agents were admitted by primary position only, so a DL eligible at LB never appeared in an LB-only league; the read now takes every defensive primary with eligible_positions, admits him where he would play and ranks him in that group while showing his own primary; test added. 9 minor, FIXED: Power Pulse depth averaged over DL, LB and DB whenever the switch was on, so an unstartable benched DL added a zero drop; a defensive position now counts only when a starting slot takes it (the offensive list is unchanged); test added, both goldens unchanged. 10 plan adherence: IDP-316 is now recorded above. IDP-303 has no entry of its own because its work landed inside IDP-301 (loadPlayers positions, loadAccuracy and loadDefenseSplits under two keys) and IDP-305 (read.ts includeDefenders); read.ts eligibleByPlayer was NOT added, deliberately: every consumer already receives eligibility on the players map from loadPlayers, and a second copy keyed by player would be one more thing to keep in step. The IDP-307 chopped case exists in lib/power-pulse/engine.idp.test.ts ("a chopped IDP league's weekly mean includes the defensive slots") rather than chopped.test.ts. The IDP-310 "claimed defender is named" case is added to moves.test.ts. R-5 cut protection is NOT added to the Positional WAR upgrade what-if or the Who Should I Start league tab, deliberately: neither guards ANY player from being the modeled drop (upgrade.test.ts pins "configures no drop guard"), offense included, and R-5 exists to stand in for the value guard a defender cannot have, so there is nothing for it to stand in for on those two surfaces.
      | verified: yes (typecheck, full suite, build)
 
 PHASE 3 STATUS (2026-09-24, seventh pass): IDP-301 to IDP-317 completed and reviewed. COMMITTED to main at the owner's instruction, NOT PUSHED. The switch is OFF. Phase 4 not started.
@@ -16313,10 +16313,10 @@ PHASE 3 STATUS (2026-09-24, seventh pass): IDP-301 to IDP-317 completed and revi
 
 Started 2026-09-24 (eighth pass). Phase 3 is still committed locally and NOT pushed, so nothing in this phase has touched production: IDP-401, IDP-402 and the measuring half of IDP-403 are done in the tree, IDP-404 is a draft awaiting the owner, and IDP-405 onward still wait on the push, the deploy and the owner's go-ahead. Owner decisions this session: install ESLint properly (IDP-401); hold the reliability values until the switch goes on (IDP-403); LB ships at 0 per the plan rule.
 
-IDP-401 | completed | Lint: ESLint installed and customised (owner chose install, 2026-09-24)
+IDP-401 | completed | Lint: ESLint installed and customized (owner chose install, 2026-09-24)
      | files: package.json, package-lock.json, eslint.config.mjs (NEW), scripts/eslint/ffbeacon-plugin.mjs (NEW), scripts/eslint/ffbeacon-plugin.d.mts (NEW), scripts/eslint/ffbeacon-plugin.test.ts (NEW), next.config.ts, postcss.config.mjs, and the clean-up across about 95 files listed by `git diff --stat`
      | depends on: owner decision
-     | notes: Dev dependencies eslint 9.39, eslint-config-next 15.5.25 (pinned to the installed Next), @eslint/eslintrc 3. ESLint 9 prints an end-of-support notice; it is the newest major eslint-config-next 15 supports, ESLint 10 needs Next 16. npm audit's four findings are pre-existing (vitest's mocker, Next's bundled PostCSS), none from these packages. `npm run lint` is now `eslint . --max-warnings 0` (next lint is deprecated in 15.5 and gone in 16). Config: Next's core-web-vitals and typescript presets through FlatCompat, jsx-a11y's FULL recommended set (Next enables six of its rules), reportUnusedDisableDirectives as an error, and three FF Beacon rules in a local plugin, each tested with ESLint's RuleTester (19 cases): ascii-punctuation (CLAUDE.md rule 6, over strings, JSX text and comments), sleeper-api-host (no api.sleeper.app or api.sleeper.com string outside lib/sleeper.ts) and eastern-time (a date formatter must carry timeZone; options it cannot read are left alone). Tuned to this codebase, each with its reason in the config: underscore means deliberately unused; react/no-unescaped-entities forbids only > and } (straight apostrophes are the house style); role="list" on ul/ol is allowed (VoiceOver drops list semantics under Tailwind's preflight; 329 sites); tabIndex 0 allowed on role region/group/tabpanel and on aside/pre (scrollable regions and keyboard-explorable charts, the axe scrollable-region-focusable pattern; 66 sites); onKeyDown/onKeyUp dropped from the two interactions rules (container key handlers here are Escape and arrow-key delegation; click handlers still fail); label depth 5; aria-role ignores non-DOM components (PlayerLine role="in"). next build does NOT lint (eslint.ignoreDuringBuilds), so lint can never fail a deploy. First scan of the existing code: 653 errors, 11 warnings; after the tuning above, about 95 real findings, all fixed with no behaviour change except where stated: 142 literal typographic characters in 18 detection files (tests and validators) rewritten as escapes, same meaning; about 60 unused imports, constants, pure locals and props removed (each checked for side effects; sortByValueDesc copies before sorting, so removing its unused call changes nothing); three never-called functions deleted, FAAB urgencySignal (an explanation line that was built but never wired into the output: flagged to the owner), awards coercePosition, trade-impact assetKeyOf; four let to const; six plain internal anchors to next/link (admin Brief pages, Signal pages), global-error's reload link kept as a plain anchor on purpose with a documented exception; useTeamNames renamed withTeamNames (a plain string function whose use prefix tripped the hooks rule); two test-file patterns (require in upgrade.test.ts, this-alias in reference.test.ts); four image exceptions and one autofocus exception that never took effect because the disable comment was not on the line directly above; three stale exceptions removed; hook dependencies: startingScore added to a Signal Scout callback (a stale-announcement fix if the prop ever changes), an unused dependency dropped, roster-sheet tabs memoised, the guide panel's filter made a useCallback keyed on the query (same results), and the guide mount's effect lists its stable warm callback (still subscribes once). The audit script's never-printed top player is now printed. Four remaining a11y findings carry inline exceptions with reasons (dialog backdrop click with a document-level Escape, the WAI-ARIA tablist, a scrollable filter list, autofocus after an explicit reveal). FOUND ON THE WAY: the file-writing tool used in these sessions turns a typed backslash-u escape into the literal character, which is how those characters kept reaching test files; the conversion was done by a script building both from character codes. lib/rankings-formats.test.ts mixed CRLF and LF (pre-existing) and was normalised to CRLF. Gate: typecheck green, lint 0 errors 0 warnings, full suite 431 files / 6,245 tests, npm run build 57 of 57.
+     | notes: Dev dependencies eslint 9.39, eslint-config-next 15.5.25 (pinned to the installed Next), @eslint/eslintrc 3. ESLint 9 prints an end-of-support notice; it is the newest major eslint-config-next 15 supports, ESLint 10 needs Next 16. npm audit's four findings are pre-existing (vitest's mocker, Next's bundled PostCSS), none from these packages. `npm run lint` is now `eslint . --max-warnings 0` (next lint is deprecated in 15.5 and gone in 16). Config: Next's core-web-vitals and typescript presets through FlatCompat, jsx-a11y's FULL recommended set (Next enables six of its rules), reportUnusedDisableDirectives as an error, and three FF Beacon rules in a local plugin, each tested with ESLint's RuleTester (19 cases): ascii-punctuation (CLAUDE.md rule 6, over strings, JSX text and comments), sleeper-api-host (no api.sleeper.app or api.sleeper.com string outside lib/sleeper.ts) and eastern-time (a date formatter must carry timeZone; options it cannot read are left alone). Tuned to this codebase, each with its reason in the config: underscore means deliberately unused; react/no-unescaped-entities forbids only > and } (straight apostrophes are the house style); role="list" on ul/ol is allowed (VoiceOver drops list semantics under Tailwind's preflight; 329 sites); tabIndex 0 allowed on role region/group/tabpanel and on aside/pre (scrollable regions and keyboard-explorable charts, the axe scrollable-region-focusable pattern; 66 sites); onKeyDown/onKeyUp dropped from the two interactions rules (container key handlers here are Escape and arrow-key delegation; click handlers still fail); label depth 5; aria-role ignores non-DOM components (PlayerLine role="in"). next build does NOT lint (eslint.ignoreDuringBuilds), so lint can never fail a deploy. First scan of the existing code: 653 errors, 11 warnings; after the tuning above, about 95 real findings, all fixed with no behavior change except where stated: 142 literal typographic characters in 18 detection files (tests and validators) rewritten as escapes, same meaning; about 60 unused imports, constants, pure locals and props removed (each checked for side effects; sortByValueDesc copies before sorting, so removing its unused call changes nothing); three never-called functions deleted, FAAB urgencySignal (an explanation line that was built but never wired into the output: flagged to the owner), awards coercePosition, trade-impact assetKeyOf; four let to const; six plain internal anchors to next/link (admin Brief pages, Signal pages), global-error's reload link kept as a plain anchor on purpose with a documented exception; useTeamNames renamed withTeamNames (a plain string function whose use prefix tripped the hooks rule); two test-file patterns (require in upgrade.test.ts, this-alias in reference.test.ts); four image exceptions and one autofocus exception that never took effect because the disable comment was not on the line directly above; three stale exceptions removed; hook dependencies: startingScore added to a Signal Scout callback (a stale-announcement fix if the prop ever changes), an unused dependency dropped, roster-sheet tabs memoised, the guide panel's filter made a useCallback keyed on the query (same results), and the guide mount's effect lists its stable warm callback (still subscribes once). The audit script's never-printed top player is now printed. Four remaining a11y findings carry inline exceptions with reasons (dialog backdrop click with a document-level Escape, the WAI-ARIA tablist, a scrollable filter list, autofocus after an explicit reveal). FOUND ON THE WAY: the file-writing tool used in these sessions turns a typed backslash-u escape into the literal character, which is how those characters kept reaching test files; the conversion was done by a script building both from character codes. lib/rankings-formats.test.ts mixed CRLF and LF (pre-existing) and was normalized to CRLF. Gate: typecheck green, lint 0 errors 0 warnings, full suite 431 files / 6,245 tests, npm run build 57 of 57.
      | verified: yes (typecheck, lint, tests, build; one reviewer at the end of the session)
 
 IDP-402 | completed | Accuracy backtest per position
@@ -16334,13 +16334,13 @@ IDP-403 | completed | Opponent-split calibration: measured, and SAVED with the s
 IDP-4R | completed | Review round for this session (one reviewer, as the owner asked)
      | files: eslint.config.mjs, components/player-profile/weekly-stats.tsx, package.json, package-lock.json, docs/idp/claude-md-draft-idp-404.txt
      | depends on: IDP-401, IDP-402, IDP-403, IDP-404
-     | notes: One reviewer sub-agent over the whole uncommitted diff (bugs, security, accessibility, performance, plan adherence, ASCII). No blocker and no behaviour-changing bug. It checked line by line that the computeSeasonSplits extraction stores identical rows, that every escape maps to the same code point (all 11 non-breaking spaces were real), that every removed local was side-effect free, that the hook changes cannot add renders, that the six links keep href, class and text, and that each a11y exception holds (Escape closes the dialog, the tabs use roving tabindex). Findings: 1 MAJOR, OWNER DECISION, OPEN: the plan says a position worse than naive ships at 0; DB is worse than naive over every graded week but mixed at starter level, and the script tests starter level only, so DB came out at 0.18. The owner chooses before IDP-405: starter-level test (DB 0.18) or the literal rule (DB 0). 2 minor, FIXED IN THE DRAFT: the eastern-time rule does not see a Date held in a variable and formatted with toLocaleString (the same method formats numbers, so it cannot be checked without type information); the IDP-404 draft now says so. No current violation exists. 3 nit, FIXED: .claude/** added to the lint ignores (agent worktrees hold a full repo copy). 4 nit, FIXED: the weekly-stats clock comment that described the removed local now describes what the code does. 5 nit, FIXED: eslint-config-next pinned exactly to 15.5.25 (it was a caret range; the earlier note calling it pinned was wrong). 6 nit, FIXED: eslint-plugin-jsx-a11y 6.10.2 declared as a direct dev dependency (was reached through hoisting); npm reports the tree unchanged. Gate after the fixes: typecheck green, lint 0 errors 0 warnings, full suite 431 files / 6,245 tests, npm run build 57 of 57.
+     | notes: One reviewer sub-agent over the whole uncommitted diff (bugs, security, accessibility, performance, plan adherence, ASCII). No blocker and no behavior-changing bug. It checked line by line that the computeSeasonSplits extraction stores identical rows, that every escape maps to the same code point (all 11 non-breaking spaces were real), that every removed local was side-effect free, that the hook changes cannot add renders, that the six links keep href, class and text, and that each a11y exception holds (Escape closes the dialog, the tabs use roving tabindex). Findings: 1 MAJOR, OWNER DECISION, OPEN: the plan says a position worse than naive ships at 0; DB is worse than naive over every graded week but mixed at starter level, and the script tests starter level only, so DB came out at 0.18. The owner chooses before IDP-405: starter-level test (DB 0.18) or the literal rule (DB 0). 2 minor, FIXED IN THE DRAFT: the eastern-time rule does not see a Date held in a variable and formatted with toLocaleString (the same method formats numbers, so it cannot be checked without type information); the IDP-404 draft now says so. No current violation exists. 3 nit, FIXED: .claude/** added to the lint ignores (agent worktrees hold a full repo copy). 4 nit, FIXED: the weekly-stats clock comment that described the removed local now describes what the code does. 5 nit, FIXED: eslint-config-next pinned exactly to 15.5.25 (it was a caret range; the earlier note calling it pinned was wrong). 6 nit, FIXED: eslint-plugin-jsx-a11y 6.10.2 declared as a direct dev dependency (was reached through hoisting); npm reports the tree unchanged. Gate after the fixes: typecheck green, lint 0 errors 0 warnings, full suite 431 files / 6,245 tests, npm run build 57 of 57.
      | verified: yes
 
 IDP-404 | completed | CLAUDE.md updates: owner approved the draft (docs/idp/claude-md-draft-idp-404.txt) on 2026-09-24 and it is applied: the null-projection, slots, Manager Ledger and Lineups sentences now hold in both switch states, the Power Pulse and Positional WAR IDP statements, the team route label, a new IDP section before the Manager Ledger section, and the lint gate in Project conventions
      | files: CLAUDE.md
      | depends on: owner approval of the wording
-     | notes: Draft, show the owner, write only after approval. Sentences that become false: the PROJECTION_POSITIONS sentence ("Sleeper publishes projections for QB, RB, WR, TE, K and DEF only"), the Schedules null-projection paragraph, the Power Pulse and Positional WAR position statements, the Manager Ledger IDP paragraph, the League Pulse route list ("team deep view, future phase" is stale). Add a short IDP section: lib/site.ts isDefender/positionNoun, lib/idp/*, the switch threading rule (R-25, lib/power-pulse/idp-reads.ts), the R-8 normaliser rule, the points-guard test, and scripts/verify-idp-invariant.ts.
+     | notes: Draft, show the owner, write only after approval. Sentences that become false: the PROJECTION_POSITIONS sentence ("Sleeper publishes projections for QB, RB, WR, TE, K and DEF only"), the Schedules null-projection paragraph, the Power Pulse and Positional WAR position statements, the Manager Ledger IDP paragraph, the League Pulse route list ("team deep view, future phase" is stale). Add a short IDP section: lib/site.ts isDefender/positionNoun, lib/idp/*, the switch threading rule (R-25, lib/power-pulse/idp-reads.ts), the R-8 normalizer rule, the points-guard test, and scripts/verify-idp-invariant.ts.
      | verified: no
 
 IDP-405 | completed | Switch on and version bumps (2026-09-25 UTC, owner go-ahead after the deploy): `npm run verify:idp-invariant` against the deployed phase 3 code first, 549 leagues this season, 31 IDP, 20 ordinary sampled, EVERY ORDINARY LEAGUE IDENTICAL, exit 0 (report: docs/idp/phase-4-invariant-report.txt). IDP leagues as expected: Fourth & Violence goes from 0.0 points a week to about 230; 32 man still shows 0.00 expected wins in both states (pre-existing, not IDP) with four empty rosters at 0. Then the settings row (id global, previously an empty document, so every value was a code default) got {idp: {enabled: true}, opponent: {positionReliability: {DL 0.33, LB 0, DB 0}}} by SQL, after the merged document was run through validatePowerPulseSettings (ok). Code: modelVersion pp-9, Positional WAR war-5, Manager Ledger ledger-6 (the plan said ledger-5, which IDP-122 had already used); guide FAQ now answers yes and lesson 8 gains a sentence on what League Pulse does (worded without the token WAR, which the guide's own test forbids); the FAQ test flipped. trade-finder fingerprint left at tf2 on purpose (suggestions never hold a defender, IDP-311). Defender profile cache key unchanged: it reads the switch at render, nothing cached. Recompute stays on demand through pulseLeague; nothing added to any cron. Gate: lint clean, typecheck green, 431 files / 6,245 tests. STILL TO DO: the owner's browser and screen-reader pass over the switch-on screens.
@@ -16370,7 +16370,7 @@ IDP-4F3 | completed | FAAB league mode: a defender's result card reads his defen
 LU-BUG-01 | completed | Lineups: the slot-button what-if vanished for the whole weekend (owner report, 2026-09-25, NOT COMMITTED)
      | files: lib/league-lineups/simulate.ts (NEW isLockedAt; swapCandidates and countSwapCandidates take liveNowMs), components/league-lineups/lineup-board.tsx, components/league-lineups/slot-swap-dialog.tsx, app/leagues/[league_id]/lineups/page.tsx, lib/league-lineups/simulate.test.ts (3 tests)
      | depends on: none
-     | notes: CAUSE. The board only offered the what-if while status.showsAdvice was true, and that turns false the moment a week has live points (lib/league-lineups/status.ts). Week 3's Thursday game (ATL at GB) kicked off 2026-09-25 00:15 UTC, so from then until the week settles every slot label stopped being a button: the whole weekend, when managers actually set lineups. Nothing else was wrong: the eligibility and bench filters were intact. FIX: the what-if now runs during a live week too, and offers only moves Sleeper would allow: a bench player or a current starter whose game has kicked off (nfl_game_odds.kickoff_at, already on each player's game environment) is locked and left out, and a player with no kickoff on record during a live week is treated as locked rather than guessed. The clock is the server render time (nowIso), so the first paint agrees with the HTML. Before the games nothing is locked, so an upcoming week behaves exactly as before; a settled week still has no what-if; the optimiser panel is unchanged. During a live week the dialog says only players whose games have not kicked off are listed. Gate: lint clean, typecheck green, 433 files / 6,275 tests, build 57 of 57.
+     | notes: CAUSE. The board only offered the what-if while status.showsAdvice was true, and that turns false the moment a week has live points (lib/league-lineups/status.ts). Week 3's Thursday game (ATL at GB) kicked off 2026-09-25 00:15 UTC, so from then until the week settles every slot label stopped being a button: the whole weekend, when managers actually set lineups. Nothing else was wrong: the eligibility and bench filters were intact. FIX: the what-if now runs during a live week too, and offers only moves Sleeper would allow: a bench player or a current starter whose game has kicked off (nfl_game_odds.kickoff_at, already on each player's game environment) is locked and left out, and a player with no kickoff on record during a live week is treated as locked rather than guessed. The clock is the server render time (nowIso), so the first paint agrees with the HTML. Before the games nothing is locked, so an upcoming week behaves exactly as before; a settled week still has no what-if; the optimizer panel is unchanged. During a live week the dialog says only players whose games have not kicked off are listed. Gate: lint clean, typecheck green, 433 files / 6,275 tests, build 57 of 57.
      | verified: yes
 
 IDP-406 | completed | Post-launch checks: DAY ONE DONE 2026-09-25; Search Console checks due 2026-10-23 (28 days) and 2026-11-20 (56 days)
@@ -16402,7 +16402,7 @@ FU-01 | completed | Matchup view names the week's own starters, not only the sto
 FU-02 | completed | FAAB urgency signal restored and wired
      | files: lib/faab/market.ts (NEW exported urgencySignal; buildMarket appends it), lib/faab/market.test.ts (7 tests)
      | depends on: none
-     | notes: The deleted urgencySignal was never in buildMarket's output. Restored as a real market signal, but NOT on its old maths: the old ramp discounted early season, and the measured calendar bands (lib/faab/default-settings.ts, 3,578 priced winning bids) say weeks 2 to 6 are among the dearest. It now reads the calendar band for the week: weeks 2 to 6 "Early-season bidding runs hot" (about 1.3 times the cheapest band), weeks 7 to 10 "The cheapest stretch of the season", the run-in "Money you do not spend is wasted" with the weeks left (about 1.7 times). Silent in week 1 (not a measured in-season market), in chopped leagues (priced on the field left, not the week) and when the calendar is off. Multiplier exactly 1 and spread 0, because the calendar already moves the RIVAL bid centres in the auction and ladder.ts never applies market signals to the bid; the signal list prints no percentage for a multiplier of 1, and the detail says it is already counted. It appears under "More detail" in both league and manual mode; manual mode previously showed no market signal at all despite its comment saying the calendar was in play.
+     | notes: The deleted urgencySignal was never in buildMarket's output. Restored as a real market signal, but NOT on its old math: the old ramp discounted early season, and the measured calendar bands (lib/faab/default-settings.ts, 3,578 priced winning bids) say weeks 2 to 6 are among the dearest. It now reads the calendar band for the week: weeks 2 to 6 "Early-season bidding runs hot" (about 1.3 times the cheapest band), weeks 7 to 10 "The cheapest stretch of the season", the run-in "Money you do not spend is wasted" with the weeks left (about 1.7 times). Silent in week 1 (not a measured in-season market), in chopped leagues (priced on the field left, not the week) and when the calendar is off. Multiplier exactly 1 and spread 0, because the calendar already moves the RIVAL bid centers in the auction and ladder.ts never applies market signals to the bid; the signal list prints no percentage for a multiplier of 1, and the detail says it is already counted. It appears under "More detail" in both league and manual mode; manual mode previously showed no market signal at all despite its comment saying the calendar was in play.
      | verified: yes (FAAB 353 tests)
 
 FU-03 | completed | Every older position-noun map folded into lib/site.ts
@@ -16441,7 +16441,7 @@ FU-07 | completed | Cron alerting: failed runs and per-source value freshness
      | verified: yes
 
 FU-08 | completed | Who Should I Start: last season's matchup rank until this season qualifies, and review fixes
-     | files: lib/start-sit/load.ts (rank falls back to the previous season when none exists yet, labelled; boardSide, getsPickerChip, unadjustedPositionsFrom limited to defenders; defendersOnly on the projection read), lib/start-sit/types.ts (defenseRankSeason), lib/start-sit/reasons.ts, lib/projections/read.ts (defendersOnly), app/tools/who-should-i-start/page.tsx (entries resolved in the first wave; picker keyed on its list; format chip reads the IDP scoring on a defensive board), start-sit-card.tsx, start-sit-picker.tsx (chip name includes the position), tests
+     | files: lib/start-sit/load.ts (rank falls back to the previous season when none exists yet, labeled; boardSide, getsPickerChip, unadjustedPositionsFrom limited to defenders; defendersOnly on the projection read), lib/start-sit/types.ts (defenseRankSeason), lib/start-sit/reasons.ts, lib/projections/read.ts (defendersOnly), app/tools/who-should-i-start/page.tsx (entries resolved in the first wave; picker keyed on its list; format chip reads the IDP scoring on a defensive board), start-sit-card.tsx, start-sit-picker.tsx (chip name includes the position), tests
      | depends on: FU-04
      | notes: The 2026 matchup data is not missing by fault: lib/calculate-defense-splits.ts publishes a team only after 4 games (MIN_GAMES), so 2026 rows appear on their own after about week 4. Projections already blend 2024 and 2025 meanwhile. The rank line now falls back to 2025 and every sentence names the year ("ranked 4th ... in 2025"); one extra read only in those early weeks.
      | verified: yes
@@ -16477,9 +16477,9 @@ Production check before build (2026-09-26): source_registry has ffbeacon is_acti
 is_default=true, so the wizard default and the "vs FF Beacon" comparison both read ffbeacon rows.
 Boards in production: 5, with 1,418 player rows; 1 board has tiers on (49 tiered rows); largest board 584.
 
-BR-T01 | completed | Editor up/down moves announce; TrendChip up colour class defined
+BR-T01 | completed | Editor up/down moves announce; TrendChip up color class defined
      | files: tailwind.config.ts (signal.positive token), app/my-beacon/rankings/[boardId]/board-editor.tsx
-     | notes: `text-signal-positive` was used by 7 components and never defined, so every rising figure drew in the inherited colour. Added the token (same green as success) rather than renaming each use. Moves now announce the new rank and who was passed (and the new tier when a line was crossed).
+     | notes: `text-signal-positive` was used by 7 components and never defined, so every rising figure drew in the inherited color. Added the token (same green as success) rather than renaming each use. Moves now announce the new rank and who was passed (and the new tier when a line was crossed).
      | verified: pending review (BR-R)
 BR-T02 | completed | Migration 0304: scope widened (DL, LB, DB, defense); includes_defenders, format_config_id, seed_source_slug, community_opt_out, left_off_player_ids on boards
      | files: supabase/migrations/0304_ranking_boards_builder_columns.sql, lib/database.types.ts
@@ -16613,7 +16613,7 @@ BR-T34 | completed | Privacy policy line on community rankings
      | verified: pending review (BR-R)
 BR-T35 | completed | Community page /rankings/community (sub-agent)
      | files: NEW app/rankings/community/page.tsx, lib/ranking-boards/community-view.ts (+ test), lib/ranking-boards/community-page-data.ts, lib/rankings-format-redirect.ts (+ test: /rankings/community is excepted from the ?format= redirect to board pages)
-     | notes: Format and position filters are real links with aria-current; one table per group with a sentence when groups were fitted apart; movement in colour and words; strength bar decorative with the number as text; below threshold: "N of M boards needed so far", progress bar, "Build yours to help", no player rows, noindex. ItemList JSON-LD, share card. No loading.tsx, so noindex is set before anything streams.
+     | notes: Format and position filters are real links with aria-current; one table per group with a sentence when groups were fitted apart; movement in color and words; strength bar decorative with the number as text; below threshold: "N of M boards needed so far", progress bar, "Build yours to help", no player rows, noindex. ItemList JSON-LD, share card. No loading.tsx, so noindex is set before anything streams.
      | verified: tsc, lint, tests, next build pass (agent)
 BR-T36 | completed | Links into the community page and vs community
      | files: app/rankings/page.tsx, components/player-profile/overview-tab.tsx ("Community rank: 14th, on 38 boards" inside the existing Promise.all), lib/sitemap/sections.ts, NEW lib/ranking-boards/community-comparison.ts, lib/ranking-boards/compare.ts (ranksDefenders), board-editor page and board-view (second chip column)
@@ -16715,7 +16715,7 @@ BD-T103 | completed | Block kinds game_cards, week_awards and projection_report,
 BD-T104 | completed | Game cards, week in numbers, projection report and editor's take on the edition page
      | files: components/brief-desk/blocks/game-cards.tsx, components/brief-desk/blocks/week-awards.tsx, components/brief-desk/blocks/projection-report.tsx, components/brief-desk/editor-take.tsx, components/brief-desk/blocks/render-block.tsx, components/brief-desk/edition-page.tsx
      | depends on: BD-T103
-     | verified: yes (a11y review: headings, alt text, contrast pass; fixed team-name truncation, doubled heading, unlabelled fun-stat landmarks, coded jump links, 44px targets, low-contrast red; no data hidden at any breakpoint)
+     | verified: yes (a11y review: headings, alt text, contrast pass; fixed team-name truncation, doubled heading, unlabeled fun-stat landmarks, coded jump links, 44px targets, low-contrast red; no data hidden at any breakpoint)
 BD-T105 | completed | Shared write helpers for the drafts route and the backfill; recaps and the editor's take in content_md and in owner edits
      | files: lib/brief-desk/edition-write.ts, app/api/brief-desk/drafts/route.ts, lib/brief-desk/publish.ts
      | depends on: BD-T103
@@ -16812,11 +16812,11 @@ SP-T010 | completed | Registries for the new top-level section: menu (before Gam
      | files: lib/nav-tree.ts, components/app-shell/nav-icons.ts, lib/site-layout/default-settings.ts, lib/site-layout/parse.test.ts, lib/site.ts, lib/breadcrumbs.ts, lib/sitemap/sections.ts, lib/llms/llms-full-txt.ts, app/api/og/page/[key]/route.tsx, lib/signal/reserved-routes.ts, supabase/migrations/0338_site_layout_season_pulse_section.sql, supabase/migrations/0339_reserve_season_handle.sql
      | depends on: SP-T009
      | verified: yes (both migrations applied to prod; 0338 dry-run in a rolled-back transaction first; nobody held the handle)
-SP-T011 | completed | Review fixes. Implementation: the live week no longer earns positional finishes or starter weeks; the live week's projections are read on their own window; a forecast with no wind figure is unknown, snow is read from the conditions when no amount is published, a gust lifts one band; stat lines keep a trick-play pass; tied stingiest defenses; recap teaser shown; forecast source credited on every card; dead helpers removed. Accessibility: show more moves focus to the first new row, the status line is debounced, team codes carry the name for a screen reader, tinted cells use full ink, tables scroll in a labelled region instead of clipping, selected buttons carry a check mark
+SP-T011 | completed | Review fixes. Implementation: the live week no longer earns positional finishes or starter weeks; the live week's projections are read on their own window; a forecast with no wind figure is unknown, snow is read from the conditions when no amount is published, a gust lifts one band; stat lines keep a trick-play pass; tied stingiest defenses; recap teaser shown; forecast source credited on every card; dead helpers removed. Accessibility: show more moves focus to the first new row, the status line is debounced, team codes carry the name for a screen reader, tinted cells use full ink, tables scroll in a labeled region instead of clipping, selected buttons carry a check mark
      | files: lib/season-pulse/*, lib/nfl-weather-impact.ts, components/season-pulse/*, app/season/**
      | depends on: SP-T009
      | verified: yes (typecheck, lint, tests, build). Not committed.
-GROW-T01 | completed | Extract /tools/faab data loading into app/tools/faab/calculator-data.ts, no behaviour change
+GROW-T01 | completed | Extract /tools/faab data loading into app/tools/faab/calculator-data.ts, no behavior change
      | files: app/tools/faab/calculator-data.ts, app/tools/faab/page.tsx
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; /tools/faab main element identical before and after with numbers masked; implementation, accessibility and security reviews passed; server-only import added on the security review's advice)
@@ -16924,4 +16924,4 @@ GROW-T21 | completed | True lastmod on /season/weather from nfl_game_weather.fet
 GROW-T22 | completed | "NFL" back in the weather page title and h1 only (approved D1)
      | files: app/season/weather/page.tsx
      | depends on: none
-     | verified: yes (typecheck, lint, tests, build; three reviews passed; the title keeps its existing behaviour of dropping the season when it is null; og:title and the WebPage JSON-LD name follow titleFor, so they carry NFL too; menu, footer, breadcrumb, search entry and share image labels unchanged; the comment wording was corrected on review)
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; the title keeps its existing behavior of dropping the season when it is null; og:title and the WebPage JSON-LD name follow titleFor, so they carry NFL too; menu, footer, breadcrumb, search entry and share image labels unchanged; the comment wording was corrected on review)

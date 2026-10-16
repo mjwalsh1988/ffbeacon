@@ -2,7 +2,7 @@
 
 /**
  * League picker for step 2. Renders every league the lookup returned, grouped
- * into three labelled sections in priority order:
+ * into three labeled sections in priority order:
  *   1. Actively Drafting  (the primary category, listed first)
  *   2. Pre-Draft
  *   3. Completed / In-Season Drafts (openable for review; visually dimmed and

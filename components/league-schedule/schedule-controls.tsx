@@ -335,7 +335,7 @@ export function ScheduleControls({
           </div>
         )}
 
-        {/* Why a stepper is greyed out. The sentence is in the button's
+        {/* Why a stepper is grayed out. The sentence is in the button's
             aria-label too, but a disabled button is out of the tab order, so
             nobody tabbing the controls lands on it to hear it, and sighted
             readers get nothing but a faded chevron. Inline in the same wrapping

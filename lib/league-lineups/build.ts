@@ -5,7 +5,7 @@
  * betting line arrives as plain data, so this file can be reasoned about and
  * tested without a database. lib/league-lineups/data.ts does the fetching.
  *
- * THE OPTIMISER IS RUN ONCE AND DIFFED. That is the whole design of this file,
+ * THE OPTIMIZER IS RUN ONCE AND DIFFED. That is the whole design of this file,
  * and it is what makes it different from lib/league-schedule/matchup.ts, which
  * lists the best INDEPENDENT single swaps and says out loud that their gains do
  * not sum to the total. Both are correct for their own question. A matchup card
@@ -31,7 +31,7 @@
  *     because offering an IDP slot to the fill would let a running back take it.
  *
  * `projectableSlotIndex` below maps a position in the second list back to a
- * position in the first, so a move the optimiser makes in "projectable slot 4"
+ * position in the first, so a move the optimizer makes in "projectable slot 4"
  * is reported against the slot the reader can actually see.
  *
  * EVERY PROJECTION GOES THROUGH lib/power-pulse/project.ts. There is no second
@@ -663,7 +663,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
         slotDescription: slot.description,
         pointsGained: gained,
         // Always false today: an inactive player is never a candidate, so the
-        // optimiser cannot seat one. Carried anyway because the field is what
+        // optimizer cannot seat one. Carried anyway because the field is what
         // the UI branches on, and the day IR players are offered to the fill
         // behind a toggle, this is the line that has to change rather than the
         // component.
@@ -752,7 +752,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
  * footnote says "players we could not match to our player list", which is
  * false for a player named in the table above it. The panel subtracts these
  * and gives them their own sentence. Pure; derived from the view rather than
- * added to the optimisation output, so the engine goldens stay as captured.
+ * added to the optimization output, so the engine goldens stay as captured.
  */
 export function ungradedDefenderSlots(
   groups: { entries: { player: { playerId: string | null; position: string; projected: number | null; actual: number | null } | null }[] }[],

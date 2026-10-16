@@ -6,7 +6,7 @@
  *                       nfl_game_odds as the fallback for a game whose line
  *                       has not been captured yet (its home side and kickoff
  *                       are still right; its numbers may be null)
- *   nfl_teams           names and primary colours
+ *   nfl_teams           names and primary colors
  *   player_stats        the week's offensive lines with the team each player
  *                       played for (metadata.team) and the longest plays, and
  *                       weeks 1 to N for the season reliability lists

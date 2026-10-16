@@ -7,7 +7,7 @@
  * the report plus the league context to /api/on-the-clock/report-format, which
  * emails the team. On success it thanks the reporter and sets expectations.
  *
- * Accessible dialog semantics: role=dialog, aria-modal, labelled title, focus
+ * Accessible dialog semantics: role=dialog, aria-modal, labeled title, focus
  * moves into the dialog on open and returns to the opener on close, Tab is trapped
  * within the dialog, Escape closes. Validation errors and the success state are
  * announced to screen readers via live regions.

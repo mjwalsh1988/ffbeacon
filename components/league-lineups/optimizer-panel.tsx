@@ -1,5 +1,5 @@
 /**
- * What the optimiser would change, and what each change is worth.
+ * What the optimizer would change, and what each change is worth.
  *
  * THE LIST IS A PLAN, NOT A MENU. Every move comes out of ONE optimal fill (see
  * lib/league-lineups/build.ts), so making all of them produces exactly the

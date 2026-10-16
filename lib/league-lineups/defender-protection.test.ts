@@ -23,7 +23,7 @@ function points(map: Record<string, number[]>): Map<string, Map<number, number>>
 describe("protectedDefenderIds (plan R-5)", () => {
   const slots = startingSlots(["QB", "LB", "BN", "BN"], ON);
 
-  it("protects a linebacker the optimiser seats in at least half the remaining weeks", () => {
+  it("protects a linebacker the optimizer seats in at least half the remaining weeks", () => {
     const out = protectedDefenderIds({
       isKeeperLeague: true,
       slotTokens: slots,
@@ -37,7 +37,7 @@ describe("protectedDefenderIds (plan R-5)", () => {
     expect(out.has("lb-b")).toBe(true);
   });
 
-  it("protects the top linebacker by rest-of-season points even when a single week favours another", () => {
+  it("protects the top linebacker by rest-of-season points even when a single week favors another", () => {
     const out = protectedDefenderIds({
       isKeeperLeague: true,
       slotTokens: slots,

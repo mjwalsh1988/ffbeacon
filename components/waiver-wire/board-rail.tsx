@@ -2,7 +2,7 @@
  * The waiver board's right-hand rail: the controls and the small print.
  *
  * WHY THESE MOVED OUT OF THE MAIN COLUMN. The board used to open with a row of
- * filter chips, then a five-line grey box of assumptions, then a status line,
+ * filter chips, then a five-line gray box of assumptions, then a status line,
  * and only then a player. Three blocks of furniture between a reader and the
  * thing they came for, and all three are reference material they consult once
  * and then ignore. In the rail they are permanently visible on a wide screen,

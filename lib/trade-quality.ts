@@ -117,7 +117,7 @@ export interface TradeQualityResult {
   highestAsset: number;
   /** The pool ceiling actually used (poolMax or the trade's own top, padded). */
   ceiling: number;
-  /** Which side the quality comparison favours. Null on a dead heat. */
+  /** Which side the quality comparison favors. Null on a dead heat. */
   favoured: QualitySideKey | null;
 }
 
@@ -134,7 +134,7 @@ export interface TradeBalanceResult extends TradeQualityResult {
   balancingAsset: number;
   /** True when the solver hit its ceiling instead of converging. */
   capped: boolean;
-  /** Points credited to the favoured side. Zero when nothing was applied. */
+  /** Points credited to the favored side. Zero when nothing was applied. */
   adjustment: number;
   /** Raw total plus the adjustment, per side. What the verdict compares. */
   effective: Record<QualitySideKey, number>;

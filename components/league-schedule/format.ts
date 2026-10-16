@@ -111,7 +111,7 @@ export function opponentLabel(code: string | null, isHome?: boolean | null): str
   if (!code) return "(BYE)";
   const trimmed = code.trim();
   if (!trimmed) return "(BYE)";
-  // A leading "@" is honoured if a source ever sends one pre-marked.
+  // A leading "@" is honored if a source ever sends one pre-marked.
   if (trimmed.startsWith("@")) return `(@ ${trimmed.slice(1)})`;
   if (isHome === true) return `(vs ${trimmed})`;
   if (isHome === false) return `(@ ${trimmed})`;
@@ -178,7 +178,7 @@ export function sidesFor(
  *
  * `homeWinProb` is stored once for the pair. Reading it from the away side's
  * row without flipping it is how a 38 percent underdog gets shown as a
- * favourite, so the flip happens in exactly one place.
+ * favorite, so the flip happens in exactly one place.
  */
 export function winProbFor(
   matchup: ScheduleMatchup,
@@ -204,14 +204,14 @@ export const BENCH_CHIP_THRESHOLD = 1;
  *
  * A list of matchup cards on a dark background runs together: every card is the
  * same surface with the same one pixel border, so the eye has to find the gap
- * rather than the edge. A thick coloured rule down the left side gives each card
+ * rather than the edge. A thick colored rule down the left side gives each card
  * a start, and it carries the game's state for free.
  *
  * Purple for a game still to be played, cyan for the week in progress, and a
- * flat grey for one that is done, which reads as settled precisely because it is
- * the only one of the three that is not a brand colour.
+ * flat gray for one that is done, which reads as settled precisely because it is
+ * the only one of the three that is not a brand color.
  *
- * COLOUR IS NEVER THE ONLY SIGNAL HERE. Every card already carries "Final",
+ * COLOR IS NEVER THE ONLY SIGNAL HERE. Every card already carries "Final",
  * "This week" or "Projected" as a chip, and every team-season row already
  * carries the outcome as a word. This is reinforcement, so it stays aria-hidden
  * by virtue of being a border and nothing announces it.

@@ -7,7 +7,7 @@
  * GROUPED BY SEASON, AS CARDS. Fifty rows of a five-column table is the
  * evidence and none of the meaning: the season is the first thing a reader
  * sorts by, and repeating it in every row costs a column to say what a heading
- * says once. Each card carries the league name, its type as a coloured chip,
+ * says once. Each card carries the league name, its type as a colored chip,
  * the record as a figure AND as a win-share bar, and a result badge where
  * there is a result to report.
  *
@@ -37,7 +37,7 @@ const CATEGORY_LABEL: Record<ManagerLeagueCategory, string> = {
 
 /**
  * One tint per league type, and it is decorative: the label sits in text on
- * every chip, so nothing here is carried by colour alone. Dynasty takes the
+ * every chip, so nothing here is carried by color alone. Dynasty takes the
  * brand purple and redraft the brand cyan, matching how the lens switch above
  * already separates the two. Chopped takes the warning amber, which is the one
  * remaining tone that is not already spoken for and reads as "this one plays
@@ -327,7 +327,7 @@ function LeaguesTable({ rows, isSample }: { rows: ManagerLeagueRow[]; isSample?:
               <th scope="row" className="py-2 pr-3 text-left align-top font-normal">
                 {/* The logo is decorative, so it adds nothing to the row
                     header's accessible name, which a `th` builds from its whole
-                    subtree. Centred against the block so it sits between the
+                    subtree. Centered against the block so it sits between the
                     name line and the phone-only summary line beneath it. */}
                 <div className="flex items-center gap-2">
                   <LeagueLogo avatarId={row.avatar} name={row.leagueName} size={32} />

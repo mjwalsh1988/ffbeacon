@@ -12,9 +12,9 @@ import { Eye, EyeOff, Star } from "lucide-react";
  *   team count, and two standing pills, that is the width the league names
  *   wanted. Stacked in the League cell they take about 36px of it instead.
  *
- * STATE IS CARRIED TWICE OVER, NEVER BY COLOUR ALONE
+ * STATE IS CARRIED TWICE OVER, NEVER BY COLOR ALONE
  *   Featured fills the star and turns it amber; unfeatured is the same star as an
- *   outline in the site's cyan accent. Shown is an eye with a wash of colour
+ *   outline in the site's cyan accent. Shown is an eye with a wash of color
  *   inside it; hidden is the eye with a line through it. So the shape changes,
  *   the fill changes, and only then the hue. Someone who cannot separate amber
  *   from cyan still has a solid star against an outlined one.
@@ -22,7 +22,7 @@ import { Eye, EyeOff, Star } from "lucide-react";
  * TWO SHAPES
  *   `stack` is the bare vertical pair for the desktop table, where there is no
  *   room for words and the row provides the context.
- *   `list` is the labelled pair for the mobile sheet, where there is room and an
+ *   `list` is the labeled pair for the mobile sheet, where there is room and an
  *   icon with no word beside it is a guess.
  *
  * In `list` the visible word is also the start of the accessible name, which is
@@ -44,7 +44,7 @@ type ToggleVariant = "stack" | "list";
 const BASE =
   "inline-flex shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
-/** Off is never a dimmed grey: on a near-black page that reads as disabled
+/** Off is never a dimmed gray: on a near-black page that reads as disabled
  *  rather than as off, and these are always operable. */
 const OFF_TONE =
   "border-line-accent bg-base/60 text-brand-cyan hover:border-brand-cyan/60 hover:bg-brand-cyan/10";
@@ -150,7 +150,7 @@ export function ShownEyeToggle({
 
 /**
  * Both controls together. Vertical in the table so they cost one column's width
- * rather than two, and a labelled list in the sheet.
+ * rather than two, and a labeled list in the sheet.
  */
 export function LeagueProfileToggles({
   leagueName,

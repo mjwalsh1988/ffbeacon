@@ -58,7 +58,7 @@ describe("verifyStripeSignature", () => {
     ).toEqual({ ok: false, reason: "mismatch" });
   });
 
-  // The reason the raw body must never be re-serialised before it gets here.
+  // The reason the raw body must never be re-serialized before it gets here.
   it("refuses when the body has changed by even one byte", () => {
     const tampered = BODY.replace("evt_1", "evt_2");
     expect(

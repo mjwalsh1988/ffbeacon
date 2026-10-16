@@ -319,7 +319,7 @@ export const POSITION_SERIES: Record<PulsePosition | IdpPosition, SeriesStyle> =
   DEF: { color: "#FDE047", dash: "10 3 2 3 2 3", marker: "star" },
   // The three defensive curves draw on their OWN chart (plan R-10), so they
   // need to separate from each other first; they are also distinct from the
-  // six above in colour, dash and marker, which chart-kit.test.ts holds.
+  // six above in color, dash and marker, which chart-kit.test.ts holds.
   // Lime (tailwind position.dl). Contrast vs #0B0B14: 12.99:1 (AAA).
   DL: { color: "#A3E635", dash: "4 2", marker: "pentagon" },
   // Fuchsia (position.lb). Contrast vs #0B0B14: 7.96:1 (AAA).
@@ -340,7 +340,7 @@ export const POSITION_SERIES: Record<PulsePosition | IdpPosition, SeriesStyle> =
  * normal-vision floor, and chroma all hold, and every entry already carries
  * its own dash and marker). Two more are appended for players seven and
  * eight, per docs/seo/who-should-i-start-and-site-seo-plan.md section 2.7: a
- * solid grey with a plus marker, a dotted white with a hexagon marker. Both
+ * solid gray with a plus marker, a dotted white with a hexagon marker. Both
  * reuse existing FF Beacon ink tokens rather than inventing new hex values,
  * and both are checked with this file's own contrast formula against the
  * same composited panel background the six above are checked against
@@ -362,7 +362,7 @@ export const PLAYER_SERIES: SeriesStyle[] = [
   // of offensive players, and spreading the widened PULSE_POSITIONS would
   // silently shift players seven and eight (plan hazard E).
   ...OFFENSE_POSITIONS.map((position) => POSITION_SERIES[position]),
-  // Player 7. Solid grey (ink.muted). Contrast vs #0B0B14: 8.35:1 (AAA).
+  // Player 7. Solid gray (ink.muted). Contrast vs #0B0B14: 8.35:1 (AAA).
   { color: "#A8A8B8", dash: null, marker: "plus" },
   // Player 8. Dotted white (ink.DEFAULT). Contrast vs #0B0B14: 17.85:1 (AAA).
   { color: "#F4F4F8", dash: "1 3", marker: "hexagon" },
@@ -475,7 +475,7 @@ export function markerPath(marker: SeriesStyle["marker"], cx: number, cy: number
       return `M${cx.toFixed(2)},${(cy + h).toFixed(2)} L${(cx + h).toFixed(2)},${(cy - h * 0.8).toFixed(2)} L${(cx - h).toFixed(2)},${(cy - h * 0.8).toFixed(2)} Z`;
     }
     case "hourglass": {
-      // Two triangles meeting at the centre, so it reads apart from the
+      // Two triangles meeting at the center, so it reads apart from the
       // diamond and both triangles at marker size.
       const s = r * 1.05;
       return `M${(cx - s).toFixed(2)},${(cy - s).toFixed(2)} L${(cx + s).toFixed(2)},${(cy - s).toFixed(2)} L${(cx - s).toFixed(2)},${(cy + s).toFixed(2)} L${(cx + s).toFixed(2)},${(cy + s).toFixed(2)} Z`;

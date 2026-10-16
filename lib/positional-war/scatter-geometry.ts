@@ -2,7 +2,7 @@
  * Geometry for the trade value against Positional WAR scatterplot.
  *
  * PURE, for the same reason lib/positional-war/chart-geometry.ts is: it owns
- * maths a component should not, and it can be tested without rendering.
+ * math a component should not, and it can be tested without rendering.
  *
  * WHAT THE CHART ASKS. The line chart answers "which positions are scarce
  * here". This one answers "is the market in my league pricing that scarcity".

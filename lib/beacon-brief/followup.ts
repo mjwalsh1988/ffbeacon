@@ -386,7 +386,7 @@ export async function findExactEventMatch(
  * than the one it was failing. "The Colts have now handed out major contracts to
  * their QB/RB/WR trio" names three players; the Jonathan Taylor contract article names
  * one of them. Same kind, overlapping people, not the same key, so a human-shaped
- * judgement is genuinely required and it is worth one cheap call to get it.
+ * judgment is genuinely required and it is worth one cheap call to get it.
  *
  * Player ids come out of the key itself, so this costs one query rather than a join
  * across article_players.
@@ -444,7 +444,7 @@ export async function loadOverlapCandidates(
  *
  * Returns the matched candidate, or null when the model declines or names an id
  * that is not on the list it was given. Never throws: a failed call means "no
- * match", which degrades to the current behaviour of writing a new article rather
+ * match", which degrades to the current behavior of writing a new article rather
  * than losing the post.
  */
 export async function findFollowupTarget(args: {

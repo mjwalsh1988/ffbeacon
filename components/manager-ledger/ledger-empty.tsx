@@ -32,7 +32,7 @@
  *   letting a reader open and explore all of it. A reader who can drill into
  *   invented data has been handed something that behaves exactly like the real
  *   thing. This is a flat, inert picture of the shape of the page, and the
- *   difference in behaviour is itself one more signal that it is not real.
+ *   difference in behavior is itself one more signal that it is not real.
  *
  * NOTHING IS HIDDEN AT ANY BREAKPOINT. The example carries every column at
  * every width and scrolls sideways inside its own container when it has to,
@@ -98,7 +98,7 @@ const EXAMPLE_ROWS = [
   },
 ] as const;
 
-/** The rank gap, in the same words and colours the real table uses. */
+/** The rank gap, in the same words and colors the real table uses. */
 function gapWords(efficiencyRank: number, pointsRank: number): {
   short: string;
   spoken: string;

@@ -14,7 +14,7 @@
  *   1. THE REAL DRAFT ORDER. If the league already has a draft for that season,
  *      Sleeper publishes slot_to_roster_id and we know the exact slot. Read via
  *      lib/league-pick-slots.ts, which the transaction feed already uses to
- *      label picks "1.04". Not an estimate, so it is not labelled as one.
+ *      label picks "1.04". Not an estimate, so it is not labeled as one.
  *   2. PROJECTED STANDINGS. Otherwise, rank the teams by projected regular
  *      season finish (Power Pulse) and split them into thirds:
  *

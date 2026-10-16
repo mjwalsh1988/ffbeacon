@@ -7,7 +7,7 @@ what the reviews found is in Part 0 (step 1) and Part 0b (the decisions); where
 those two parts and the item text in Part 6 disagree, Part 0 and 0b are the
 record. Continue at Part 7, Phase 2, which starts with the step 1 leftovers.
 
-Goal, in the owner's words: keep maximising organic traffic. That means more
+Goal, in the owner's words: keep maximizing organic traffic. That means more
 people arriving from Google, Bing, and the AI answer engines (Google AI
 Overviews and AI Mode, ChatGPT search, Copilot, Perplexity, Claude).
 
@@ -116,7 +116,7 @@ Where the build differs from Part 6, and why:
   not-found branch that returns only a title (Brief category, team and player
   archives, rankings formats, league pages). Google applies the stricter rule,
   but not every parser does, and Google says listing index and follow has no
-  effect. Bing honours max-image-preview and max-snippet too, hence the
+  effect. Bing honors max-image-preview and max-snippet too, hence the
   general tag. The B06 code sample below has been updated to match.
 - B06 also needed components/signal/profile-view.tsx changed: it returned
   `robots: undefined` for a live profile, and a present-but-undefined key
@@ -255,7 +255,7 @@ What was built:
 - Decision 3, Signal profiles (A09). They stay indexed, and the profiles
   sitemap already adds every live profile automatically. Boards are indexable
   and reached through their owner's profile; the comment in
-  lib/sitemap/sections.ts that said otherwise was corrected. No behaviour
+  lib/sitemap/sections.ts that said otherwise was corrected. No behavior
   changed.
 - Decision 4, AI training (G03). app/robots.ts keeps one wildcard group on
   purpose: a crawler with its own group ignores the wildcard, so a named group
@@ -457,7 +457,7 @@ Console, resubmit the sitemap. Do these first if they have not been done.
 
 ## 4. What changed in search this year, and what it means here
 
-The research pass is summarised here; sources and dates are in Part 11.
+The research pass is summarized here; sources and dates are in Part 11.
 "Official" means the engine documents it; "industry" means it was observed and
 not confirmed.
 
@@ -466,12 +466,12 @@ not confirmed.
   December 2025 Google says smaller core updates run continuously without
   announcement (official). A drop outside a dashboard window is no longer
   proof that nothing algorithmic happened.
-- The February 2026 Discover core update favoured in-depth, original, timely
+- The February 2026 Discover core update favored in-depth, original, timely
   work from sites with topic expertise and pushed down sensational content
   (official). The Brief is the surface this judges.
 - AI Overviews and AI Mode have no extra requirements: a page must be indexed
   and eligible for a snippet (official, updated 2025-12-10). Google's AI
-  optimisation guide (2026-05-15, updated 2026-07-10) says optimising for
+  optimization guide (2026-05-15, updated 2026-07-10) says optimizing for
   generative AI "is still SEO" and rules out llms.txt, Markdown copies of
   pages, and special schema (official).
 - Search Console's generative AI performance report (impressions for AI
@@ -483,7 +483,7 @@ not confirmed.
   markup is still valid and still read by Bing, but earns nothing in Google.
   Dataset markup feeds only Dataset Search (official, November 2025).
 - Google accepts rel=canonical only in the head (official, updated
-  2026-07-10). It honours robots meta tags wherever they sit (official,
+  2026-07-10). It honors robots meta tags wherever they sit (official,
   2026-03-24). This makes A02 matter.
 - Googlebot reads the first 2 MB of uncompressed HTML (official, documented
   2026-02-03). The rankings pages are 1.6 MB (A06).
@@ -491,7 +491,7 @@ not confirmed.
   pages without adding value (official, updated 2026-08-28). Google permits AI
   content that meets Search Essentials and asks sites to tell readers how it
   was made (official). Case studies of the August 2026 spam update found
-  penalised sites combined programmatic pages with AI-written filler
+  penalized sites combined programmatic pages with AI-written filler
   (industry).
 - Core Web Vitals thresholds are unchanged (LCP 2.5 s, INP 200 ms, CLS 0.1);
   Google calls them one signal among many (official). Chrome 151 measures
@@ -982,7 +982,7 @@ Severity: low. Effort: S each.
   shape. Optionally 308 a bare name to the canonical slug when exactly one
   player matches.
 - An `X-Robots-Tag: noindex, follow` header from middleware for /leagues/* and
-  /tools/manager-pulse/*. Google honours the body tag they carry today;
+  /tools/manager-pulse/*. Google honors the body tag they carry today;
   engines that do not render may not see it. Belt and braces.
 - Start/sit parameter URLs (`?p=a,b` from app/tools/who-should-i-start/toughest-calls.tsx:78-80
   and the BEAM links) are crawlable, and each runs a full board and an OG
@@ -1608,9 +1608,9 @@ the script tag. The items below are accuracy and linking, not safety.
   metadata. Keep SearchAction out: Google retired the sitelinks search box in
   November 2024.
 - F06 (low, S). Rankings pages carry no list markup. Google shows nothing for
-  a player ItemList, but Bing's guidance favours structured data. Emit
+  a player ItemList, but Bing's guidance favors structured data. Emit
   `itemListJsonLd` (lib/json-ld.ts:155) over the first 100 rows actually in
-  the HTML. Do not add Dataset (it implies a licence to redistribute
+  the HTML. Do not add Dataset (it implies a license to redistribute
   third-party values, and Google Search no longer uses it).
 - F07. FAQPage: add no more. Google ended FAQ rich results for every site on
   2026-05-07. The existing blocks mirror visible text and stay for Bing.
@@ -1844,7 +1844,7 @@ SA-T054 | pending | IndexNow on archive, for moved players, gated on indexabilit
         | files: lib/beacon-brief/deletion.ts, app/api/cron/recalculate-derived/route.ts, lib/beacon-brief/worker.ts, lib/indexnow.ts
 SA-T055 | pending | Per-player sitemap lastmod; throw on sitemap read errors
         | files: lib/sitemap/sections.ts
-SA-T060 | pending | Rankings title season, capitalised H1, dated intro with time element (after 2026-09-25)
+SA-T060 | pending | Rankings title season, capitalized H1, dated intro with time element (after 2026-09-25)
         | files: lib/rankings-formats.ts, components/rankings/rankings-view.tsx
 SA-T061 | pending | Player title ladder, page and tabs (after 2026-09-25)
         | files: app/players/[slug]/page.tsx
@@ -1956,7 +1956,7 @@ Research read on 2026-09-11. Dates are publication or last-updated dates.
   https://developers.google.com/search/blog/2026/02/discover-core-update
 - AI features and your website (updated 2025-12-10):
   https://developers.google.com/search/docs/appearance/ai-features
-- Google AI optimisation guide (2026-05-15, updated 2026-07-10):
+- Google AI optimization guide (2026-05-15, updated 2026-07-10):
   https://developers.google.com/search/docs/fundamentals/ai-optimization-guide
 - Robots meta tag documentation (updated 2026-03-24):
   https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag

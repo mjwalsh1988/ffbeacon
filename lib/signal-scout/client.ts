@@ -109,7 +109,7 @@ async function request<T>(
       cache: "no-store",
     });
   } catch (err) {
-    // A deliberate abort (search debounce cancelling a stale request) is not
+    // A deliberate abort (search debounce canceling a stale request) is not
     // a network failure; let the caller's own abort handling see it.
     if (err instanceof DOMException && err.name === "AbortError") throw err;
     return { ok: false, status: 0, code: "network", message: ERROR_MESSAGES.network };

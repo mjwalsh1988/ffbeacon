@@ -19,7 +19,7 @@ import { ManagerReportSkeleton } from "./report-skeleton";
 // lib/manager-pulse/service.ts (Wave 3, B2) landed while this page was being
 // written. THE PUBLIC DOOR per docs/manager-pulse/manager-pulse-plan.md 3.1:
 // getManagerFootprint(admin, userId, request) never throws. `userId` is the
-// SIGNED-IN READER (what the cooldown metres), never the report's subject.
+// SIGNED-IN READER (what the cooldown meters), never the report's subject.
 import { getManagerFootprint } from "@/lib/manager-pulse/service";
 
 // The polling constants (MPS-T044) for the "building" branch's live report,

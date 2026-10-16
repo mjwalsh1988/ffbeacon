@@ -2,7 +2,7 @@
  * Every read the waiver board makes, and nothing else.
  *
  * The pure half of this feature is `opportunity.ts`, `reasons.ts`, `bid.ts` and
- * `weeks.ts`. This file fetches and assembles; it makes no modelling decision
+ * `weeks.ts`. This file fetches and assembles; it makes no modeling decision
  * of its own.
  *
  * NO SLEEPER REQUEST EVER. This is a public, indexable, unauthenticated page,

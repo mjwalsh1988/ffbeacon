@@ -8,7 +8,7 @@
  *
  * It is drawn as an actual file rather than another panel in the stack: a
  * header strip with a CLASSIFIED stamp, the silhouette under a scanline, and
- * three labelled fields whose values are blacked out. Every redaction is
+ * three labeled fields whose values are blacked out. Every redaction is
  * aria-hidden, and the one line a screen reader gets says the same thing the
  * blackout says to everyone else.
  */

@@ -99,7 +99,7 @@ export class Voice {
   }
 
   /**
-   * Draw one line from a bank, honouring the snark setting.
+   * Draw one line from a bank, honoring the snark setting.
    *
    * Lines hotter than the setting are filtered out FIRST, so lowering the dial
    * changes which lines are eligible rather than merely how often a hot one is

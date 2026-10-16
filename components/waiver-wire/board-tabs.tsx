@@ -17,7 +17,7 @@
  *
  * THE ARIA TABS PATTERN, AUTOMATIC ACTIVATION. Arrow keys move and select,
  * Home and End jump, only the selected tab is in the tab order, and each panel
- * is labelled by its tab. A roving tabindex rather than aria-activedescendant,
+ * is labeled by its tab. A roving tabindex rather than aria-activedescendant,
  * because the buttons are real buttons.
  */
 
@@ -39,7 +39,7 @@ export type BoardTab = {
   /** Full label, e.g. "Running backs". Visible from sm, spoken always. */
   label: string;
   count: number;
-  /** Position colour for the active underline and dot. */
+  /** Position color for the active underline and dot. */
   hue: string;
   content: ReactNode;
 };

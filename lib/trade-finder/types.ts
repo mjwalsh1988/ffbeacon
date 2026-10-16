@@ -166,7 +166,7 @@ export const TRADE_GOALS: { key: TradeGoal; label: string; blurb: string }[] = [
 /**
  * A position group the reader can name on either side of a deal.
  *
- * Deliberately the same six keys lib/on-the-clock/position-colors.ts colours, so
+ * Deliberately the same six keys lib/on-the-clock/position-colors.ts colors, so
  * a chip in the filter and a tag on an asset row are the same word in the same
  * hue. Anything a league does not roster is never offered as a choice; see
  * `availablePositions` on the Trade Ideas page.
@@ -338,7 +338,7 @@ export type TradeFinderInput = {
    *
    * No longer a control on Trade Ideas: the reader picks a strategy now, and the
    * five shapes were answering a different question from the one the toggle
-   * asks. The constraint itself is unchanged and still honoured, so a caller
+   * asks. The constraint itself is unchanged and still honored, so a caller
    * that wants a specific shape can still ask for one; the surface simply does
    * not, and leaving it out means "any shape".
    */

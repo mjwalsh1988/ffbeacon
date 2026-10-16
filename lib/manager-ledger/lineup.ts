@@ -3,7 +3,7 @@
  *
  * Pure. No database, no clock, no network. Everything arrives as plain data.
  *
- * THE OPTIMISER IS THE ONE IN lib/power-pulse/lineup.ts, UNCHANGED.
+ * THE OPTIMIZER IS THE ONE IN lib/power-pulse/lineup.ts, UNCHANGED.
  *   `buildOptimalLineup` solves a maximum weight independent set in a
  *   transversal matroid, which is exact for the overlapping non-nested slots
  *   real leagues run (WR_TE alongside WRRB_FLEX). Power Pulse feeds it
@@ -235,7 +235,7 @@ export function biggestMiss(
 /**
  * Grade one settled week.
  *
- * `sigma` is zero on every candidate on purpose. The optimiser takes it because
+ * `sigma` is zero on every candidate on purpose. The optimizer takes it because
  * Power Pulse needs a spread to carry forward into a simulation; a week that
  * has already been played has no uncertainty left in it, and a fabricated
  * spread here would be a number with no meaning that some later reader would
@@ -358,7 +358,7 @@ function tally(record: LedgerRecord, outcome: LedgerOutcome): void {
 }
 
 /** Roll a season's graded weeks into one roster's lineup ledger. */
-export function summariseLineup(weeks: GradedWeek[]): LineupLedger {
+export function summarizeLineup(weeks: GradedWeek[]): LineupLedger {
   const actualRecord = emptyRecord();
   const bestLineupRecord = emptyRecord();
   let setPoints = 0;

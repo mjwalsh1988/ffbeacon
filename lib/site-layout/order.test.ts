@@ -82,7 +82,7 @@ describe("packRows", () => {
 });
 
 describe("moveEntry", () => {
-  it("swaps with the neighbour", () => {
+  it("swaps with the neighbor", () => {
     expect(moveEntry(["a", "b", "c"], 1, "up")).toEqual(["b", "a", "c"]);
     expect(moveEntry(["a", "b", "c"], 1, "down")).toEqual(["a", "c", "b"]);
   });

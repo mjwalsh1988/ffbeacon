@@ -36,7 +36,7 @@ import { PercentExplainer } from "@/components/waiver-wire/percent-explainer";
 import {
   isPublishableWeek,
   parseWeekSegment,
-  weekNeighbours,
+  weekNeighbors,
   weekPath,
   weekPhase,
   weekPhaseLabel,
@@ -286,7 +286,7 @@ export default async function WaiverWeekPage({
   // The headline add. `?pos=` only picks the board's opening tab now, so the
   // hero stays whichever tab a shared link opens on.
   const hero = topPickup(board.rows);
-  const { prev, next } = weekNeighbours(week, context.currentWeek);
+  const { prev, next } = weekNeighbors(week, context.currentWeek);
   const faq = faqFor(week, board, hero);
   const title = titleFor(week, board.season || context.season);
   const canonical = `${SITE.url}${weekPath(week)}`;

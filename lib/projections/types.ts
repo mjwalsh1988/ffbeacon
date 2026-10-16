@@ -55,7 +55,7 @@ export type StatLine = Record<string, number>;
  * Shares rather than counts, because a share is the part that persists. A
  * receiver's target COUNT moves with his team's pass volume, which moves with
  * game script, opponent and injuries to other people. His target SHARE is his
- * job, and the published stabilisation work puts that at four to six games,
+ * job, and the published stabilization work puts that at four to six games,
  * which is why the recency half life defaults to four weeks.
  */
 export type UsageShares = {
@@ -134,7 +134,7 @@ export type GameEnvironment = {
   opponent: string | null;
   /** Points this team is implied to score. Null when no line exists. */
   impliedTotal: number | null;
-  /** This team's spread. NEGATIVE means this team is favoured. */
+  /** This team's spread. NEGATIVE means this team is favored. */
   spread: number | null;
 };
 
@@ -147,7 +147,7 @@ export type BeaconProjection = {
    *
    * Deliberately a plain string rather than ProjectionPosition. The engine
    * mirrors every Sleeper row, kickers and defenses included, and narrowing
-   * this to the four modelled positions would force a mirrored kicker to be
+   * this to the four modeled positions would force a mirrored kicker to be
    * recorded as something he is not. It is informational either way:
    * player_weekly_projections has no position column, and the position is read
    * from `players` on every path that needs it.
@@ -183,14 +183,14 @@ export type BeaconProjection = {
    * Whether OUR model produced this number, or the row is a mirrored Sleeper
    * one carried through unchanged.
    *
-   * Distinct from `blendWeight`, and the difference matters. A modelled player
+   * Distinct from `blendWeight`, and the difference matters. A modeled player
    * in week 1 has a blend weight of 0 because he has no current-season games
    * yet, so weight alone cannot tell "we ran the model and it contributed
    * nothing yet" apart from "we had nothing to run". The backtest needs exactly
    * that distinction to grade our model rather than grading Sleeper's numbers
    * wearing our name.
    */
-  modelled: boolean;
+  modeled: boolean;
   /**
    * Why this row holds what it holds, matching
    * lib/sync-weekly-projections.ts classifyRow().

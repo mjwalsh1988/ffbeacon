@@ -186,7 +186,7 @@ const RATIO_CAP = 3;
 /**
  * How many graded players a position needs before its own average means
  * anything. Below this the pool is centered on nothing and the multiplier falls
- * back to the raw ratio, which is the old behaviour and the honest one: with
+ * back to the raw ratio, which is the old behavior and the honest one: with
  * eight quarterbacks measured we cannot claim to know what an average
  * quarterback does against his projection.
  *
@@ -255,7 +255,7 @@ export function positionBaselineRatio(
  * did not have.
  *
  * `baseline` null means the pool was too thin to center on, so the raw ratio is
- * used. That is a deliberate fall-back to the previous behaviour rather than a
+ * used. That is a deliberate fall-back to the previous behavior rather than a
  * fall-back to neutral: with no baseline we still know the player's own figure,
  * we just cannot separate his part from his position's.
  */

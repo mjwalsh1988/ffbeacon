@@ -1,8 +1,8 @@
 /**
  * The per-player daily article cap: a backstop, not a feature.
  *
- * Every other duplicate defence in the pipeline is a judgement about one post. This
- * one is a judgement about the shape of a day, and it is here because the 2026-08
+ * Every other duplicate defense in the pipeline is a judgment about one post. This
+ * one is a judgment about the shape of a day, and it is here because the 2026-08
  * incident ran for four days before anyone noticed. Six articles about one Jonathan
  * Taylor contract is not a story the site would ever want, whatever the reason, so the
  * pipeline should be able to notice that on its own and stop.

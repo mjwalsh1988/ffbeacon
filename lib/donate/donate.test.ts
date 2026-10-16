@@ -147,7 +147,7 @@ describe("safeReturnPath", () => {
 
   /**
    * The output can go protocol-relative even when the input did not.
-   * `/..//evil.example` clears every input check and URL normalisation collapses
+   * `/..//evil.example` clears every input check and URL normalization collapses
    * it to the pathname `//evil.example`. Same-origin for our one caller, which
    * prefixes an absolute origin, and a live open redirect for any caller that
    * uses the result as a bare Location or href.

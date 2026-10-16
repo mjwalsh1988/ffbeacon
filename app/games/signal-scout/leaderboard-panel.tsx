@@ -260,7 +260,7 @@ export function LeaderboardPanel({
       )}
 
       <div
-        // Only a real tabpanel gets the role, the labelling, and the tabIndex
+        // Only a real tabpanel gets the role, the labeling, and the tabIndex
         // that APG asks for. With one board it is just a div holding a list.
         {...(tabbed
           ? {

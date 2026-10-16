@@ -2,7 +2,7 @@
  * Lineups with the IDP switch (plan IDP-305).
  *
  * build.golden.test.ts pins the OFF path. These pin the ON path: defensive
- * slots are projected and optimised, a DL/LB player can be seated as LB, the
+ * slots are projected and optimized, a DL/LB player can be seated as LB, the
  * pairing reads the outgoing starter's eligibility, and the what-if offers a
  * dual-eligible bench player for a slot his primary cannot fill.
  */

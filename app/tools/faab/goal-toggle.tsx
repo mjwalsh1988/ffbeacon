@@ -17,7 +17,7 @@ import type { GoalKey } from "@/lib/faab/types";
  * Native radios in a real fieldset. The visible control is a pill, the radio
  * itself is visually hidden rather than replaced, so arrow keys, the selected
  * state and the group's own name all come from the platform. The selected
- * pill carries a tick as well as the gradient, because colour is never the
+ * pill carries a tick as well as the gradient, because color is never the
  * only signal.
  *
  * NO LIVE REGION IN HERE, on purpose. There is exactly one polite region per

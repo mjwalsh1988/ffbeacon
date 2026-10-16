@@ -211,7 +211,7 @@ export function qualityGapOf(ratio: number): number {
  * The bands in the order a tendency adjustment moves through them.
  *
  * Used only by the shift below: an adjustment of +1 means "one band more
- * willing", -1 means "one band less", never a jump past a neighbour.
+ * willing", -1 means "one band less", never a jump past a neighbor.
  */
 const ACCEPTANCE_ORDER: AcceptanceBand[] = ["long-shot", "worth-asking", "likely"];
 
@@ -270,7 +270,7 @@ export function acceptanceOf(
   return shiftBand(base, clamped);
 }
 
-/** The value-and-lineup judgement, unchanged from before Manager Pulse existed. */
+/** The value-and-lineup judgment, unchanged from before Manager Pulse existed. */
 function baseAcceptanceOf(
   theirs: SideImpact,
   profile: TeamProfile,
@@ -303,7 +303,7 @@ function baseAcceptanceOf(
    * 22-year-old costs a rebuilder real points on Sunday, and that is not a side
    * effect of the deal, it IS the deal: the most standard trade in dynasty
    * football. An earlier version applied the lineup penalty to everyone, and it
-   * labelled exactly that trade a long shot against a real league, which is how
+   * labeled exactly that trade a long shot against a real league, which is how
    * this was found.
    *
    * A contender is the opposite case. Their timeline is this season, so points
@@ -497,7 +497,7 @@ const GOAL_WEIGHTS: Record<TradeGoal, ScoreWeights> = {
  *   multiplier is small and positive rather than negative.
  *
  *   Bubble, or a league Power Pulse has not scored. Everything at 1, which is
- *   exactly the behaviour that shipped before this existed. A team in the pack
+ *   exactly the behavior that shipped before this existed. A team in the pack
  *   genuinely does want both, and a league with no Power Pulse row has told us
  *   nothing, so inventing a lean for it would be worse than staying neutral.
  *

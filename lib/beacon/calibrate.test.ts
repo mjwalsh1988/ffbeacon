@@ -410,7 +410,7 @@ describe("calibrateSlice: stability when a source disappears", () => {
   });
 });
 
-describe("existing blending behaviour is untouched", () => {
+describe("existing blending behavior is untouched", () => {
   // The calibrated value is a base input to combine() exactly like the
   // quantile_median value was. Ordering must stay: base -> factor (clamped) ->
   // overrides -> band clamp, with the band clamp last.

@@ -6,7 +6,7 @@
  * traded, most traded with, overpays, unpriced-pick trades) goes through this,
  * so the never-pool rule lives in one place. Under a specific lens it renders
  * that one side. Under "all" it renders BOTH, dynasty and redraft, clearly
- * labelled, side by side on a wide screen and stacked on a narrow one. There
+ * labeled, side by side on a wide screen and stacked on a narrow one. There
  * is no combined number anywhere in this file, because there is no unit for
  * one: a dynasty superflex trade and a redraft PPR trade are priced against
  * different format configs.

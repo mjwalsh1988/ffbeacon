@@ -8,7 +8,7 @@
  *
  * A SERVER COMPONENT, AND IT HAS TO BE. `loadPriorCellsCached` pulls next/cache
  * and a Supabase client, so it must never reach a client component. The
- * calculator's own browser-side pricing goes through the pure maths in
+ * calculator's own browser-side pricing goes through the pure math in
  * lib/faab/priors-math.ts and one cell fetched by a server action instead.
  *
  * NOTHING HERE IS TYPED INTO THE COPY. Every figure, including the league

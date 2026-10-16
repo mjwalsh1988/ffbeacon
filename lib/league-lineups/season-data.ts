@@ -216,7 +216,7 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
 
     if (sleeperIds.size > 0) {
       // THREE LEVELS BECOME TWO. Only the projection and accuracy reads need the
-      // resolved player ids; the defence splits and the engine resolution need
+      // resolved player ids; the defense splits and the engine resolution need
       // nothing from wave 1 beyond what is already in hand, so waiting for the
       // player lookup before starting them spent a round trip on nothing.
       const [players, defense, resolvedSource] = await Promise.all([

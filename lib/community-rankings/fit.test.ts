@@ -47,7 +47,7 @@ describe("fitBradleyTerry", () => {
     expect(fit.groups).toEqual(["offense"]);
   });
 
-  it("fits unconnected offense and defense apart, each normalised", () => {
+  it("fits unconnected offense and defense apart, each normalized", () => {
     const boards = [
       ...repeat({ playerIds: ["R1", "W1", "R2", "W2", "R3"], leftOff: [], pool: [] }, 3),
       ...repeat({ playerIds: ["L1", "D1", "L2"], leftOff: [], pool: ["L1", "D1", "L2", "D2"] }, 3),

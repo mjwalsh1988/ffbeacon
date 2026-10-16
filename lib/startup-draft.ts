@@ -25,7 +25,7 @@
  * write a second copy of it, the DECISION lives here and both callers ask this
  * module. On The Clock keeps its own live `CurrentDraftPick[]` and League Pulse
  * keeps its own stored `draft_selections` rows, because those inputs genuinely
- * differ; what must never diverge is the judgement made from them.
+ * differ; what must never diverge is the judgment made from them.
  *
  * CLASSIFY ON THE PICK, NOT ON THE CLOCK.
  * The obvious rule, "was this trade made during the draft window", is wrong. Of
@@ -147,14 +147,14 @@ export function describeUnresolved(reason: StartupUnresolvedReason): string {
 }
 
 // ---------------------------------------------------------------------------
-// Seat maths
+// Seat math
 // ---------------------------------------------------------------------------
 
 /**
  * The overall pick number a (round, roster) lands on in a startup draft.
  *
  * The seat comes from Sleeper's published slot_to_roster_id, and the serpentine
- * maths is `pickNoForSeat` from lib/on-the-clock/draft-derive.ts, shared rather
+ * math is `pickNoForSeat` from lib/on-the-clock/draft-derive.ts, shared rather
  * than reimplemented so snake, linear, and third-round-reversal drafts all land
  * on the same answer the draft room gives. Null when the roster holds no seat.
  *

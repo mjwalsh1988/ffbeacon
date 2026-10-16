@@ -3,7 +3,7 @@
  *
  * WHAT CHANGED AND WHY. The edition post used to be four strings joined by
  * blank lines: "@everyone", the title, the tl;dr, the URL. Discord rendered
- * that as what it was, a wall of grey text with a link preview stapled
+ * that as what it was, a wall of gray text with a link preview stapled
  * underneath, and an edition that took a person twenty minutes to review
  * arrived looking like a bot alert. The facts are the same; this puts them in
  * an embed so the channel can read them.
@@ -49,7 +49,7 @@ const EMBED_TOTAL_MAX = 6000;
 /** Five per cent back, because Discord counts some characters as more than one. */
 const SAFETY_MARGIN = 0.95;
 
-/** How many section headings the contents field will list before summarising. */
+/** How many section headings the contents field will list before summarizing. */
 const SECTIONS_LISTED_MAX = 8;
 /** Stat tiles render three across on a desktop client, so three is the row. */
 const STAT_TILES_MAX = 3;

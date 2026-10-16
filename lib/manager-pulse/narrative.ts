@@ -28,7 +28,7 @@
  *     middle dot, no emoji. Straight ASCII punctuation only.
  *   - No negative parallelism ("not just X, it's Y"), no puffery, no
  *     rule-of-three cadence, no formulaic transitions.
- *   - Never a judgement where a number will do. "Half their moves land by
+ *   - Never a judgment where a number will do. "Half their moves land by
  *     week 4" beats "they lose interest".
  */
 

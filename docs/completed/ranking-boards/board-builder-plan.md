@@ -430,7 +430,7 @@ Beacon has him:
 - A player FF Beacon does not rank in that format: "Not in FF Beacon's
   rankings".
 - Older boards with no stored format compare on the reader's current format,
-  labelled.
+  labeled.
 
 ## 7. Tiers: tier breaks
 
@@ -587,7 +587,7 @@ Storage and lifetime:
   `next=/tools/custom-rankings?claim=1`, and the tool page, when it sees
   `claim=1` with a signed-in user and a guest cookie, runs the claim action
   and drops the parameter. This is a page step rather than something in the
-  auth callback because `app/auth/callback/route.ts` honours `next` for
+  auth callback because `app/auth/callback/route.ts` honors `next` for
   OAuth only; password and magic-link confirmations land on "/" by default and
   the login and sign-up forms need to pass `next` through for those paths.
   A guest cookie with no guest board (already claimed, or expired) is a
@@ -661,7 +661,7 @@ pairs instead of rank numbers.
    - A player the reader LEFT OFF is recorded on the run as left off, and the
      board makes a within-board style statement about him: everyone on the
      board is preferred over him, at the within-board weight. That is a
-     judgement the reader made and it should count as one; a player who was
+     judgment the reader made and it should count as one; a player who was
      simply beyond the depth is only a pool statement. The two are kept
      apart in `user_ranking_board_players` by a `left_off` boolean row (rank
      null), so the merge can tell them apart after the run is gone.
@@ -822,7 +822,7 @@ The builder's own phrases:
 | fantasy football rankings quiz | no data |
 | fantasy football would you rather | no data |
 
-The neighbours with real volume:
+The neighbors with real volume:
 
 | Keyword | Avg. monthly searches |
 | --- | --- |
@@ -905,7 +905,7 @@ Added in the 2026-09-25 revision, same status:
 - The sign-in hand-off lands on `?claim=1` on the tool page (section 8).
 - The community merge's pool is the seed set to the board's depth plus
   `poolMargin`, within-board and pool statements are weighted apart, a left
-  off player counts as a judgement, and the fit runs on aggregated counts
+  off player counts as a judgment, and the fit runs on aggregated counts
   (section 9.2).
 - Tier breaks land in three steps so no reader of the old column breaks
   mid-sequence; `tier_count` is dropped with `tier` (section 7).
@@ -919,7 +919,7 @@ Added in the 2026-09-25 revision, same status:
 The tool has to look and move like FAAB, League Pulse, Manager Pulse and the
 guides, not like a form. Everything below names the component that already
 draws the thing, so the build reuses rather than reinvents. Survey of the
-component library, 2026-09-25. Colours are the brand tokens in
+component library, 2026-09-25. Colors are the brand tokens in
 `tailwind.config.ts` (`brand.purple` #A855F7, `brand.cyan` #22D3EE, the
 `position.*` set including `dl`, `lb` and `db`, `signal.*`); the gradient
 utility is `bg-beacon`; the site is dark only.
@@ -953,7 +953,7 @@ utility is `bg-beacon`; the site is dark only.
   (`components/dashboard-panel.tsx`) with `glow` while open.
 - The scope choice is a `role="radiogroup"` of large native radios wrapped in
   tile labels, the `components/league-choice-list.tsx` construction, each
-  tile carrying a `PositionChip` in its position colour and a one-line
+  tile carrying a `PositionChip` in its position color and a one-line
   description from `scopeDescription`. Defenders sit in the same group with
   a "Defense" divider, and the IDP switch beside Overall is a real checkbox
   in a label.
@@ -961,7 +961,7 @@ utility is `bg-beacon`; the site is dark only.
   (24, 48, 100, More) with a number field behind More. A guest sees the cap
   as the last segment and a short line under it saying why.
 
-### 13.3 The comparison screen (the centrepiece)
+### 13.3 The comparison screen (the centerpiece)
 
 - Two cards in `grid gap-4 sm:grid-cols-2`, the Would You Rather
   `trade-board.tsx` construction: identical sides, nothing pre-selected, one
@@ -970,7 +970,7 @@ utility is `bg-beacon`; the site is dark only.
   corners, as everywhere on the site), name at heading size, `PositionChip`,
   `NflTeamLogo` with the team code beside it, age, and the last three
   positional finishes drawn as three small pills ("2025 WR12", "2024 WR24",
-  "2023 WR15") in the position colour, a rookie getting one muted pill. A
+  "2023 WR15") in the position color, a rookie getting one muted pill. A
   digit badge, 1 or 2, sits in the card's corner and matches the keyboard
   shortcut.
 - The whole card is the button. The accessible name is the sentence in
@@ -984,7 +984,7 @@ utility is `bg-beacon`; the site is dark only.
   motion library is added; the project has none.
 - The result line under the cards is one sentence plus a `TrendChip`
   (`components/trend-chip.tsx`) for the FF Beacon gap: "4 higher" with the
-  up glyph and its sr-only text. (`TrendChip` colours its up state with a
+  up glyph and its sr-only text. (`TrendChip` colors its up state with a
   class the config does not define; that is fixed in task 1 so the chip
   reads green here and everywhere else.)
 - Progress is the `ProgressBar` from `components/manager-pulse/progress-bar.tsx`
@@ -1083,7 +1083,7 @@ Each line is one atomic task for progress.md. The standard reviews
 (implementation, accessibility, security) run after each.
 
 1. Fix the silent up and down moves in the existing editor, and the undefined
-   up colour class in `components/trend-chip.tsx`.
+   up color class in `components/trend-chip.tsx`.
 2. Migration: `scope` widened to DL, LB, DB and `defense`; `includes_defenders`,
    `format_config_id`, `seed_source_slug` and the community opt-out on
    boards; `left_off` on board players. Policies unchanged.
@@ -1127,7 +1127,7 @@ Each line is one atomic task for progress.md. The standard reviews
     tests enforce agreement), metadata, `ToolExplainer`, `PAGE_CARDS` share
     card, llms.txt.
 27. Guest caps (48 and 12), enforced in the answer action.
-28. Guest cap prompt (centred slide-up dialog), the `next=` pass-through on
+28. Guest cap prompt (centered slide-up dialog), the `next=` pass-through on
     the login and sign-up forms, and the `?claim=1` hand-off.
 29. "vs FF Beacon" on the editor, the public board page and the rewritten
     board OG route.

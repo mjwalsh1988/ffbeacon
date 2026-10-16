@@ -71,7 +71,7 @@ export function admitGradedTrade(
   if (result.view.partial || result.view.graded === false) return false;
   if (result.startup !== null && !settings.include_startup_trades) return false;
   // A pick-for-pick trade grades fine and plays badly: there is nothing to
-  // recognise and nothing to argue about. Checked against the GRADED sides,
+  // recognize and nothing to argue about. Checked against the GRADED sides,
   // because a startup pick that became a player counts as the player.
   if (settings.require_player_asset) {
     const hasPlayer = (["a", "b"] as const).some((side) =>

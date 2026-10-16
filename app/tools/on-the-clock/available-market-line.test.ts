@@ -68,7 +68,7 @@ describe("describeAvailableVsMarket", () => {
 
   it("never emits a banned typographic character", () => {
     // Escaped rather than literal: an em dash and a non-breaking space are hard
-    // to tell apart from their plain neighbours in source, and a stray literal
+    // to tell apart from their plain neighbors in source, and a stray literal
     // space in this class makes the assertion match every string.
     const BANNED = /[\u2014\u2013\u2018\u2019\u201C\u201D\u2026\u00B7\u00A0]/;
     const cases = [

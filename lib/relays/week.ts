@@ -185,7 +185,7 @@ export function assignRelayWeek(
   }
   if (type === "post" && liveWeek) {
     // Sleeper counts playoff weeks from 1 again in some seasons and continues
-    // from 19 in others; normalise to the continuing count the table stores.
+    // from 19 in others; normalize to the continuing count the table stores.
     const week = liveWeek <= REGULAR_SEASON_WEEKS ? REGULAR_SEASON_WEEKS + liveWeek : liveWeek;
     return { season, week, phase: "post", preSeasonWeek: null };
   }

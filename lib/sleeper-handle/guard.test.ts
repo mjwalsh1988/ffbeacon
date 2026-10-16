@@ -70,7 +70,7 @@ const IDENTITY_KEYS = [
  *
  * Every entry below reads the LEAGUE keys only. None of them may read an
  * identity key; the second test in this file is what enforces that, so an
- * allow-list entry cannot quietly become a licence to read a username.
+ * allow-list entry cannot quietly become a license to read a username.
  */
 const ALLOWLIST: Record<string, string> = {
   "lib/sleeper-league-settings.ts":

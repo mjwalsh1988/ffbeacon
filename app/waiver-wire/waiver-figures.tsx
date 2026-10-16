@@ -17,7 +17,7 @@
  * SVG one marks its `<svg>` aria-hidden because the sentence and the table
  * carry the meaning. The DOM-built one keeps every label in the tree.
  *
- * NOTHING HERE ENCODES MEANING IN COLOUR ALONE. The two bidding systems are
+ * NOTHING HERE ENCODES MEANING IN COLOR ALONE. The two bidding systems are
  * told apart by their headings and their rows, not by their hue, and the price
  * bars carry their value as text beside them.
  */

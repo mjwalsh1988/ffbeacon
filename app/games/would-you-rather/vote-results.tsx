@@ -14,11 +14,11 @@
  * transition and no timer running at all. The reveal is identical in content
  * either way, because the animation carries nothing the text does not say.
  *
- * NOTHING HERE IS COLOUR ONLY. Each bar is labelled with its team, its
+ * NOTHING HERE IS COLOR ONLY. Each bar is labeled with its team, its
  * percentage and its raw count, the reader's own pick carries the word "your
  * pick" rather than only a border, and the whole graph is preceded by a
  * one-sentence summary that a screen reader announces as a single fact instead
- * of walking two unlabelled rectangles.
+ * of walking two unlabeled rectangles.
  */
 
 import { useEffect, useRef, useState } from "react";

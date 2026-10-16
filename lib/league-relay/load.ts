@@ -162,7 +162,7 @@ export function rankStandings(teams: Map<number, RelayTeam>): Map<number, RelayT
   return teams;
 }
 
-/** Power Pulse rank per roster, for the standings colour in every writeup. */
+/** Power Pulse rank per roster, for the standings color in every writeup. */
 export async function loadPulseRanks(
   admin: Admin,
   leagueRowId: string,

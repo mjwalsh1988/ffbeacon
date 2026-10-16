@@ -277,7 +277,7 @@ interface ResearchArgs {
  * The search loop re-bills the whole accumulated conversation every round, so one
  * bad batch of long pages can cost more than a day of everything else: the worst
  * single call measured before migration 0186 billed 673,861 input tokens, about
- * $2.02 to research one article. This does not change behaviour, it makes the
+ * $2.02 to research one article. This does not change behavior, it makes the
  * outlier visible instead of leaving it averaged into a monthly total.
  */
 const RESEARCH_INPUT_WARN_TOKENS = 120_000;

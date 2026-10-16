@@ -9,7 +9,7 @@ import { saveBeamSettings } from "@/app/admin/beam/actions";
 /**
  * The BEAM settings editor.
  *
- * Deliberately a plain form of labelled number inputs rather than a slider
+ * Deliberately a plain form of labeled number inputs rather than a slider
  * dashboard. These are thresholds an owner tunes once every few weeks after
  * reading the unanswered-questions list, and every one of them needs its "what
  * happens if I move this" explained next to it, which sliders have no room for.

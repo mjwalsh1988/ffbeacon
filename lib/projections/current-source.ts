@@ -36,7 +36,7 @@ import { SLEEPER_SOURCE } from "./source-constants";
  * live one forward, so the whole-season answer and the rest-of-season answer
  * can legitimately differ: one missed player-week in an already-played week
  * fails the season probe while every live-window probe still passes. A caller
- * that is labelling something built over a specific window has to ask about
+ * that is labeling something built over a specific window has to ask about
  * THAT window or it will name the wrong engine. The no-argument form is for a
  * surface whose own window really is the whole season, which is what the player
  * profile shows.

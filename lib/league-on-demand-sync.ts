@@ -10,7 +10,7 @@ import {
  * Sync one league on demand, from wherever the reader happens to be.
  *
  * A league nobody has opened has no rosters stored, which used to make it a
- * dead end in every tool that asks you to pick one: the FAAB calculator greyed
+ * dead end in every tool that asks you to pick one: the FAAB calculator grayed
  * it out, the Beacon Breakdown refused to compare against it. Picking it now
  * runs exactly the sync opening the league would have run, and the tool carries
  * on with the answer.

@@ -171,7 +171,7 @@ export async function SiteHeaderControls() {
   // Filtered on the server for the same reason the rail's is: the tree names
   // every admin route, and the drawer is a client component. Built from the
   // cached viewer object so this is the same array the rail gets and Flight
-  // serialises it once rather than twice.
+  // serializes it once rather than twice.
   const [navViewer, siteLayout] = await Promise.all([getNavViewer(), loadSiteLayout()]);
   const navSections = buildNavTree(navViewer, siteLayout);
 

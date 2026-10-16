@@ -145,7 +145,7 @@ export async function addPlayerAlias(input: {
   // clarification never gets to argue. The seed data did exactly this and
   // "cook" answered for James Cook with six other Cooks in the table. Tier 4
   // already matches every surname for every player, and it asks when the
-  // surname is shared, which is the behaviour an alias would override.
+  // surname is shared, which is the behavior an alias would override.
   if (player.search_last_name && alias === player.search_last_name) {
     return {
       ok: false,

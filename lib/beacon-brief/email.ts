@@ -228,7 +228,7 @@ export interface BeaconBriefOutage {
 
 /**
  * One email when an upstream integration goes down, then silence until the
- * cooldown elapses. Replaces the previous behaviour of one email per failed job,
+ * cooldown elapses. Replaces the previous behavior of one email per failed job,
  * which turned a single billing event into 30 identical alerts.
  */
 export async function sendBeaconBriefOutageEmail(

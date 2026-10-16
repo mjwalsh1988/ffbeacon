@@ -131,7 +131,7 @@ The guide holds "chopped league faab"; the calculator links to the guide with th
 ### 4.2 Voice and rules
 
 - Match `app/guides/faab-strategy/page.tsx`: Michael's first person, plain English, short and long sentences mixed, lessons with `GuideSectionHeader`, `GuideShell`, `GuideToc`, `PageMasthead`, `DiscordCtaSection`.
-- Every worked number is either measured (cite our data or a named source in text) or clearly labelled invented, in the caption and the copy, the way the FAAB guide does.
+- Every worked number is either measured (cite our data or a named source in text) or clearly labeled invented, in the caption and the copy, the way the FAAB guide does.
 - No em dashes, curly quotes, ellipsis characters; no puffery; no negative parallelism; no three-item rhythm lists by default. Run the owner's AI-writing checklist before finishing and state the result.
 - Published figures from our synced leagues must be anonymous aggregates (owner approved). Read them from `faab_market_priors` (overhaul plan 7.3) at render, not hardcoded, with the sample size and "Updated {Eastern date}" beside them. If a cell is under the minimum sample, show "Not enough data yet" rather than a number.
 
@@ -145,9 +145,9 @@ Each lesson is an `h2` via `GuideSectionHeader` with an id ending `-heading`; su
    - One line on death league and survivor naming (survivor usually means an NFL pick'em pool, a different game).
 2. `survive-heading` "The only goal each week: not last"
    - The math: with N teams of equal strength each has a 1 in N chance of being chopped; being average is almost always enough in September. The danger is a bad week, so floor beats ceiling early.
-   - Figure: survival odds by week for an average team in an 18-team league (computed with `lib/chopped/survival.ts` on equal teams, labelled "equal-strength teams, illustration"). Chart via `ChartFigure` with a table.
+   - Figure: survival odds by week for an average team in an 18-team league (computed with `lib/chopped/survival.ts` on equal teams, labeled "equal-strength teams, illustration"). Chart via `ChartFigure` with a table.
 3. `draft-heading` "Drafting for a chopped league"
-   - Floor over ceiling, depth over stars, byes (early versus late, both views: Sanderson favours early byes, LaMarca and Childs late), K and DEF only if the league starts them, QB in superflex.
+   - Floor over ceiling, depth over stars, byes (early versus late, both views: Sanderson favors early byes, LaMarca and Childs late), K and DEF only if the league starts them, QB in superflex.
 4. `money-heading` "How FAAB works when rosters drop in bulk"
    - Budgets never reset; every surviving team is a rival; a chopped roster arrives all at once so several good players compete for the same money; prices fall as the field shrinks.
    - Measured table from our leagues: chopped winning bids by teams-alive band (cells `chopped|any|any|alive_*|any`) and by position when 3 or more teams bid.
@@ -155,7 +155,7 @@ Each lesson is an `h2` via `GuideSectionHeader` with an id ending `-heading`; su
 5. `how-much-heading` "How much to bid in a chopped league" (answers the PAA directly)
    - By phase: September (most of the field alive), October, November, the endgame. Cite Charchian's hold targets ($900 through September, $750 through October, $250 through November) and the champion ledger ($969, $904, $240, $11), and the opposing early-spend view (Masters 20 to 35% in September, Gretch's barbell). Our position: spend on players who start for you through the final week and when your survival odds this week are in danger; otherwise hold.
    - Danger ladder: bottom two, near the cut, middle, safe, with plain guidance for each (no invented percentages; use the calculator's manual danger multipliers only as "the calculator weighs this more").
-   - Worked example (invented, labelled): 12 of 18 teams alive, $640 left, a top running back released.
+   - Worked example (invented, labeled): 12 of 18 teams alive, $640 left, a top running back released.
    - Call to action: the calculator's chopped mode, anchor text "chopped FAAB calculator".
 6. `endgame-heading` "The endgame"
    - Money left versus talent available; release cutoffs (FFPC week 15 lock, Fantasy Life after week 14); streaming when broke; bidding hard with 65% or more left.

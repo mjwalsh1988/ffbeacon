@@ -1091,7 +1091,7 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
 
   // 18. Zigged When They Zagged, The Contrarian Award.
   //
-  // How far a team's positional shape sits from the room's. Not a judgement: the
+  // How far a team's positional shape sits from the room's. Not a judgment: the
   // most contrarian roster in a draft is sometimes the smartest and sometimes
   // the strangest, and the card says which by sitting next to the lineup and
   // grade cards rather than by asserting it.

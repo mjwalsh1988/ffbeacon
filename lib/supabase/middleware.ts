@@ -42,7 +42,7 @@ export async function updateSession(request: NextRequest) {
   //
   // It also degrades safely. If a token turns out to be HS256-signed, or
   // carries no key id, or WebCrypto is unavailable, auth-js falls back to
-  // getUser() internally, which is exactly the behaviour this line replaced.
+  // getUser() internally, which is exactly the behavior this line replaced.
   // So this is never less correct than what it replaces, only sometimes
   // faster.
   //

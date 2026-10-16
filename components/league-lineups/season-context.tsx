@@ -149,7 +149,7 @@ function spokenRecord(r: { wins: number; losses: number; ties: number }): string
 }
 
 /**
- * One labelled figure.
+ * One labeled figure.
  *
  * The visible value is a real text node with the meaning appended beside it,
  * never an aria-hidden number with a spoken twin: pointing at "6-3" has to say

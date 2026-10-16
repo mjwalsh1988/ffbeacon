@@ -66,7 +66,7 @@ describe("clampWeek", () => {
     15,
   );
 
-  it("honours a requested week that exists", () => {
+  it("honors a requested week that exists", () => {
     expect(clampWeek(options, 2, 3)).toBe(2);
   });
 

@@ -133,7 +133,7 @@ export interface DiscordMessageInput {
    * multipart/form-data (payload_json + files[n]); otherwise it is plain JSON.
    */
   attachments?: DiscordAttachment[];
-  /** Only honoured on create. Discord ignores a poll on an edit. */
+  /** Only honored on create. Discord ignores a poll on an edit. */
   poll?: DiscordPollInput;
 }
 

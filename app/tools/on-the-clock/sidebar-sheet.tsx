@@ -105,7 +105,7 @@ export function SidebarSheet({
   /**
    * Keep focus out from under the docked bar.
    *
-   * When the browser scrolls a newly focused control into view it honours
+   * When the browser scrolls a newly focused control into view it honors
    * scroll-padding on the scrolling element, so one declaration covers every
    * focusable in the room: the search box, the sort headers, the watchlist
    * stars, the show-more button, the trade builder. Chasing it with scroll-mt

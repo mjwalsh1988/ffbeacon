@@ -12,7 +12,7 @@ import { X } from "lucide-react";
  * WHY THE TWO BREAKPOINTS MOVE IN DIFFERENT DIRECTIONS
  *   A phone has one thumb and a bottom edge, so a sheet that rises from it is
  *   reachable. A desktop reader has a wide viewport and a page they were
- *   already reading, and a centred box drops on top of that page and hides the
+ *   already reading, and a centered box drops on top of that page and hides the
  *   thing they opened it from. A right-edge panel leaves the page in place, so
  *   a lineup row and the panel explaining it are on screen together.
  *
@@ -105,7 +105,7 @@ export function SlideUpDialog({
    * Where the dialog sits from the `sm` breakpoint up.
    *
    * "right" (the default) is a full-height panel anchored to the right edge,
-   * sliding in horizontally. "center" is the older centred box, and is for
+   * sliding in horizontally. "center" is the older centered box, and is for
    * dialogs that are a decision rather than a detail view.
    *
    * Below `sm` this has no effect at all: every dialog is a bottom sheet.
@@ -239,9 +239,9 @@ export function SlideUpDialog({
           paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
         }}
       >
-        {/* Top bar: drag handle centred on mobile, close button on the right
+        {/* Top bar: drag handle centered on mobile, close button on the right
             at every width. The spacer on the left is what keeps the handle
-            centred against the button's width without absolute positioning. */}
+            centered against the button's width without absolute positioning. */}
         {showClose ? (
           <div className="flex shrink-0 items-center gap-2 px-2 pb-1 pt-2">
             <span aria-hidden="true" className="h-11 w-11 shrink-0 sm:hidden" />

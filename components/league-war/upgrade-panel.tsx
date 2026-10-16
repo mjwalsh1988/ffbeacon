@@ -24,7 +24,7 @@ import type { UpgradeWhatIfOutcome } from "@/lib/positional-war/upgrade";
  * league-wide, player-independent figure) and projected wins (the
  * team-specific figure this panel exists to compute) are required to appear
  * together. lib/positional-war/naming.test.ts allowlists this file for that
- * reason. The two are always two separately labelled blocks, never merged
+ * reason. The two are always two separately labeled blocks, never merged
  * into one figure and never sharing a column, because making the gap between
  * them legible is the entire point of the panel.
  */

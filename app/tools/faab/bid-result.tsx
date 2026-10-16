@@ -43,7 +43,7 @@ export {
  * it.
  *
  * Nothing is hidden at any breakpoint. On a phone the week strip, the signals
- * and the notices sit inside one labelled disclosure; on a wide screen that
+ * and the notices sit inside one labeled disclosure; on a wide screen that
  * disclosure is open. Collapsed is not hidden: the content is in the DOM at
  * every width and reachable by keyboard.
  */

@@ -110,7 +110,7 @@ export async function captureLeagueSnapshot(
     // `data: []`. Taking the error branch as a snapshot would hand the diff an
     // empty prior, which reads as every manager joining at once, and those
     // cards are permanent. The doc comment above already promises this
-    // behaviour; before this check it did not deliver it.
+    // behavior; before this check it did not deliver it.
     if (rosterRead.error || userRead.error || draftRead.error) {
       console.warn(
         `[league-activity] snapshot child read failed for ${sleeperLeagueId}:`,
@@ -171,7 +171,7 @@ export async function captureLeagueSnapshot(
  * The league as Sleeper just described it, in the same shape as the stored one.
  *
  * Built from the payloads `pulseLeagueCore` already has in hand, so detection
- * costs no extra Sleeper request. The two sides go through the same normalisers
+ * costs no extra Sleeper request. The two sides go through the same normalizers
  * (`asStringList` below) so a difference in the diff is a real difference in the
  * league rather than a difference in how two code paths spell an empty array.
  */
@@ -203,7 +203,7 @@ export function snapshotFromSleeper(
     status: league.status ?? null,
     totalRosters: league.total_rosters ?? null,
     scoringSettings: (league.scoring_settings ?? {}) as Record<string, unknown>,
-    // The SAME normaliser as the stored side. `asStringList` strips "0" and
+    // The SAME normalizer as the stored side. `asStringList` strips "0" and
     // "", which is right for player ids and wrong for slot tokens, so slots get
     // their own. Before this the two sides disagreed about how to spell an
     // empty entry, which is exactly the difference the diff would have reported
@@ -326,7 +326,7 @@ export async function writeActivity(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Normalisers                                                                */
+/* Normalizers                                                                */
 /* -------------------------------------------------------------------------- */
 
 function asRecord(value: unknown): Record<string, unknown> {

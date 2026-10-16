@@ -127,7 +127,7 @@ function toEntry(
  * The three published buckets for one format, each capped.
  *
  * Ordered by steal_score, which already folds confidence in, so the cap never
- * cuts off a well-evidenced player in favour of a noisier one. Fades are ordered
+ * cuts off a well-evidenced player in favor of a noisier one. Fades are ordered
  * ascending because a fade's severity runs the other way.
  */
 export async function loadBoardBuckets(

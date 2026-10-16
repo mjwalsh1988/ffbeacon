@@ -2,7 +2,7 @@
  * PageMasthead: the header card that opens every page, so a tool, a ranking
  * board, an article index, and a league all announce themselves the same way.
  *
- * It is the League Pulse masthead generalised. Same anatomy: a small cyan
+ * It is the League Pulse masthead generalized. Same anatomy: a small cyan
  * eyebrow naming the area, the page title set large and uppercase against the
  * beacon gradient, a plain sentence saying what the page is for, a row of
  * chips, and an optional strip of stat readouts on the right.
@@ -10,8 +10,8 @@
  * The title is the page's h1. A page that renders this must not render a second
  * one; sub-sections step down to h2.
  *
- * Presentational server component. Every coloured element is paired with text,
- * so nothing here is colour-only, and the stat strip keeps every readout at
+ * Presentational server component. Every colored element is paired with text,
+ * so nothing here is color-only, and the stat strip keeps every readout at
  * every width (two columns on a phone, four from sm up) rather than dropping
  * any of them on the small layout.
  */

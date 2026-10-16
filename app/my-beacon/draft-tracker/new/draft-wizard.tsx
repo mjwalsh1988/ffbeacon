@@ -545,7 +545,7 @@ export function DraftWizard({
             />
             <p id={`${nameId}-help`} className="mt-3 text-sm leading-relaxed text-ink-muted">
               This is how you will find the draft again later, so give it
-              something you will recognise. Leave it blank and we call it{" "}
+              something you will recognize. Leave it blank and we call it{" "}
               {DEFAULT_DRAFT_NAME}.
             </p>
           </div>

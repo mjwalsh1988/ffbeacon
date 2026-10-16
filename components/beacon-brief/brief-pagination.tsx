@@ -17,7 +17,7 @@ const SHOW_ALL_UP_TO = 7;
  *
  * Always includes page 1, the last page, and a window around the current page, so a
  * crawler reaching any page finds a direct link to the first, the last, and the
- * neighbours. Returns "gap" markers where numbers were skipped.
+ * neighbors. Returns "gap" markers where numbers were skipped.
  *
  * Two rules keep the output sensible on a small archive, both of which the tests pin
  * down because the first draft got both wrong:

@@ -202,7 +202,7 @@ const MOBILE_GRID = "grid-cols-[minmax(0,1fr)_1.5rem]";
  * Phone rows: the logo column and everything else.
  *
  * The logo spans BOTH rows of the row (the name line and the standing line
- * beneath it) and centres itself across them, which is why it lives on the `li`
+ * beneath it) and centers itself across them, which is why it lives on the `li`
  * rather than inside the button. 2.5rem holds the 40px phone logo.
  */
 const MOBILE_LOGO_GRID = "grid-cols-[2.5rem_minmax(0,1fr)]";
@@ -777,7 +777,7 @@ function TeamStandingCell({
  *  The figure leads and the tag's own reasoning follows, and both name the
  *  measure they are quoting. They are different numbers on purpose: the finish
  *  is ordered by expected wins, the tag is derived from Power Pulse, and a hard
- *  schedule separates them. Unlabelled, the pair reads as a contradiction. */
+ *  schedule separates them. Unlabeled, the pair reads as a contradiction. */
 function describeTeamStanding(
   summary: LeagueTeamStatusSummary | null,
   leagueTeamCount: number,
@@ -1021,7 +1021,7 @@ function MobilePublicList({
               className={`group grid gap-x-3 px-4 transition-colors hover:bg-surface/60 focus-within:bg-surface/60 ${MOBILE_LOGO_GRID}`}
             >
               {/* Column one of the row, spanning the name line and the standing
-                  line under it, so it is centred against the pair rather than
+                  line under it, so it is centered against the pair rather than
                   hanging off the top of the row. */}
               <span className="row-span-2 self-center">
                 <LeagueLogo
@@ -1113,7 +1113,7 @@ function DesktopDashboardTable({
             (columns line up by construction) and its full table semantics.
             Featured and Shown used to be columns five and six. They are switches
             now, stacked inside the League cell, which gave the league names back
-            the width two labelled pill buttons were spending. */}
+            the width two labeled pill buttons were spending. */}
         <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle">
           <tr>
             {/* The logo cell holds a decorative image and nothing to announce,
@@ -1297,7 +1297,7 @@ function MobileDashboardCards({
             className={`group grid gap-x-3 rounded-card border border-line bg-surface px-4 transition-colors hover:bg-surface-elevated focus-within:bg-surface-elevated ${MOBILE_LOGO_GRID}`}
           >
             {/* Column one of the card, spanning the name line and the standing
-                line under it, so it is centred against the pair. */}
+                line under it, so it is centered against the pair. */}
             <span className="row-span-2 self-center">
               <LeagueLogo
                 avatarId={league.avatar}

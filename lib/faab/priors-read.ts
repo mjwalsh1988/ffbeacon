@@ -1,7 +1,7 @@
 /**
  * The cached server read of the FAAB market cells.
  *
- * The maths lives in lib/faab/priors-math.ts, which is pure and therefore
+ * The math lives in lib/faab/priors-math.ts, which is pure and therefore
  * safe to import into a client component: manual mode draws its win curve in
  * the browser as the reader drags the controls, and it cannot pull a module
  * that imports next/cache and a Supabase client to do it. This file is the

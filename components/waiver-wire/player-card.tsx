@@ -5,7 +5,7 @@
  * three things from each before they decide to stop: who he is, what he costs,
  * and the one fact that makes him interesting. So the card leads with exactly
  * those, in that order and at those sizes: the name beside a headshot ringed
- * in his position's colour, the bid as the largest figure on the card in the
+ * in his position's color, the bid as the largest figure on the card in the
  * beacon gradient, and one or two highlight chips
  * (`lib/waiver-wire/highlights.ts`). The four measured figures sit under them
  * as icon tiles, and the full reason sentence is one tap away behind "Why him"
@@ -74,7 +74,7 @@ const POSITION_WORD: Record<BoardPosition, string> = positionNounMap(OFFENSE_POS
 });
 
 /**
- * The position palette as raw colours, for the ring and the glow. The same
+ * The position palette as raw colors, for the ring and the glow. The same
  * values as `position.*` in tailwind.config.ts. Position hue labels the
  * position; brand purple and cyan stay reserved for the claim itself.
  */
@@ -103,7 +103,7 @@ export const BIDDERS_TEXT: Record<BidderKey, string> = {
   "4p": "4 or more teams bidding",
 };
 
-/** The tier as a coloured pill with its own icon. Colour is paired with the words. */
+/** The tier as a colored pill with its own icon. Color is paired with the words. */
 export const TIER_STYLE: Record<BoardBid["tier"], { icon: LucideIcon; className: string }> = {
   priority: {
     icon: Flame,
@@ -272,7 +272,7 @@ export function WaiverPlayerCard({
         aria-labelledby={`wire-${row.playerId}`}
         className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl [container-type:inline-size] border border-line bg-surface/70 p-2.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-line-accent hover:shadow-[0_12px_40px_-20px_rgba(168,85,247,0.55)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-3.5"
       >
-        {/* Position-coloured glow in the corner. Decoration only, and
+        {/* Position-colored glow in the corner. Decoration only, and
             pointer-events-none so a pointer over it still finds the card. */}
         <span
           aria-hidden="true"

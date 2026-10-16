@@ -189,7 +189,7 @@ type ServiceClient = SupabaseClient<Database>;
 
 // The in-flight coalescer moved to lib/request-coalesce.ts when the Manager
 // Ledger needed the same guarantee: it is imported BY this file, so importing
-// the helper back out of here would close a cycle. Behaviour is unchanged.
+// the helper back out of here would close a cycle. Behavior is unchanged.
 
 /**
  * Decide whether this league's power rankings need recomputing. Returns true
@@ -1947,7 +1947,7 @@ function scaledPoints(whole: number | undefined, decimal: number | undefined): n
  * Re-exported so every existing importer keeps working.
  *
  * The implementation moved to `lib/sleeper-draft-picks.ts` because this module
- * now imports the activity projector, which needs the same normaliser while
+ * now imports the activity projector, which needs the same normalizer while
  * reading transactions back. Leaving it here made that pair an import cycle.
  */
 export { normalizeDraftPicks };

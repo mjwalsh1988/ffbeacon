@@ -146,7 +146,7 @@ export function availabilityMultiplier(
  * per week and it CAN, so when Sleeper has published an opinion about this
  * particular week, that opinion wins, whichever designation the player carries.
  *
- * That was not always true here, and the old behaviour was doing real damage. A
+ * That was not always true here, and the old behavior was doing real damage. A
  * season-long designation used to zero every remaining week REGARDLESS of the
  * projection. Measured against the live board on 2026-08-31:
  *

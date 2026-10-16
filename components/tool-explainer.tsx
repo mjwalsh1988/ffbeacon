@@ -29,7 +29,7 @@
  *   - Every icon and number badge is decorative and aria-hidden; the ordered
  *     list carries the step numbers for a screen reader, and the eyebrow text
  *     is real visible text rather than an aria-label.
- *   - Colour is never the only signal: the numbered tile, the accent rails and
+ *   - Color is never the only signal: the numbered tile, the accent rails and
  *     the gradient wash decorate cards whose meaning is entirely in their text.
  *   - Nothing here is hidden at any breakpoint. The grids wrap.
  *   - Any number that an admin can change (a cost, a limit) is passed IN by the
@@ -124,7 +124,7 @@ export function ToolExplainer({
   return (
     // No width of its own. It fills the column its page is in, which is what
     // keeps its left edge on the same line as the tool above it. It used to cap
-    // itself at max-w-5xl and centre, which put it 5rem inside a 90rem tool on
+    // itself at max-w-5xl and center, which put it 5rem inside a 90rem tool on
     // one page and 8rem inside a 96rem one on another, for no reason a reader
     // could see. Nothing in here is a long line of prose: the steps, notes and
     // next-steps are card grids, and the intro paragraph sets its own measure.

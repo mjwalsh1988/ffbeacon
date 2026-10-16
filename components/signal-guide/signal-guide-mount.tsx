@@ -90,7 +90,7 @@ export function SignalGuideMount() {
     setSignalGuideAvailable(false);
     if (!pageKey) return;
 
-    let cancelled = false;
+    let canceled = false;
     const controller = new AbortController();
     (async () => {
       try {
@@ -99,7 +99,7 @@ export function SignalGuideMount() {
         const data = (await res.json()) as Partial<GuidePageContent> & {
           page: GuidePageContent["page"] | null;
         };
-        if (cancelled) return;
+        if (canceled) return;
         if (
           data.page &&
           ((data.questions?.length ?? 0) > 0 || (data.terms?.length ?? 0) > 0)
@@ -119,7 +119,7 @@ export function SignalGuideMount() {
     })();
 
     return () => {
-      cancelled = true;
+      canceled = true;
       controller.abort();
     };
   }, [pathname]);

@@ -7,7 +7,7 @@ import { X, type LucideIcon } from "lucide-react";
 /**
  * Accessible confirmation dialog. On desktop it pops as a centered modal; on
  * mobile it slides up from the bottom as a sheet. Follows the WAI-ARIA dialog
- * pattern: role="dialog", aria-modal, labelled + described by its title and
+ * pattern: role="dialog", aria-modal, labeled + described by its title and
  * body, focus moved in on open and restored on close, focus trapped on Tab,
  * Escape and backdrop click cancel.
  *

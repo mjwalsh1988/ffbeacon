@@ -196,7 +196,7 @@ const PHASE_PATTERN = /^[a-z0-9_]{1,16}$/;
  * WHY THE SERVER PICKS IT. The whole set is about two thousand rows, which is
  * far too much to ship to a browser that will use exactly one of them. So the
  * reader's situation comes up, the fallback ladder runs here, and one cell
- * goes back. The maths that turns it into a win curve is pure
+ * goes back. The math that turns it into a win curve is pure
  * (lib/faab/priors-math.ts) and runs in the browser, so dragging the budget
  * or the bid style stays instant and costs nothing.
  *
@@ -547,7 +547,7 @@ export async function connectSleeperLeagues(
 
   // Chunked and paged: a reader with many leagues has more rosters than one
   // request returns. A failed read is treated as nothing synced (the prior
-  // behaviour on error), never as a partial list.
+  // behavior on error), never as a partial list.
   let leagueRows: Array<{ id: string; sleeper_league_id: string; metadata: unknown }> = [];
   let rosterRows: Array<{
     league_id: string;
@@ -655,7 +655,7 @@ export type SyncConnectedLeagueResult =
  * Sync one league the reader just picked, then report what it changed.
  *
  * Picking a league nobody has opened used to be impossible: the option was
- * greyed out and the reader was told to go and open it in League Pulse first,
+ * grayed out and the reader was told to go and open it in League Pulse first,
  * which is an errand, not an answer. Now picking it runs the same sync opening
  * the league would have run, and the free-agent list loads behind it.
  *

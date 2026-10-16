@@ -405,7 +405,7 @@ export function TeamCard({
           </div>
         )}
         {/* Share controls: the generated image, then the roster page itself.
-            Below lg they get their own labelled strip across the bottom of the
+            Below lg they get their own labeled strip across the bottom of the
             header, so the team name row and the stat panels above keep the
             card's full width instead of stopping short of the buttons. From lg
             the strip sits inline at the header's right edge, where the identity

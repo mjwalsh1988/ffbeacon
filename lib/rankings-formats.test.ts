@@ -244,7 +244,7 @@ describe("formatPhraseFromSlug", () => {
     },
   );
 
-  it("refuses a slug it does not recognise rather than guessing", () => {
+  it("refuses a slug it does not recognize rather than guessing", () => {
     expect(formatPhraseFromSlug("dynasty-ppr-sflex-extra")).toBeNull();
     expect(formatPhraseFromSlug("dynasty-superflex")).toBeNull();
     expect(formatPhraseFromSlug("")).toBeNull();

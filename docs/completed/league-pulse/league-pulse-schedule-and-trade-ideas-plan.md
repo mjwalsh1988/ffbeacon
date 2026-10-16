@@ -139,7 +139,7 @@ Fix: stop filtering at write time, filter at read time.
 - `lib/league-matchups.ts`: write `m.starters` and `m.players` verbatim.
 - Every existing reader already filters. `lib/power-pulse/load.ts` `loadSchedule`
   runs `asStringArray`, which drops `"0"`. `scoreSetLineup` skips ids it does not
-  recognise. No consumer changes.
+  recognize. No consumer changes.
 - Rows written before the change keep the filtered array. The raw array is still
   available in `metadata.starters`, because `metadata` stores the Sleeper object
   verbatim, which is exactly the backfill case the CLAUDE.md metadata rule is for.
@@ -166,7 +166,7 @@ All pure except `data.ts`.
   `QB, RB, WR, TE, FLEX, SUPERFLEX, IDP, K, DEF`. The FLEX group covers `FLEX`,
   `REC_FLEX`, `WR_TE`, `WRRB_FLEX`, `WRRB_WRT`. The SUPERFLEX group covers
   `SUPER_FLEX` and `Q_FLEX`. The IDP group covers `DL`, `LB`, `DB`, `IDP_FLEX`
-  and any unrecognised token, so an exotic league renders rather than silently
+  and any unrecognized token, so an exotic league renders rather than silently
   dropping a slot.
 - `slotLabel(token)`. The visible label: `QB`, `RB`, `WR`, `TE`, `FLEX`, `W/T`,
   `W/R`, `SUPERFLEX`, `DL`, `LB`, `DB`, `IDP`, `K`, `DEF`.
@@ -274,10 +274,10 @@ two buttons in a `role="group"` with `aria-pressed`, not a select, because there
 are exactly two and a toggle is one press instead of three. Right side changes
 with the mode:
 
-- Week mode: previous and next week buttons flanking a labelled `<select>` of
+- Week mode: previous and next week buttons flanking a labeled `<select>` of
   weeks 1 to 18. Each option reads "Week 3, final" or "Week 12, upcoming" so the
-  state is in the option text rather than in a colour.
-- Team mode: a labelled `<select>` of teams. Above eight teams it also gets the
+  state is in the option text rather than in a color.
+- Team mode: a labeled `<select>` of teams. Above eight teams it also gets the
   `PanelFilterField` treatment already used by the cross league panels, hoisted
   into a `SlideUpDialog` on a phone.
 
@@ -291,7 +291,7 @@ One card per matchup. Each card links to the matchup detail and carries:
 - Both team names, owner handles, avatars (`components/sleeper-avatar.tsx`), and
   records.
 - Final weeks: both actual scores, the winner's side marked with a filled bar and
-  a "Won" label, never colour alone.
+  a "Won" label, never color alone.
 - Unplayed weeks: both projected totals, the win probability as a two segment
   bar with both percentages written out, and a "Projected" chip so nobody reads a
   projection as a result.
@@ -311,7 +311,7 @@ the thing to look at.
 The selected team's 18 weeks as rows: week, opponent (name, record, Power Pulse
 rank), result or projection, win probability, and a difficulty chip driven by the
 opponent's projected mean against the league median. Playoff weeks get a section
-divider labelled with the league's own `playoff_week_start`, because the
+divider labeled with the league's own `playoff_week_start`, because the
 difference between week 13 and week 15 is the whole point of looking at a
 schedule.
 
@@ -327,7 +327,7 @@ Layout, top to bottom:
 1. **Header.** Both teams, records, Power Pulse ranks, the week, and the state
    (final, in progress, upcoming). Projected or actual totals large, with the win
    probability bar underneath and both percentages written out.
-2. **The lineup comparison.** The centrepiece.
+2. **The lineup comparison.** The centerpiece.
 3. **Bench and taxi upgrades**, one panel per side.
 4. **Right rail.** Season series between these two teams, both teams' recent
    form, and a "how these numbers are built" panel.
@@ -354,7 +354,7 @@ Each player cell shows headshot, name, `POS, TEAM`, the NFL opponent for that
 week (`@SF` or `vs BUF`, `BYE` when there is no projection row for a scheduled
 week), the projected points in bold, and for a final week the actual points with
 the projection beside it. An injury designation renders as a text chip, never as
-a colour on the name.
+a color on the name.
 
 Each player cell is a button that opens `PlayerDetailDialog`, on every
 breakpoint. That dialog carries the full numbers: raw projection before
@@ -366,7 +366,7 @@ too is deliberate: it is one component and one interaction to learn, and the
 alternative is a desktop hover popover a keyboard cannot reach.
 
 **Mobile.** The table stays a table. Three columns at 360px works because the
-centre slot column is fixed at about 56px and each player cell is a two line
+center slot column is fixed at about 56px and each player cell is a two line
 stack: name on the first line, `POS @OPP` and the points on the second. Nothing
 is hidden and nothing moves to a separate sheet. This is what the mobile first
 rule asks for: a compact layout, not a reduced one. Below `sm` the headshot drops
@@ -410,7 +410,7 @@ a bug report; a stated conclusion is the feature.
 
 The single swap gains do not add up to the total, and the copy must never imply
 they do: taking one swap changes what the next one is worth. The total comes from
-the optimal lineup, the swaps are the route to it, and both are labelled.
+the optimal lineup, the swaps are the route to it, and both are labeled.
 
 For a final week the same panel becomes retrospective: "You left 18.4 points on
 your bench in week 3", computed from `player_points`, which the sync already
@@ -462,9 +462,9 @@ No new tables and no new cron.
   `(league_id, season, week, roster_id)` with a `model_version`. Not building it
   now. Measure first.
 
-### 2.9 Edge cases, each with a stated behaviour
+### 2.9 Edge cases, each with a stated behavior
 
-| Case | Behaviour |
+| Case | Behavior |
 | --- | --- |
 | League has no schedule yet (`noScheduleYet` from `syncLeagueMatchups`) | Branded empty state naming the reason: Sleeper publishes the slate at league creation, so this league has not been created for the season yet. Reuse the tone of `components/power-pulse/pre-draft-notice.tsx`. |
 | Some weeks failed to fetch (`failedWeeks` non empty) | Show what we have and say which weeks are missing. Never present a partial slate as complete. Same rule Power Pulse follows when it refuses to score a failed fetch. |
@@ -483,7 +483,7 @@ No new tables and no new cron.
 - The lineup comparison is a table with a `<caption>`, `scope="row"` on the slot,
   and `scope="col"` on the team headers.
 - The view toggle is a `role="group"` of buttons with `aria-pressed`. The week
-  and team pickers are labelled selects. Prev and next carry
+  and team pickers are labeled selects. Prev and next carry
   `aria-label="Previous week"` and are disabled at the ends, with the disabled
   state announced by the label rather than by opacity.
 - Changing week or team announces the result in an `aria-live="polite"` region:
@@ -494,7 +494,7 @@ No new tables and no new cron.
 - Win probability bars are decorative. Both percentages are in the text.
 - Tap targets stay at or above 44 by 44, including the compact mobile player cells
   and the week stepper buttons.
-- Colour never carries meaning alone: won and lost, hard and easy, gain and loss
+- Color never carries meaning alone: won and lost, hard and easy, gain and loss
   all carry a word or a sign.
 
 ### 2.11 Format and source
@@ -535,7 +535,7 @@ Changed: the route, the page, the labels, and what gets rendered around a deal.
   `components/league-shell/nav-items.ts`, and the page's own `copyHref` and
   `TeamChooser` links.
 - `components/trade-finder-panel.tsx`, the cross league panel on the dashboard,
-  keeps its behaviour and takes the new label, so one name is used everywhere.
+  keeps its behavior and takes the new label, so one name is used everywhere.
 - `components/trade-finder.tsx` and `components/trade-finder-card.tsx` STAY where
   they are. This is a deliberate change from the first draft of this plan, which
   moved them into `components/trade-ideas/`. They are the browser and the card
@@ -783,7 +783,7 @@ modes, under the deal card.
 Structure:
 
 1. **Reasons.** The headline section, not a footnote. Each reason is a row with a
-   tone marker (icon plus word, never colour alone), the short label in semibold,
+   tone marker (icon plus word, never color alone), the short label in semibold,
    and the sentence under it. Good reasons first, then neutral, then the costs,
    and the costs are never collapsed or hidden. A trade card that shows the upside
    and buries the downside is a sales pitch, which is the rule
@@ -940,7 +940,7 @@ confidence, not dropping the feature. The iteration count already lives in
   the verdict heading, matching the pattern `components/trade-finder.tsx` already
   uses.
 - The per week strip is `aria-hidden`; its table is the accessible copy.
-- Reason tone is icon plus word plus text. Never colour alone.
+- Reason tone is icon plus word plus text. Never color alone.
 - All tap targets 44 by 44, including the asset remove buttons, which are the ones
   most likely to be built too small.
 
@@ -969,7 +969,7 @@ and asserts `setLineups` is byte identical for both.
 identical output before and after, and the guard is FAAB's existing suite
 (`lib/faab/*.test.ts`) passing unchanged, with no test edited to accommodate the
 move. A test that has to be adjusted is evidence the extraction changed
-behaviour, and the correct response is to revert the extraction and let Trade
+behavior, and the correct response is to revert the extraction and let Trade
 Ideas carry its own copy with a comment naming the duplication.
 
 **The standing rule for the whole build.** Every task ends with the full suite
@@ -977,7 +977,7 @@ green, not just the tests it added. `npx vitest run` and `npx tsc --noEmit` both
 clean before a task is written into `progress.md` as complete. The suite is 1747
 tests across 122 files today; that number may only go up.
 
-**Files this build must not change the behaviour of:**
+**Files this build must not change the behavior of:**
 
 `lib/power-pulse/engine.ts`, `simulate.ts`, `lineup.ts`, `project.ts`, `math.ts`,
 `load.ts` (beyond additive exports), `lib/league-power-pulse.ts`,
@@ -1020,7 +1020,7 @@ Two follow ups that would need migrations, both deliberately out of scope for no
 - `league_trade_evaluations`, if repeated evaluations of the same proposal turn
   out to be common.
 
-Both are optimisations, and building either before measuring would be guessing.
+Both are optimizations, and building either before measuring would be guessing.
 
 ---
 

@@ -53,7 +53,7 @@ export function safeRedirectPath(input: unknown, fallback = "/"): string {
     const resolved = new URL(input, base);
     if (resolved.origin !== base.origin) return fallback;
     const out = `${resolved.pathname}${resolved.search}${resolved.hash}`;
-    // `/..//host` normalises to the pathname `//host`, which is live as a
+    // `/..//host` normalizes to the pathname `//host`, which is live as a
     // protocol-relative URL the moment it is used without an origin in front.
     if (out.startsWith("//") || out.startsWith("/\\")) return fallback;
     return out;
