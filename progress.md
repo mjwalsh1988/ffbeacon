@@ -16921,7 +16921,7 @@ GROW-T21 | completed | True lastmod on /season/weather from nfl_game_weather.fet
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; three reviews passed; the plan's read is an exported newestWeatherQuery awaited in coreSection's opening Promise.all, and the Season Pulse URLs come from a pure seasonPulseSitemapUrls, so the test drives both with a fake client instead of faking every core read; review fixes: the test asserts limit(1), and a source check pins the coreSection wiring; production holds about 226 weather rows, so the unindexed order-by-limit-1 is fine)
 
-GROW-T22 | pending | "NFL" back in the weather page title and h1 only (approved D1)
+GROW-T22 | completed | "NFL" back in the weather page title and h1 only (approved D1)
      | files: app/season/weather/page.tsx
      | depends on: none
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; the title keeps its existing behaviour of dropping the season when it is null; og:title and the WebPage JSON-LD name follow titleFor, so they carry NFL too; menu, footer, breadcrumb, search entry and share image labels unchanged; the comment wording was corrected on review)

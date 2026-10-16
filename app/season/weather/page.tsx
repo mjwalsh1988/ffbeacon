@@ -56,10 +56,15 @@ import { SectionNav, type SectionNavItem } from "@/components/season-pulse/secti
 
 export const dynamic = "force-dynamic";
 
+// "NFL" leads the title and the h1 on this page only (owner decision D1,
+// docs/seo-audit/gsc-growth-plan-2026-10-15.md 6.4): every weather search
+// Search Console shows contains "nfl weather". The menu, footer, breadcrumb,
+// search list and share image labels still say game day weather without NFL
+// (commit 8aeab0a). og:title and the WebPage name follow the title.
 function titleFor(week: number | null, season: number | null): string {
   return week
-    ? `Game Day Weather, Week ${week}${season ? ` ${season}` : ""}: Forecast for Every Game and Fantasy Impact`
-    : "Game Day Weather This Week: Forecast for Every Game and Fantasy Impact";
+    ? `NFL Weather, Week ${week}${season ? ` ${season}` : ""}: Forecast for Every Game and Fantasy Impact`
+    : "NFL Weather This Week: Forecast for Every Game and Fantasy Impact";
 }
 
 const DESCRIPTION =
@@ -84,7 +89,13 @@ export async function generateMetadata(): Promise<Metadata> {
       "fantasy football weather",
       "fantasy football weather report",
       "nfl dome teams",
-      ...(week ? [`nfl week ${week} weather`, `week ${week} nfl weather forecast`] : []),
+      ...(week
+        ? [
+            `nfl week ${week} weather`,
+            `week ${week} nfl weather forecast`,
+            `fantasy football weather week ${week}`,
+          ]
+        : []),
     ],
     robots: {
       index: true,
@@ -239,7 +250,7 @@ export default async function SeasonWeatherPage({
       <PageBody flush>
         <PageMasthead
           eyebrow="Season Pulse"
-          title={week ? `Game day weather, week ${week}` : "Game day weather this week"}
+          title={week ? `NFL game day weather, week ${week}` : "NFL game day weather this week"}
           chips={chips}
           stats={stats}
           description="The forecast at kickoff for every game still to be played, and what it means for a fantasy lineup: which games to downgrade, which to ignore, and which have a roof."
