@@ -177,6 +177,48 @@ function newest(values: Array<string | null | undefined>): Date | undefined {
   return best === null ? undefined : new Date(best);
 }
 
+/**
+ * The newest forecast read, the one true lastmod the weather page has: the page
+ * changes exactly when a forecast is re-read, and fetched_at is when that
+ * happened. One row, so no paging. Exported so a test can run it against a fake
+ * client.
+ */
+export function newestWeatherQuery(supabase: Admin) {
+  return supabase
+    .from("nfl_game_weather")
+    .select("fetched_at")
+    .order("fetched_at", { ascending: false })
+    .limit(1);
+}
+
+/**
+ * Season Pulse: the hub, its three pages, and one page per week the season has
+ * reached. A week further out is a 404 on the route itself
+ * (lib/season-pulse/weeks.ts isPublishableWeek), so it is not listed here either
+ * (rule 1). Only the weather page carries a lastModified, from the newest
+ * forecast read; the others change whenever a stat or value sync lands, so they
+ * carry none (rule 2). Pure, so a test reads the same list coreSection does.
+ */
+export function seasonPulseSitemapUrls(
+  currentWeek: number,
+  newestWeatherFetchedAt: string | null | undefined,
+): SitemapUrl[] {
+  const urls: SitemapUrl[] = [
+    { loc: `${SITE.url}/season`, priority: 0.8 },
+    { loc: `${SITE.url}/season/leaders`, priority: 0.8 },
+    {
+      loc: `${SITE.url}/season/weather`,
+      lastModified: newest([newestWeatherFetchedAt]),
+      priority: 0.8,
+    },
+    { loc: `${SITE.url}/season/stats`, priority: 0.7 },
+  ];
+  for (const week of publishedWeeks(currentWeek)) {
+    urls.push({ loc: `${SITE.url}${seasonWeekPath(week)}`, priority: 0.6 });
+  }
+  return urls;
+}
+
 /* ------------------------------------------------------------------ */
 /* Shared reads                                                        */
 /* ------------------------------------------------------------------ */
@@ -321,6 +363,7 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
     { data: latestRanking },
     { data: newestRelay },
     { data: communityFormats },
+    { data: newestWeather },
   ] = await Promise.all([
       supabase
         .from("format_configs")
@@ -347,6 +390,8 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
         .from("community_ranking_formats")
         .select("published, format_configs!inner(slug)")
         .eq("published", true),
+      // When a forecast was last re-read, the weather page's lastmod.
+      newestWeatherQuery(supabase),
     ]);
 
   // The same filter hasPublishedEditions() counts, so the file and the page
@@ -436,17 +481,11 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
         urls.push({ loc: `${SITE.url}${weekPath(week)}`, priority: 0.7 });
       }
 
-      // Season Pulse: the hub, its three pages, and one page per week the
-      // season has reached. A week further out is a 404 on the route itself
-      // (lib/season-pulse/weeks.ts isPublishableWeek), so it is not listed
-      // here either (rule 1). No lastModified, for the reason given above.
-      urls.push({ loc: `${SITE.url}/season`, priority: 0.8 });
-      urls.push({ loc: `${SITE.url}/season/leaders`, priority: 0.8 });
-      urls.push({ loc: `${SITE.url}/season/weather`, priority: 0.8 });
-      urls.push({ loc: `${SITE.url}/season/stats`, priority: 0.7 });
-      for (const week of publishedWeeks(clock.currentWeek)) {
-        urls.push({ loc: `${SITE.url}${seasonWeekPath(week)}`, priority: 0.6 });
-      }
+      // Season Pulse. The weather page alone is dated, from the newest
+      // forecast read (seasonPulseSitemapUrls says why).
+      urls.push(
+        ...seasonPulseSitemapUrls(clock.currentWeek, newestWeather?.[0]?.fetched_at),
+      );
     }
   }
 

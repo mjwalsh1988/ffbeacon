@@ -16916,10 +16916,10 @@ GROW-T20 | completed | Weather links from waiver week pages and the start/sit to
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; three reviews passed; the intro sentence now says "Four things"; the start/sit /rankings link is a masthead button with no paragraph, so the sentence sits under the verdict board, outside the hasPlayers branch so the empty state carries it; accessibility fix: the waiver aside, now four cards tall, is sticky only on screens at least 800 px tall, so its last card is never stuck below the fold; noted, not changed: "above 15" against the code's 15-or-more wind band, and "this week's" weather from a future-week start/sit board, both the plan's exact words)
 
-GROW-T21 | pending | True lastmod on /season/weather from nfl_game_weather.fetched_at, with test
+GROW-T21 | completed | True lastmod on /season/weather from nfl_game_weather.fetched_at, with test
      | files: lib/sitemap/sections.ts, lib/sitemap/sections.test.ts
      | depends on: none
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; the plan's read is an exported newestWeatherQuery awaited in coreSection's opening Promise.all, and the Season Pulse URLs come from a pure seasonPulseSitemapUrls, so the test drives both with a fake client instead of faking every core read; review fixes: the test asserts limit(1), and a source check pins the coreSection wiring; production holds about 226 weather rows, so the unindexed order-by-limit-1 is fine)
 
 GROW-T22 | pending | "NFL" back in the weather page title and h1 only (approved D1)
      | files: app/season/weather/page.tsx
