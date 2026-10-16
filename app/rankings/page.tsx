@@ -197,6 +197,41 @@ function FormatDirectory({
           linkQuery={linkQuery}
         />
       </div>
+
+      {/* The IDP board takes no format or source (no value source prices a
+          defender), so its link carries no linkQuery. */}
+      <div className="mt-8">
+        <h3
+          id="format-group-defenders"
+          className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+        >
+          Individual defensive players
+        </h3>
+        <ul
+          aria-labelledby="format-group-defenders"
+          role="list"
+          className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface"
+        >
+          <li>
+            <Link
+              href="/rankings/idp"
+              className="flex min-h-11 items-center justify-between gap-4 px-4 py-3 text-sm text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:bg-base focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <span>
+                <span className="block font-medium">IDP rankings</span>
+                <span className="mt-0.5 block text-xs text-ink-subtle">
+                  Defensive linemen, linebackers and defensive backs, projected
+                  rest of season
+                </span>
+              </span>
+              <ArrowRight
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 text-brand-cyan"
+              />
+            </Link>
+          </li>
+        </ul>
+      </div>
     </section>
   );
 }
@@ -232,7 +267,7 @@ function FormatGroup({
             <Link
               href={`/rankings/${format.slug}${linkQuery}`}
               aria-current={format.slug === currentSlug ? "true" : undefined}
-              className="flex min-h-11 items-center justify-between gap-4 px-4 py-3 text-sm text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="flex min-h-11 items-center justify-between gap-4 px-4 py-3 text-sm text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:bg-base focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
             >
               <span className="font-medium">
                 {formatPhrase(format)} rankings

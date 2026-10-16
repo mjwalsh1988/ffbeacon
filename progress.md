@@ -16896,10 +16896,10 @@ GROW-T16 | completed | IDP guide links to the rankings; bump guide date
      | depends on: GROW-T13
      | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; idp-fantasy-football updatedAt bumped to 2026-10-15)
 
-GROW-T17 | pending | Rankings hub entry for IDP rankings (approved D2)
+GROW-T17 | completed | Rankings hub entry for IDP rankings (approved D2)
      | files: app/rankings/page.tsx
      | depends on: GROW-T13
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; accessibility fix: the focus outline was clipped by the list's overflow-hidden, now drawn inset with a background cue, on the new link and the existing format links; the entry sits inside FormatDirectory, so it hides with the directory if no format is active, the plan's literal placement)
 
 GROW-T18 | pending | FAAB manual mode: defender note links to IDP rankings
      | files: app/tools/faab/faab-form.tsx
