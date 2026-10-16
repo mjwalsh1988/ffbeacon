@@ -592,7 +592,7 @@ export default async function WaiverWeekPage({
                     {
                       href: "/season/weather",
                       title: "Check the weather",
-                      body: "Wind above 15 miles per hour is the one forecast that moves a lineup. Every game's kickoff forecast, worst first.",
+                      body: "Wind of 15 miles per hour or more is the one forecast that moves a lineup. Every game's kickoff forecast, worst first.",
                       icon: CloudRain,
                     },
                   ].map((link) => {

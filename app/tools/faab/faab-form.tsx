@@ -1009,20 +1009,25 @@ function SelectedPlayerCard({
         <Metric
           label={`${player.position} rank`}
           value={`#${player.position_rank}`}
-          attribution={rankingsSourceName ?? "-"}
+          // A defender's position rank is ours, from idp123 points a game
+          // (lib/faab/manual-defenders.ts), not the value source's. The short
+          // name keeps the credit on one line in a 158 px cell at 640 px.
+          attribution={player.unranked ? DEFENDER_RANK_CREDIT : (rankingsSourceName ?? "-")}
         />
         <Metric
           label="Overall rank"
           // A defender's overall_rank is a sort key past every ranked player
           // (UNRANKED_BASE), never a rank to print.
-          value={player.unranked ? "Not ranked" : `#${player.overall_rank}`}
+          value={
+            player.unranked ? <MetricWords>Not ranked</MetricWords> : `#${player.overall_rank}`
+          }
           attribution={rankingsSourceName ?? "-"}
         />
         <Metric
           label="Market value"
           value={
             player.unranked ? (
-              "No market value"
+              <MetricWords>No market value</MetricWords>
             ) : player.value != null && player.value > 0 ? (
               <BeaconValue show={valueSourceIsBeacon}>
                 {player.value.toLocaleString()}
@@ -1050,6 +1055,18 @@ function SelectedPlayerCard({
       )}
     </section>
   );
+}
+
+/** Sleeper's default IDP scoring (idp123), short enough for a metric cell. */
+const DEFENDER_RANK_CREDIT = "Sleeper IDP scoring";
+
+/**
+ * Words in a metric cell's figure slot, set a size down from the monospace
+ * figures so "No market value" stays on one line at the narrowest
+ * three-column width.
+ */
+function MetricWords({ children }: { children: ReactNode }) {
+  return <span className="font-sans text-base">{children}</span>;
 }
 
 function Metric({

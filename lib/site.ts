@@ -204,7 +204,6 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "rank players",
       "make your own rankings",
       "my rankings",
-      "idp rankings",
       "beacon ranker",
     ],
   },
