@@ -16906,10 +16906,10 @@ GROW-T18 | completed | FAAB manual mode: defender note links to IDP rankings
      | depends on: GROW-T13
      | verified: yes (typecheck, lint, tests, build; three reviews passed; no defender note existed in SelectedPlayerCard, so it is a new paragraph; two reviewers found the card beside it printing a defender's sort key as "Overall rank #100001" and "-" for market value, fixed to "Not ranked" and "No market value" per the CLAUDE.md IDP rule; the position rank's source credit is left as it was)
 
-GROW-T19 | pending | Site search entry for IDP rankings (approved D3)
+GROW-T19 | completed | Site search entry for IDP rankings (approved D3)
      | files: lib/site.ts
      | depends on: GROW-T13
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed with no findings; only SEARCHABLE_TOOLS touched in lib/site.ts; noted, not changed: the Rankings Builder entry carries the keyword "idp rankings" and sits earlier, so that query lists the builder first)
 
 GROW-T20 | pending | Weather links from waiver week pages and the start/sit tool
      | files: app/waiver-wire/[week]/page.tsx, app/tools/who-should-i-start/page.tsx

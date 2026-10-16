@@ -270,6 +270,12 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["leaders", "points leaders", "rank", "positional rank", "top scorers", "scoring leaders"],
   },
   {
+    label: "IDP Rankings",
+    href: "/rankings/idp",
+    description: "Every defender ranked for the rest of the season",
+    keywords: ["idp", "defender", "defenders", "linebacker", "defensive back", "defensive line", "dl", "lb", "db", "tackles", "sacks"],
+  },
+  {
     label: "Season Stat Leaders",
     href: "/season/stats",
     description: "Yards, touchdowns, targets, carries and snap share",
