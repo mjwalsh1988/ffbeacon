@@ -1013,13 +1013,17 @@ function SelectedPlayerCard({
         />
         <Metric
           label="Overall rank"
-          value={`#${player.overall_rank}`}
+          // A defender's overall_rank is a sort key past every ranked player
+          // (UNRANKED_BASE), never a rank to print.
+          value={player.unranked ? "Not ranked" : `#${player.overall_rank}`}
           attribution={rankingsSourceName ?? "-"}
         />
         <Metric
           label="Market value"
           value={
-            player.value != null && player.value > 0 ? (
+            player.unranked ? (
+              "No market value"
+            ) : player.value != null && player.value > 0 ? (
               <BeaconValue show={valueSourceIsBeacon}>
                 {player.value.toLocaleString()}
               </BeaconValue>
@@ -1030,6 +1034,20 @@ function SelectedPlayerCard({
           attribution={valueSourceName ?? rankingsSourceName ?? "-"}
         />
       </dl>
+      {/* `unranked` is the flag the manual list's defenders carry
+          (calculator-data.ts): no value source prices one. */}
+      {player.unranked && (
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          No value source prices a defender. See where he sits in our{" "}
+          <Link
+            href="/rankings/idp"
+            className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            IDP rankings
+          </Link>
+          .
+        </p>
+      )}
     </section>
   );
 }

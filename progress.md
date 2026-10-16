@@ -16901,10 +16901,10 @@ GROW-T17 | completed | Rankings hub entry for IDP rankings (approved D2)
      | depends on: GROW-T13
      | verified: yes (typecheck, lint, tests, build; three reviews passed; accessibility fix: the focus outline was clipped by the list's overflow-hidden, now drawn inset with a background cue, on the new link and the existing format links; the entry sits inside FormatDirectory, so it hides with the directory if no format is active, the plan's literal placement)
 
-GROW-T18 | pending | FAAB manual mode: defender note links to IDP rankings
+GROW-T18 | completed | FAAB manual mode: defender note links to IDP rankings
      | files: app/tools/faab/faab-form.tsx
      | depends on: GROW-T13
-     | verified: no
+     | verified: yes (typecheck, lint, tests, build; three reviews passed; no defender note existed in SelectedPlayerCard, so it is a new paragraph; two reviewers found the card beside it printing a defender's sort key as "Overall rank #100001" and "-" for market value, fixed to "Not ranked" and "No market value" per the CLAUDE.md IDP rule; the position rank's source credit is left as it was)
 
 GROW-T19 | pending | Site search entry for IDP rankings (approved D3)
      | files: lib/site.ts
