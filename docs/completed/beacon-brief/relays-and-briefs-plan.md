@@ -1,10 +1,10 @@
 # Beacon Brief, second life: Relays and Briefs
 
+Status: BUILT. Shipped 2026-09-17 (commit 2d72547); the record is the BD-T tasks in progress.md. Owner steps BD-T051, BD-T052 and BD-T108 are still open, and BD-T109 (the week 3 redo) is in progress.
+
 Written 2026-09-16. Revised the same day after the owner's review; the seven
 open decisions in section 20 are now recorded as decisions, and sections 4.3,
-4.5, 4.6, 8.4, 9, 10, 11 and 14 changed to match. Research and plan only.
-Nothing in this document is built. docs/README.md was not edited; add a row
-for this file when the build starts.
+4.5, 4.6, 8.4, 9, 10, 11 and 14 changed to match.
 
 The question asked: is it a better idea to stop rewriting every news post into
 an article, keep the posts as short structured headlines, and write one long

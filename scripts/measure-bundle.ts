@@ -1,5 +1,5 @@
 // Bundle size report (Phase 0, PERF-T002 in
-// docs/performance/site-speed-audit-and-plan.md).
+// docs/completed/performance/site-speed-audit-and-plan.md).
 //
 // Reads .next/app-build-manifest.json after a production build and reports,
 // per route, how much JavaScript a reader downloads: raw bytes and gzip
@@ -16,7 +16,7 @@
 //   npm run measure:bundle
 //
 // Prints to stdout and writes the same text to
-// docs/performance/bundle-<date>.txt (date in America/New_York, per the
+// data/performance/bundle-<date>.txt (date in America/New_York, per the
 // project's Time Display rule) so a before and after change in bundle size
 // can be diffed in git.
 
@@ -127,7 +127,7 @@ function main(): void {
   const report = formatReport(routeRows, chunkRows);
   console.log(report);
 
-  const outDir = join("docs", "performance");
+  const outDir = join("data", "performance");
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, `bundle-${easternDateStamp()}.txt`);
   writeFileSync(outPath, `${report}\n`, "utf8");

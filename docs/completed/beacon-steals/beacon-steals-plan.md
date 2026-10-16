@@ -1,5 +1,7 @@
 # Beacon Steals: draft value against the market
 
+Status: BUILT. Section 9 lists what was deferred.
+
 Plan of record. Written 2026-08-12, before any code existed.
 
 Beacon Steals answers one question for every drafted player, in every format we

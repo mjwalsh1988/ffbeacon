@@ -211,6 +211,10 @@ Status values: pending | in_progress | blocked | completed
 - File-per-component, kebab-case file names, PascalCase exports
 - Migrations: numbered 0001, 0002... in /supabase/migrations/
 - Database types: /lib/database.types.ts (generated, do not edit by hand)
+- docs/ holds documents only. Nothing a program runs may write to or read
+  from it; logs, measurements and files code loads go under data/<feature>/.
+  A built plan moves to docs/completed/ even when check-ins remain. Full rule:
+  docs/README.md.
 - The gate, in order: `npm run typecheck`, `npm run lint`, `npm test`,
   `npm run build`. Lint must finish with zero errors and zero warnings.
   `next build` does not lint (next.config.ts), so a lint failure can never
@@ -586,7 +590,7 @@ Observability: `leagues.positional_war_status` / `_detail` / `_attempted_at` / `
 
 Defenders (DL, LB, DB) are first-class players across the site: profiles,
 search behind a relevance gate, the IDP guide, and League Pulse behind one
-switch. Plan of record: `docs/idp/idp-guide-and-data-plan.md`.
+switch. Plan of record: `docs/completed/idp/idp-guide-and-data-plan.md`.
 
 ABSOLUTE RULE: `lib/site.ts` is the only source of defender checks and
 position nouns. `isDefender(position)` decides whether a player is a defender,
@@ -949,7 +953,7 @@ Transactions:
 
 `/tools/custom-rankings`, nav label "Rankings Builder". A reader builds a
 ranking board by answering one question at a time: which of these two players
-would you rather have? Plan of record: `docs/ranking-boards/board-builder-plan.md`.
+would you rather have? Plan of record: `docs/completed/ranking-boards/board-builder-plan.md`.
 The board it builds is an ordinary `user_ranking_boards` board, edited in My
 Beacon and shared at `/{handle}/rankings/{boardId}`.
 
@@ -1306,9 +1310,9 @@ platform, so the keyboard behaviour is not worse than the control it replaces.
 ## Manager Pulse (the capture, and how it is made fast)
 
 `/tools/manager-pulse/[handle]`. One reader's whole Sleeper history read back
-to them. The plan of record is `docs/manager-pulse/manager-pulse-plan.md`; the
+to them. The plan of record is `docs/completed/manager-pulse/manager-pulse-plan.md`; the
 2026-09-05 speed audit and the build that followed it are
-`docs/manager-pulse/manager-pulse-audit-and-speed-plan.md`. The rules below are
+`docs/completed/manager-pulse/manager-pulse-audit-and-speed-plan.md`. The rules below are
 that build's, and they hold for anything that touches the league sync queue,
 not only for Manager Pulse.
 

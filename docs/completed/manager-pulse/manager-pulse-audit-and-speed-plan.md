@@ -1,6 +1,10 @@
 # Manager Pulse: audit, and the implementation plan to make it fast
 
-Status: AUDIT AND PLAN. Nothing in this document has been built. Written
+Status: BUILT. Shipped 2026-09-05 (commit fec1cd8). The three measurement
+runs in Part 9 (MPS-T017, MPS-T050, MPS-T054) have not been made; `npm run
+measure:manager-pulse` appends them to data/manager-pulse/measurements.jsonl.
+
+Written
 2026-09-05 against `main` at `bca707d`, revised the same day after owner
 review to add three requirements (Part 3), the Sleeper GraphQL research
 (MPS-T038) and the measurement protocol (Part 9). Task prefix for the build:

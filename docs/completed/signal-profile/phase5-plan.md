@@ -1,5 +1,7 @@
 # Signal Phase 5 - Profile block builder (approved plan)
 
+Status: BUILT.
+
 This file exists so a context reset can never wipe the approved Phase 5 breakdown
 again. It is the single source of truth for Phase 5 scope. Build 5.1 -> 5.6 in
 order, one commit per step, each verified with `npm run typecheck` + `npm run

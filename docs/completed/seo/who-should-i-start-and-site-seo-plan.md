@@ -1,7 +1,9 @@
 # Who Should I Start (Beacon Breakdown), the trade calculator slug, and the site SEO audit
 
-Plan of record, written 2026-09-10. Planning only: nothing in this document has
-been implemented. Every file path and line number below was verified against
+Status: BUILT. Shipped 2026-09-11 (commit bb7f9ef). The section 4.5 content
+pages were never built; they were carried into the SEO audit plan.
+
+Plan of record, written 2026-09-10. Every file path and line number below was verified against
 the repo on 2026-09-10 by read-only research agents; line numbers drift, so
 treat them as "where to look", not as a contract.
 

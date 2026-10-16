@@ -1,6 +1,8 @@
 # League Pulse: Positional WAR
 
-Build plan. Nothing here has been built. Written 2026-08-26 against `main` at
+Status: BUILT. Shipped 2026-08-26 (commit d453334).
+
+Written 2026-08-26 against `main` at
 `c068818`. Revised twice on 2026-08-26: once after a review pass on the model,
 and once to bring every deferred extension into scope.
 

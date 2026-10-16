@@ -1,6 +1,7 @@
 # Saved handle: every tool opens on your leagues, and every league list shows its logo
 
-Status: PLAN ONLY. Nothing in this document has been built. Written 2026-09-05
+Status: BUILT. Shipped 2026-09-06 (commit f9160d6; SH-T001 to SH-T060
+completed). Written 2026-09-05
 against `main` at `fec1cd8`. Task prefix for the build: `SH-T###` in
 `progress.md`. The build needs exactly one migration, a column-comment update
 (Part 4.1). The next free migration number is 0268; the unbuilt Beacon Link

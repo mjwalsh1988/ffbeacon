@@ -1,6 +1,6 @@
 # IDP across FF Beacon: data, every tool, every surface, and the IDP guide
 
-Status: APPROVED DIRECTION, NOT BUILT. Written 2026-09-23. Revision 4 (same day): a six-part code audit re-verified every cited line, re-measured the database and Sleeper's live feed, and rewrote the build as four phases with a review stop after each. The build starts in a NEW session from this document.
+Status: BUILT. Shipped in four phases, 2026-09-24 to 2026-09-25 (the IDP tasks in progress.md). Written 2026-09-23. Revision 4 (same day): a six-part code audit re-verified every cited line, re-measured the database and Sleeper's live feed, and rewrote the build as four phases with a review stop after each.
 Protocol: the fresh-session protocol of `docs/faab/faab-calculator-overhaul-plan.md` section 0 applies, including DO NOT COMMIT, DO NOT PUSH, DO NOT CREATE A BRANCH unless the owner says so.
 Task prefix in `progress.md`: `IDP`. Task ids are `IDP-1xx` (phase 1) to `IDP-4xx` (phase 4). The revision 1 to 3 ids (IDP-01 to IDP-85) are retired; nothing was built under them.
 Owner-facing summary (plain language, kept in step): https://claude.ai/artifact/3vmyhZLJ77nwexvAVNyHLA (Artifact tool: read, then republish with its url).

@@ -1,6 +1,8 @@
 # League Pulse: Schedule page and Trade Ideas
 
-Plan only. Nothing in here has been built. Written 2026-08-21 against the tree at
+Status: BUILT. Shipped 2026-08-21 (commits bfbb4cc and 2c5cd5a); T664, saving a built trade, is still blocked in progress.md.
+
+Written 2026-08-21 against the tree at
 `bf6b6e3`.
 
 Two pieces of work:

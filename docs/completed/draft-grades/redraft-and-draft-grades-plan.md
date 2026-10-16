@@ -1,5 +1,9 @@
 # Redraft parity, draft grades and the post-draft handoff
 
+Status: BUILT (the RD-T tasks in progress.md). RD-T063 is open: the "What
+changed since your draft" banner is built but always passed null, because the
+server read is missing.
+
 Plan of record for the build started 2026-08-31. Task ids are `RD-T###` and their
 status lives in `progress.md`. If a session ends mid-build, `handoff.md` says
 exactly where it stopped.

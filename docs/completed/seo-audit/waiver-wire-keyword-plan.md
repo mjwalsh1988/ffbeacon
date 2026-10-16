@@ -1,5 +1,7 @@
 # The waiver wire build: research, decisions, and what shipped
 
+Status: BUILT. This is the record of what shipped.
+
 Written 2026-09-22. The research is a Google Ads Keyword Planner export of 262
 keywords pulled 2026-09-21, cross-read against 90 days of Search Console
 (2026-06-24 to 2026-09-21).

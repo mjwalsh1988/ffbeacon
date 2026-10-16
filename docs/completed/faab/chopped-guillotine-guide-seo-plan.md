@@ -1,6 +1,6 @@
 # Chopped, guillotine and death league guide: SEO plan and build spec
 
-Status: APPROVED PLAN, NOT BUILT. Written 2026-09-19.
+Status: BUILT. The guide shipped 2026-09-19 to 2026-09-22 (the FB-G tasks in progress.md). Written 2026-09-19.
 Companion to `docs/faab/faab-calculator-overhaul-plan.md` (read its section 0 first: the same fresh-session protocol applies, including DO NOT COMMIT, DO NOT PUSH, DO NOT CREATE A BRANCH).
 
 Task prefix in `progress.md`: `FB-G`.

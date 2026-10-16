@@ -1,5 +1,7 @@
 # Season Pulse plan
 
+Status: BUILT. Shipped 2026-10-03 (commit 5b80f46; the SP-T tasks in progress.md).
+
 Written 2026-10-03. Owner decisions recorded here: the name (Season Pulse), the
 position in the menu (directly before Games), fantasy first with NFL second, a
 current-season positional rank finder, weather forecasts through the National

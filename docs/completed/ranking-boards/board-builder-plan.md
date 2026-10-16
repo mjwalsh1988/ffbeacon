@@ -1,11 +1,10 @@
 # Beacon Ranker (head-to-head rankings board builder)
 
-Status: plan complete, awaiting approval to build. Research 2026-09-25; the
+Status: BUILT. Shipped 2026-09-26 (commit e9fe6a0). Research 2026-09-25; the
 owner answered three rounds of questions the same day (section 3). Revised the
 same day after a code review of the plan (corrections in section 2, the run
 model in section 8, the merge in section 9.2, the design pass in section 13).
-Nothing built. No code, schema or copy has changed. Section 12 lists what is
-still open.
+Section 12 lists what was open when the plan was written.
 
 ## 1. The idea
 

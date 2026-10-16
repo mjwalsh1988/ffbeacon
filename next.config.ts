@@ -108,11 +108,11 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/og/**": ["./assets/og-fonts/**", "./public/img/ff-beacon-mark-96.png"],
     // The Brief desk bundle reads the reference edition off disk
-    // (lib/brief-desk/bundle.ts readExample, docs/beacon-brief/examples/), a
+    // (lib/brief-desk/bundle.ts readExample, data/beacon-brief/examples/), a
     // runtime readFileSync the tracer cannot follow, same as the fonts above.
     // Without this the run gets example: null in production and matches
     // nothing.
-    "/api/brief-desk/bundle": ["./docs/beacon-brief/examples/*.json"],
+    "/api/brief-desk/bundle": ["./data/beacon-brief/examples/*.json"],
   },
   // Global security response headers (FFB-SEC-005). Applied to every route.
   // CSP ships in Report-Only mode; see lib/security-headers.ts for the path to

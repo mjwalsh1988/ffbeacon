@@ -1,5 +1,7 @@
 # Google AdSense decline, 2026-09-14: why, and what was changed
 
+Status: BUILT. The changes in Part 3 shipped; the AdSense re-review waits on BD-T052.
+
 Written 2026-09-14. Research only at first, then the changes listed in Part 3
 were built the same day. Nothing here is committed or deployed by this
 document; it is the record of the decision.

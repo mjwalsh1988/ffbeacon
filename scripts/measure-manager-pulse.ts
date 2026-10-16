@@ -1,7 +1,7 @@
 /**
  * scripts/measure-manager-pulse.ts
  *
- * docs/manager-pulse/manager-pulse-audit-and-speed-plan.md, MPS-T053 and Part 9.
+ * docs/completed/manager-pulse/manager-pulse-audit-and-speed-plan.md, MPS-T053 and Part 9.
  *
  * Times a real Manager Pulse lookup the way a reader experiences it: by
  * requesting the site's own routes (GET /tools/manager-pulse/<handle>, then
@@ -88,7 +88,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { appendFile } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { getServiceClient } from "./_supabase";
@@ -853,7 +853,9 @@ type MeasurementLogLine = {
 async function appendMeasurementLog(
   line: MeasurementLogLine,
 ): Promise<void> {
-  const filePath = path.join(process.cwd(), "docs", "manager-pulse", "measurements.jsonl");
+  const dir = path.join(process.cwd(), "data", "manager-pulse");
+  await mkdir(dir, { recursive: true });
+  const filePath = path.join(dir, "measurements.jsonl");
   await appendFile(filePath, `${JSON.stringify(line)}\n`, "utf8");
 }
 

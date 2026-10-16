@@ -1,6 +1,11 @@
 # FF Beacon: site-wide speed audit, and the plan to make it faster
 
-Status: AUDIT AND PLAN. Nothing in this document has been built. Written
+Status: BUILT. Shipped 2026-09-08 (commit 4b203b6). PERF-T034 is partial:
+app/players and app/[handle] got no loading boundary, because one would turn
+their not-found pages into soft 404s. `npm run measure:bundle` writes its
+reports to data/performance.
+
+Written
 2026-09-08 against `main` at `ffb32a7`, from the production build of
 2026-09-06 (`BUILD_ID NfuePAErfvfFe9I-F9YwR`), the production database's
 `pg_stat_statements` ledger (accumulating since 2026-05-16 21:56 UTC, 115

@@ -85,7 +85,7 @@ const WAIVER_CANDIDATES = 60;
  * redo is the first in the game-by-game format (plan section 23); week 1 stays
  * beside it in the folder as the record of the old shape.
  */
-const EXAMPLE_PATH = path.join("docs", "beacon-brief", "examples", "week-3-2026-brief.json");
+const EXAMPLE_PATH = path.join("data", "beacon-brief", "examples", "week-3-2026-brief.json");
 
 /** The typed defensive columns (migration 0296), read beside the offensive ones. */
 const IDP_STAT_COLUMNS =

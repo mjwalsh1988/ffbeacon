@@ -1,7 +1,7 @@
 # FF Beacon SEO and answer-engine audit, and the plan to grow organic traffic
 
-Status: STEP 1 (QUICK FIXES) AND THE FIVE OWNER DECISIONS BUILT 2026-09-11, NOT
-YET COMMITTED OR DEPLOYED. Everything else from Part 7 Phase 2 onward is still
+Status: IN PROGRESS. Step 1 (quick fixes) and the five owner decisions were
+built 2026-09-11 and are deployed. Everything else from Part 7 Phase 2 onward is still
 plan only. Written 2026-09-11. What was built, how it differs from Part 6, and
 what the reviews found is in Part 0 (step 1) and Part 0b (the decisions); where
 those two parts and the item text in Part 6 disagree, Part 0 and 0b are the

@@ -1,5 +1,9 @@
 # The FF Beacon Projection Engine
 
+Status: BUILT (the PE-T tasks in progress.md). PE-T018, one save on
+/admin/power-pulse to clear a stale noise setting, is still open. Version 2 is
+planned in docs/projection-engine/projection-engine-v2-plan.md.
+
 Plan of record. Written 2026-09-01 from the audit in the same session. Task
 prefix in `progress.md` is `PE-T###`.
 

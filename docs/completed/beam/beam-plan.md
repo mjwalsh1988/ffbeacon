@@ -3,7 +3,7 @@
 BEAM: Beacon Engine for Answers and Metrics. An "Ask BEAM" natural-language
 helper backed by FF Beacon's own data and tools. V1 uses no LLM.
 
-Status: PLAN ONLY. Nothing in this document has been implemented.
+Status: BUILT. Shipped 2026-08-14 (first commit a4dda25); beam-build-report.md beside this file says what shipped. Phase 7, the language model interpreter, is a separate project.
 
 ## 0. What was inspected
 

@@ -1,6 +1,6 @@
 # FAAB calculator overhaul: audit, decisions and build spec
 
-Status: APPROVED PLAN, NOT BUILT. Written 2026-09-19. Owner decisions recorded in section 1.
+Status: BUILT. Shipped 2026-09-19 to 2026-09-22 (the FB-T tasks in progress.md); review follow-ups FB-R03, FB-R05 and FB-R07 are still pending. Written 2026-09-19. Owner decisions recorded in section 1.
 Page: `/tools/faab`. Engine: `lib/faab/`. Companion content plan: `docs/faab/chopped-guillotine-guide-seo-plan.md`.
 
 This document is written so a brand-new session with no memory of the planning conversation can build the whole thing. Nothing in it should need guessing. Where a fact could not be verified during planning it is marked VERIFY FIRST with the exact check to run.
