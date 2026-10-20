@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { briefAnnouncement, buildBriefCard, contentsField, statFields } from "./brief-card";
+import { briefAnnouncement, briefBody, buildBriefCard } from "./brief-card";
 
 const BASE = {
   title: "Week 3 of the 2026 season, read through trade value and projected wins",
   url: "https://ffbeacon.com/brief/week-3-2026",
+  editorTake: "What a week.\n\nThe Packers won again.",
   tlDr: "Three running backs changed hands and two of them were overpaid for.",
   periodChip: "Week 3, 2026",
   periodCovered: "Covers Sep 9 to Sep 15, 2026",
-  statTiles: [
-    { label: "Trades graded", value: "14" },
-    { label: "Biggest riser", value: "Jayden Daniels, +9%" },
-  ],
-  sectionHeadings: ["The trades", "The waiver wire", "What the model changed its mind about"],
   imageUrl: "https://ffbeacon.com/api/og/brief/week-3-2026",
   formatsPhrase: "Dynasty Superflex PPR and Redraft PPR",
 };
+
+const READ_MORE = `[Read more](${BASE.url})`;
 
 describe("briefAnnouncement", () => {
   it("names the period and pings the channel", () => {
@@ -28,45 +26,21 @@ describe("briefAnnouncement", () => {
   });
 });
 
-describe("contentsField", () => {
-  it("lists the headings as a bullet list", () => {
-    const field = contentsField(["The trades", "The waiver wire"]);
-    expect(field?.value).toBe("- The trades\n- The waiver wire");
-    expect(field?.inline).toBe(false);
+describe("briefBody", () => {
+  it("uses the editor's take first and keeps its paragraphs", () => {
+    expect(briefBody({ editorTake: "One.  \r\n\r\n\r\n\r\nTwo.", tlDr: "Gist." })).toEqual({
+      text: "One.\n\nTwo.",
+      source: "editor_take",
+    });
   });
 
-  it("counts what it does not list rather than trailing off", () => {
-    const many = Array.from({ length: 12 }, (_, i) => `Section ${i + 1}`);
-    const field = contentsField(many);
-    expect(field?.value.split("\n")).toHaveLength(9);
-    expect(field?.value.endsWith("and 4 more")).toBe(true);
+  it("falls back to the gist when the take is missing or blank", () => {
+    expect(briefBody({ editorTake: null, tlDr: "The  gist." })).toEqual({ text: "The gist.", source: "tl_dr" });
+    expect(briefBody({ editorTake: "  \n ", tlDr: "The gist." }).source).toBe("tl_dr");
   });
 
-  it("never exceeds Discord's field value cap", () => {
-    const huge = Array.from({ length: 20 }, () => "x".repeat(140));
-    const field = contentsField(huge);
-    expect(field!.value.length).toBeLessThanOrEqual(1024);
-  });
-
-  it("is absent when the edition has no sections", () => {
-    expect(contentsField([])).toBeNull();
-  });
-});
-
-describe("statFields", () => {
-  it("renders three across at most", () => {
-    const fields = statFields([
-      { label: "a", value: "1" },
-      { label: "b", value: "2" },
-      { label: "c", value: "3" },
-      { label: "d", value: "4" },
-    ]);
-    expect(fields).toHaveLength(3);
-    expect(fields.every((f) => f.inline)).toBe(true);
-  });
-
-  it("drops a tile with no value rather than printing an empty one", () => {
-    expect(statFields([{ label: "Trades", value: "  " }])).toHaveLength(0);
+  it("says so when there is neither", () => {
+    expect(briefBody({ editorTake: null, tlDr: null })).toEqual({ text: null, source: "none" });
   });
 });
 
@@ -78,49 +52,36 @@ describe("buildBriefCard", () => {
     expect(card.embeds[0].title).toBe(BASE.title);
   });
 
-  it("carries the tl;dr as the description and the OG card as the image", () => {
+  it("carries the editor's take and a Read more link, and nothing else in the body", () => {
     const card = buildBriefCard(BASE);
-    expect(card.embeds[0].description).toBe(BASE.tlDr);
-    expect(card.embeds[0].image?.url).toBe(BASE.imageUrl);
+    expect(card.embeds[0].description).toBe(`What a week.\n\nThe Packers won again.\n\n${READ_MORE}`);
+    expect(card.embeds[0].fields).toBeUndefined();
+    expect(card.bodySource).toBe("editor_take");
   });
 
-  it("puts the period and the formats in the footer", () => {
+  it("carries the gist when there is no take", () => {
+    const card = buildBriefCard({ ...BASE, editorTake: null });
+    expect(card.embeds[0].description).toBe(`${BASE.tlDr}\n\n${READ_MORE}`);
+    expect(card.bodySource).toBe("tl_dr");
+  });
+
+  it("still links when there is no take and no gist", () => {
+    const card = buildBriefCard({ ...BASE, editorTake: null, tlDr: null });
+    expect(card.embeds[0].description).toBe(READ_MORE);
+  });
+
+  it("keeps the OG card and the footer", () => {
     const card = buildBriefCard(BASE);
+    expect(card.embeds[0].image?.url).toBe(BASE.imageUrl);
     expect(card.embeds[0].footer?.text).toBe(
       "Covers Sep 9 to Sep 15, 2026 | Dynasty Superflex PPR and Redraft PPR | ffbeacon.com",
     );
   });
 
-  it("stays inside Discord's 6000 character embed budget on a huge edition", () => {
-    const card = buildBriefCard({
-      ...BASE,
-      tlDr: "y".repeat(1500),
-      statTiles: Array.from({ length: 3 }, (_, i) => ({
-        label: "L".repeat(80),
-        value: `${i}`.repeat(80),
-      })),
-      sectionHeadings: Array.from({ length: 20 }, () => "z".repeat(140)),
-    });
-    const embed = card.embeds[0];
-    const cost =
-      (embed.title?.length ?? 0) +
-      (embed.description?.length ?? 0) +
-      (embed.author?.name.length ?? 0) +
-      (embed.footer?.text.length ?? 0) +
-      (embed.fields ?? []).reduce((sum, f) => sum + f.name.length + f.value.length, 0);
-    expect(cost).toBeLessThanOrEqual(6000);
-  });
-
-  it("still posts when the edition has no tl;dr, tiles or sections", () => {
-    const card = buildBriefCard({
-      ...BASE,
-      tlDr: null,
-      statTiles: [],
-      sectionHeadings: [],
-      formatsPhrase: null,
-    });
-    expect(card.embeds[0].description).toBeUndefined();
-    expect(card.embeds[0].fields).toBeUndefined();
-    expect(card.embeds[0].title).toBe(BASE.title);
+  it("never pushes the link off a body at Discord's cap", () => {
+    const card = buildBriefCard({ ...BASE, editorTake: "y".repeat(5000) });
+    const description = card.embeds[0].description!;
+    expect(description.length).toBeLessThanOrEqual(4096);
+    expect(description.endsWith(READ_MORE)).toBe(true);
   });
 });

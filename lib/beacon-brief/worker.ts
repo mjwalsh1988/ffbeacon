@@ -778,25 +778,22 @@ async function postBriefDiscord(
   const origin = SITE.url.replace(/\/$/, "");
   const pageUrl = `${origin}/brief/${article.slug}`;
   const meta = parseEditionMetadata(article.metadata);
-  // The draft is the only place the section headings live. A payload that no
-  // longer parses is not a reason to refuse the post: the card simply goes out
-  // without its contents list, which is the part a reader can get by clicking.
+  // The draft is the only place the editor's take lives. A payload that no
+  // longer parses is not a reason to refuse the post: the card simply falls
+  // back to the gist, which the articles row carries on its own.
   const parsedDraft = draftSchema.safeParse(edition.draft_payload);
-  const sectionHeadings = parsedDraft.success
-    ? parsedDraft.data.sections.map((s) => s.heading)
-    : [];
+  const editorTake = parsedDraft.success ? parsedDraft.data.editor_take : null;
 
   const card = buildBriefCard({
     title: article.title,
     url: pageUrl,
+    editorTake,
     tlDr: article.tl_dr,
     periodChip: periodChipLabel(article.season, article.week, meta.phase),
     periodCovered: (() => {
       const period = formatPeriod(meta.periodStart, meta.periodEnd);
       return period ? `Covers ${period}` : null;
     })(),
-    statTiles: meta.statTiles,
-    sectionHeadings,
     // The same 1200x630 the page's social unfurl uses, so the Discord card and
     // a link pasted anywhere else cannot show different art for one edition.
     // Built on the PUBLIC origin: Discord fetches this itself, so a localhost
@@ -815,7 +812,7 @@ async function postBriefDiscord(
     stage: "discord_post",
     level: res.ok ? "info" : "error",
     message: res.ok
-      ? `brief ${article.slug} posted${card.dropped.length > 0 ? ` (dropped to fit: ${card.dropped.join(", ")})` : ""}`
+      ? `brief ${article.slug} posted (body: ${card.bodySource})`
       : `brief ${article.slug}: ${res.error}`,
     responsePayload: res as unknown as Json,
   });

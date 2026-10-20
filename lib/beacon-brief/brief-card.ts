@@ -4,9 +4,9 @@
  * WHAT CHANGED AND WHY. The edition post used to be four strings joined by
  * blank lines: "@everyone", the title, the tl;dr, the URL. Discord rendered
  * that as what it was, a wall of gray text with a link preview stapled
- * underneath, and an edition that took a person twenty minutes to review
- * arrived looking like a bot alert. The facts are the same; this puts them in
- * an embed so the channel can read them.
+ * underneath. The embed replaced it, and for a while it also carried the stat
+ * tiles and a list of every section heading, which the owner found cluttered.
+ * The body is now one piece of writing and a link.
  *
  * THE SHAPE, top to bottom:
  *
@@ -16,23 +16,22 @@
  *                 carries the same edition twice. The embed title is the link.
  *   author        "The Beacon Brief", the standing masthead.
  *   title + url   The headline, clickable.
- *   description   The tl;dr, verbatim.
- *   fields        The edition's own stat tiles, three across, then the list of
- *                 sections so a reader can see what is inside before clicking.
+ *   description   ONE body, chosen in this order, then a "Read more" link:
+ *                   1. the editor's take, when the owner wrote one;
+ *                   2. otherwise the gist (the tl;dr), verbatim.
  *   image         The edition's OG card, the same 1200x630 the page and the
  *                 social unfurl use, so the three cannot drift apart.
  *   footer        The period, in words, plus the domain.
  *
- * NOTHING IS TRUNCATED MID-SENTENCE. The same rule League Relay holds to
- * (lib/league-relay/limits.ts): a unit either fits whole or it is dropped
- * whole, and a dropped list of sections says how many it dropped rather than
- * trailing off. The one place a count stands in for content is the section
- * list, where "and 4 more" is an honest summary rather than a severed sentence.
+ * NOTHING IS TRUNCATED MID-SENTENCE. The schema caps the take at 2000
+ * characters and the tl;dr at 1500, both far inside Discord's 4096 for a
+ * description, so the body always goes out whole. The take keeps its
+ * paragraph breaks; Discord renders them.
  *
  * Pure. No I/O, no clock, no Supabase. The worker gathers the facts.
  */
 
-import type { DiscordEmbed, DiscordEmbedField } from "@/lib/discord";
+import type { DiscordEmbed } from "@/lib/discord";
 
 /** FF Beacon purple, as Discord wants it: a decimal integer. */
 export const BRIEF_ACCENT = 0xa855f7;
@@ -42,33 +41,21 @@ const CONTENT_MAX = 2000;
 const TITLE_MAX = 256;
 const AUTHOR_MAX = 256;
 const DESCRIPTION_MAX = 4096;
-const FIELD_NAME_MAX = 256;
-const FIELD_VALUE_MAX = 1024;
 const FOOTER_MAX = 2048;
-const EMBED_TOTAL_MAX = 6000;
-/** Five per cent back, because Discord counts some characters as more than one. */
-const SAFETY_MARGIN = 0.95;
-
-/** How many section headings the contents field will list before summarizing. */
-const SECTIONS_LISTED_MAX = 8;
-/** Stat tiles render three across on a desktop client, so three is the row. */
-const STAT_TILES_MAX = 3;
 
 export interface BriefCardInput {
   /** The published headline. */
   title: string;
   /** Absolute URL of the edition page. */
   url: string;
-  /** The edition's tl;dr, exactly as approved. Null when it has none. */
+  /** The owner's take from the review page. Null or blank when there is none. */
+  editorTake: string | null;
+  /** The edition's tl;dr ("The gist" on the page), exactly as approved. Null when it has none. */
   tlDr: string | null;
   /** "Week 3, 2026", "Pre-season, 2026". Already worded by lib/brief-desk/period.ts. */
   periodChip: string | null;
   /** "Covers Sep 9 to Sep 15, 2026", already in Eastern. Null when unknown. */
   periodCovered: string | null;
-  /** The edition's headline figures. At most three are shown. */
-  statTiles: Array<{ label: string; value: string }>;
-  /** The section headings, in the order the edition runs them. */
-  sectionHeadings: string[];
   /** Absolute URL of the edition's 1200x630 OG card. Null to post without one. */
   imageUrl: string | null;
   /** The two edition formats as one phrase, for the footer. Null when unknown. */
@@ -78,12 +65,26 @@ export interface BriefCardInput {
 export interface BriefCard {
   content: string;
   embeds: DiscordEmbed[];
-  /** Which optional parts were left out to fit. Recorded in the log line. */
-  dropped: string[];
+  /** Which text became the body. Recorded in the log line. */
+  bodySource: "editor_take" | "tl_dr" | "none";
 }
 
 function clean(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Tidy the take without flattening it: trailing spaces off each line and runs
+ * of blank lines down to one, so paragraphs survive as paragraphs.
+ */
+function cleanParagraphs(value: string): string {
+  return value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** The one-line announcement above the card. Never carries the URL. */
@@ -93,52 +94,16 @@ export function briefAnnouncement(periodChip: string | null): string {
     : "@everyone A new Beacon Brief is live.";
 }
 
-/**
- * The contents field: what a reader gets for clicking.
- *
- * Lists headings until it runs out of either the display cap or Discord's 1024
- * characters, then says how many it did not list. A count is not a truncation:
- * "and 4 more" is a complete statement, where a heading cut at "The waiver wire
- * that" is not.
- */
-export function contentsField(headings: string[]): DiscordEmbedField | null {
-  const all = headings.map(clean).filter(Boolean);
-  if (all.length === 0) return null;
-
-  const lines: string[] = [];
-  let used = 0;
-  for (const heading of all.slice(0, SECTIONS_LISTED_MAX)) {
-    const line = `- ${heading}`;
-    // Reserve room for the "and N more" line so adding it can never overflow.
-    if (used + line.length + 1 > FIELD_VALUE_MAX - 24) break;
-    lines.push(line);
-    used += line.length + 1;
-  }
-  if (lines.length === 0) return null;
-
-  const remaining = all.length - lines.length;
-  if (remaining > 0) lines.push(`and ${remaining} more`);
-
-  return {
-    name: "In this edition".slice(0, FIELD_NAME_MAX),
-    value: lines.join("\n").slice(0, FIELD_VALUE_MAX),
-    inline: false,
-  };
-}
-
-/** The headline figures, three across. Empty when the edition published none. */
-export function statFields(
-  tiles: Array<{ label: string; value: string }>,
-): DiscordEmbedField[] {
-  return tiles
-    .map((t) => ({ label: clean(t.label), value: clean(t.value) }))
-    .filter((t) => t.label && t.value)
-    .slice(0, STAT_TILES_MAX)
-    .map((t) => ({
-      name: t.label.slice(0, FIELD_NAME_MAX),
-      value: t.value.slice(0, FIELD_VALUE_MAX),
-      inline: true,
-    }));
+/** The editor's take when there is one, else the gist, else nothing. */
+export function briefBody(input: Pick<BriefCardInput, "editorTake" | "tlDr">): {
+  text: string | null;
+  source: BriefCard["bodySource"];
+} {
+  const take = input.editorTake ? cleanParagraphs(input.editorTake) : "";
+  if (take) return { text: take, source: "editor_take" };
+  const gist = input.tlDr ? clean(input.tlDr) : "";
+  if (gist) return { text: gist, source: "tl_dr" };
+  return { text: null, source: "none" };
 }
 
 /** The small print: which period this covers, in which formats, and the domain. */
@@ -149,68 +114,30 @@ export function briefFooter(input: BriefCardInput): string {
   return bits.join(" | ").slice(0, FOOTER_MAX);
 }
 
-function embedCost(embed: DiscordEmbed): number {
-  return (
-    (embed.title?.length ?? 0) +
-    (embed.description?.length ?? 0) +
-    (embed.author?.name.length ?? 0) +
-    (embed.footer?.text.length ?? 0) +
-    (embed.fields ?? []).reduce((sum, f) => sum + f.name.length + f.value.length, 0)
-  );
-}
-
-/**
- * Build the message.
- *
- * The title, the tl;dr and the link are the edition; they are priced first and
- * are never dropped. The stat tiles and the contents list are the decoration,
- * and they leave in that order if the 6000-character embed budget is tight,
- * which for a normal edition it is not.
- */
+/** Build the message. */
 export function buildBriefCard(input: BriefCardInput): BriefCard {
-  const dropped: string[] = [];
   const title = clean(input.title).slice(0, TITLE_MAX);
-  const description = input.tlDr ? clean(input.tlDr).slice(0, DESCRIPTION_MAX) : undefined;
+  const body = briefBody(input);
+  const readMore = `[Read more](${input.url})`;
+  // The link is priced first, so a body at the cap can never push it off.
+  const description = body.text
+    ? `${body.text.slice(0, DESCRIPTION_MAX - readMore.length - 2)}\n\n${readMore}`
+    : readMore;
 
   const embed: DiscordEmbed = {
     author: { name: "The Beacon Brief".slice(0, AUTHOR_MAX) },
     title,
     url: input.url,
     color: BRIEF_ACCENT,
+    description,
   };
-  if (description) embed.description = description;
   const footer = briefFooter(input);
   if (footer) embed.footer = { text: footer };
   if (input.imageUrl) embed.image = { url: input.imageUrl };
 
-  const ceiling = Math.floor(EMBED_TOTAL_MAX * SAFETY_MARGIN);
-  const fields: DiscordEmbedField[] = [];
-  let cost = embedCost(embed);
-
-  for (const field of statFields(input.statTiles)) {
-    const price = field.name.length + field.value.length;
-    if (cost + price > ceiling) {
-      dropped.push("stat tiles");
-      break;
-    }
-    fields.push(field);
-    cost += price;
-  }
-
-  const contents = contentsField(input.sectionHeadings);
-  if (contents) {
-    const price = contents.name.length + contents.value.length;
-    if (cost + price > ceiling) dropped.push("contents");
-    else {
-      fields.push(contents);
-      cost += price;
-    }
-  }
-  if (fields.length > 0) embed.fields = fields;
-
   return {
     content: briefAnnouncement(input.periodChip).slice(0, CONTENT_MAX),
     embeds: [embed],
-    dropped: [...new Set(dropped)],
+    bodySource: body.source,
   };
 }
