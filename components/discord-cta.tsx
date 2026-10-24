@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { hasSupabaseAuthCookie } from "@/lib/supabase/auth-cookie";
 
 /**
  * Site-wide floating CTA that nudges visitors into the FF Beacon Discord.
@@ -64,12 +65,33 @@ export function DiscordCta() {
       return;
     }
 
+    // A reader with no Supabase auth cookie is signed out, and the membership
+    // endpoint can only ever answer "not a member" for them. Skip the round
+    // trip and show the invite. This is a hint, not a gate: the cookie is
+    // client-writable, and all a forged one buys is the same request every
+    // signed-in reader makes, answered by the server from its own session.
+    // Before this check, every guest and every bot page view cost one function
+    // invocation here, about 3,300 a day, to learn nothing.
+    let signedOut = true;
+    try {
+      signedOut = !hasSupabaseAuthCookie(document.cookie);
+    } catch {
+      // document.cookie can throw under some privacy settings; treat it as
+      // signed out and fall through to showing the invite.
+      signedOut = true;
+    }
+    if (signedOut) {
+      setVisible(true);
+      return;
+    }
+
     // Ask the server whether the signed-in user is already in our Discord.
     // The endpoint derives identity from the session cookie (never trusts the
     // client) and the bot token stays server-side. We stay in the "undecided"
     // (render nothing) state until this resolves so a confirmed member never
-    // sees the invite flash in. Anyone we can't confirm as a member (logged
-    // out, no Discord linked, or an unverifiable check) still sees the CTA.
+    // sees the invite flash in. Anyone we can't confirm as a member (no
+    // Discord linked, not a member, or an unverifiable check) still sees the
+    // CTA.
     const controller = new AbortController();
     let active = true;
     fetch("/api/discord/membership", {

@@ -7,30 +7,16 @@ import {
   SiteHeaderControls,
   HeaderControlsFallback,
 } from "@/components/site-header-controls";
-
-/**
- * The Supabase project ref, parsed from the same URL the client already
- * reads. Supabase's SSR helper (`@supabase/ssr`) names its auth cookie
- * `sb-<project-ref>-auth-token`, splitting a long token across
- * `sb-<ref>-auth-token.0`, `sb-<ref>-auth-token.1` and so on. Deriving the
- * exact prefix from this project's own URL, rather than testing any cookie
- * shaped like `sb-*-auth-token`, means a stray Supabase cookie from a
- * different project on the same hostname cannot mark this reader as signed in.
- */
-function supabaseAuthCookiePrefix(): string | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) return null;
-  try {
-    const projectRef = new URL(url).hostname.split(".")[0];
-    return projectRef ? `sb-${projectRef}-auth-token` : null;
-  } catch {
-    return null;
-  }
-}
+import {
+  isAuthTokenCookieName,
+  supabaseAuthCookiePrefix,
+} from "@/lib/supabase/auth-cookie";
 
 /**
  * A HINT for layout only: does this request carry a cookie shaped like this
- * project's Supabase auth token. Nothing more.
+ * project's Supabase auth token. Nothing more. The cookie's shape, and why
+ * the prefix is derived from this project's URL, is explained in
+ * lib/supabase/auth-cookie.ts, which the Discord invite pill shares.
  *
  * `await cookies()` is a request-scoped read with no network round trip, so
  * this costs nothing like the ~70ms auth call this whole Suspense split
@@ -45,7 +31,9 @@ async function likelySignedIn(): Promise<boolean> {
   const prefix = supabaseAuthCookiePrefix();
   if (!prefix) return false;
   const cookieStore = await cookies();
-  return cookieStore.getAll().some((c) => c.name.startsWith(prefix));
+  return cookieStore
+    .getAll()
+    .some((c) => isAuthTokenCookieName(c.name, prefix));
 }
 
 /**
