@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
-import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SITE } from "@/lib/site";
 import { GA_MEASUREMENT_ID, isGoogleAnalyticsEnabled } from "@/lib/analytics";
@@ -229,13 +228,13 @@ export default function RootLayout({
         </SidebarProvider>
         <DiscordCta />
         <SignalGuideMount />
-        <Analytics />
         {/* Real-user Web Vitals. Page views alone cannot say whether a change
             made the site faster for anyone who is not on the office wifi. */}
         <SpeedInsights />
-        {/* Google Analytics runs beside Vercel's, not instead of it. Vercel
-            counts page views without cookies; GA adds returning visitors,
-            traffic sources and the conversion events in lib/analytics.ts. */}
+        {/* Google Analytics is the site's only page-view analytics. Vercel
+            Analytics ran beside it until 2026-10-24 and was removed because it
+            duplicated GA's page counts, cost a script and a beacon on every
+            view, and billed its events against the Vercel plan. */}
         {googleAnalytics && (
           <>
             <GoogleAnalyticsLibrary measurementId={GA_MEASUREMENT_ID} />

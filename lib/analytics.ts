@@ -2,10 +2,10 @@
  * Google Analytics 4, and the one function the rest of the site calls to send
  * it an event.
  *
- * Vercel Analytics still runs beside this and still counts page views on its
- * own. GA is here for what Vercel cannot say: returning visitors, where a visit
- * came from, and the handful of actions below that tell us whether the site is
- * doing its job.
+ * This is the site's only analytics. Vercel Analytics counted page views beside
+ * it until 2026-10-24, when it was removed as a duplicate. GA covers page views,
+ * returning visitors, where a visit came from, and the handful of actions below
+ * that tell us whether the site is doing its job.
  *
  * GA LOADS IN PRODUCTION ONLY. `isGoogleAnalyticsEnabled()` is read by the root
  * layout, and outside production no tag is rendered, `window.gtag` never exists

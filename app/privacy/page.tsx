@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   }),
 };
 
-const EFFECTIVE_DATE = "September 26, 2026";
-const EFFECTIVE_DATE_ISO = "2026-09-26";
+const EFFECTIVE_DATE = "October 24, 2026";
+const EFFECTIVE_DATE_ISO = "2026-10-24";
 const OPERATOR = SITE.author.legalName;
 const CONTACT = SITE.legalContactEmail;
 
@@ -49,13 +49,19 @@ const CONTACT = SITE.legalContactEmail;
  * cookies" line was removed at the same time because it stopped being true the
  * moment the application went in.
  *
- * GOOGLE ANALYTICS (2026-09-18). GA4 now runs beside Vercel Analytics, so the
- * Analytics block no longer says the site's analytics are cookie-free: Vercel's
- * are, Google's are not. The block names the cookies, the events, what never
- * goes into an event, the 14-month retention set on the property, that Google
- * signals is off, and Google's opt-out add-on. Everything it states matches
- * lib/analytics.ts and the property's admin settings; change one and change the
- * other.
+ * GOOGLE ANALYTICS (2026-09-18). GA4 was added beside Vercel Analytics, so the
+ * Analytics block stopped saying the site's analytics are cookie-free. The block
+ * names the cookies, the events, what never goes into an event, the 14-month
+ * retention set on the property, that Google signals is off, and Google's
+ * opt-out add-on. Everything it states matches lib/analytics.ts and the
+ * property's admin settings; change one and change the other.
+ *
+ * VERCEL ANALYTICS REMOVED (2026-10-24). It duplicated GA's page counts, so the
+ * Analytics block now names Google Analytics alone and the Vercel entry in the
+ * processor list is hosting only. Vercel's request logs (section 1, "Technical
+ * and abuse-prevention data") are unchanged, and Vercel Speed Insights still
+ * measures page load timing in the browser; it sets no cookie and identifies
+ * nobody.
  */
 
 const LINK_CLASS =
@@ -293,12 +299,7 @@ export default function PrivacyPage() {
               Analytics
             </h3>
             <p className="mt-2">
-              We use two analytics services. Vercel Analytics counts page views and
-              shows which pages are used. It sets no cookie and builds no profile of
-              you across sites or visits.
-            </p>
-            <p className="mt-2">
-              We also use Google Analytics, which does set cookies. Two of them, one
+              We use Google Analytics, which sets cookies. Two of them, one
               named <code className="font-mono text-ink">_ga</code> and one whose name
               starts with <code className="font-mono text-ink">_ga_</code> followed by
               our property code, hold a random identifier for your browser, so Google
@@ -418,8 +419,9 @@ export default function PrivacyPage() {
                 data.
               </li>
               <li>
-                <strong className="text-ink">Vercel</strong>, hosting, edge network, and
-                the cookie-free Vercel Analytics described above.
+                <strong className="text-ink">Vercel</strong>, hosting and edge network,
+                including the request logs described above and a page speed
+                measurement that sets no cookie.
               </li>
               <li>
                 <strong className="text-ink">Google Analytics</strong>, the
