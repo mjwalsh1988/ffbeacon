@@ -159,11 +159,11 @@ describe("the title link", () => {
     return buildMatchupRecap({ league, view, teams: new Map(), slot: null, snark: 0.8, showNumbers: false, url, seedKey: "link" });
   }
 
-  it("points at the game on the Schedules tab, not the league overview", () => {
+  it("points at the game on the Matchups tab, not the league overview", () => {
     const writeup = recapWithUrl("https://ffbeacon.com/leagues/123") as Writeup;
-    expect(writeup.url).toBe("https://ffbeacon.com/leagues/123/schedules/6/1");
+    expect(writeup.url).toBe("https://ffbeacon.com/leagues/123/matchups/6/1");
     const rendered = renderWriteup(writeup, { mentionRoleIds: [], pollHours: null });
-    expect(rendered?.message.embeds?.[0]?.url).toBe("https://ffbeacon.com/leagues/123/schedules/6/1");
+    expect(rendered?.message.embeds?.[0]?.url).toBe("https://ffbeacon.com/leagues/123/matchups/6/1");
   });
 
   it("stays off when linking back is switched off", () => {

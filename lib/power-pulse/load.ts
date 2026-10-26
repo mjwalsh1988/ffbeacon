@@ -111,6 +111,12 @@ export type LeagueRow = {
    * (chopsPerWeek). 1 for an ordinary league and when omitted.
    */
   choppedPerWeek?: number;
+  /**
+   * Sleeper's best_ball switch: the lineup sets itself from the roster's best
+   * scorers, so nobody chose a bench. Optional so hand-built rows keep
+   * compiling; loadLeague always fills it.
+   */
+  bestBall?: boolean;
 };
 
 export type RosterRow = {
@@ -140,6 +146,9 @@ export type RosterRow = {
 export type PlayerRow = {
   playerId: string;
   sleeperId: string;
+  /** players.slug, for a link to the profile. Optional so hand-built rows keep
+   *  compiling; loadPlayers always fills it. */
+  slug?: string;
   name: string;
   /** The primary position (players.position). */
   position: PulsePosition;
@@ -304,6 +313,7 @@ export async function loadLeague(
     medianMatch: intOrNull(settings.league_average_match) === 1,
     chopped: isChoppedLeague(settings, eliminated),
     choppedPerWeek: chopsPerWeek(eliminated),
+    bestBall: intOrNull(settings.best_ball) === 1,
   };
 }
 
@@ -525,6 +535,7 @@ export async function loadPlayers(
       out.set(sid, {
         playerId: p.id,
         sleeperId: sid,
+        slug: p.slug,
         name:
           p.full_name ??
           (`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.slug),

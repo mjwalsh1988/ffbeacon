@@ -49,6 +49,7 @@ import {
   recordLabel,
   withUsername,
 } from "@/components/league-schedule/format";
+import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
 
 export const dynamic = "force-dynamic";
 
@@ -313,7 +314,7 @@ export default async function LeagueMatchupPage({
     linkUsername,
   );
   const scheduleHref = withUsername(
-    `/leagues/${sleeperLeagueId}/schedules?view=week&week=${week}`,
+    `/leagues/${sleeperLeagueId}/matchups?view=week&week=${week}`,
     linkUsername,
   );
 
@@ -360,15 +361,15 @@ export default async function LeagueMatchupPage({
   return (
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
-      activeTab="schedules"
+      activeTab="matchups"
       viewer={viewer}
       homeHref={homeHref}
       crumbs={[
         { label: league.name, href: leagueHref },
-        { label: "Schedule", href: scheduleHref },
+        { label: "Matchups", href: scheduleHref },
         { label: `Week ${week}` },
       ]}
-      copyHref={`/leagues/${sleeperLeagueId}/schedules/${week}/${sleeperRosterId}`}
+      copyHref={`/leagues/${sleeperLeagueId}/matchups/${week}/${sleeperRosterId}`}
       copyAriaLabel={`Copy link to this week ${week} matchup`}
       otherLeagues={otherLeagues}
       masthead={mastheadProps}
@@ -441,7 +442,7 @@ async function MatchupBody({
       sleeperRosterId,
       currentWeek,
     }),
-    // The rail's two league-wide panels come from the same board the Schedule
+    // The rail's two league-wide panels come from the same board the Matchups
     // page renders, which is four queries and no arithmetic. Deriving a season
     // series and a form line from it costs nothing beyond that one read.
     loadScheduleBoard(supabase, {
@@ -463,7 +464,7 @@ async function MatchupBody({
           // reader who followed a shared link needs to be told which of those
           // four things did not line up.
           <Panel
-            eyebrow="Schedule"
+            eyebrow="Matchups"
             title={`No game stored for roster ${sleeperRosterId} in week ${week}`}
             helper="The league and the week both exist. This pairing does not."
           >
@@ -480,7 +481,7 @@ async function MatchupBody({
                   href={scheduleHref}
                   className="rounded-sm font-semibold text-brand-cyan underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
-                  Back to week {week} on the schedule
+                  Back to the week {week} matchups
                 </Link>
               </p>
             </div>
@@ -496,13 +497,13 @@ async function MatchupBody({
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-6">
         {/* GETTING BACK OUT, without walking the breadcrumb.
-            The crumb trail above says Schedules, and a crumb is a small target
+            The crumb trail above says Matchups, and a crumb is a small target
             in a row of small targets that a reader has to go looking for. These
             two are the moves somebody actually wants from a matchup: back to the
             week they came from, or straight to one of these two teams' own
             seasons. Both carry the week and the roster, so neither lands on a
             default the reader has to correct. */}
-        <nav aria-label="Back to the schedules" className="flex flex-wrap gap-2">
+        <nav aria-label="Back to the matchups" className="flex flex-wrap gap-2">
           <Link
             href={scheduleHref}
             className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line-accent bg-surface px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -512,7 +513,7 @@ async function MatchupBody({
           </Link>
           <Link
             href={withUsername(
-              `/leagues/${sleeperLeagueId}/schedules?view=team&roster=${view.home.sleeperRosterId}`,
+              `/leagues/${sleeperLeagueId}/matchups?view=team&roster=${view.home.sleeperRosterId}`,
               linkUsername,
             )}
             className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/60 px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -523,7 +524,7 @@ async function MatchupBody({
           {view.away !== null && (
             <Link
               href={withUsername(
-                `/leagues/${sleeperLeagueId}/schedules?view=team&roster=${view.away.sleeperRosterId}`,
+                `/leagues/${sleeperLeagueId}/matchups?view=team&roster=${view.away.sleeperRosterId}`,
                 linkUsername,
               )}
               className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/60 px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -641,7 +642,7 @@ function ShareStrip({
   const card = buildShareCard(view, leagueName);
   const imageHref = `/api/og/matchup/${sleeperLeagueId}/${week}/${sleeperRosterId}/share`;
   const pageHref = withUsername(
-    `/leagues/${sleeperLeagueId}/schedules/${week}/${sleeperRosterId}`,
+    `/leagues/${sleeperLeagueId}/matchups/${week}/${sleeperRosterId}`,
     linkUsername,
   );
   const teams = view.away
@@ -1041,7 +1042,7 @@ function SeasonSeriesPanel({
                   ? m.away
                   : m.home;
               const href = withUsername(
-                `/leagues/${sleeperLeagueId}/schedules/${m.week}/${view.home.sleeperRosterId}`,
+                `/leagues/${sleeperLeagueId}/matchups/${m.week}/${view.home.sleeperRosterId}`,
                 linkUsername,
               );
               return (
@@ -1270,23 +1271,6 @@ function intOrNull(value: string | undefined): number | null {
   if (typeof value !== "string" || value.trim() === "") return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) ? parsed : null;
-}
-
-/**
- * The league's own playoff cut line.
- *
- * Same rule lib/power-pulse/load.ts applies: Sleeper writes
- * `playoff_week_start: 0` on a league whose bracket has not been set up, and
- * zero is a number, so a plain `?? 15` never fires. A cut line at week zero
- * marks the whole season a playoff week, which looks deliberate and is not.
- */
-function resolvePlayoffWeekStart(metadata: unknown): number {
-  const settings = (metadata as { settings?: Record<string, unknown> } | null)
-    ?.settings;
-  const configured = Number(settings?.playoff_week_start);
-  return Number.isFinite(configured) && configured > 0
-    ? Math.trunc(configured)
-    : 15;
 }
 
 function formatRelative(date: Date): string {

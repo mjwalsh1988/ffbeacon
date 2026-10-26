@@ -306,7 +306,7 @@ export function LuckFigure() {
     <ChartFigure
       titleLevel={3}
       title="Same points, opposite records"
-      description="An invented six-team league where everyone plays everyone once. The scores are made up. The all-play records are worked out by the same code the Luck index on the Schedules page runs."
+      description="An invented six-team league where everyone plays everyone once. The scores are made up. The all-play records are worked out by the same code the Luck index on the Matchups page runs."
       summary={`Team A and Team B both scored ${a.pointsFor} points over five weeks. Team A went ${rec(a.record)} and Team B went ${rec(b.record)}. Played against every team every week, Team A was ${a.allPlayWins}-${a.allPlayLosses} and Team B was ${b.allPlayWins}-${b.allPlayLosses}: three all-play wins apart, where their real records are three games apart in five weeks. Team A's all-play record was the best in the league and Team B's sat in the middle of it.`}
       tableLabel="View all six teams as a table"
       table={

@@ -139,7 +139,7 @@ export function ScheduleControls({
     }
     router.push(
       withUsername(
-        `/leagues/${sleeperLeagueId}/schedules?${params.toString()}`,
+        `/leagues/${sleeperLeagueId}/matchups?${params.toString()}`,
         linkUsername,
       ),
     );
@@ -220,7 +220,7 @@ export function ScheduleControls({
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
         <div
           role="group"
-          aria-label="Schedules view"
+          aria-label="Matchups view"
           className="flex shrink-0 gap-1.5"
         >
           <ViewButton

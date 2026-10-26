@@ -60,6 +60,7 @@ import {
   withUsername,
 } from "@/components/league-schedule/format";
 import { matchViewerRoster } from "@/lib/league-viewer";
+import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,7 @@ export async function generateMetadata({
   if (!synced) return { title: "League not found" };
   const league = synced.league;
 
-  const title = `${league.name} Schedules`;
+  const title = `${league.name} Matchups`;
   const description = `Every week and every matchup in ${league.name}, with both lineups, projected totals, win probability, and strength of schedule.`;
   const ogPath = `/api/og/league/${league_id}`;
   return {
@@ -126,7 +127,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function LeagueSchedulePage({
+export default async function LeagueMatchupsPage({
   params,
   searchParams,
 }: {
@@ -242,12 +243,12 @@ export default async function LeagueSchedulePage({
   return (
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
-      activeTab="schedules"
+      activeTab="matchups"
       viewer={viewer}
       homeHref={homeHref}
-      crumbs={[{ label: league.name, href: leagueHref }, { label: "Schedules" }]}
-      copyHref={`/leagues/${sleeperLeagueId}/schedules`}
-      copyAriaLabel="Copy link to this league's schedule"
+      crumbs={[{ label: league.name, href: leagueHref }, { label: "Matchups" }]}
+      copyHref={`/leagues/${sleeperLeagueId}/matchups`}
+      copyAriaLabel="Copy link to this league's matchups"
       otherLeagues={otherLeagues}
       masthead={mastheadProps}
     >
@@ -277,7 +278,7 @@ export default async function LeagueSchedulePage({
             id="schedule-intro"
             className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl"
           >
-            Schedules
+            Matchups
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             Sleeper shows you who you play. This shows you what that costs:
@@ -536,7 +537,7 @@ async function ScheduleBody({
             Second in DOM order, so on a phone it reads after the board it is
             supplementary to. */}
         <aside
-          aria-label="Schedule insights and methodology"
+          aria-label="Matchup insights and methodology"
           className="min-w-0 space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
         >
           <SosPanel board={board} insightWeeks={insightWeeks} />
@@ -876,7 +877,7 @@ function SpotlightItem({
   linkUsername: string | null;
 }) {
   const href = withUsername(
-    `/leagues/${sleeperLeagueId}/schedules/${matchup.week}/${matchup.home.sleeperRosterId}`,
+    `/leagues/${sleeperLeagueId}/matchups/${matchup.week}/${matchup.home.sleeperRosterId}`,
     linkUsername,
   );
   const away = matchup.away;
@@ -983,7 +984,7 @@ function ScheduleBodySkeleton() {
       aria-live="polite"
       className="mt-6 rounded-modal border border-line bg-surface/50 p-6"
     >
-      <p className="text-sm text-ink-muted">Loading the schedule</p>
+      <p className="text-sm text-ink-muted">Loading the matchups</p>
       <div aria-hidden="true" className="mt-4 space-y-2">
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="h-14 animate-pulse rounded-card bg-base/60 motion-reduce:animate-none" />
@@ -1012,24 +1013,6 @@ function intOrNull(value: string | undefined): number | null {
   if (typeof value !== "string" || value.trim() === "") return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) ? parsed : null;
-}
-
-/**
- * The league's own playoff cut line.
- *
- * Same rule lib/power-pulse/load.ts applies, and for the same reason: Sleeper
- * writes `playoff_week_start: 0` on a league whose bracket has not been set up,
- * and zero is a number, so a plain `?? 15` never fires. A cut line drawn at week
- * zero marks every week of the season a playoff week, which looks like a
- * deliberate answer and is not one.
- */
-function resolvePlayoffWeekStart(metadata: unknown): number {
-  const settings = (metadata as { settings?: Record<string, unknown> } | null)
-    ?.settings;
-  const configured = Number(settings?.playoff_week_start);
-  return Number.isFinite(configured) && configured > 0
-    ? Math.trunc(configured)
-    : 15;
 }
 
 /**

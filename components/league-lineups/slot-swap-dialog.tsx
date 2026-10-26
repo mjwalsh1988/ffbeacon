@@ -400,7 +400,7 @@ export function SlotSwapDialog({
           <span>
             A preview only. Make the change in Sleeper for it to count. The win probability
             is your lineup as you have it set against your opponent&apos;s best lineup, so it
-            starts lower than the figure on the Schedules page, which assumes both teams
+            starts lower than the figure on the Matchups page, which assumes both teams
             start their best nine.
           </span>
         </p>

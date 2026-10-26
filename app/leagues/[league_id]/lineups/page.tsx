@@ -35,6 +35,7 @@ import { SeasonCharts } from "@/components/league-lineups/season-charts";
 import { loadLineupSeason } from "@/lib/league-lineups/season-data";
 import { refreshManagerLedger } from "@/lib/league-manager-ledger";
 import { projectionSourceDisplay } from "@/lib/projections/source-constants";
+import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
 
 /**
  * `/leagues/[id]/lineups`: one team, one week, in depth.
@@ -273,10 +274,10 @@ export default async function LeagueLineupsPage({
             },
             {
               href: withUsername(
-                `/leagues/${sleeperLeagueId}/schedules`,
+                `/leagues/${sleeperLeagueId}/matchups`,
                 linkUsername,
               ),
-              label: "Schedules",
+              label: "Matchups",
               hint: "Every matchup and every final score",
             },
           ]}
@@ -812,13 +813,6 @@ function LineupSkeleton() {
 function resolvePlayoffTeams(metadata: unknown): unknown {
   return (metadata as { settings?: Record<string, unknown> } | null)?.settings
     ?.playoff_teams;
-}
-
-/** Sleeper's playoff_week_start, or the usual 15 when it is unset. */
-function resolvePlayoffWeekStart(metadata: unknown): number {
-  const settings = (metadata as { settings?: Record<string, unknown> } | null)?.settings;
-  const configured = Number(settings?.playoff_week_start);
-  return Number.isFinite(configured) && configured > 0 ? Math.trunc(configured) : 15;
 }
 
 function intOrNull(value: string | undefined): number | null {

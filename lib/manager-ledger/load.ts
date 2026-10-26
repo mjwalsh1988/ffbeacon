@@ -111,6 +111,12 @@ export type { RosterRow };
 export type LoadedWeek = WeekInput & {
   sleeperRosterId: number;
   startedIds: Set<string>;
+  /**
+   * The roster on the other side of this game, or null for an unpaired week, a
+   * bye, or a chopped league that pairs nobody. The ledger reads only the
+   * opponent's points; the Leaderboards section needs to know who they were.
+   */
+  opponentRosterId: number | null;
 };
 
 function pointsMap(value: Json | null): Map<string, number> {
@@ -187,6 +193,7 @@ export async function loadSettledWeeks(
     const rosterId = Number(row.sleeper_roster_id);
 
     let opponentPoints: number | null = null;
+    let opponentRosterId: number | null = null;
     if (row.matchup_id !== null && row.matchup_id !== undefined) {
       const list = sides.get(pairKey(week, Number(row.matchup_id))) ?? [];
       // Exactly two sides is a game. One is an unpaired roster; more than two
@@ -196,6 +203,7 @@ export async function loadSettledWeeks(
         const opponentId = list.find((id) => id !== rosterId);
         if (opponentId !== undefined) {
           opponentPoints = pointsByKey.get(`${week}|${opponentId}`) ?? null;
+          opponentRosterId = opponentId;
         }
       }
     }
@@ -210,6 +218,7 @@ export async function loadSettledWeeks(
       starterIds,
       playerPoints: pointsMap(row.player_points),
       opponentPoints,
+      opponentRosterId,
       startedIds: new Set(
         starterIds.filter((id) => id.length > 0 && id !== "0"),
       ),

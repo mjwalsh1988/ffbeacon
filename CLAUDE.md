@@ -480,11 +480,12 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 1. `/tools/league-pulse` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
 2. `/my-beacon/sleeper-leagues` — logged-in users persist their Sleeper username on user_preferences and see the same league list cached for fast return visits.
 3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 is a plain `<Link>` navigation to the deep view, so the branded loading boundary shows immediately on click. The deep-view page calls `lib/league-pulse.ts pulseLeague` on every render (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role); the 60-minute cache inside `pulseLeague` short-circuits redundant Sleeper hits (power rankings recompute at most once per 24h on the cached path). A sync failure renders a branded retry state (`components/league-load-error.tsx`), not a redirect or 404.
-4. `/leagues/[sleeper_league_id]?tab=teams` plus the full routes `/leagues/[sleeper_league_id]/schedules`, `/leagues/[sleeper_league_id]/power-pulse`, `/leagues/[sleeper_league_id]/trade-ideas` and `/leagues/[sleeper_league_id]/transactions` (the tabbed deep view). Overview and Teams render inline on the deep view; the other four are their own routes. Every tab renders from the synced rows; never re-derives from Sleeper.
+4. `/leagues/[sleeper_league_id]?tab=teams` plus the full routes `/leagues/[sleeper_league_id]/matchups`, `/leagues/[sleeper_league_id]/power-pulse`, `/leagues/[sleeper_league_id]/trade-ideas` and `/leagues/[sleeper_league_id]/transactions` (the tabbed deep view). Overview and Teams render inline on the deep view; the other four are their own routes. Every tab renders from the synced rows; never re-derives from Sleeper.
 
 Naming rules:
 - Feature name in copy/docs: "League Pulse".
-- Routes: `/tools/league-pulse` (entry), `/my-beacon/sleeper-leagues` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/lineups` (one team's starters and bench for one week, plus the optimizer), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/decisions` (the Manager Ledger), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view).
+- Routes: `/tools/league-pulse` (entry), `/my-beacon/sleeper-leagues` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/lineups` (one team's starters and bench for one week, plus the optimizer), `/leagues/[sleeper_league_id]/matchups` (week and team schedule views, nav label "Matchups"), `/leagues/[sleeper_league_id]/matchups/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/leaderboards` (every player's points under the league's scoring, rostered or not), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/decisions` (the Manager Ledger), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view).
+- `/leagues/[sleeper_league_id]/schedules` was renamed to `matchups` (both the board and the single-matchup path). `next.config.ts` holds permanent 308s for both old paths; keep them forever, the Discord relay and activity writeups posted links to them.
 - `/leagues/[sleeper_league_id]/trade-finder` was renamed to `trade-ideas`. `next.config.ts` holds a permanent 308 for the old path; keep it forever, shared links use it.
 - `/leagues/[sleeper_league_id]/activity` was REMOVED. It rendered the same `LeagueActivityPanel`, from the same `loadLeagueActivity`, that the league overview already carries; the only thing the route added was the per-team filter, which now renders on the panel itself behind a `<details>` disclosure. `next.config.ts` holds a permanent 308 to the overview; keep it forever, the Copy link button published that path. There is deliberately no Activity entry in `LEAGUE_NAV_ITEMS`.
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
@@ -805,11 +806,11 @@ a judgment call rather than a bug fix, it is partly a claim about future
 behavior rather than about a roster, and it is noisy early in a season. When it
 is off, no ledger read happens at all. Bump `modelVersion` when changing it.
 
-## Schedules (League Pulse)
+## Matchups (League Pulse)
 
-`/leagues/[id]/schedules` is the week view and the team view, driven by
+`/leagues/[id]/matchups` (nav label "Matchups", formerly Schedules) is the week view and the team view, driven by
 `?view=week&week=N` or `?view=team&roster=N`, so both are linkable.
-`/leagues/[id]/schedules/[week]/[roster_id]` is one matchup with both starting
+`/leagues/[id]/matchups/[week]/[roster_id]` is one matchup with both starting
 lineups. Keyed on week plus roster rather than `matchup_id`, because that column
 is nullable when Sleeper leaves a roster unpaired.
 
@@ -846,6 +847,35 @@ projects about 60 players for ONE week. No new table, no cron.
 Venue is never claimed. Sleeper's `opponent` is a bare team code with no home or
 away marker, so `opponentLabel` renders the code as itself. A leading "@" is
 honored for the day `player_weekly_projections.game_id` gets parsed.
+
+## Leaderboards (League Pulse)
+
+`/leagues/[id]/leaderboards`, nav label "Leaderboards", `?week=N` for one
+settled week. Every player who played a settled week, rostered or not, ranked
+under the league's own scoring, with whose roster he was on each week.
+`lib/league-leaderboards/` (pure `build.ts`, `positions.ts`, the server
+`load.ts`), components in `components/league-leaderboards/`, share image at
+`/api/og/leaderboards/[league_id]`, and a "Week N leaders" card on the
+Overview.
+
+ABSOLUTE RULE: a rostered week uses the points Sleeper credited in
+`league_matchups.player_points`; a free agent week is scored from
+`player_stats.metadata->stats` through `lib/league-scoring.ts
+scoreActualLine`, the same dot product Sleeper runs. Who held a player in a
+week is read off that week's `player_points` (one roster per week, or none
+for a free agent). Never infer ownership from the current roster or replay the
+transaction log for it.
+
+ABSOLUTE RULE: settled weeks only (`is_final`), the Manager Ledger's gate.
+No value source and no format: the source toggle changes nothing here.
+Defenders appear only with the IDP switch on, a defensive starting slot, and
+an `idp_*` scoring rule. The "most top players held" cut line is teams still
+holding a roster times each position's DEDICATED starting slots; flex slots
+count toward no position.
+
+The stat lines are cached per NFL week (`leaderboards-week-lines`, busted by
+the `playerStats` tag), shared by every league, and scored in memory. No new
+table and no cron.
 
 ## Trade Ideas (League Pulse)
 

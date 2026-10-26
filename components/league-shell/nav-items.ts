@@ -3,9 +3,9 @@
  * (league-side-nav.tsx) and the mobile sheet (league-mobile-nav.tsx) read from
  * here, so a section can never appear in one and go missing from the other.
  *
- * Overview and Teams are inline views on `/leagues/[id]`; Lineups, Schedules,
- * Power Pulse, Positional WAR, Decisions, Trade Ideas, and Transactions are
- * full routes of their own.
+ * Overview and Teams are inline views on `/leagues/[id]`; Matchups, Lineups,
+ * Power Pulse, Leaderboards, Trade Ideas, Transactions, Decisions, and
+ * Positional WAR are full routes of their own.
  *
  * `leagueTabHref` knows which is which, and forwards the Sleeper handle ONLY
  * when the reader arrived on a `?username=` link. A reader on their own saved
@@ -31,8 +31,9 @@ export type LeagueTabId =
   | "overview"
   | "teams"
   | "lineups"
-  | "schedules"
+  | "matchups"
   | "power-pulse"
+  | "leaderboards"
   | "positional-war"
   | "decisions"
   | "trade-ideas"
@@ -65,16 +66,16 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     icon: "users",
   },
   {
+    id: "matchups",
+    label: "Matchups",
+    hint: "Every week, every matchup, both lineups",
+    icon: "calendar",
+  },
+  {
     id: "lineups",
     label: "Lineups",
     hint: "Who you are starting this week, and what to change",
     icon: "layers",
-  },
-  {
-    id: "schedules",
-    label: "Schedules",
-    hint: "Every week, every matchup, both lineups",
-    icon: "calendar",
   },
   {
     id: "power-pulse",
@@ -83,16 +84,10 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     icon: "activity",
   },
   {
-    id: "positional-war",
-    label: "Positional WAR",
-    hint: "Which positions are scarce in this league",
-    icon: "trendingDown",
-  },
-  {
-    id: "decisions",
-    label: "Decisions",
-    hint: "How well each manager has played the roster they have",
-    icon: "listChecks",
+    id: "leaderboards",
+    label: "Leaderboards",
+    hint: "Top scorers, best weeks, biggest games",
+    icon: "trophy",
   },
   {
     id: "trade-ideas",
@@ -105,6 +100,18 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     label: "Transactions",
     hint: "Trades, waivers, and FAAB moves",
     icon: "swap",
+  },
+  {
+    id: "decisions",
+    label: "Decisions",
+    hint: "How well each manager has played the roster they have",
+    icon: "listChecks",
+  },
+  {
+    id: "positional-war",
+    label: "Positional WAR",
+    hint: "Which positions are scarce in this league",
+    icon: "trendingDown",
   },
 ];
 
@@ -127,10 +134,11 @@ export function leagueTabHref(
     tabId === "lineups" ||
     tabId === "transactions" ||
     tabId === "power-pulse" ||
+    tabId === "leaderboards" ||
     tabId === "positional-war" ||
     tabId === "decisions" ||
     tabId === "trade-ideas" ||
-    tabId === "schedules"
+    tabId === "matchups"
   ) {
     const s = qs.toString();
     return `/leagues/${sleeperLeagueId}/${tabId}${s ? `?${s}` : ""}`;

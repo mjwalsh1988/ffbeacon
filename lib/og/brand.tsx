@@ -29,7 +29,24 @@ export const OG_COLORS = {
   line: "#1F1F33",
 } as const;
 
-export const OG_GRADIENT = `linear-gradient(90deg, ${OG_COLORS.purple} 0%, ${OG_COLORS.cyan} 100%)`;
+/**
+ * The position hues the site's pills use (tailwind.config.ts `position.*`), as
+ * hex for satori, which cannot read a Tailwind class. Five older cards still
+ * carry their own copy of this map; new cards read it from here.
+ */
+export const OG_POSITION_COLORS: Readonly<Record<string, string>> = {
+  QB: "#F87171",
+  RB: "#34D399",
+  WR: "#60A5FA",
+  TE: "#FBBF24",
+  K: "#F472B6",
+  DEF: "#94A3B8",
+  DL: "#A3E635",
+  LB: "#E879F9",
+  DB: "#818CF8",
+};
+
+export const OG_GRADIENT =`linear-gradient(90deg, ${OG_COLORS.purple} 0%, ${OG_COLORS.cyan} 100%)`;
 
 /** The ImageResponse options every card passes: size, Geist, and a cache policy. */
 export function ogResponseOptions(cacheControl: string, extra: { status?: number } = {}) {

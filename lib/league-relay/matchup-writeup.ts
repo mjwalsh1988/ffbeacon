@@ -94,7 +94,7 @@ export interface MatchupWriteupInput {
  */
 export function matchupUrl(leagueUrl: string | null, view: MatchupView): string | null {
   if (!leagueUrl) return null;
-  return `${leagueUrl}/schedules/${view.week}/${view.home.sleeperRosterId}`;
+  return `${leagueUrl}/matchups/${view.week}/${view.home.sleeperRosterId}`;
 }
 
 const PREVIEW_OPENERS: Line[] = [

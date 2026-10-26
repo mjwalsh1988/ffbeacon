@@ -1047,7 +1047,7 @@ function matchupHref(
 ): string | null {
   if (event.week == null) return null;
   return withUsername(
-    `/leagues/${ctx.sleeperLeagueId}/schedules/${event.week}/${rosterId}`,
+    `/leagues/${ctx.sleeperLeagueId}/matchups/${event.week}/${rosterId}`,
     ctx,
   );
 }

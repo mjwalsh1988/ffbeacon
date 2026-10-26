@@ -634,7 +634,7 @@ export function PowerPulseSettingsManager({
 
       <Section
         title="Defensive players (IDP)"
-        description="When this is off, League Pulse leaves DL, LB, DB and IDP flex slots empty in every model, exactly as it did before defenders were added. When it is on, those slots are filled with defenders projected under each league's own IDP scoring, in Power Pulse, Positional WAR, Lineups, Schedules, Decisions, Trade Ideas and the FAAB calculator."
+        description="When this is off, League Pulse leaves DL, LB, DB and IDP flex slots empty in every model, exactly as it did before defenders were added. When it is on, those slots are filled with defenders projected under each league's own IDP scoring, in Power Pulse, Positional WAR, Lineups, Matchups, Decisions, Trade Ideas and the FAAB calculator."
       >
         <div className="sm:col-span-2">
           <Checkbox

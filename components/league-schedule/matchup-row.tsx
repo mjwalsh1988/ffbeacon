@@ -75,7 +75,7 @@ export function MatchupRow({
   const { home, away, isFinal, week } = matchup;
 
   const href = withUsername(
-    `/leagues/${sleeperLeagueId}/schedules/${week}/${home.sleeperRosterId}`,
+    `/leagues/${sleeperLeagueId}/matchups/${week}/${home.sleeperRosterId}`,
     linkUsername,
   );
 

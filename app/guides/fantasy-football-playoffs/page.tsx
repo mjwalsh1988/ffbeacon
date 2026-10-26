@@ -725,7 +725,7 @@ function LuckSection() {
         good you are, and in a one-game playoff round, only how good you are counts.
       </KeyIdea>
       <TryIt href="/tools/league-pulse" label="Sync a league for its Luck index">
-        In a synced league, the Schedules page has a Luck index: every team&apos;s real record set
+        In a synced league, the Matchups page has a Luck index: every team&apos;s real record set
         against its all-play record, ranked from luckiest to unluckiest, using every week that has
         been played. In a league with a median game, the real record includes those extra games and
         the all-play record does not, so read the gap with that in mind.
@@ -1266,7 +1266,7 @@ function SourcesSection() {
         Every platform rule and published figure on this page comes from one of these, read at the
         source. The worksheet and the week-by-week figure come from the guide&apos;s own teaching
         model and say so. The luck and lineup figures use invented teams run through the same
-        functions the Schedules page and the Lineups what-if use. Everything else is invented to show a
+        functions the Matchups page and the Lineups what-if use. Everything else is invented to show a
         shape, and says that too.
       </Para>
       <ul role="list" className="mt-4 space-y-3">
@@ -1298,7 +1298,7 @@ function ClosingSection() {
           League Pulse
         </Link>
         : sync a Sleeper league and the Power Pulse page simulates the rest of your season, the
-        Schedules page shows your Luck index, and Trade Ideas prices any deadline deal in wins as
+        Matchups page shows your Luck index, and Trade Ideas prices any deadline deal in wins as
         well as value. The{" "}
         <Link href="/guides/fantasy-football-trade-guide" className={LINK_CLASS}>
           trade guide

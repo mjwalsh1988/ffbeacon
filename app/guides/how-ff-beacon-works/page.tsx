@@ -383,7 +383,7 @@ function ConfidenceSection() {
           href="/tools/league-pulse"
           className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"
         >
-          League Pulse Schedules board
+          League Pulse Matchups board
         </Link>
         , so a start/sit call and a weekly matchup projection are never running two different
         kinds of math to answer a similar question.

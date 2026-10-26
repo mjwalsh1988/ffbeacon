@@ -605,7 +605,7 @@ async function PowerPulseBody({
 
             <Panel
               eyebrow="Superlatives"
-              title="League leaders"
+              title="Season Awards & Outlooks"
               helper="The things a rankings table cannot tell you."
             >
               <PulseLeaders leaders={buildPulseLeaders(view.teams)} />

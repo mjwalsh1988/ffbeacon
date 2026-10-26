@@ -29,3 +29,22 @@ export const DEFAULT_PLAYOFF_TEAMS = 6;
 
 /** Sleeper's own default first playoff week. */
 export const DEFAULT_PLAYOFF_WEEK_START = 15;
+
+/**
+ * The league's own first playoff week, read off its stored Sleeper object.
+ *
+ * Sleeper writes `playoff_week_start: 0` on a league whose bracket has not been
+ * set up, and zero is a number, so a plain `?? 15` never fires. A cut line drawn
+ * at week zero marks every week of the season a playoff week, which looks like a
+ * deliberate answer and is not one. Anything at or below zero is an unset field.
+ *
+ * Five pages carried their own copy of this until the Leaderboards section
+ * needed a sixth.
+ */
+export function resolvePlayoffWeekStart(metadata: unknown): number {
+  const settings = (metadata as { settings?: Record<string, unknown> } | null)?.settings;
+  const configured = Number(settings?.playoff_week_start);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.trunc(configured)
+    : DEFAULT_PLAYOFF_WEEK_START;
+}

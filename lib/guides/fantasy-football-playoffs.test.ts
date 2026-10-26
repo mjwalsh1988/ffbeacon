@@ -45,7 +45,7 @@ const LINKING_FILES = [
   "app/guides/fantasy-football-trade-guide/page.tsx",
   "app/guides/dynasty-strategy/page.tsx",
   "components/power-pulse/projected-standings.tsx",
-  "app/leagues/[league_id]/schedules/page.tsx",
+  "app/leagues/[league_id]/matchups/page.tsx",
 ];
 
 const glossaryIds = new Set([

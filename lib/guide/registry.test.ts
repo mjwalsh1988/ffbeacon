@@ -43,7 +43,7 @@ describe("resolveGuidePageKey", () => {
     expect(resolveGuidePageKey("/leagues/123/positional-war/")).toBe("league-positional-war");
     // A section route with no guide page still resolves to nothing rather than
     // borrowing the overview's.
-    expect(resolveGuidePageKey("/leagues/123/schedules")).toBeNull();
+    expect(resolveGuidePageKey("/leagues/123/matchups")).toBeNull();
   });
 
   it("ignores a trailing slash and a query string", () => {

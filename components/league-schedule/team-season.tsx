@@ -459,7 +459,7 @@ function SeasonTableRow({
     : (opponent?.projectedOptimal ?? null);
 
   const href = withUsername(
-    `/leagues/${sleeperLeagueId}/schedules/${row.week}/${team.sleeperRosterId}`,
+    `/leagues/${sleeperLeagueId}/matchups/${row.week}/${team.sleeperRosterId}`,
     linkUsername,
   );
 

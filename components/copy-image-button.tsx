@@ -4,7 +4,7 @@
  * Copy a generated share image to the clipboard AS AN IMAGE.
  *
  * Used by every surface that generates one: the matchup scoreboard under
- * /leagues/[id]/schedules, and the team card on the league's Teams tab. The
+ * /leagues/[id]/matchups, and the team card on the league's Teams tab. The
  * caller supplies the image URL and a sentence describing what is on it; nothing
  * in here knows or cares which card it is copying.
  *

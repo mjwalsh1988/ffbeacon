@@ -225,7 +225,7 @@ const PULSE_FEATURES: Array<{ icon: LucideIcon; name: string; body: string }> =
     },
     {
       icon: CalendarRange,
-      name: "Schedules",
+      name: "Matchups",
       body: "Every matchup, both starting lineups, and the projected total behind each side of it.",
     },
     {

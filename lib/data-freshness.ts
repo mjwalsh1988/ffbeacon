@@ -121,7 +121,7 @@ export const FRESHNESS_SPECS: readonly FreshnessSpec[] = [
     label: "Weekly projections",
     maxAgeHours: 48,
     matters:
-      "Power Pulse, playoff odds, Trade Ideas and the schedule board all read these. Stale rows do not look stale; they look like this week's numbers.",
+      "Power Pulse, playoff odds, Trade Ideas and the Matchups board all read these. Stale rows do not look stale; they look like this week's numbers.",
   },
   // One entry per value source rather than one for the table (see `match`).
   // Each reads the (source, captured_at desc) index, so it is one index probe.

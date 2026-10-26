@@ -63,8 +63,12 @@ import {
   Handshake,
   CalendarDays,
   TrendingDown,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
+import { loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
+import { WeekLeadersCard } from "@/components/league-leaderboards/week-leaders-card";
+import { leaderboardsHref } from "@/components/league-leaderboards/range-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -321,7 +325,7 @@ export default async function LeagueDeepViewPage({
   const transactionsHref = `/leagues/${sleeperLeagueId}/transactions${carry ? `?${carry}` : ""}`;
   const powerPulseHref = `/leagues/${sleeperLeagueId}/power-pulse${carry ? `?${carry}` : ""}`;
   const tradeIdeasHref = `/leagues/${sleeperLeagueId}/trade-ideas${carry ? `?${carry}` : ""}`;
-  const scheduleHref = `/leagues/${sleeperLeagueId}/schedules${carry ? `?${carry}` : ""}`;
+  const scheduleHref = `/leagues/${sleeperLeagueId}/matchups${carry ? `?${carry}` : ""}`;
   const positionalWarHref = `/leagues/${sleeperLeagueId}/positional-war${carry ? `?${carry}` : ""}`;
 
   // The masthead is identical on every League Pulse section, so its inputs are
@@ -394,7 +398,7 @@ export default async function LeagueDeepViewPage({
         // landed above the rankings on a phone; the masthead does that job for
         // every section now, so what is left in the rail is genuinely
         // supplementary and belongs after the table in DOM order.
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-6">
             {/*
               THE LOG LEADS THE REST OF THE COLUMN. The only thing above it
@@ -464,6 +468,24 @@ export default async function LeagueDeepViewPage({
                 showPicksToggle={showPicksToggle}
                 rankMode={rankMode}
                 powerPulseHref={powerPulseHref}
+                resynced={!pulseResult.cached}
+              />
+            </Suspense>
+
+            {/*
+              The latest settled week's leaders, a taste of the Leaderboards
+              section. Its own boundary and nothing at all until a week has
+              settled, for the same reason the season result card above
+              reserves no height.
+            */}
+            <Suspense fallback={null}>
+              <WeekLeadersSection
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
+                linkUsername={linkUsername}
+                searchedUsername={searchedUsername}
+                viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+                focusedRosterId={focusedRosterId}
                 resynced={!pulseResult.cached}
               />
             </Suspense>
@@ -552,8 +574,16 @@ export default async function LeagueDeepViewPage({
                   <ExploreLink
                     href={scheduleHref}
                     icon={CalendarDays}
-                    label="Schedules"
+                    label="Matchups"
                     hint="Every week, every matchup, both lineups"
+                  />
+                </li>
+                <li>
+                  <ExploreLink
+                    href={leaderboardsHref(sleeperLeagueId, null, linkUsername)}
+                    icon={Trophy}
+                    label="Leaderboards"
+                    hint="Top scorers, best weeks, biggest games"
                   />
                 </li>
                 <li>
@@ -784,7 +814,7 @@ async function OverviewInsights({
       {showLeaders && (
         <Panel
           eyebrow="Superlatives"
-          title="League leaders"
+          title="Season Awards & Outlooks"
           helper="The things a rankings table cannot tell you."
         >
           {/* One card per row once this panel is sharing the column. The
@@ -798,6 +828,54 @@ async function OverviewInsights({
         </Panel>
       )}
     </div>
+  );
+}
+
+/**
+ * The latest settled week's leaders, linking on to the Leaderboards section.
+ *
+ * Awaits pulseLeagueDerived for the reason OverviewInsights gives: the matchup
+ * rows it reads are written by that pass, and it coalesces per league, so this
+ * shares the rankings table's execution rather than starting a second sync.
+ * A failure renders nothing: a missing taste of another page is not worth an
+ * error state on the Overview.
+ */
+async function WeekLeadersSection({
+  leagueRowId,
+  sleeperLeagueId,
+  linkUsername,
+  searchedUsername,
+  viewerSleeperUserId,
+  focusedRosterId,
+  resynced,
+}: {
+  leagueRowId: string;
+  sleeperLeagueId: string;
+  linkUsername: string | null;
+  searchedUsername: string | null;
+  viewerSleeperUserId: string | null;
+  focusedRosterId: number | null;
+  resynced: boolean;
+}) {
+  const admin = createAdminClient();
+  await pulseLeagueDerived(admin, leagueRowId, { resynced, includePositionalWar: false });
+  const supabase = await createClient();
+  const [view, candidates] = await Promise.all([
+    loadLeaderboardsCached(leagueRowId, "latest").catch((error) => {
+      console.error("[overview] week leaders failed", error);
+      return null;
+    }),
+    loadViewerCandidates(supabase, leagueRowId),
+  ]);
+  if (!view || view.week === null) return null;
+  return (
+    <WeekLeadersCard
+      view={view}
+      sleeperLeagueId={sleeperLeagueId}
+      linkUsername={linkUsername}
+      viewerRosterId={matchViewerRoster(candidates, searchedUsername, focusedRosterId, viewerSleeperUserId)}
+      href={leaderboardsHref(sleeperLeagueId, view.week, linkUsername)}
+    />
   );
 }
 

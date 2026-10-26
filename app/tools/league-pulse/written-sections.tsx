@@ -78,7 +78,7 @@ export function WrittenSections() {
         {
           icon: Workflow,
           title: "Open the deep view",
-          body: "Every roster with its values, every trade graded, the transaction feed, week by week schedules, and the lineup helper. Everything is read from your league's own scoring settings, so a superflex TE premium league is scored as one.",
+          body: "Every roster with its values, every trade graded, the transaction feed, week by week matchups, and the lineup helper. Everything is read from your league's own scoring settings, so a superflex TE premium league is scored as one.",
         },
         {
           icon: Gauge,

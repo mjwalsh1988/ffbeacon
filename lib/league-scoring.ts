@@ -23,7 +23,7 @@
  */
 
 import { isDefender } from "@/lib/site";
-import { normalizeProjectedIdpLine } from "@/lib/idp/stat-line";
+import { normalizeActualIdpLine, normalizeProjectedIdpLine } from "@/lib/idp/stat-line";
 
 /** A Sleeper scoring_settings map: stat key to points per unit. */
 export type ScoringSettings = Record<string, number>;
@@ -260,6 +260,36 @@ export function scoreWithFallback(
     }
   }
   return { points, usedLeagueScoring: false };
+}
+
+/**
+ * Score an ACTUAL stat line (what a player really did in a week) under one
+ * league's rules. The counterpart to `scoreWithFallback`, which scores a
+ * projection.
+ *
+ * Sleeper's actual lines use the same keys a league's `scoring_settings`
+ * does, so this is the same dot product Sleeper itself runs: measured against
+ * the points Sleeper credited rostered players in a live league, it agrees to
+ * the decimal on every line but stat corrections. That is what lets a player
+ * nobody rostered be scored as if somebody had.
+ *
+ * A defender goes through the actual-line normalizer (everything Sleeper
+ * credited him, minus its own derived figures) and only when the league scores
+ * individual defense at all; otherwise null, which is "no rule for him", never
+ * a zero. Null too when the league's scoring is unusable: there is no stored
+ * column to fall back to that would be honest about this league.
+ */
+export function scoreActualLine(
+  stats: StatMap | null | undefined,
+  scoring: ScoringSettings | null | undefined,
+  position: string | null | undefined,
+): number | null {
+  if (!stats || typeof stats !== "object") return null;
+  if (isDefender(position)) {
+    if (!scoresIdp(scoring)) return null;
+    return scoreStatMap(normalizeActualIdpLine(stats as Record<string, unknown>), scoring);
+  }
+  return scoreStatMap(stats, scoring);
 }
 
 /**

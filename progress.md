@@ -16925,3 +16925,23 @@ GROW-T22 | completed | "NFL" back in the weather page title and h1 only (approve
      | files: app/season/weather/page.tsx
      | depends on: none
      | verified: yes (typecheck, lint, tests, build; three reviews passed; the title keeps its existing behavior of dropping the season when it is null; og:title and the WebPage JSON-LD name follow titleFor, so they carry NFL too; menu, footer, breadcrumb, search entry and share image labels unchanged; the comment wording was corrected on review)
+
+MATCHUPS-T01 | completed | League Pulse: Schedules renamed Matchups (nav, headings, crumbs, copy, route) and nav reordered
+     | files: app/leagues/[league_id]/matchups/** (moved from schedules/), next.config.ts (two permanent 308s), components/league-shell/nav-items.ts, every link builder that pointed at /schedules, CLAUDE.md
+     | depends on: none
+     | verified: yes (typecheck, lint, tests, build; one review: two fixes, a missing attribute space and five "Schedule" eyebrows on the empty states)
+
+LB-T01 | completed | Leaderboards data: every player under the league's scoring, ownership per week, cached per NFL week and per (league, week) view
+     | files: lib/league-leaderboards/{types,build,positions,load,share}.ts and tests, lib/league-scoring.ts (scoreActualLine), lib/manager-ledger/load.ts (opponentRosterId), lib/power-pulse/load.ts (slug, bestBall), lib/power-pulse/playoff-defaults.ts (shared resolvePlayoffWeekStart, five copies removed)
+     | depends on: none
+     | verified: yes (typecheck, lint, tests, build; checked against a live 12-team league; review fixes: team defense points-allowed buckets were being dropped from free agent weeks, IR and taxi players left out of Bench heroes, history line names a single earlier holder, the view cached ten minutes per league and week)
+
+LB-T02 | completed | Leaderboards page, nav item, Overview "Week N leaders" card, "League leaders" retitled "Season Awards & Outlooks"
+     | files: app/leagues/[league_id]/leaderboards/page.tsx, components/league-leaderboards/*, app/leagues/[league_id]/page.tsx, app/leagues/[league_id]/power-pulse/page.tsx, components/power-pulse/pulse-leaders.tsx, lib/league-masthead.ts
+     | depends on: LB-T01
+     | verified: yes (checked at 1440 and 360 px, nothing past the edge; accessibility review fixes: full text instead of truncation, contrast on small text, no drawn-twice figures, position buttons keep "QB" in their names, focus after Show more, list roles, 44 px name targets; the Overview grid now shrinks on phones, which it did not before)
+
+LB-T03 | completed | Leaderboards share image
+     | files: app/api/og/leaderboards/[league_id]/route.tsx, lib/og/brand.tsx (OG_POSITION_COLORS)
+     | depends on: LB-T01
+     | verified: yes (rendered for season and week 6; security review: no high findings; non-canonical query strings now redirect to one URL per card)

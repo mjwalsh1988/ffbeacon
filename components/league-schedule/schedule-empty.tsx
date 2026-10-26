@@ -47,7 +47,7 @@ export function ScheduleEmpty({
   if (kind === "no-schedule") {
     return (
       <EmptyPanel
-        eyebrow="Schedule"
+        eyebrow="Matchups"
         title="No schedule published yet"
         helper={`Sleeper has no games on file for ${seasonLabel}.`}
         icon={<CalendarOff aria-hidden="true" className="h-5 w-5" />}
@@ -72,7 +72,7 @@ export function ScheduleEmpty({
   if (kind === "chopped") {
     return (
       <EmptyPanel
-        eyebrow="Schedule"
+        eyebrow="Matchups"
         title="These pairings do not decide anything"
         helper="A chopped league eliminates the lowest score in the whole league each week."
         icon={<Scissors aria-hidden="true" className="h-5 w-5" />}
@@ -96,7 +96,7 @@ export function ScheduleEmpty({
   if (kind === "no-projections") {
     return (
       <EmptyPanel
-        eyebrow="Schedule"
+        eyebrow="Matchups"
         title="Projections are still calculating"
         helper="Opponents, records and final scores are here. The forward-looking numbers are not."
         icon={<CalendarClock aria-hidden="true" className="h-5 w-5" />}
@@ -122,7 +122,7 @@ export function ScheduleEmpty({
     const plural = missingWeeks.length === 1 ? "week" : "weeks";
     return (
       <EmptyPanel
-        eyebrow="Schedule"
+        eyebrow="Matchups"
         title="The slate is incomplete"
         helper={
           missingWeeks.length === 0
@@ -148,7 +148,7 @@ export function ScheduleEmpty({
 
   return (
     <EmptyPanel
-      eyebrow="Schedule"
+      eyebrow="Matchups"
       title="No opponent this week"
       helper="This roster is unpaired, so there is no matchup to open."
       icon={<UserMinus aria-hidden="true" className="h-5 w-5" />}

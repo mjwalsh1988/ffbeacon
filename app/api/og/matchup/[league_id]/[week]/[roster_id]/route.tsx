@@ -11,6 +11,7 @@ import type {
 } from "@/lib/league-schedule/types";
 import { OG_FONT_FAMILY, OG_FONTS } from "@/lib/og/assets";
 import { fitText, OgBrandMark } from "@/lib/og/brand";
+import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
 
 export const runtime = "nodejs";
 
@@ -516,22 +517,6 @@ function notFoundImage(reason: string): Response {
       headers: { "cache-control": "public, max-age=0, s-maxage=60" },
     },
   );
-}
-
-/**
- * The league's own playoff cut line.
- *
- * Sleeper writes `playoff_week_start: 0` on a league whose bracket has not been
- * set up, and zero is a number, so a plain `?? 15` never fires. Same guard as
- * lib/power-pulse/load.ts, for the same reason.
- */
-function resolvePlayoffWeekStart(metadata: unknown): number {
-  const settings = (metadata as { settings?: Record<string, unknown> } | null)
-    ?.settings;
-  const configured = Number(settings?.playoff_week_start);
-  return Number.isFinite(configured) && configured > 0
-    ? Math.trunc(configured)
-    : 15;
 }
 
 function clip(s: string, n: number): string {

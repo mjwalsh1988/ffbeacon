@@ -2646,7 +2646,7 @@ export function FaabSettingsManager({
           <p className="text-[11px] leading-relaxed text-ink-subtle">
             NOT ACTIVE YET. This switch is saved but nothing reads it. Carrying
             an injury forward means changing the shared projection path that
-            Power Pulse, Lineups, Schedules and the Manager Ledger all run on,
+            Power Pulse, Lineups, Matchups and the Manager Ledger all run on,
             which is a decision of its own rather than part of the FAAB work.
             The intent, when it lands: a player ruled out for the season should
             not read as available again the moment the feed stops mentioning

@@ -1,5 +1,7 @@
 /**
- * League leaders: one bright card per superlative.
+ * Season Awards & Outlooks: one bright card per superlative. It was titled
+ * "League leaders" until the Leaderboards section arrived, and two things
+ * called leaders on one site is one too many.
  *
  * Modeled on the On The Clock draft awards, where each award gets its own icon
  * and accent so the grid reads as distinct callouts rather than a repeating
@@ -111,7 +113,7 @@ export function PulseLeaders({
   if (leaders.length === 0) {
     return (
       <p className="text-sm text-ink-muted">
-        League leaders appear once Power Pulse has scored every team.
+        Season awards appear once Power Pulse has scored every team.
       </p>
     );
   }

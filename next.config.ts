@@ -154,6 +154,22 @@ const nextConfig: NextConfig = {
         destination: "/leagues/:league_id/trade-ideas",
         permanent: true,
       },
+      // Schedules inside a league became Matchups, the word Sleeper and Yahoo
+      // use for the same screen. Two explicit entries, like the trade-calculator
+      // pair below: the second keeps single-matchup links working, and those
+      // are the ones the Discord relay and the activity writeups have already
+      // posted into league chats. The query string (view, week, roster) is
+      // carried across by Next without being named here.
+      {
+        source: "/leagues/:league_id/schedules",
+        destination: "/leagues/:league_id/matchups",
+        permanent: true,
+      },
+      {
+        source: "/leagues/:league_id/schedules/:week/:roster_id",
+        destination: "/leagues/:league_id/matchups/:week/:roster_id",
+        permanent: true,
+      },
       // Signal Check became the trade calculator: same tool, the slug now
       // matches the label already shipping in the nav and footer, and it is
       // the head term readers search for. Two explicit entries rather than a

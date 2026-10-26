@@ -345,8 +345,8 @@ export default async function LeagueTradeFinderPage({
               hint: "Every move the league made, with the trades graded",
             },
             {
-              href: `/leagues/${sleeperLeagueId}/schedules${qs}`,
-              label: "Schedules",
+              href: `/leagues/${sleeperLeagueId}/matchups${qs}`,
+              label: "Matchups",
               hint: "How the season fell, week by week",
             },
           ]}
