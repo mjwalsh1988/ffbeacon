@@ -10,6 +10,7 @@
  */
 
 import { SleeperAvatar } from "@/components/sleeper-avatar";
+import { teamLabel } from "@/lib/league-leaderboards/team-label";
 import { POSITION_CHIP } from "@/components/season-pulse/bits";
 import { positionNoun } from "@/lib/site";
 import {
@@ -103,9 +104,10 @@ export function OwnerTag({
       <SleeperAvatar avatarId={team.avatarId} title="" size={18} />
       {/* The comma is the pause between the tag before and the name. */}
       <span className="sr-only">, {prefix ? `${prefix} ` : ""}</span>
-      {/* Wraps rather than truncates: the team name appears nowhere else in
-          full on a phone. */}
-      <span className="min-w-0 break-words">{team.teamName}</span>
+      {/* The owner's Sleeper handle, not the team name (see
+          lib/league-leaderboards/team-label.ts). Wraps rather than truncates:
+          it appears nowhere else in full on a phone. */}
+      <span className="min-w-0 break-words">{teamLabel(team)}</span>
       {mine && (
         <span className="shrink-0 rounded-full bg-brand-cyan/20 px-1.5 text-[9px] font-bold uppercase tracking-[0.1em]">
           Your team
@@ -130,7 +132,7 @@ export function ownershipRuns(ownership: OwnershipWeek[]): Run[] {
 
 /**
  * The ownership history in full words: "Free agent weeks 1 to 3, then
- * Gridiron Kings weeks 4 to 7". Null only when one holder had him every week
+ * mjwalsh weeks 4 to 7". Null only when one holder had him every week
  * AND still has him, because then the owner tag already says it all. A single
  * holder who has since traded or dropped him is still named. One line for the
  * eye and the ear alike, so nothing is drawn twice.
@@ -145,7 +147,7 @@ export function ownershipHistory(
   if (runs.length === 1 && runs[0].rosterId === currentRosterId) return null;
   return runs
     .map((r) => {
-      const who = r.rosterId === null ? "Free agent" : (teams[r.rosterId]?.teamName ?? "Another team");
+      const who = r.rosterId === null ? "Free agent" : (teams[r.rosterId] ? teamLabel(teams[r.rosterId]) : "Another team");
       const span = r.from === r.to ? `week ${r.from}` : `weeks ${r.from} to ${r.to}`;
       return `${who} ${span}`;
     })

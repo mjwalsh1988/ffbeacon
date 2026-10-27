@@ -11,7 +11,7 @@ import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { leagueMastheadProps } from "@/lib/league-masthead";
 import { loadViewerCandidates } from "@/lib/league-positional-war-data";
 import { matchViewerRoster } from "@/lib/league-viewer";
-import { loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
+import { isWeekSettled, loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
 import type { LeaderboardsView } from "@/lib/league-leaderboards/types";
 import { LeagueShell } from "@/components/league-shell";
 import { Panel } from "@/components/dashboard-panel";
@@ -26,6 +26,12 @@ import { RangeNav } from "@/components/league-leaderboards/range-nav";
 import { LIST_CLASS, LeaderRow, PlayerWeekRow } from "@/components/league-leaderboards/leader-row";
 import { GameList, TeamScoreList, TeamTotalList } from "@/components/league-leaderboards/team-boards";
 import { describeLeaderboards } from "@/lib/league-leaderboards/share";
+import {
+  boardImageHref,
+  buildBoardShareCard,
+  describeBoardShareCard,
+  type ShareBoard,
+} from "@/lib/league-leaderboards/board-share";
 import type { SleeperLeague } from "@/lib/sleeper";
 
 export const dynamic = "force-dynamic";
@@ -57,10 +63,21 @@ const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
  * share one execution.
  */
 const getView = cache(
-  async (leagueRowId: string, resynced: boolean, week: number | null): Promise<LeaderboardsView | null> => {
+  async (
+    leagueRowId: string,
+    season: number | null,
+    resynced: boolean,
+    week: number | null,
+  ): Promise<LeaderboardsView | null> => {
     const admin = createAdminClient();
     // includePositionalWar: false. Nothing here draws a curve.
     await pulseLeagueDerived(admin, leagueRowId, { resynced, includePositionalWar: false });
+    // A week that has not settled shows the season. Asking for it by number
+    // would build the same season again and cache it under that week, so a
+    // link to week 20 would cost a full season build per visit window.
+    if (week !== null && season !== null && !(await isWeekSettled(leagueRowId, season, week))) {
+      return loadLeaderboardsCached(leagueRowId, null);
+    }
     return loadLeaderboardsCached(leagueRowId, week);
   },
 );
@@ -178,6 +195,7 @@ export default async function LeagueLeaderboardsPage({
         <Suspense fallback={<BodySkeleton />}>
           <LeaderboardsBody
             leagueRowId={league.id}
+            season={league.season != null ? Number(league.season) : null}
             sleeperLeagueId={sleeperLeagueId}
             leagueName={league.name}
             resynced={!pulseCached}
@@ -194,6 +212,7 @@ export default async function LeagueLeaderboardsPage({
 
 async function LeaderboardsBody({
   leagueRowId,
+  season,
   sleeperLeagueId,
   leagueName,
   resynced,
@@ -203,6 +222,7 @@ async function LeaderboardsBody({
   linkUsername,
 }: {
   leagueRowId: string;
+  season: number | null;
   sleeperLeagueId: string;
   leagueName: string;
   resynced: boolean;
@@ -212,7 +232,7 @@ async function LeaderboardsBody({
   linkUsername: string | null;
 }) {
   const [view, candidates] = await Promise.all([
-    getView(leagueRowId, resynced, requestedWeek),
+    getView(leagueRowId, season, resynced, requestedWeek),
     createClient().then((supabase) => loadViewerCandidates(supabase, leagueRowId)),
   ]);
 
@@ -243,6 +263,38 @@ async function LeaderboardsBody({
   // The builder falls back to the season for a week that has not settled, and
   // the reader is told rather than left wondering where their week went.
   const ignoredWeek = requestedWeek !== null && !isWeek;
+
+  // One copy-image button per list, drawn by /api/og/leaderboards/[id]/[board].
+  // Nothing is offered for a list with nothing on it.
+  const shareButton = (board: ShareBoard, spoken: string) => {
+    const card = buildBoardShareCard(view, board);
+    if (!card || card.entries.length === 0) return undefined;
+    return (
+      <CopyImageButton
+        size="sm"
+        imageHref={boardImageHref(sleeperLeagueId, board, view.week)}
+        description={describeBoardShareCard(card, leagueName)}
+        ariaLabel={`Copy image: ${spoken} ${scopeLabel}, as a picture on the clipboard`}
+      />
+    );
+  };
+  // The points board switches position in the browser, so it gets every
+  // position's link and sentence up front and its button follows the tab.
+  const pointsShare = Object.fromEntries(
+    (["ALL", ...view.positions] as const).map((key) => {
+      const position = key === "ALL" ? null : key;
+      const card = buildBoardShareCard(view, "points", position);
+      return [
+        key,
+        card && card.entries.length > 0
+          ? {
+              imageHref: boardImageHref(sleeperLeagueId, "points", view.week, position),
+              description: describeBoardShareCard(card, leagueName),
+            }
+          : null,
+      ];
+    }),
+  );
 
   return (
     <div className="mt-6 space-y-6">
@@ -307,6 +359,7 @@ async function LeaderboardsBody({
           teams={teams}
           viewerRosterId={viewerRosterId}
           scopeLabel={scopeLabel}
+          share={pointsShare}
         />
       </Panel>
 
@@ -315,6 +368,7 @@ async function LeaderboardsBody({
           eyebrow="Still out there"
           title="Best players nobody owns"
           helper={`The top scorers ${scopeLabel} who are on no roster today.`}
+          action={shareButton("unowned", "the best players nobody owns")}
         >
           {view.unowned.length === 0 ? (
             <p className="text-sm text-ink-muted">Every player who has scored is on somebody&apos;s roster.</p>
@@ -340,6 +394,7 @@ async function LeaderboardsBody({
           eyebrow="Who has them"
           title="Most top players held"
           helper="The top X at each position, where X is the number of teams times that position's own starting slots. Flex slots do not count. Counted on today's rosters."
+          action={shareButton("top-tier", "the teams holding the most top players")}
         >
           <TopTier
             cutoffs={view.topTier.cutoffs}
@@ -356,6 +411,7 @@ async function LeaderboardsBody({
             eyebrow="Single games"
             title="Best player games"
             helper="The biggest one-week scores of the season, and whose team each one landed on."
+            action={shareButton("best-games", "the best player games")}
           >
             <ol role="list" aria-label="Best player games this season" className={LIST_CLASS}>
               {view.bestWeeks.map((item, i) => (
@@ -375,6 +431,7 @@ async function LeaderboardsBody({
             eyebrow="Left on the bench"
             title="Bench heroes"
             helper={`The biggest games ${scopeLabel} that did not count, because the player was not in the lineup.`}
+            action={shareButton("bench-heroes", "the bench heroes")}
           >
             {view.benchHeroes.length === 0 ? (
               <p className="text-sm text-ink-muted">Nobody scored a point from the bench {scopeLabel}.</p>
@@ -397,13 +454,13 @@ async function LeaderboardsBody({
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
-        <Panel eyebrow="Teams" title="Highest team scores" helper={`The best single weeks ${scopeLabel}.`}>
+        <Panel eyebrow="Teams" title="Highest team scores" helper={`The best single weeks ${scopeLabel}.`} action={shareButton("team-highs", "the highest team scores")}>
           <TeamScoreList label="Highest team scores" scores={view.teamHighs} teams={teams} viewerRosterId={viewerRosterId} />
         </Panel>
-        <Panel eyebrow="Teams" title="Lowest team scores" helper={`The quietest weeks ${scopeLabel}.`}>
+        <Panel eyebrow="Teams" title="Lowest team scores" helper={`The quietest weeks ${scopeLabel}.`} action={shareButton("team-lows", "the lowest team scores")}>
           <TeamScoreList label="Lowest team scores" scores={view.teamLows} teams={teams} viewerRosterId={viewerRosterId} />
         </Panel>
-        <Panel eyebrow="Teams" title="Most points scored" helper={`Total points ${scopeLabel}, playoff weeks included.`}>
+        <Panel eyebrow="Teams" title="Most points scored" helper={`Total points ${scopeLabel}, playoff weeks included.`} action={shareButton("points-for", "every team's total points")}>
           <TeamTotalList
             label="Most points scored"
             totals={view.pointsFor}
@@ -418,6 +475,7 @@ async function LeaderboardsBody({
             eyebrow="Teams"
             title="Weekly high scores"
             helper="How many weeks each team posted the top score in the league. Ties count for everyone tied."
+            action={shareButton("weekly-highs", "the weekly high score count for every team")}
           >
             <TeamTotalList
               label="Weekly high scores"
@@ -436,13 +494,16 @@ async function LeaderboardsBody({
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
             {(
               [
-                { title: "Biggest blowouts", games: view.games.blowouts, figure: "margin" },
-                { title: "Closest games", games: view.games.closest, figure: "margin" },
-                { title: "Most combined points", games: view.games.shootouts, figure: "combined" },
+                { title: "Biggest blowouts", games: view.games.blowouts, figure: "margin", board: "blowouts" },
+                { title: "Closest games", games: view.games.closest, figure: "margin", board: "closest" },
+                { title: "Most combined points", games: view.games.shootouts, figure: "combined", board: "shootouts" },
               ] as const
             ).map((list) => (
               <div key={list.title} className="min-w-0">
-                <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-subtle">{list.title}</h3>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-subtle">{list.title}</h3>
+                  {shareButton(list.board, `the ${list.title.toLowerCase()}`)}
+                </div>
                 <GameList
                   label={list.title}
                   games={list.games}

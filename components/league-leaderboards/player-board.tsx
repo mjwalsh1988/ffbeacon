@@ -22,6 +22,7 @@ import type {
   LeaderboardTeam,
   PlayerLeader,
 } from "@/lib/league-leaderboards/types";
+import { CopyImageButton } from "@/components/copy-image-button";
 import { LIST_CLASS, LeaderRow } from "./leader-row";
 import { OwnershipLegend } from "./ownership-strip";
 
@@ -40,6 +41,7 @@ export function PlayerBoard({
   teams,
   viewerRosterId,
   scopeLabel,
+  share,
 }: {
   boards: { all: PlayerLeader[] } & Partial<Record<LeaderboardPosition, PlayerLeader[]>>;
   positions: LeaderboardPosition[];
@@ -47,6 +49,12 @@ export function PlayerBoard({
   viewerRosterId: number | null;
   /** "this season" or "in week 6". */
   scopeLabel: string;
+  /**
+   * The share image for each tab ("ALL" and every position), or null for a tab
+   * with nobody on it. Built on the server so the button follows the tab
+   * without the browser rebuilding a card.
+   */
+  share: Record<string, { imageHref: string; description: string } | null>;
 }) {
   const [tab, setTab] = useState<Tab>("ALL");
   const [shown, setShown] = useState(FIRST_PAGE);
@@ -54,6 +62,7 @@ export function PlayerBoard({
   const focusIndex = useRef<number | null>(null);
 
   const rows = (tab === "ALL" ? boards.all : boards[tab]) ?? [];
+  const tabShare = share[tab] ?? null;
   const page = rows.slice(0, shown);
   const noun = tab === "ALL" ? "players" : positionNoun(tab, "plural");
   const status =
@@ -116,7 +125,20 @@ export function PlayerBoard({
         <p role="status" aria-live="polite" className="text-xs text-ink-muted">
           {status}
         </p>
-        <OwnershipLegend />
+        <div className="flex flex-wrap items-center gap-2">
+          <OwnershipLegend />
+          {tabShare && (
+            // Keyed by tab so a status left over from the last tab ("Image
+            // copied") never sits beside a different list.
+            <CopyImageButton
+              key={tab}
+              size="sm"
+              imageHref={tabShare.imageHref}
+              description={tabShare.description}
+              ariaLabel={`Copy image: the top ${noun} ${scopeLabel}, as a picture on the clipboard`}
+            />
+          )}
+        </div>
       </div>
 
       {rows.length === 0 ? (

@@ -178,6 +178,29 @@ export async function loadLeaderboards(
   });
 }
 
+/**
+ * Whether one week has final results in this league, read live.
+ *
+ * Asked BEFORE a single week's view is built. The builder falls back to the
+ * whole season for a week that has not settled and would cache that season
+ * under the week's key, so a link to week 20 would buy a season build per
+ * cache window. This is one head-only count, never cached, so a week that
+ * settled a minute ago is never refused because a cached view has not caught
+ * up yet. The same filter as loadSettledWeeks: league, season, week, final.
+ */
+export async function isWeekSettled(leagueRowId: string, season: number, week: number): Promise<boolean> {
+  const { count, error } = await createAdminClient()
+    .from("league_matchups")
+    .select("id", { count: "exact", head: true })
+    .eq("league_id", leagueRowId)
+    .eq("season", season)
+    .eq("week", week)
+    .eq("is_final", true);
+  // On a failed count, let the build decide rather than refusing a real week.
+  if (error) return true;
+  return (count ?? 0) > 0;
+}
+
 /** How long an assembled view is reused. Owners change with every claim, so short. */
 export const LEADERBOARDS_VIEW_TTL_S = 600;
 

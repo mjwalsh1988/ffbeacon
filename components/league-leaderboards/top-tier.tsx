@@ -18,6 +18,7 @@ import type {
   TopTierRow,
 } from "@/lib/league-leaderboards/types";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
+import { teamLabel } from "@/lib/league-leaderboards/team-label";
 import { PosChip } from "./bits";
 import { LIST_CLASS, RankMark } from "./leader-row";
 
@@ -83,7 +84,7 @@ export function TopTier({
               <SleeperAvatar avatarId={team.avatarId} title="" size={32} />
               <div className="min-w-0 flex-1">
                 <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink">
-                  <span className="min-w-0 break-words">{team.teamName}</span>
+                  <span className="min-w-0 break-words">{teamLabel(team)}</span>
                   {mine && (
                     <span className="shrink-0 rounded-full bg-brand-cyan/20 px-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-brand-cyan">
                       Your team

@@ -8,6 +8,7 @@
  */
 
 import type { LeaderboardsView } from "./types";
+import { teamLabel } from "./team-label";
 
 export const SHARE_ROWS = 5;
 
@@ -43,12 +44,12 @@ export function buildLeaderboardsShareCard(view: LeaderboardsView): Leaderboards
     sleeperId: leader.player.sleeperId,
     points: leader.points,
     ownerName:
-      leader.currentRosterId !== null ? (view.teams[leader.currentRosterId]?.teamName ?? null) : null,
+      leader.currentRosterId !== null ? (view.teams[leader.currentRosterId] ? teamLabel(view.teams[leader.currentRosterId]) : null) : null,
   }));
   const top = view.teamHighs[0];
   const highScore =
     top && view.teams[top.rosterId]
-      ? { teamName: view.teams[top.rosterId].teamName, points: top.points, week: top.week }
+      ? { teamName: teamLabel(view.teams[top.rosterId]), points: top.points, week: top.week }
       : null;
   return { title, playoff, rows, highScore };
 }

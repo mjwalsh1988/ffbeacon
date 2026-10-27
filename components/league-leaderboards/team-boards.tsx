@@ -10,6 +10,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { ChevronRight } from "lucide-react";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
+import { teamLabel } from "@/lib/league-leaderboards/team-label";
 import { withUsername } from "@/components/league-schedule/format";
 import type {
   GameResult,
@@ -25,7 +26,7 @@ function TeamName({ team, viewerRosterId }: { team: LeaderboardTeam; viewerRoste
   return (
     <span className="flex min-w-0 items-center gap-2">
       <SleeperAvatar avatarId={team.avatarId} title="" size={28} />
-      <span className="min-w-0 break-words text-sm font-semibold text-ink">{team.teamName}</span>
+      <span className="min-w-0 break-words text-sm font-semibold text-ink">{teamLabel(team)}</span>
       {mine && (
         <span className="shrink-0 rounded-full bg-brand-cyan/20 px-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-brand-cyan">
           Your team

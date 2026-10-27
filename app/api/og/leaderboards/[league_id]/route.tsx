@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isValidLeagueId } from "@/lib/on-the-clock/validation";
-import { loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
+import { isWeekSettled, loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
 import { buildLeaderboardsShareCard, type LeaderboardsShareRow } from "@/lib/league-leaderboards/share";
 import { loadRemoteImages, sleeperPlayerImageUrl } from "@/lib/og/assets";
 import {
@@ -33,11 +33,13 @@ export const runtime = "nodejs";
  * cannot disagree. Reads stored rows only; it never starts a league sync, so
  * a crawler fetching the card cannot make the site call Sleeper.
  *
- * Cached an hour at the edge like the other league cards. A failed or empty
+ * Cached ten minutes at the edge, the same as the view it reads. A failed or empty
  * league gets a short cache, so the real card replaces it once there is one.
  */
 
-const LONG_CACHE = "public, s-maxage=3600, stale-while-revalidate=86400";
+// Ten minutes, the same as the view it is drawn from, so the picture a reader
+// copies and the sentence announced with it name the same owners after a claim.
+const LONG_CACHE = "public, s-maxage=600, stale-while-revalidate=600";
 const SHORT_CACHE = "public, s-maxage=300, stale-while-revalidate=600";
 const PANEL = "#0B0B14";
 
@@ -143,13 +145,20 @@ export async function GET(
   const admin = createAdminClient();
   const { data: league } = await admin
     .from("leagues")
-    .select("id, name")
+    .select("id, name, season")
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (!league) return placeholder("League", "not found", "Open the league in League Pulse to build its leaderboards.");
 
+  // A week that has not settled is refused BEFORE its view is built: the
+  // builder would fall back to a whole season and cache it under that week.
+  // isWeekSettled is a live count, so a week that just went final is never
+  // refused because a cached view has not caught up.
   let view;
   try {
+    if (week !== null && league.season != null && !(await isWeekSettled(league.id, Number(league.season), week))) {
+      return placeholder(clip(league.name, 40), `Week ${week} is not final`, "This week has no final results in this league yet.");
+    }
     view = await loadLeaderboardsCached(league.id, week);
   } catch (error) {
     console.error("[og/leaderboards] load failed", error);

@@ -242,7 +242,7 @@ export function CopyImageButton({
     status === "working"
       ? "Building the image."
       : status === "copied-image"
-        ? `Matchup image copied to the clipboard. ${description}`
+        ? `Image copied to the clipboard. ${description}`
         : status === "copied-link"
           ? `The image could not be copied on this browser, so its link was copied instead. ${description}`
           : status === "manual"
