@@ -29,6 +29,7 @@ import {
 
 export type LeagueTabId =
   | "overview"
+  | "blueprint"
   | "teams"
   | "lineups"
   | "matchups"
@@ -58,6 +59,13 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     label: "Overview",
     hint: "Rankings and league snapshot",
     icon: "dashboard",
+  },
+  {
+    // Directly after Overview (Team Blueprint plan 4.3, decision 18.13).
+    id: "blueprint",
+    label: "Blueprint",
+    hint: "One team's plan: grades, calls, trade shapes and partners",
+    icon: "target",
   },
   {
     id: "teams",
@@ -131,6 +139,7 @@ export function leagueTabHref(
   if (linkUsername) qs.set("username", linkUsername);
 
   if (
+    tabId === "blueprint" ||
     tabId === "lineups" ||
     tabId === "transactions" ||
     tabId === "power-pulse" ||

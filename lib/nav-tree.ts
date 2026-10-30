@@ -369,6 +369,20 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "activity",
       },
       {
+        id: "/admin/league-blueprint",
+        label: "Team Blueprint",
+        href: "/admin/league-blueprint",
+        hint: "Grade weights, sell ages, calls, and trade partner scoring",
+        icon: "listChecks",
+      },
+      {
+        id: "/admin/market-signals",
+        label: "Market Signals",
+        href: "/admin/market-signals",
+        hint: "Value band settings, nightly runs, and table sizes",
+        icon: "trendingDown",
+      },
+      {
         id: "/admin/manager-pulse",
         label: "Manager Pulse",
         href: "/admin/manager-pulse",

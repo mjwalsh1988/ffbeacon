@@ -536,7 +536,7 @@ export function SiteLayoutManager({
   const cards = settings.homepage.cards;
   const moveCard = useReorder(
     cards,
-    (next) => patch((s) => ({ ...s, homepage: { cards: next } })),
+    (next) => patch((s) => ({ ...s, homepage: { ...s.homepage, cards: next } })),
     (card) => TOOL_TITLES[card.href],
     (card) => card.href,
     "home-card",
@@ -547,6 +547,7 @@ export function SiteLayoutManager({
     patch((s) => ({
       ...s,
       homepage: {
+        ...s.homepage,
         cards: s.homepage.cards.map((card) => (card.href === href ? { ...card, ...update } : card)),
       },
     }));
@@ -630,6 +631,27 @@ export function SiteLayoutManager({
         />
       </Section>
 
+      <section aria-labelledby="layout-blueprint-strip" className="rounded-modal border border-line bg-surface/40 p-4 sm:p-5">
+        <h2 id="layout-blueprint-strip" className="text-sm font-semibold tracking-tight text-ink">
+          Homepage Team Blueprint strip
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+          The short strip under the homepage hero that points to the Team Blueprint in League Pulse. Turn it off to
+          retire it without a deploy.
+        </p>
+        <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
+          <input
+            type="checkbox"
+            checked={settings.homepage.blueprintStrip.enabled}
+            onChange={(e) =>
+              patch((s) => ({ ...s, homepage: { ...s.homepage, blueprintStrip: { enabled: e.target.checked } } }))
+            }
+            className="h-5 w-5 shrink-0 rounded border-line bg-base text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          />
+          Show the strip
+        </label>
+      </section>
+
       <Section
         id="layout-homepage"
         title="Homepage tool cards"
@@ -637,7 +659,7 @@ export function SiteLayoutManager({
         action={matchMenuButton("the homepage cards", () => {
           patch((s) => ({
             ...s,
-            homepage: { cards: applyOrder(s.homepage.cards, s.menu.toolOrder, (c) => c.href) },
+            homepage: { ...s.homepage, cards: applyOrder(s.homepage.cards, s.menu.toolOrder, (c) => c.href) },
           }));
           announce("The homepage cards now match the main menu order. Widths, tags and highlights are unchanged.");
         })}

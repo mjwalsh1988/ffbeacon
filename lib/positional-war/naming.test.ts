@@ -137,12 +137,19 @@ describe("the token WAR is always adjacent to Positional", () => {
   // token. Its own header stated the discipline in prose and nothing enforced
   // it, which is how a rule survives until the first person who has not read
   // the header.
+  // lib/league-blueprint and lib/market-signals joined with the Team Blueprint
+  // (docs/team-blueprint/team-blueprint-plan.md section 16): the Blueprint is
+  // one roster's plan, team-specific throughout, and it displays no Positional
+  // WAR figure at all; Market Signals measures one player against his own
+  // value history, which is neither metric.
   const GUARDED_DIRECTORIES = [
     "lib/trade-impact",
     "lib/faab",
     "lib/power-pulse",
     "lib/trade-finder",
     "lib/manager-ledger",
+    "lib/league-blueprint",
+    "lib/market-signals",
   ];
 
   // Comments count here. These modules own the OTHER metric, so a bare WAR in a

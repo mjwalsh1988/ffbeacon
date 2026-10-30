@@ -16,13 +16,18 @@ import type {
   PositionalFinish,
   ProjectionSummary,
   TrendsRow,
+  ValueBand,
   ValuePoint,
 } from "@/lib/player-profile";
+import type { ReactNode } from "react";
 import type { PlayerTrade } from "@/lib/player-trades";
 
 export function OverviewSidebar({
   valuePoints,
   windowed,
+  valueBands,
+  valueBandWindowDays,
+  marketSignal,
   latestValue,
   trends,
   sourceDisplay,
@@ -39,6 +44,12 @@ export function OverviewSidebar({
 }: {
   valuePoints: ValuePoint[];
   windowed: boolean;
+  /** The Market Signals band per day, for the chart. */
+  valueBands?: ValueBand[];
+  /** The stored Market Signals window the bands were computed over. */
+  valueBandWindowDays?: number;
+  /** The market signal badge, rendered by the caller. */
+  marketSignal?: ReactNode;
   latestValue: number | null;
   trends: TrendsRow | null;
   sourceDisplay: string | null;
@@ -92,11 +103,14 @@ export function OverviewSidebar({
             />
           )}
         </div>
+        {marketSignal}
         <ValueTrendChart
           points={valuePoints}
           sourceDisplay={sourceDisplay}
           formatDisplay={formatDisplay}
           windowed={windowed}
+          bands={valueBands}
+          bandWindowDays={valueBandWindowDays}
         />
       </Panel>
 

@@ -11,7 +11,7 @@
 
 import { useId, useRef, useState } from "react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
-import type { ValuePoint } from "@/lib/player-profile";
+import type { ValueBand, ValuePoint } from "@/lib/player-profile";
 
 const W = 320;
 const H = 128;
@@ -34,11 +34,20 @@ export function ValueTrendChart({
   sourceDisplay,
   formatDisplay,
   windowed,
+  bands = [],
+  bandWindowDays = 30,
 }: {
   points: ValuePoint[];
   sourceDisplay: string | null;
   formatDisplay: string;
   windowed: boolean;
+  /**
+   * The 30-day Market Signals band per day (lib/player-profile.ts
+   * valueBandsFor), drawn translucent under the line. Empty draws nothing.
+   */
+  bands?: ValueBand[];
+  /** The window the bands were computed over, for their label. */
+  bandWindowDays?: number;
 }) {
   const gid = useId().replace(/:/g, "");
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -53,9 +62,14 @@ export function ValueTrendChart({
     );
   }
 
+  // The band for each plotted point, by its UTC day, so band and line share
+  // one x scale.
+  const bandByDay = new Map(bands.map((b) => [b.day, b]));
+  const pointBands = points.map((p) => bandByDay.get(p.t.slice(0, 10)) ?? null);
   const values = points.map((p) => p.value);
-  let min = Math.min(...values);
-  let max = Math.max(...values);
+  const bandValues = pointBands.flatMap((b) => (b ? [b.upper, b.lower] : []));
+  let min = Math.min(...values, ...bandValues);
+  let max = Math.max(...values, ...bandValues);
   if (min === max) {
     // Flat series: pad so the line sits mid-height instead of on an edge.
     min -= 1;
@@ -67,6 +81,19 @@ export function ValueTrendChart({
 
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(" ");
   const areaPath = `${linePath} L ${x(n - 1).toFixed(1)} ${(PAD.t + INNER_H).toFixed(1)} L ${x(0).toFixed(1)} ${(PAD.t + INNER_H).toFixed(1)} Z`;
+
+  const bandIdx = pointBands.map((b, i) => (b ? i : -1)).filter((i) => i >= 0);
+  const bandPath =
+    bandIdx.length >= 2
+      ? [
+          ...bandIdx.map((i, k) => `${k === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(pointBands[i]!.upper).toFixed(1)}`),
+          ...bandIdx
+            .slice()
+            .reverse()
+            .map((i) => `L ${x(i).toFixed(1)} ${y(pointBands[i]!.lower).toFixed(1)}`),
+          "Z",
+        ].join(" ")
+      : null;
 
   const first = points[0];
   const last = points[n - 1];
@@ -139,6 +166,7 @@ export function ValueTrendChart({
             strokeDasharray="3 4"
           />
 
+          {bandPath && <path d={bandPath} fill="#A855F7" fillOpacity="0.12" />}
           <path d={areaPath} fill={`url(#fill-${gid})`} />
           <path
             d={linePath}
@@ -195,6 +223,12 @@ export function ValueTrendChart({
           {netPct.toFixed(1)}%)
         </span>
       </figcaption>
+      {bandPath && (
+        <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-subtle">
+          <span aria-hidden="true" className="inline-block h-2.5 w-4 rounded-sm bg-brand-purple/20" />
+          {bandWindowDays}-day band
+        </p>
+      )}
       {!windowed && (
         <p className="mt-1 text-[11px] text-ink-subtle">
           Showing all available history (under 30 days captured).
@@ -208,13 +242,17 @@ export function ValueTrendChart({
           <tr>
             <th scope="col">Date</th>
             <th scope="col">Value</th>
+            {bandPath && <th scope="col">{bandWindowDays}-day band low</th>}
+            {bandPath && <th scope="col">{bandWindowDays}-day band high</th>}
           </tr>
         </thead>
         <tbody>
-          {points.map((p) => (
+          {points.map((p, i) => (
             <tr key={p.t}>
               <td>{shortDate(p.t)}</td>
               <td>{Math.round(p.value).toLocaleString()}</td>
+              {bandPath && <td>{pointBands[i] ? Math.round(pointBands[i]!.lower).toLocaleString() : "None"}</td>}
+              {bandPath && <td>{pointBands[i] ? Math.round(pointBands[i]!.upper).toLocaleString() : "None"}</td>}
             </tr>
           ))}
         </tbody>

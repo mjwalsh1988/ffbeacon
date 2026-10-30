@@ -2128,6 +2128,84 @@ export type Database = {
           },
         ];
       };
+      league_blueprint_cache: {
+        Row: {
+          fingerprint: string;
+          format_config_id: string;
+          generated_at: string;
+          id: string;
+          league_id: string;
+          model_version: number;
+          roster_id: number;
+          season: string;
+          source: string;
+          view: Json;
+        };
+        Insert: {
+          fingerprint: string;
+          format_config_id: string;
+          generated_at?: string;
+          id?: string;
+          league_id: string;
+          model_version: number;
+          roster_id: number;
+          season: string;
+          source: string;
+          view: Json;
+        };
+        Update: {
+          fingerprint?: string;
+          format_config_id?: string;
+          generated_at?: string;
+          id?: string;
+          league_id?: string;
+          model_version?: number;
+          roster_id?: number;
+          season?: string;
+          source?: string;
+          view?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_blueprint_cache_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "league_blueprint_cache_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      league_blueprint_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       league_bulk_sync_requests: {
         Row: {
           completed_at: string | null;
@@ -2866,6 +2944,41 @@ export type Database = {
         };
         Relationships: [];
       };
+      league_roster_age_history: {
+        Row: {
+          ages: Json;
+          as_of_day: string;
+          id: string;
+          league_id: string;
+          roster_id: number;
+          season: string;
+        };
+        Insert: {
+          ages: Json;
+          as_of_day: string;
+          id?: string;
+          league_id: string;
+          roster_id: number;
+          season: string;
+        };
+        Update: {
+          ages?: Json;
+          as_of_day?: string;
+          id?: string;
+          league_id?: string;
+          roster_id?: number;
+          season?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_roster_age_history_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       league_sync_attempts: {
         Row: {
           actor_key: string;
@@ -3525,6 +3638,71 @@ export type Database = {
           sleeper_handle?: string | null;
           sleeper_user_id?: string;
           tendency?: Json;
+        };
+        Relationships: [];
+      };
+      market_signal_runs: {
+        Row: {
+          as_of_day: string;
+          changes_written: number;
+          duration_ms: number;
+          format_config_id: string;
+          id: string;
+          ran_at: string;
+          rows_written: number;
+          source: string;
+        };
+        Insert: {
+          as_of_day: string;
+          changes_written: number;
+          duration_ms: number;
+          format_config_id: string;
+          id?: string;
+          ran_at?: string;
+          rows_written: number;
+          source: string;
+        };
+        Update: {
+          as_of_day?: string;
+          changes_written?: number;
+          duration_ms?: number;
+          format_config_id?: string;
+          id?: string;
+          ran_at?: string;
+          rows_written?: number;
+          source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "market_signal_runs_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      market_signal_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
         };
         Relationships: [];
       };
@@ -5395,6 +5573,132 @@ export type Database = {
           },
           {
             foreignKeyName: "player_value_history_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      player_value_signal_changes: {
+        Row: {
+          band_pct: number | null;
+          changed_on: string;
+          format_config_id: string;
+          from_signal: string | null;
+          id: string;
+          market_value: number;
+          player_id: string;
+          source: string;
+          to_signal: string;
+        };
+        Insert: {
+          band_pct?: number | null;
+          changed_on: string;
+          format_config_id: string;
+          from_signal?: string | null;
+          id?: string;
+          market_value: number;
+          player_id: string;
+          source: string;
+          to_signal: string;
+        };
+        Update: {
+          band_pct?: number | null;
+          changed_on?: string;
+          format_config_id?: string;
+          from_signal?: string | null;
+          id?: string;
+          market_value?: number;
+          player_id?: string;
+          source?: string;
+          to_signal?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_value_signal_changes_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "player_value_signal_changes_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      player_value_signals: {
+        Row: {
+          as_of_day: string;
+          band_lower: number | null;
+          band_pct: number | null;
+          band_upper: number | null;
+          bandwidth: number | null;
+          computed_at: string;
+          format_config_id: string;
+          market_value: number;
+          mean_30: number | null;
+          model_version: number;
+          player_id: string;
+          points_in_window: number;
+          previous_signal: string | null;
+          signal: string;
+          signal_since: string | null;
+          source: string;
+          stdev_30: number | null;
+        };
+        Insert: {
+          as_of_day: string;
+          band_lower?: number | null;
+          band_pct?: number | null;
+          band_upper?: number | null;
+          bandwidth?: number | null;
+          computed_at?: string;
+          format_config_id: string;
+          market_value: number;
+          mean_30?: number | null;
+          model_version: number;
+          player_id: string;
+          points_in_window: number;
+          previous_signal?: string | null;
+          signal: string;
+          signal_since?: string | null;
+          source: string;
+          stdev_30?: number | null;
+        };
+        Update: {
+          as_of_day?: string;
+          band_lower?: number | null;
+          band_pct?: number | null;
+          band_upper?: number | null;
+          bandwidth?: number | null;
+          computed_at?: string;
+          format_config_id?: string;
+          market_value?: number;
+          mean_30?: number | null;
+          model_version?: number;
+          player_id?: string;
+          points_in_window?: number;
+          previous_signal?: string | null;
+          signal?: string;
+          signal_since?: string | null;
+          source?: string;
+          stdev_30?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_value_signals_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "player_value_signals_player_id_fkey";
             columns: ["player_id"];
             isOneToOne: false;
             referencedRelation: "players";

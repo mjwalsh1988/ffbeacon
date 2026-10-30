@@ -1,1121 +1,134 @@
-# Handoff: search growth plan, 2026-10-15
+# Handoff: Team Blueprint and Market Signals build
 
-Plan of record: docs/seo-audit/gsc-growth-plan-2026-10-15.md (untracked, owner's file).
-Task list: progress.md, GROW-T01 to GROW-T22, at the bottom of the file.
+Updated after BP-T080. Plan of record: docs/completed/team-blueprint/team-blueprint-plan.md
+(build order in section 17, phases A to I). Task lines: progress.md, BP-T### entries
+under the heading "Team Blueprint and Market Signals" at the bottom of the file.
+
+Owner rules for this build: do NOT commit or push; skip BP-T081; one shell command
+per tool call; the gate after each phase; one review sub-agent at the end (not three).
 
 ## State
 
-All 22 tasks (GROW-T01 to GROW-T22) are completed, each through the gate
-(typecheck, lint, test, build) and the three review sub-agents, and committed
-on main. Nothing is pushed. Working tree is clean apart from the untracked
-plan document.
-
-Commits: T01 8b4ff23, T02 804592f, T08 213a6de, T03 ede5714, T04 dd35c0c,
-T05 94a7207, T06 d5eb46c, T07 3dfc06f, T09 cb4b6cc, T10 fe5dd96, T11 a03b88c,
-T12 1e2b938, T13 830c6df, T14 eed1135, T15 6562435, T16 90b20d5,
-T17 6a97a71, T18 cd74a07, T19 f36d20c, T20 2000d24, T21 295069e,
-T22 7dab3af.
-
-## What is left (owner actions, no code)
-
-- Push and deploy.
-- Request indexing for /tools/faab/guillotine and /rankings/idp in Search
-  Console (daily cap on this property has been about 4).
-- Plan section 7: record the measurements on 2026-10-29 and 2026-11-26, and
-  plan 4.3: the "faab calculator" query each Tuesday for six weeks.
-- Plan 5.10 asks for `npm run verify:idp-invariant` after IDP work. No League
-  Pulse loader was touched, so it was not run in this session.
-
-## Open questions found on review, not changed
-
-- FAAB selected-player card (app/tools/faab/faab-form.tsx): a defender's
-  position rank is still credited to the value source's name. T18 fixed the
-  overall rank ("Not ranked") and market value ("No market value") beside it.
-- Site search: the Rankings Builder entry carries the keyword "idp rankings"
-  and sits earlier in SEARCHABLE_TOOLS, so that query lists the builder above
-  the IDP Rankings page. Changing it edits a second entry the plan does not
-  name.
-- Rankings hub: the IDP entry sits inside FormatDirectory, so it disappears
-  if no format is active (the plan's literal placement).
-- Waiver week card copy says wind "above 15 miles per hour"; the code's
-  downgrade band starts at 15 or more. The plan fixes the text.
-- Start/sit: the weather sentence says "this week's" even on a future-week
-  board. The plan fixes the text.
-
-## Deviations and decisions to carry into the final report
-
-- T01: requestedSourceSlug is string | null (the resolver returns null). The
-  before/after check compared the main element with numbers masked, not the
-  whole page HTML. server-only import added on review.
-- T02: plan said "four keys in BAND_LABELS"; there are three plus overall.
-- T08: review found parseManualSeed read danger values off Object.prototype
-  (?danger=constructor would crash /tools/faab). Fixed with an own-key check;
-  a teams-alive figure with no starting field is now dropped. Tests added.
-- T03: login and clear-handle links were hardcoded to /tools/faab; pagePath
-  prop added to FaabForm and LeaguePanel.
-- T04: three intro paragraphs are blocks inside ToolExplainer's single p.
-  Copy corrected on review where it overstated what the release cutoff does.
-- T05: p25 added to MarketRead (lib/guides/faab-market-figures.ts). Column
-  headers read "1 in 4 paid less than" and "1 in 4 paid more than" so they
-  wrap at 360 px. The platform table sits under the market table, per 3.6.
-- T06: the llms sentence is emitted for the /tools/faab TOOL_CATALOG entry
-  inside lib/llms/llms-full-txt.ts, because that paragraph comes from
-  TOOL_CATALOG, which section 2 forbids editing.
-- T07: guide line numbers were about 40 lower than the plan says.
-- T10: uses the waiver page's BidFigure (about 3 kB more first-load JS on
-  /tools/faab). Position and team spelled out visibly; visible rank numbers.
-- T11: faab-strategy and playoffs guides already read "FAAB calculator"; no
-  guide date bumped in T11.
-- T12: snap share stored 0 to 1, shown 0 to 100, capped at 100. Finishes
-  shown only at the position earned. Public tables read with the cached
-  publishable client. The seed's basis wording kept per the plan.
-- T13: stacked-cell classes from components/rankings-table.tsx. Section ids
-  derived from positionNoun. "Projected by" chip only for a real engine. Rail
-  panel added so the rail is never empty below xl.
-- T14: /rankings/idp is in STATIC_PATHS at 0.8 (plan allows), tested.
-- T15: the not-found line renders nothing when a position lists fewer than 60.
-- T17: format entries have no hint line; the IDP entry adds one, per the
-  plan. Review found the focus outline clipped by the list's overflow-hidden;
-  now inset with a background cue, on the new link and the existing format
-  links.
-- T18: no defender note existed, so it is a new paragraph after the metrics.
-  Two reviewers found the card printing a defender's sort key as "Overall rank
-  #100001" and "-" for market value; fixed per the CLAUDE.md IDP rule.
-- T19: entry exactly as the plan; only SEARCHABLE_TOOLS touched.
-- T20: intro sentence changed to "Four things". The start/sit /rankings link
-  is a masthead button with no paragraph, so the sentence sits under the
-  verdict board, outside the hasPlayers branch. The waiver aside is now sticky
-  only on screens at least 800 px tall, so its fourth card is never stuck
-  below the fold.
-- T21: the plan's read is an exported newestWeatherQuery awaited in the
-  opening Promise.all; the Season Pulse URLs come from a pure
-  seasonPulseSitemapUrls. The test drives both with a fake client and a source
-  check pins the wiring.
-- T22: the title keeps dropping the season when it is null. og:title and the
-  WebPage JSON-LD name follow titleFor and carry NFL too.
-- npm audit: a T03 reviewer saw 15 advisories against an earlier 4; every
-  run in the T17 to T22 session reported 4 packages (1 moderate, 3 high, 8
-  advisories). Package files unchanged throughout.
-- Writing check: every new string was reviewed against the AI-writing list
-  by the implementation reviewer for its task, and reread by the builder.
-
----
-
-Everything below is the earlier handoff, kept as it was.
-
-# Handoff
-
-## NEXT SESSION: START HERE. BEACON BRIEF GAME-BY-GAME EDITION (2026-10-01, UNCOMMITTED)
-
-Plan: docs/beacon-brief/relays-and-briefs-plan.md section 23. Tasks: BD-T096 to
-BD-T111 at the end of progress.md. NOTHING IS COMMITTED OR PUSHED; the owner said
-not to commit until told.
-
-State
-- Built and passing: typecheck, lint 0/0, all tests, production build. Three
-  review agents (implementation, security, accessibility) ran on the build and a
-  fourth on the visual redesign; their fixes are applied.
-- Production database already changed: migration 0333 (nfl_game_lines) applied,
-  weeks 1 to 3 of 2026 closing lines backfilled (48 games).
-- Migration 0334 (new desk instructions) is generated and deliberately NOT
-  applied. Apply it only AFTER the code is deployed.
-- Week 3 redo is a private draft (articles status 'draft', metadata.backfill_of
-  = the live week 3 article). Current edition id:
-  ba70e630-ed12-45da-8534-911e0c75a0de. Preview on a local dev server (no
-  login on localhost): http://localhost:3000/brief/preview/ba70e630-ed12-45da-8534-911e0c75a0de
-  The owner is reviewing the look. The live week 3 page is untouched.
-- Apply button: works only from a production build (refuses on a dev server),
-  replaces the live page in place, posts nothing to Discord, sends no email.
-
-Session of 2026-10-01 (second): phone check done, weeks 2 and 1 redone
-- All three redos are private drafts: week 3 bbdb0272-a532-43a7-b05b-f1c8234f2e88
-  (re-stored), week 2 50a8d763-9660-4615-9bac-2a446c727d1c, week 1
-  e4254796-aa8b-46be-a8e0-1a7099d7a96d. Previews at /brief/preview/{id}.
-- Phone check: Chrome's resize_window still did nothing (the tab reports
-  hidden), so pages were captured with headless Chrome over the DevTools
-  protocol at exact widths. Script: shoot.mjs in the session scratchpad.
-  Fixed: game card team names broke mid-word ("Clevelan d"); both SVG charts
-  had labels under 6 px at 390 px and now draw a narrow layout below sm.
-- Backfill bundles now read values AS OF the period end (BD-T113). Before this,
-  a backfill read today's trends, so week 1 would have shown late-September
-  movers. Weeks 1 and 2 were originally written days after their periods
-  closed, so their live value figures differ from the pinned ones; the redos
-  use the pinned ones throughout.
-- Not done: accessibility and security review sub-agents on BD-T112 to T115.
-- Third pass (BD-T114/T115): a Relay's status now reaches its subjects only,
-  which removed backups and cleared players from all three timelines (Mayer in
-  week 1, Ollie Gordon, Darnold, Dobbins, Harvey in week 3, Mariota, Winston,
-  Bagent in week 2). Five Relays had their is_primary flags corrected in
-  production. The redos were re-stored; CURRENT draft ids:
-  week 1 cddcb16c-2c08-4c33-981e-23e5abd7b59f,
-  week 2 45f8d074-89b4-4cd6-b6ec-98397fcb4017,
-  week 3 90d69e03-9110-4d45-94ed-4d3ff7de0357.
-- The owner chose to WAIT for the deploy before publishing. Applying before
-  the deploy would leave the three live pages in the plain-text fallback.
-- Fourth pass (BD-T116): security, accessibility and design reviews run and
-  their fixes applied; all three redos re-stored and every warning and
-  research row ticked in the browser. CURRENT draft ids (supersede the ones
-  above): week 1 8eb7bfb0-ed89-4da0-a157-9c6d45bac34b, week 2
-  170b8b89-7a35-4487-9a8e-08fd64e30dc7, week 3
-  31e8017d-93c5-4cfd-8465-fbdd34efbde4. Committed and pushed to main.
-
-- LAUNCHED 2026-10-01: migration 0334 applied (instructions match the file
-  byte for byte), and all three redos applied in place on the live site (same
-  ids, slugs, published dates and Discord dates; 16 game cards each; old text
-  kept as revision 1 and the original payload in metadata.pre_backfill_payload).
-  The cloud routine "FF Beacon Brief weekly draft" (trig_014WGE51HeAqxN8My5V7Y9oh)
-  had its own copy of the prompt; its step 3 now matches scripts/brief-desk/prompt.md.
-  First real run of the new format: Tuesday 2026-10-06, 13:00 UTC.
-
-Open items: none for the game-by-game Brief. Watch the 2026-10-06 routine run.
-Optional follow-ups: the uppercase masthead title is long on phones (site-wide
-component); relay ingestion still flags only one primary player per Relay, so
-group reports ("15 players ruled out") need the subject flags corrected by hand.
-
-(Historical) Commit when the owner says so, deploy, apply 0334, update the routine's copy
-   of scripts/brief-desk/prompt.md if it keeps its own, then press Apply on each
-   redo at /admin/brief-desk/editions/{id} on the live site.
-
-How to redo a week (week 3 is the worked example)
-- Bundle: npx tsx --env-file=.env.local scripts/brief-desk/backfill-edition.ts bundle --season 2026 --week N --out <scratch>/weekN-bundle.json
-  (PowerShell: quote comma lists, e.g. --weeks "2,3", or it splits them.)
-- Published payload of the live edition: brief_editions draft_payload for that
-  week (week 2 edition id 239d499e-f116-4444-81cd-59f8af151013, week 1
-  349c303c-1950-48df-840c-dc4394f53e41). Reuse its researched news sections,
-  research_log, relays and FAQ; trim the news to one line per player.
-- Game facts for recaps: ESPN game package per game,
-  https://cdn.espn.com/core/nfl/game?xhr=1&gameId={espn_event_id} (scoringPlays,
-  leaders). Record each game page in research_log.
-- Generator to copy: docs/beacon-brief/examples/make-week3-draft.mjs (its dir
-  constant points at the old scratchpad; change it to the new session's); the stored result is docs/beacon-brief/examples/week-3-2026-brief.json.
-  Shape: sections week-N-in-numbers [awards, scorers], game-by-game [cards],
-  how-the-projections-did [projections], injuries-and-availability [tiles,
-  timeline, planner, quote], moves-and-role-changes [lines],
-  what-to-do-this-week [actions, movers, toggle, rule]; 16 games[] recaps of
-  70 to 100 words with fun_stat; scorers block limit 6; editor_take null.
-- Fact-check every superlative against the bundle before storing (the week 3
-  generator asserts them).
-- Store: ... backfill-edition.ts store --season 2026 --week N --draft <file>
-  It validates against the week's bundle and replaces any earlier redo.
-
-Gotchas found this session
-- Shell edits through bash heredocs/node -e stripped backslashes and template
-  strings twice; use the Edit tool or a script file for code edits.
-- Edit tool turns a typed — escape into the literal em dash; lint catches
-  it. Fix with a script that writes the escape from character codes.
-- The dev page is about 4 MB; keep Chrome batches small or the extension times out.
-
-
-## NEXT SESSION: START HERE. BEACON RANKER SHIPPED (e9fe6a0, 2026-09-26)
-
-- Plan: docs/ranking-boards/board-builder-plan.md. Task list: the BR-T## section at
-  the end of progress.md (one task per plan build step). Status of each task is there.
-- Owner instruction: build all of it, then one independent review agent
-  (implementation, security, accessibility, speed, SEO), fix what is justified.
-  DO NOT COMMIT OR PUSH.
-- Done: every task BR-T01 to BR-T37 and the review round BR-R (details in
-  progress.md). Gate passes: typecheck, lint 0/0, 6,457 tests, build.
-- Production already changed: migrations 0304 to 0309, 0311, 0312 applied.
-- Post-deploy steps DONE: 0310 applied, types regenerated (uncommitted),
-  community build run once (0 counted boards: existing boards have no format).
-- OWNER to check: the new CLAUDE.md section (BR-T37); deviations listed in
-  progress.md (left-off ids as an array, one guest table, Build by comparing
-  opens the tool on the board, new code writes only tier breaks).
-- DO NOT APPLY the tier-column drop migration (BR-T08) until the new code is
-  deployed: production still runs code that reads user_ranking_board_players.tier.
-
-## NEXT SESSION: START HERE. IDP BUILD COMPLETE; EVERYTHING UNCOMMITTED (2026-09-25)
-
-- IDP-407 done with three reviewers; FU-01 to FU-12 in progress.md. The owner
-  recorded the screen-reader pass as done. Only IDP item left: Search Console
-  on 2026-10-23 and 2026-11-20.
-- NOTHING IS COMMITTED OR PUSHED (owner instruction). The KTC fix is live: the
-  Vercel sync-ktc cron has succeeded every night since 2026-09-26.
-- Production already changed (not waiting on a deploy): migration 0303, four
-  player positions, the Frank Gore and Kyle Williams KTC id repair, the KTC
-  backfill. The code that expects migration 0303 ships with the commit.
-
-## EARLIER: FOLLOW-UPS FU-01 TO FU-06 BUILT, NOT COMMITTED (2026-09-25)
-
-- Owner instruction: do not commit or push. Everything below is in the
-  working tree only. Details, with production checks, in progress.md FU-01 to
-  FU-06 (after IDP-407).
-- KTC: the nightly sync broke on 2026-09-08 when KTC moved its player list
-  into <script id="ktc-players">. Fixed in lib/ktc-page.ts, and production
-  data is whole again: backfill for 2026-09-08 to 2026-09-24, today's sync,
-  rankings and trends rebuilt. RESOLVED: the Vercel cron has succeeded every
-  night since 2026-09-26 and the gap was backfilled, so no stopgap is needed.
-- Also built: matchup view names the week's own starters (no "Unknown player"
-  from a stale roster, verified 0 on production); FAAB urgency signal back
-  and wired; every old position-noun map folded into lib/site.ts; Who Should I
-  Start accepts defenders while the IDP switch is on (defenders compared only
-  with defenders, Sleeper default IDP scoring).
-
-## EARLIER: IDP-406 DAY ONE IS DONE (2026-09-25)
-
-- Invariant rerun identical, zero "No projection" for defenders Sleeper
-  projects, zero "Unknown player" on the Lineups board, IndexNow accepted for
-  the guide and 1,558 defender slugs. Details and the three matchup-page
-  "Unknown player" rows (stale rosters, not IDP) in IDP-406 in progress.md.
-- RESOLVED, NOT IDP: sync-ktc failed every night from 2026-09-08 to
-  2026-09-25 (0 rows, "every KTC target returned empty"). It has succeeded
-  every night since 2026-09-26 and the gap was backfilled.
-- STILL OPEN: the owner's browser and screen-reader pass over the switch-on
-  screens; Search Console on 2026-10-23 and 2026-11-20; IDP-407 close-out.
-
-## EARLIER: THE IDP SWITCH IS ON (2026-09-25 UTC); NEXT WAS IDP-406
-
-- Invariant check passed on the deployed code (every ordinary league
-  identical), then the switch went on with DL 0.33, LB 0, DB 0, defense splits
-  recomputed, and versions pp-9, war-5, ledger-6 plus the guide copy pushed.
-  See IDP-405 in progress.md.
-- ALSO DONE, NOT COMMITTED (owner instruction): IDP-4F1, chopped leagues that
-  Sleeper flags disable_elimination but still chop (the 32 team leagues chop two
-  a week), and IDP-4F2, defenders in the FAAB manual calculator. Power Pulse is
-  pp-10 in the tree. Also IDP-4F3, the league-mode FAAB defender card (finish
-  line, defensive snap share, depth by sub-position). See progress.md.
-- NEXT: the owner's visual and screen-reader pass; then IDP-406 day-one checks
-  (no "No projection" for projected defenders, no "Unknown player" rows, rerun
-  the invariant, IndexNow for the guide and gated defender slugs), Search
-  Console at 28 and 56 days, then IDP-407 close-out.
-
-## EARLIER THE SAME DAY: PHASE 4 PART ONE (kept for history)
-
-- Phase 3 is still committed locally and NOT pushed. This session's work is
-  UNCOMMITTED in the working tree, by instruction. The IDP switch is OFF and no
-  production data or settings were changed.
-- DONE (details in progress.md, IDP-401, IDP-402, IDP-4R):
-  IDP-401 ESLint installed and customized; `npm run lint` is part of the gate
-  (typecheck, lint, test, build) and passes with zero errors and warnings.
-  IDP-402 backtest: `npm run backtest:idp`, report in
-  docs/idp/idp-accuracy-backtest.txt.
-- MEASURED, NOT SAVED (IDP-403): DL 0.33, LB 0, DB 0 (owner chose 0 for DB).
-  Owner chose to save these in the same step as the switch-on (IDP-405).
-- OPEN OWNER DECISIONS:
-  1. DB reliability: DECIDED, 0.
-  2. CLAUDE.md wording: APPROVED AND APPLIED (IDP-404 done).
-  3. Phase 3 and this session are COMMITTED AND PUSHED at the owner's
-     instruction. When the deploy is live the owner will ask for
-     `npm run verify:idp-invariant`; IDP-405 waits on it and on the go-ahead.
-  4. FAAB urgencySignal was dead code (never wired into the output) and was
-     deleted; say if it should come back as a real signal.
-- Tool gotcha: the file-writing tool turns a typed backslash-u escape into the
-  literal character. Generate such text from character codes in a script.
-
-## PREVIOUS: IDP PHASE 4 (launch) WAS NEXT, NOT STARTED (kept for history)
-
-### Where things stand (end of 2026-09-24, seventh pass)
-
-- IDP phases 1, 2 and 3 are all BUILT, REVIEWED AND COMMITTED to main. Phases 1
-  and 2 are pushed and deployed. PHASE 3 IS COMMITTED LOCALLY BUT NOT PUSHED
-  (owner instruction), so production does not run phase 3 code yet. Check with
-  `git status` and `git log origin/main..main` before doing anything.
-- The IDP switch, `league_power_pulse_settings.settings.idp.enabled` (row
-  id='global'), is OFF on production and must stay off until task IDP-405.
-  With it off, every League Pulse number is exactly what it was before phase 3.
-- Phase 3 tasks IDP-301 to IDP-317 and the review round IDP-317R are recorded
-  at the end of progress.md under "IDP across FF Beacon, phase 3". Phase 4's
-  task list (IDP-401 to IDP-407, all pending) is directly below them.
-- Last gate: typecheck green, `npx vitest run` 429 files / 6,215 tests (plus
-  one plainName test added after that run, green on its own), `npm run build`
-  57 of 57, punctuation scan clean over every changed file.
-- Migrations: latest on disk and applied is 0302. Phase 3 added none. Next
-  number 0303. The plan's "Start here" still says 0295; ignore that.
-
-### What to read, in order
-
-1. CLAUDE.md in the repo root and ~/.claude/CLAUDE.md. Read .env.local and echo
-   the variable NAMES only.
-2. docs/idp/idp-guide-and-data-plan.md: section 0 (decisions, do not reopen
-   without the owner), section 8 (phase 3, what now exists) and section 9
-   (phase 4, the work).
-3. progress.md from the heading "IDP across FF Beacon, phase 3" to the end:
-   what was built, every deliberate deviation with its reason, and the phase 4
-   task list.
-4. docs/idp/phase-3-invariant-report.txt: switch off against switch on for the
-   31 IDP leagues on production, and the 20 ordinary leagues that came out
-   identical.
-
-### Before phase 4 can start (owner steps, ask, do not assume)
-
-1. The owner reviews phase 3 and says whether to PUSH it. Nothing in phase 4
-   that touches production (IDP-405 above all) may happen until phase 3 is
-   pushed AND deployed: flipping the switch against old code turns on nothing
-   and still rescores every league.
-2. After the deploy, run `npm run verify:idp-invariant` once more; every
-   ordinary league must print "identical" and the script must exit 0.
-3. The owner has never opened the phase 3 screens in a browser, at phone width
-   or with a screen reader. They only render with the switch ON, so this is
-   part of IDP-405/406, not before it.
-
-### Phase 4, in order (plan section 9; details in progress.md)
-
-- IDP-401 lint decision: OWNER CHOOSES. Do not install eslint unasked.
-- IDP-402 accuracy backtest per position (idp123 against a naive last-4-weeks
-  average, 2020 to 2025): findings to the owner.
-- IDP-403 set DL, LB, DB positionReliability from measured values only, through
-  the admin form.
-- IDP-404 CLAUDE.md updates: DRAFT the wording and get OWNER APPROVAL before
-  writing. The plan lists the sentences that become false (PROJECTION_POSITIONS,
-  the Schedules null-projection paragraph, Power Pulse and Positional WAR
-  position statements, the Manager Ledger IDP paragraph, the stale "team deep
-  view, future phase" route) plus a new short IDP section.
-- IDP-405 switch on and version bumps: OWNER GO-AHEAD REQUIRED, after the push
-  and deploy. idp.enabled true; modelVersion pp-9; Positional WAR war-5;
-  Manager Ledger ledger-5; decide tf2 (phase 3 left it on purpose, see
-  IDP-311); guide lesson 8 and the FAQ answer flip to "yes, in League Pulse".
-  Recompute stays on demand through pulseLeague; nothing goes into a cron.
-- IDP-406 post-launch checks (day 1, then Search Console at 28 and 56 days).
-- IDP-407 final reviews and close-out.
-- Reviews at the end: for phases 2 and 3 the owner asked for ONE reviewer
-  sub-agent instead of the plan's three. Ask which they want for phase 4.
-  Never pass `name` to the Agent tool.
-
-### Known and live today, not caused by phase 3
-
-- Fourth & Violence (sleeper 1361073366127083520), the one league that starts
-  only defenders, shows a Power Pulse table of 0.0 points a week with playoff
-  odds of 100 or 0 percent while the switch is off. Switching on fixes it.
-- 32 man (sleeper 1375706195679019008) shows 0.00 expected wins for all 32
-  teams in both switch states. Not an IDP effect; not investigated.
-
-### Open items for the owner (reasons in progress.md)
-
-- FAAB manual mode has no defender picker (IDP-312).
-- The FAAB result card shows no idp123 finish line for a defender (IDP-312).
-- The Who Should I Start page still refuses a defender before its league tab;
-  routing one there is an owner decision (IDP-313).
-- R-5 cut protection is deliberately not on the Positional WAR upgrade what-if
-  or Who Should I Start, which guard no player at all (IDP-317R item 10).
-- Carried from phase 2 and still open: the items listed under "Carried INTO
-  phase 3" further down this file, except IDP-308 and the IDP-305 link, which
-  phase 3 closed. The DE/DT position normalization in the players sync was NOT
-  done in phase 3.
-
-### Session rules that still bind
-
-One atomic task at a time; typecheck and tests after each; update progress.md
-after each; never chain shell commands; plain ASCII punctuation everywhere; no
-Claude attribution in commits; do not push or create a branch unless the owner
-says so; stop at the end of the phase for the owner.
-
-## PREVIOUS: FINISH IDP PHASE 3 (IDP-315 to IDP-317, then one reviewer), kept for history
-
-State at the end of the session of 2026-09-24 (sixth pass): IDP-301 to IDP-314
-are BUILT and recorded task by task at the very end of progress.md under
-"IDP across FF Beacon, phase 3". NOTHING IS COMMITTED OR PUSHED, by instruction.
-The switch (league_power_pulse_settings.settings.idp.enabled) exists, defaults
-to false, and must STAY OFF; phase 4 (IDP-405) turns it on.
-
-Owner instructions for the phase (still binding): finish phase 3, then spawn
-ONE independent reviewer sub-agent (bugs, security, performance/speed,
-accessibility, plan adherence) over the whole phase 3 diff, fix what it finds,
-STOP, and give the owner a plain-language report of what phase 3 did. Do not
-commit or push. Do not start phase 4. Never pass `name` to the Agent tool.
-
-Read first: CLAUDE.md (repo and ~/.claude), .env.local (echo names only), plan
-docs/idp/idp-guide-and-data-plan.md section 8 (and 0 for the decisions), then
-the phase 3 block at the end of progress.md.
-
-### What exists now (the shape a new session must know)
-
-- lib/power-pulse/default-settings.ts: settings.idp.enabled, idpEnabledFrom().
-  validate.ts has the zod object; admin form has a "Defensive players (IDP)"
-  section.
-- NEW lib/power-pulse/idp-reads.ts: idpReadsFor(idpEnabled, rosterPositions,
-  scoringBase) returns slotMap, candidatePositions, scoringKeys and
-  loadsDefenders (true only when the switch is on AND the league starts a
-  defensive slot). scoringKeysArg() passes a bare string when off, so OFF reads
-  are byte-identical. EVERY loader threads the switch through this.
-- lib/power-pulse/lineup.ts: startingSlots / buildOptimalLineup /
-  countStartingSlots take an optional slot map (default OFF map);
-  LineupCandidate.eligible (set only when on); pulseEligibility(); playedAsFor();
-  LineupSlot.playedAs.
-- Callers wired: Power Pulse engine + orchestrator, Schedules (slots.ts,
-  matchup.ts, data.ts), Lineups (build.ts, simulate.ts, data.ts,
-  season-data.ts, board, swap dialog, optimizer panel, page), lib/projections/
-  read.ts (includeDefenders opt-in), NEW lib/idp/free-agents.ts, NEW
-  lib/league-lineups/defender-protection.ts (R-5), advice.ts, Positional WAR
-  (replacement, engine, load with offense/defense slices at the query and
-  CACHE_SHAPE_VERSION v3, fingerprint, orchestrator, panel with Offense and
-  Defense charts, dashboard, table, upgrade what-if, action, OG card line),
-  Manager Ledger (lineup, engine, load, orchestrator), trade impact (load,
-  evaluate, roster-swap, reasons "defender-caveat"), Trade Ideas builder
-  (defenders with "No market value" only when on), FAAB (marginal.ts slotMap,
-  candidateEligible, protectedIds; league-faab.ts; NEW lib/faab/
-  idp-free-agents.ts; actions.ts; combobox), Who Should I Start league impact,
-  defender profile "This week" links.
-- New goldens: lib/power-pulse/golden/power-pulse-idp-on.json,
-  lib/positional-war/golden/war-idp-on.json. All 11 phase-1 goldens are
-  unchanged and green (the proof the OFF path is untouched).
-
-### Deliberate deviations and open items (full reasons in progress.md)
-
-- Power Pulse form ratio is now null (components.formUnmeasured) for a league
-  that starts slots the model cannot fill, i.e. every IDP league while the
-  switch is off. Plan IDP-307 asked for this; it changes IDP leagues' OFF
-  output once two weeks settle, and nothing else.
-- Admin hint says turning the switch on rescores EVERY league (the stored
-  document changes the effective model version); only IDP leagues change.
-- Lineups "What is IDP scoring?" link is in the footnotes, not the colgroup
-  header (a link there would be re-read on every cell).
-- R-5 "starter count" read per roster, not league-wide.
-- Not done, stated: trade-finder fingerprint tf2 (suggestions never hold a
-  defender, so no bump needed); FAAB manual mode IDP shapes and league-load.ts
-  idp123 finishes; the Who Should I Start page still refuses defenders before
-  the league tab (league-impact itself now handles one when on; routing is an
-  owner decision).
-- IDP-314 tests were not re-run after the last edit (typecheck green).
-
-### Next steps, in order
-
-1. LINE ENDINGS FIRST. The working tree is CRLF (core.autocrlf=true) and several
-   files edited this session by sed or node appends now mix CRLF and LF lines
-   (for example lib/power-pulse/lineup.test.ts, lib/faab/marginal.ts,
-   lib/trade-impact/load.ts and evaluate.ts, lib/projections/read.ts,
-   lib/league-positional-war-data.ts, app/leagues/[league_id]/lineups/page.tsx,
-   app/leagues/[league_id]/positional-war/page.tsx, lib/manager-ledger/load.ts,
-   lib/breakdown/league-impact.test.ts, progress.md). Find every modified or new
-   file with `git status --short`, and for each one that mixes endings rewrite
-   it to a single style with a small Node script (never Python: it writes CRLF).
-   Then check `git diff --stat` shows no whole-file rewrites.
-2. Run `npx vitest run lib/player-profile components/player-profile` (IDP-314),
-   then `npm run typecheck`, then the full `npx vitest run` (last full count
-   before this phase: 419 files / 6,143 tests; it should now be higher).
-3. IDP-315, tests sweep: plan section 8 lists the modules (lib/power-pulse
-   variance tests, lib/league-lineups status/weeks, lib/league-schedule
-   lineups/insights, lib/positional-war war, chart-geometry, table, tiers,
-   upgrade, scatter-geometry, chart-layout, share). For each: add the IDP case
-   where behavior changed, otherwise record "reviewed, unchanged" in
-   progress.md. Also run the guard tests: lib/idp/points-guard.test.ts,
-   lib/projections/source-guard and raw-column-guard, lib/positional-war/
-   naming.test.ts (WAR token rule), lib/site.test.ts (noun-map ledger: two
-   lines were deleted this phase, player-detail-dialog and slot-swap-dialog; the
-   trade-finder explain.ts/types.ts lines are still there and were NOT folded).
-4. IDP-316: NEW scripts/verify-idp-invariant.ts (+ a test for its pure parts,
-   isRunDirectly guard, package.json script). It loads engine INPUTS through the
-   existing loaders for about 20 sampled non-IDP leagues and all 40 IDP leagues,
-   runs the pure engines (computePowerPulse with idpEnabled false/true,
-   computeCurves with league.idpEnabled, computeLedger with idpEnabled) and diffs
-   the outputs. It must NEVER call calculateLeague* (those write). Non-IDP: must
-   be identical. IDP: write before/after figures (weekly totals, playoff odds,
-   efficiency, curves) into progress.md for the owner.
-5. IDP-317 gate: typecheck, full suite, `npm run build`, ASCII scan of every
-   touched file (no em/en dashes, curly quotes, ellipsis, middle dots, nbsp),
-   goldens green with the switch off.
-6. Spawn ONE reviewer (no `name`) over the phase 3 diff with the scope above,
-   including "no data hidden at any breakpoint" on the Positional WAR Defense
-   section, the Lineups board and the Power Pulse rooms, and security on the
-   widened upgrade action, the builder's defender assets and the metered
-   free-agent panels. Fix findings, rerun the gate, record everything in
-   progress.md, then STOP with the plain-language report. No commit, no push.
-
-## PREVIOUS: IDP PHASE 3 START NOTES (kept for history)
-
-SIDE QUEST DONE, COMMITTED AND PUSHED (2026-09-24, fifth pass): every Supabase read that could silently stop at 1000 rows is fixed through the shared helper lib/supabase/fetch-all.ts (RC-T01 to RC-T06 at the end of progress.md, gate green). Phase 3 code should use fetchAllRows / fetchAllRowsInChunks for any read that can pass 1000 rows. After deploy, watch the three items in RC-T06.
-
-State on 2026-09-24: IDP phases 1 and 2, the phase 2 follow-ups (IDP-2R1 to
-IDP-2R5) and the Sleeper ADP widening (ADP-201 to ADP-205) are COMMITTED AND
-PUSHED to main at the owner's instruction (the phase 2 commit is the one after
-e15e17c; see git log). Nothing is left uncommitted from this work. Last gate:
-typecheck green, npx vitest run 417 files / 6,129 tests, npm run build 57 of 57.
-
-What to read, in order:
-1. CLAUDE.md in the repo root and ~/.claude/CLAUDE.md. Read .env.local and echo
-   the variable names only.
-2. The plan: docs/idp/idp-guide-and-data-plan.md, all of it. Section 0 holds
-   every decision (do not reopen one without the owner), section 2 what the
-   audit corrected, section 8 is phase 3 (IDP-301 to IDP-317), section 9 the
-   gate and phase 4.
-3. progress.md, from the heading "IDP across FF Beacon, phase 1" to the end:
-   phase 1, phase 2, the IDP-2R follow-ups and the ADP-2xx tasks. Add phase 3's
-   tasks below them in the same format.
-
-Facts the plan text does not have yet:
-- Migrations: latest applied AND on disk is 0302 (the plan's "Start here" still
-  says 0295). Next number is 0303. Regenerate lib/database.types.ts after any
-  schema change (memory note: extract .types, then prettier).
-- Phase 3 goal from the plan: every League Pulse model projects, seats, grades
-  and suggests defenders when settings.idp.enabled is true, and produces
-  byte-identical output when it is false. The switch does not exist yet
-  (IDP-301 creates it, default false).
-- Reviews: the plan says three phase-end review sub-agents (implementation,
-  accessibility, security). For phase 2 the owner asked for ONE reviewer
-  instead. Ask the owner which they want for phase 3 before dispatching.
-  Never pass `name` to the Agent tool.
-- Rules for the session: one atomic task at a time, typecheck and tests after
-  each, update progress.md after each, never chain shell commands, ASCII only,
-  do not commit or push unless the owner says so, do not start phase 4.
-
-Carried INTO phase 3 (each is recorded in progress.md with its reason):
-- IDP-308: filter defender rows out of Positional WAR's projection read AT THE
-  QUERY (reverted once because 12 load-test fakes do not model the join; that
-  task rewrites the loader and its fakes). Also measure the per-week cache
-  entry against Next's 2 MB item limit.
-- IDP-305 renders the Lineups IDP group header; it carries the "What is IDP
-  scoring?" link to /guides/idp-fantasy-football (IDP-223 left it for then).
-- The players sync stored two defenders with position "DE" (Azur Kamara, no
-  team; Kendall Donnerson, inactive; Sleeper's fantasy position for both is
-  LB). Normalize DE/DT/NT/EDGE, ILB/OLB/MLB and CB/S/FS/SS in the players sync
-  when phase 3 touches positions; the IDP guide already folds them.
-- lib/site.test.ts allow-lists 22 older position-noun maps as a debt ledger;
-  a phase 3 task that touches one of those files folds it into positionNoun
-  and deletes its line.
-- Phase 2 review items left open for phase 3 or the owner (full text in
-  progress.md under "IDP-224 review round"): 8 PositionChip and the hero use
-  an aria-hidden code plus an sr-only noun twin, the pattern CLAUDE.md warns
-  about on the Lineups board (a cross-surface call, fix it where phase 3 adds
-  chips to League Pulse); 10 the reader's IDP leagues read is capped at 200
-  memberships; 21 draft grade "N of M" omits unvalued offensive picks; 22 On
-  The Clock detail repeats "No market value"; 34 Brief desk snap share is 0-1
-  under a % header (pre-existing); 41 offensive team-card span aria-labels
-  (pre-existing); 53 guide figure colors are hardcoded hex; 54 the OG team
-  card's defender footer needs a visual check; C6 the accuracy rebuild is
-  delete-then-insert and leaves a partial table mid-run (pre-existing); C7
-  defense-splits recentSeasons swallows an error; a covering index for the
-  accuracy scan was suggested, not applied (test on a branch first).
-
-After the deploy of this commit (owner steps, not phase 3 tasks):
-- Watch the first nightly stats cron: the projection-accuracy step was made
-  concurrent in the phase 2 review and has never run end to end. Check its
-  cron_runs record for a finish inside maxDuration 300 s.
-- IndexNow for the IDP guide and the defender profile slugs (about 1,558). From
-  this machine NEXT_PUBLIC_SITE_URL must be overridden, see the FAAB section
-  below for the exact form that works.
-- The guide's publishedAt is 2026-09-24; change it if it goes live later.
-- Nobody has opened the phase 2 screens in a browser at phone width or with a
-  screen reader: defender profiles, the guide's sliders, quiz and figures, the
-  Teams tab Defense group, league card IDP tags.
-- The Sleeper ADP cron (11:00 UTC) now stores every position; the IDP guide's
-  lesson 7 reads it and the cron busts CACHE_TAGS.marketAdp. Nothing to run.
-
-## Sleeper ADP for every position (session of 2026-09-24, fourth pass), DONE
-
-COMMITTED AND PUSHED with phase 2. Tasks ADP-201 to ADP-205 at the very end of progress.md.
-
-- The nightly cron /api/cron/sync-sleeper-market (11:00 UTC) now stores Sleeper ADP for QB, RB, WR, TE, K, DEF and DL, LB, DB. No migration: ADP is a jsonb map per row. Today's partition was filled by a manual run (4,584 rows).
-- The IDP guide's lesson 7 reads that data live; the cron busts CACHE_TAGS.marketAdp after each successful run, so the guide shows each morning's numbers. A manual npm run sync:market cannot bust it; the guide then catches up within a day.
-- Fixed on the way: On The Clock's ADP lookup was capped at 1,000 rows (about 2,500 exist), and two other market reads paged without a total order. Past draft snapshots are not rewritten.
-- Open: two players stored with position "DE" by the players sync (should be DL or LB). Guide handles it; sync should be fixed in phase 3.
-- After deploy: nothing to run. The next 11:00 UTC cron writes the next partition with defenders.
-
-## IDP build: phase 2 (session of 2026-09-24, second), DONE, history only
-
-Committed and pushed later the same day at the owner's instruction. Progress per task is at
-the very end of progress.md under "IDP across FF Beacon, phase 2". To resume:
-read the plan section 7, then the phase 2 block in progress.md, and continue
-with the first task not marked completed. When all of IDP-201 to IDP-223 are
-done: phase gate (typecheck, npm test, npm run build), then ONE reviewer
-sub-agent (bugs, security, speed, accessibility, plan adherence, plus the
-phase 1 stats/accuracy cron for safe speed-ups), apply its fixes, then STOP and
-give the owner a plain-language report. Do not start phase 3.
-
-PHASE 2 FOLLOW-UP DONE (2026-09-24, third pass), since committed and pushed. IDP-2R1 to IDP-2R5 all completed; details at the very end of progress.md. BEAM: a value, rank or projection question about an unranked player declines cleanly again, without catching bio questions; the projection-source helper no longer crashes outside a Next request. Guide: lesson 7 has sourced round ranges (Sleeper IDP ADP read 2026-09-24 as a dated snapshot, plus IDP+, Fantasy Life, Footballguys), and the replacement-level slider, chase-or-ignore quiz, Custom scoring sliders, rank-group and eligibility figures are built. One scoped reviewer ran; all 12 findings fixed. Gate: typecheck green, 417 files / 6,121 tests, build 57 of 57. NEXT: phase 3, see the top of this file.
-
-
-## IDP build: phase 1 DONE and LIVE (history only; phase 2 is also done)
-
-Plan: docs/idp/idp-guide-and-data-plan.md. Phase 2 is section 7 (IDP-201 to
-IDP-224): defenders across the whole site and the IDP guide. Phase 3 (League
-Pulse behind the IDP switch) and phase 4 (launch) follow, each with its own
-review stop. Phase 1's task notes are at the end of progress.md under "IDP
-across FF Beacon, phase 1"; add phase 2's tasks below them in the same format.
-
-Where things stand (2026-09-24):
-- Phase 1 (IDP-101 to IDP-132) is committed (e15e17c), pushed to main and
-  deployed. The owner asked for that commit and push explicitly; the plan's
-  default for phase 2 is still DO NOT COMMIT, DO NOT PUSH, NO BRANCH unless the
-  owner says so.
-- Migrations 0296 to 0300 applied; lib/database.types.ts regenerated. The next
-  migration number is 0301 (the plan reserves it for IDP-214's BEAM search RPC).
-- The post-deploy data runs are DONE (backfill:idp-columns 2026,
-  calculate:idp-seasons, calculate:projection-accuracy, faab:priors). Checked
-  after them: 13,018 current and future 2026 defender projection lines,
-  6,204 idp123 accuracy rows, 300 DL/LB/DB FAAB prior cells, 1,765 2026
-  defender season rows. Nothing further to run before phase 2.
-- Last full check: typecheck green, 405 test files and 6,028 tests passing,
-  npm run build green.
-
-Start-of-session steps for phase 2 (from the plan's "Start here"):
-1. Read CLAUDE.md and .env.local (echo the variable names), then the whole
-   plan, then the phase 1 section of progress.md.
-2. Re-run the section 4.6 live checks and record them. Expected now: defender
-   projection rows present (sleeper and ffbeacon), finishes outside the six
-   only under idp123, zero active Would You Rather trades holding a defender.
-3. Work IDP-201 onward in order; typecheck and tests after every task; phase
-   gate (typecheck, test, build) and the review at the end, then STOP.
-
-Carried into phase 2 and 3 (full reasons in progress.md, "IDP-132 review round"):
-- Owner decisions, settled 2026-09-24: (a) Would You Rather stays as built:
-  the pool refuses any trade with an unpriced asset, and only the three
-  defender trades were retired; no further retirement. (b) The two-way DB/WR
-  player's two projection rows stay merged into one metadata object.
-- Measure the nightly stats cron on production: maxDuration is 300 s and the
-  accuracy step alone takes 120 to 145 s beside finishes, splits and the new
-  defender seasons step. Check its cron_runs record for a timeout.
-- IDP-201: player_idp_seasons is upsert-only; make the rebuild delete rows for
-  players who are no longer DL/LB/DB before the search gate reads it.
-- IDP-207: rebuild the "No market value" renderers with real render tests (the
-  phase 1 tests are source-level), and add the partial flag to Would You
-  Rather's admitGradedTrade.
-- IDP-211: the live On The Clock room still computes its own ADP value marks
-  for a defender pick; the stored snapshot no longer does.
-- IDP-308: filter defender rows out of Positional WAR's projection read AT
-  THE QUERY (tried in the review round, reverted because 12 load-test fakes do
-  not model the join; that task rewrites the loader and its fakes). Also
-  measure the per-week cache entry against Next's 2 MB item limit.
-- lib/site.test.ts allow-lists 22 older position-noun maps as a debt ledger;
-  a phase 2 or 3 task that touches one of those files folds it into
-  positionNoun and deletes its line.
-- Deviations already made (each explained in progress.md): IDP-102 allow-list;
-  IDP-103 keeps PositionColorKey at six (the draft tracker types on it);
-  IDP-113 only a BARE IDP map counts as usable scoring; IDP-114 keeps the
-  out/unprojected split for defenders; IDP-116 added --idp-only to the
-  projection backfill; IDP-117 orchestrator is lib/calculate-idp-seasons.ts;
-  IDP-119 skipped the beacon calibration slope list; IDP-123 also keeps
-  defenders off the cut list until phase 3's seat test (R-5).
-
-## Session of 2026-09-20 (part two): page widths and the League Pulse season switch
-
-NOT COMMITTED, by instruction. The chopped Power Pulse work from earlier the
-same day IS committed (6f2ed87). Tasks PW-T01 and LS-T01 to LS-T05 at the end
-of progress.md carry the detail; this says where it stands.
-
-State: typecheck clean, 373 test files and 5,701 tests passing, punctuation
-scan clean over every changed file. No migration in this half: the value
-freeze needed no new table.
-
-Two things NOT done, both stated rather than hidden:
-
-1. Nothing here has been opened in a browser. The overview cards, the two
-   post-season states and every re-widened tool page are verified by typecheck,
-   by unit tests and, where there was data to check, against production rows.
-   None of them has been looked at.
-2. Trade grades on a finished league's Transactions feed still price at
-   TODAY's player values, not at the values on the day of the trade. The page
-   says so in a line of its own. Fixing it properly means an as-of lookup
-   against player_value_history inside lib/trade-analyzer.ts, threaded through
-   every caller of analyzeTrade. That is the obvious next piece of work.
-
-Verified against production during the session:
-
-- A completed 2025 dynasty league resolves the right champion and runner-up
-  off Sleeper's winners bracket.
-- A live chopped league resolves the right elimination (roster 7, week 1),
-  correctly flagged as this week's, with 17 alive and 1 out.
-- The value freeze holds: a full pulse of a finished 2025 league left
-  generated_at exactly where it was, where before this change the 24-hour TTL
-  would have recomputed it.
-
-## FAAB overhaul and chopped guide build (FB-T / FB-G)
-
-Session of 2026-09-19. BUILT, REVIEWED, COMMITTED AND PUSHED to main at
-the owner's instruction at the end of the session.
-Plans: docs/faab/faab-calculator-overhaul-plan.md (FB-T) and
-docs/faab/chopped-guillotine-guide-seo-plan.md (FB-G). Every task and its
-notes are at the end of progress.md.
-
-### SESSION OF 2026-09-20
-
-Half the list below is now closed. FB-R01 (browser QA at phone width) was done
-by the owner. FB-R02 (the IndexNow ping) was run and accepted. FB-R04 (playoff
-odds on chopped leagues) and FB-R06 (the unfed reason clause) were built this
-session, are NOT COMMITTED, and are written up in full at the end of
-progress.md. Migration 0291 IS applied to production and
-lib/database.types.ts is regenerated, so the tree and the database agree.
-
-What is left: FB-R03 (finish the review coverage) and the three judgment
-calls, FB-R05, FB-R07 and FB-R08, all still recommended to leave. The FB-R04
-work is itself unreviewed by anyone but its author and is the newest code in
-the tree, so if one reviewer gets scoped at anything, scope it at that diff.
-
-### NEXT SESSION: START HERE
-
-The build is DONE and COMMITTED. Every task in both plans is built, the full
-suite passes, and the migrations are applied to production. What follows is
-what is left, in priority order, with a recommendation on each. Tracked as
-FB-R01 to FB-R08 at the end of progress.md.
-
-Where everything lives:
-
-- The plans of record, both still accurate as intent:
-  docs/faab/faab-calculator-overhaul-plan.md (tasks FB-T, list in section 9.2)
-  docs/faab/chopped-guillotine-guide-seo-plan.md (tasks FB-G, list in section 9)
-- Every task with its status and a note on what actually shipped: the end of
-  progress.md, prefixes FB-T, FB-G and FB-R.
-- The rules that bind any further work: CLAUDE.md in the repo root and
-  ~/.claude/CLAUDE.md. Read both before touching anything.
-
-THE PRIORITY LIST
-
-1. FB-R01, browser QA at phone width. DONE by the owner, 2026-09-20. What it
-   covered was the original note: the new result card at 400px, the
-   screen-reader announcements against plan 7.14, and prefers-reduced-motion.
-   It was the highest risk item on this list because the card is entirely new
-   and the owner reads by screen reader.
-
-2. FB-R02, IndexNow after deploy. DONE 2026-09-20, accepted with a 200. The
-   command written here does NOT work from this machine, and neither failure
-   says so out loud. .env.local pins NEXT_PUBLIC_SITE_URL to localhost, so
-   lib/indexnow.ts treats an ffbeacon.com URL as a foreign host, drops it, and
-   reports only "Not submitted (status 0)"; and Git Bash rewrites a leading
-   slash argument into a Windows path. What worked, in one line:
-       NEXT_PUBLIC_SITE_URL=https://ffbeacon.com npm run indexnow -- https://ffbeacon.com/guides/chopped-league-strategy
-
-3. FB-R03, finish the review coverage. The final reviewer ran out of road.
-   Unreviewed, meaning unknown rather than known bad: bid-hero, goal-toggle,
-   impact-grid, drop-options, week-strip, signal-list, market-card,
-   bid-actions, market-stats.tsx, the replay modules and script, the admin
-   Replay section, priors-write.ts, loadAuctionHistory and groupAuctions
-   against plan 7.5, and the guide copy against section 5 of the guide plan
-   (which lists the exact passages that had to change). Recommended AFTER
-   FB-R01, because the browser pass catches the same class of problem more
-   directly. Scope one reviewer to the UI components only.
-
-4. FB-R04, Power Pulse on chopped leagues (plan finding D3). DONE
-   2026-09-20, NOT COMMITTED. A chopped league now runs
-   lib/chopped/survival.ts instead of the bracket, writes null into every
-   bracket figure rather than a precise meaningless one, drops the schedule
-   component out of the score and shares its weight over the other three, and
-   scores only the teams still alive. Four new columns (migration 0291,
-   APPLIED to production) carry the chop odds, the chance of being last
-   standing and the expected weeks alive, and eleven surfaces were changed to
-   render them. modelVersion is pp-8, so every league in the product rescores
-   on next view.
-
-   Running it against production turned up one thing no test had: an upsert
-   leaves behind the row of a roster the run has stopped scoring, which in a
-   chopped league is the eliminated team's 0.0 point, 0 percent, last place
-   row sitting in a table of live teams. The calc prunes those now, which also
-   covers an ordinary league whose roster count shrank. Full write-up in the
-   FB-R04 note at the end of progress.md.
-
-5. FB-R05, the zero-dollar bid question. In a league with no minimum bid an
-   uncontested claim prices at $0, even for a player who will start. Plan 7.8
-   rule 7 and rule 2 can be read against each other. My recommendation is to
-   LEAVE IT: $0 is the honest answer when nobody else is bidding, and
-   lib/faab/ladder.test.ts pins it deliberately. Change it only if it reads
-   wrong to you.
-
-6. FB-R06, the unfed reason clause. DONE 2026-09-20, NOT COMMITTED. The
-   injured-starter test that already ran over the reader's own roster is now
-   one function and runs over the interested rivals too, so
-   rivalsWithStarterOut is fed and the clause can fire. reasons.ts is
-   untouched, so the sentence printed is the one already written and tested.
-   Not yet seen on screen in a league where a rival really does have a starter
-   out at the candidate's position.
-
-7. FB-R07, the bid search cost. bidForTarget calls the simulation once per
-   whole dollar and each call scans every run, so a $1,000 budget at 3,000
-   runs is millions of iterations per goal. Correct, and measured at about
-   two seconds for a whole chopped answer, so it is not a problem today.
-   Recommended only if a page ever feels slow.
-
-8. FB-R08, ESLint. npm run lint still cannot run anywhere in this repo: there
-   is no ESLint config and next lint drops into its interactive setup. This
-   predates the build and is not caused by it. Recommended someday, so the
-   gate exists at all; typecheck and vitest are the gates until then.
-
-TWO THINGS A NEW SESSION SHOULD NOT UNDO
-
-- lib/faab/tendency.ts measures a manager as a shrunk deviation from the
-  room's own mean log bid, NOT plan 7.6's "divide by heat". The two shrink
-  constants differ, so the plan's literal form left identical managers at
-  1.12 instead of 1. The code is right and the plan text is unamended.
-- The replay prices an auction off the cell for the REAL bidder count, not
-  the plan's "count minus one". The cells count total bidders including the
-  winner, so minus one priced a contested auction off the uncontested
-  distribution. Correcting it moved the value goal from 35.2% to 60.7%.
-
-### State
-
-All 51 FB-T and 14 FB-G tasks are complete. The engine, the chopped model,
-the result card, the manual form, the admin panel, the OG route, the replay
-and both guides are built, checked and committed.
-
-Of the eight follow-ups, four are closed: FB-R01, FB-R02, FB-R04 and FB-R06,
-the last two in the 2026-09-20 session and NOT COMMITTED. What remains is
-FB-R03, the unfinished review coverage, and the three judgment calls FB-R05,
-FB-R07 and FB-R08.
-
-### VERIFY FIRST results
-
-1. `settings.last_chopped_leg` (plan 7.12.2). NOT the final chop week. In the
-   one completed 2025 chopped league (18 teams, 17 eliminations) it reads 17,
-   which equals the LAST COMPLETED chop; in 2026 leagues with exactly one
-   elimination it reads 1; two 32-team leagues that have chopped twice carry
-   null; one 18-team league at week 1 carries 18. It is the most recent
-   completed leg and it is unreliable. DECISION: ignore it, per the plan's
-   fallback. finalWeek = min(17, currentWeek + aliveCount - 2), and
-   `finalWeekVerified` is false so the UI can hedge. Written out in full in
-   the header of lib/chopped/league.ts.
-
-2. Waiver position direction on a tie (plan 7.7). INCONCLUSIVE, and the check
-   cannot be made to work after the fact. Over 108 two-way ties at the same
-   top amount in 2025, the winner held the lower waiver_position number 31
-   times, the higher 40 and an equal one 37. `rosters.waiver_position` is
-   today's value and Sleeper sends a successful claimant to the back of the
-   order, which is most likely what the "higher" bias is. DECISION: pass null,
-   so a tie splits 0.5, per the plan's fallback. The reasoning is in the
-   comment at the call site in lib/faab/league-faab.ts.
-
-### Numbers from the two runs
-
-`npm run faab:priors`: 1,955 cells from 15,667 auctions across 351 leagues in
-8.3 seconds. Bidder-count medians as a share of budget: 0% at one bidder, 5%
-at two, 10.5% at three, 20% at four or more; winner over runner-up 2.0 times,
-which matches the plan's own audit. Chopped: alive_50p 324 samples across 16
-leagues, alive_30_50 53, alive_lt30 31.
-
-`npm run faab:replay`, 1,514 auctions graded across 104 leagues:
-value goal wins 60.7% (target 55 to 75, INSIDE), sure goal wins 89.6%
-(target 85 to 95, INSIDE), median overpay on the value goal 6.1% of budget
-(target under 2%, OUTSIDE).
-
-The overpay miss has a known cause and it is not a calibration problem: the
-replay cannot apply the worth cap, because historical rosters are not stored,
-and that cap (ladder rules 2, 4 and 5) is exactly what holds the live bid down
-to what the player is worth. The script prints that its win shares are an
-upper bound. The two chopped buckets with real samples sit at 2.1% and 1.8%.
-
-A SPEC CORRECTION came out of the first replay run and is worth knowing about:
-the priors cells count TOTAL bidders including the winner, so the plan's
-"bidders from the real count minus one" priced a contested auction off the
-uncontested distribution. Using the real count moved the value goal from 35.2%
-to 60.7% and the sure goal from 72.5% to 89.6%. The manual-mode mapping in the
-plan (Just me to "1", Half the league to "4p") was already consistent with
-total bidders and needed no change.
-
-### Migrations
-
-0290_faab_market_priors_public_floor is APPLIED TO PRODUCTION. It floors the
-PUBLIC read of the priors table at 5 claims per cell. The table is built with
-a cell for every combination, thin ones included, because the fallback ladder
-needs to know a cell is thin in order to widen past it, but 152 of the 1,955
-cells rested on a single claim and 299 on a single league, and a one-claim
-cell is not an aggregate: it is one manager's bid republished as a quantile.
-Owner decision 3 allows aggregates and forbids "a single identifiable claim".
-The floor is deliberately NOT the admin's display threshold
-(priors.minCellSamples, default 30), which an admin may lower: this is a
-privacy floor and must not move with a settings change. Verified as anon:
-1,555 cells visible, thinnest 5.
-
-0289_faab_market_priors is APPLIED TO PRODUCTION through the Supabase MCP.
-pg_policies shows SELECT for anon and authenticated and ALL for service_role;
-an anon SELECT inside a rolled-back transaction returned the row and an anon
-INSERT was refused with 42501. lib/database.types.ts is regenerated and
-prettier-formatted, and the only change to it is the new table.
-
-### Deliberate divergences from the plan
-
-1. FB-T24 is COMPLETE as of 2026-09-19 (see progress.md). The carry lives in
-   lib/faab/league-faab.ts, not in the shared projection path, so the other
-   four models are untouched. What follows was the earlier state:
-   FB-T24 was PARTIAL. `injuredStarters` ships and drives the superflex
-   emergency trigger, but `injury.carryOutFromSource` is not implemented: it
-   would have to change projectPlayerWeek in lib/power-pulse/project.ts, which
-   is the shared projection path behind Power Pulse, Lineups, Schedules and
-   the Manager Ledger, and plan section 12 puts changing those models out of
-   scope. The setting exists and is admin-editable. This needs its own call.
-2. Manual chopped has no survival card. Survival needs a real league's
-   rosters, so `chopped` is null there; the chopped controls still drive the
-   price through the alive-fraction curve and the danger multipliers.
-3. Manual mode prices a chopped league over the regular-season weeks rather
-   than to week 17, because lib/faab/outlook.ts has one season window and no
-   chopped variant.
-4. The guide register entry uses priority 0.8, matching every other content
-   guide, rather than the plan's 0.7 (the plan's own line said to match).
-5. The league deep view route segment is [league_id], not
-   [sleeper_league_id] as both plans write it.
-
-### Checks
-
-- `npx tsc --noEmit`: CLEAN.
-- `npx vitest run`: 371 files, 5,666 tests, ALL PASSING.
-- A scan of all 92 changed files for em dashes, en dashes, curly quotes,
-  ellipsis characters, middle dots, bullets, minus signs and non-breaking
-  spaces: ZERO hits. One was found and fixed on the way: the punctuation test
-  in lib/faab/reasons.test.ts had had its escape sequences turned into the
-  literal characters, so the test that forbids them contained them.
-- `npm run lint` STILL CANNOT RUN: the repo has no ESLint config and
-  `next lint` drops into its interactive setup. Unchanged since the Relays
-  build. Typecheck and vitest are the gates.
-
-### What running it end to end found
-
-The engine was run against a real standard league and a real chopped league
-from production data, which caught four things tests had not:
-
-1. `unstable_cache` throws "incrementalCache missing" outside a Next request,
-   so any script importing the engine crashed. loadPriorCellsCached now falls
-   back to an uncached read.
-2. The rival count and the rival table used two different definitions of
-   "would start him", so a chopped league rendered "Nobody else would start
-   him" above a table of thirteen rivals. There is now one definition.
-3. A chopped league was being told we had no stored schedule and therefore no
-   playoff odds, which is the same category error as simulating a bracket for
-   it. That notice is now standard-only.
-4. A reason could print "from 2% to 2%". It now says the figure barely moves
-   and gives it once.
-
-### The review, and what it is NOT saying
-
-One review agent ran at the end (two earlier attempts died on a session rate
-limit). Nine findings were fixed; the details and the fixes are in the FB-T50
-note in progress.md. The blocker was worth the pass on its own: the
-empty-the-clip walk-away still read the need control in league mode, so a
-radio the page describes as manual-only was moving the most important number
-on the card between 75% and 100% of the whole budget.
-
-WHAT THE REVIEW DID NOT REACH. Record these as unreviewed, not as clean:
-
-- Most of the new result UI beyond its structure: bid-hero, goal-toggle
-  keyboard and announcement behavior, impact-grid, drop-options, week-strip,
-  signal-list, market-card, bid-actions. In particular NOBODY has checked the
-  400px layout, prefers-reduced-motion, the live-region wording against plan
-  7.14, or "no data hidden at any breakpoint" on the responsive utilities in
-  those files.
-- market-stats.tsx beyond its imports and heading levels.
-- The replay engine, its loader and script, and the admin Replay section,
-  including whether that action and rebuildFaabPriors require admin (the
-  building agent says both call requireAdmin; it was not independently read).
-- priors-write.ts, so nothing confirms the stale-cell deletion is right.
-- loadAuctionHistory and groupAuctions against plan 7.5, beyond their tests.
-- The guide side beyond structure, and specifically section 5 of the guide
-  plan, which lists the exact passages in /guides/faab-strategy that had to
-  change because they described the old behavior.
-- An independent AI-writing pass over the build's strings. Each agent ran the
-  check on its own copy and named what it fixed; nobody checked another's.
-
-### Open decisions, not defects
-
-1. An uncontested claim in a league with no minimum bid is priced at zero
-   dollars, even for a player who starts. Plan 7.8 rule 7 can be read as
-   wanting 1 there, and rule 2 as wanting 0. A test pins the current 0.
-2. RESOLVED 2026-09-19. Chopped substitutes are now counted for real: the
-   chopped path loads the league's free agents at the candidate's position,
-   projects the top 40 through the SAME path the candidate went through, and
-   counts those whose rest-of-season mean clears substituteShare of his. A
-   failed read leaves the count at zero and simply forgoes the discount,
-   rather than reading as "we looked and found none".
-3. `rivalsWithStarterOut` is never populated, so the ", k of them with a
-   starter out" clause cannot fire.
-4. lib/faab/tendency.ts measures a manager as a shrunk deviation from the
-   room's own mean log bid, rather than plan 7.6's "divide by heat". The two
-   shrink constants differ, so the plan's form left identical managers at
-   1.12 instead of 1. The code is right and the PLAN TEXT IS UNAMENDED: do
-   not "fix" it back.
-5. `bidForTarget` calls the simulation's `winChanceAt` once per whole dollar,
-   and each call scans every run. Correct, but on a $1,000 budget at 3,000
-   runs that is millions of iterations per goal.
-
-### Known follow-ups
-
-1. Plan finding D3: Power Pulse, Schedules and the League Pulse pages still
-   run a head-to-head playoff simulation on chopped leagues, where it means
-   nothing. Out of scope here by plan section 12; it needs its own decision.
-2. The replay's overpay figure cannot be trusted until the worth cap can be
-   applied, which needs historical rosters we do not store.
-3. FB-T24's projection carry-forward, as above.
-4. IndexNow for the new guide is a POST-DEPLOY step: nothing here is
-   committed, so the URL is not live yet.
-## Sessions of 2026-09-16 and 2026-09-17: Relays and Briefs, BUILT AND REVIEWED, NOT COMMITTED
-
-Plan of record: docs/beacon-brief/relays-and-briefs-plan.md. Tasks: progress.md,
-prefix BD, at the very end of that file. Every task carries its status there;
-this file says where the work stands and what a fresh session must know.
-
-Nothing is committed and nothing is pushed, by instruction.
-
-### State
-
-Phases 1 to 5 and the run scripts are done (BD-T001 to BD-T047, BD-T049,
-BD-T049b). Five review passes (implementation, security, accessibility,
-performance, SEO) are in docs/beacon-brief/reviews/, every finding with a
-Resolution line, and their fixes are applied (BD-T090). The 2026-09-17
-session, after the 09-16 one ran out of context, confirmed the tree was
-intact (tsc clean, full suite green), closed the review items that were
-marked "left" but were mechanical, and filled in plan section 22 (BD-T091).
-A second review pass then ran (BD-T092): four reports under
-docs/beacon-brief/reviews/*-pass-2.md with their fixes applied; the
-implementation reviewer was cut off by the session limit and wrote nothing.
-
-THE BUILD IS COMPLETE. There is no feature code left to write. Do not spawn
-another review pass over the whole feature: four sessions of budget went to
-reviewers re-reading the tree. If a later change needs review, scope one
-reviewer to that change's git diff and ask for blocker and major findings
-only.
-
-Deploy-order step found by the SEO pass: production still runs the old
-commit, so the live pipeline kept publishing per-post articles after the
-archive script ran (one is live at /brief/nico-collins-hamstring-injury).
-After this tree deploys: `npm run backfill:relays -- --apply` then
-`npm run archive:legacy-articles -- --apply` (both idempotent), then confirm
-`select count(*) from articles where status = 'published' and article_type
-<> 'brief'` is 0.
-
-Migrations 0284 to 0288 are applied to production through the Supabase MCP
-and lib/database.types.ts is regenerated.
-
-Production data changed by the build (both authorized by plan section 20):
-the Relay backfill (643 published, then 16 more after the grounding rules
-were tightened; 64 hidden for the owner in /admin/brief-desk/relays; 194
-dropped by the gates; 212 folded) and the archive of 492 legacy articles with
-463 redirects. The live pipeline now writes Relays and no articles.
-
-### Facts a new session needs
-
-- The Supabase MCP server was authorized through the owner's browser
-  (organization FF Beacon). A new session may need to re-run the authenticate
-  flow; the owner has to open the URL, or Claude in Chrome can.
-- Migrations start at 0289 (0288 is the last file).
-- BRIEF_DESK_TOKEN is in .env.local and .env.local.example. It still has to
-  be added to the Vercel project environment by the owner.
-- `npm run lint` cannot run: the repo has no ESLint config and `next lint`
-  drops into its interactive setup. Every session has used `npm run
-  typecheck` and `npm run test` instead.
-- Owner-only tasks (BD-T014, BD-T048, BD-T048b, BD-T050, BD-T051, BD-T052)
-  are left pending on purpose.
-
-### What the owner still has to do
-
-1. Review and commit the working tree.
-2. Add BRIEF_DESK_TOKEN (the value in .env.local) to the Vercel environment.
-3. Decide the Terms page sentence (docs/beacon-brief/reviews/seo.md, M1).
-4. BD-T014: watch one day of the live pipeline in /admin/brief-desk/relays
-   and /admin/beacon-brief/logs; clear or edit the 64 hidden Relays.
-5. BD-T048: write the week 1, 2026 edition by hand in a session (plan 14.3),
-   then BD-T048b copies its draft_payload to
-   docs/beacon-brief/examples/week-1-2026-brief.json.
-6. BD-T050: create the two cloud routines at claude.ai/code/routines with
-   scripts/brief-desk/prompt.md and BRIEF_DESK_TOKEN in their environment.
-7. BD-T051 and BD-T052 as the plan states.
-
-### Known and deliberately left
-
-Every item is recorded in plan section 22 with its reason. The short list:
-
-- A retracted Relay's permalink renders the retracted notice with noindex and
-  a 200, not a 410 (App Router pages cannot set a 410).
-- `week` on relays is stored for regular and post season only; pre-season
-  posts carry null with the phase reported by lib/relays/week.ts.
-- The hub is dynamic; the permalink walks its ancestor chain one query at a
-  time; the desk rate limit is keyed on the caller rather than the token;
-  `brief_editions` has no partial unique index on the period.
-
-## Session of 2026-09-11: design pass, NOT COMMITTED
-
-A presentation-only redesign of the Who Should I Start result cards, the
-toughest-calls grid and the written sections under both Who Should I Start
-and the trade calculator. Tasks DSN-T001 onward in progress.md.
-No engine, query or migration change. Nothing committed or pushed, by
-instruction: the owner reviews first.
-
-Found and left, pre-existing: the Reliability tab lists unplayed and
-unsynced weeks as "Did not play" (lib/breakdown/load-extras.ts
-loadReliabilityWeeks has no week bound); the BookmarkBar in the site shell
-throws a hydration id mismatch in dev; this week's toughest-calls pairs are
-exact projection ties, so every card reads "0.0 points clear, 50 percent".
-
-Earlier entries (the SEO build of 2026-09-10 and before) live in the git
-history of this file.
+- Last task completed: BP-T080 (Plan moved to docs/completed/team-blueprint/team-blueprint-plan.md (status line BUILT, contents entry and section 21 What shipped differently); docs/README.md row moved from Active to Completed with what is left over, cited as the old path like every other moved plan)
+- Next task: Build complete apart from BP-T081 (commit, skipped by the owner). Owner steps: deploy, check CRON_SECRET on Vercel, confirm the 10:30 and 10:50 UTC market-signals runs in cron_runs, and the first-week table size check (BP-T020)
+- Partial file in progress: none
+
+## Migrations applied to prod (cilvpyivysjxpxbudkfa)
+
+- 0340_league_blueprint_settings (applied 2026-10-29)
+- 0342_market_signals (applied 2026-10-29 as four MCP migrations named 0342_market_signals, 0342_market_signals_runs, 0342_market_signals_changes, 0342_market_signals_latest; the repo file is one file)
+- 0341 (applied 2026-10-29 as two MCP migrations, 0341_league_roster_age_history and 0341_league_blueprint_cache, after one more requestState rejection; the repo file is one file)
+
+## Unverified or pending
+
+- Market Signals has not run on Vercel: deploy, then confirm the 10:30 and 10:50 UTC entries record in cron_runs and check table sizes after the first week.
+
+## Notes and deviations for the final report
+
+- BP-T006: components/admin/settings-form-kit.tsx is new (not in the plan). Every existing admin manager carries its own local copy of the field helpers; the two new managers share one copy instead of adding two more.
+- Cached view is viewer independent: proposals are stored and turned into hrefs at render (so no searched username is baked in), and the shared build runs findTrades with no manager tendencies and no declined keys (partner tendency term fixed at 0.5). Plan 18.6 asks for signed-in extras as Trade Ideas does; a shared cache row cannot carry one reader s declines or show a guest tendency data that is gated behind sign-in.
+- BP-T009: the MCP apply_migration call rejected the whole 0342 file twice with Invalid or expired requestState (it applied nothing); split into four smaller MCP migrations with identical SQL. Also added an index on player_value_signal_changes(changed_on) for the 730-day prune and one on market_signal_runs(ran_at desc) for the admin table.
+- BP-T012: a change is logged on a move INTO a call state, including the first run (from null), so the first night writes about one row per signaled player once; baseline and thin never log.
+- BP-T013: source_registry has no display_order column, so sources are ordered is_default first then priority (the order every other source list in the code uses). The 25-player floor is applied inside run-partition, where the latest day count is known.
+- BP-T019: the table-size readout shows ROW COUNTS from exact head counts, not bytes. Bytes from pg_stat_user_tables or pg_total_relation_size need a SECURITY DEFINER function (a migration the plan does not list); BP-T020 records bytes through the MCP instead. Signal days (UTC calendar days) are formatted at UTC noon so the Eastern date never prints a day early.
+- BP-T020: DynastyProcess publishes weekly, so with stale_days 3 it has no partition most nights and its series never reach 24 points in 30 days; it is effectively unsignaled. Changes run about 360 a day averaged over the year and 957 on the first live day, so the 730-day table will be roughly 60 to 90 MB with indexes, above the plan estimate of 30 MB a year. The first-week size check (plan BP-T020) still needs doing after deploy.
+- BP-T028: two fallbacks added below P10 (P11 'Lean on {strongest position}', P12 'Track the total'), both citing figures, so exactly three priorities always render as plan 16 requires; P8 (Hold steady) is suppressed whenever an action priority (P1, P2, P3, P5, P6, P7) fires, so the page never says both. P9 reads 'A gained 18.2% and B gained 12.0% in 30 days' and uses the movers window label.
+- BP-T039: the 30d option also selects rank_change_7d and show_trend_7d, because the movers 7-day fallback (plan 6.6) needs the 7-day gate.
+- BP-T043: (1) the derived league sync runs only on the rebuild path, so the warm path really is six small reads and one row; the fingerprint is taken after the sync. (2) Spotlight compares the week top scorer with his season per-game average from the Leaderboards views, because league_power_pulse_cache.weekly holds team distributions, not player projections. (3) loadTeamShareCard is not called: loadLeagueTeamCards already carries every field the depth lists need, and a second read of the same roster would only add queries. (4) Dynasty means context.derived.league_type dynasty, the rule the team page uses.
+- BP-T051: depth columns are grid sm:grid-cols-2 xl:grid-cols-4 rather than grid-cols-2 sm:grid-cols-4, so a row of name, value, rank and call fits without truncation at 390 and 768 wide.
+- BP-T061 live-check fixes: (1) a rebuilding roster no longer sells an under-cutoff player for being trade-finder surplus (the taxi rookies read Sell; calls.ts); (2) finder team names already carry (@handle), so teamWithHandle stops doubling it; (3) Signal Check Side A or Side B verdicts read You win or They win (strategy.ts readerVerdict); (4) the spotlight season average also searches the position boards, since the overall season board is truncated.
+- BP-T063: the missing-league card is renderHeadlineCard re-wrapped as a 404 response, because renderHeadlineCard takes no status.
+- BP-T065: the profile loads 30 days of history, and a band needs 24 points in its own 30-day window, so the band covers only the last week or so of the chart. The profile band uses the code default settings rather than the stored market_signal_settings row, so after an admin changes window or k the badge (stored row) and the chart band can differ until the defaults are changed to match.
+- BP-T071: the strip takes the eyebrow as a prop so the homepage passes its own SectionEyebrow (defined privately in app/page.tsx) rather than a second copy.
+- Gate timing: Phase E, F and G ran their own typecheck and lint as they went, and one full gate (tests and build) covered E through H together, because next build and the dev server share .next.
+- BP-T082: the editing tool turned a typed backslash-b into a backspace character inside a regex literal. lib/guides/idp-fantasy-football.test.ts line 236 has the same corruption (pre-existing, outside this build, the assertion is weaker than written); not changed.
+- BP-T083: plan 11.3 lists priorities 180, strategy 260, footer 100; raised to 300, 310 and 110 because 140 and 120 character runs need three lines and two lines, and the same section says a taller card beats a clipped one.
+- BP-T084: the portrait's priorities and strategy sections are sized from their text (line counts estimated with fitText) rather than the fixed 180 and 260 of plan 11.3; the fixed heights remain the cap.
+- BP-T085: two disclosure tables still scroll sideways inside a focusable region at 360 (grade reasons, age numbers); that is the shared chart-kit DataTable pattern. The shared league shell's back link (24px) and league crumb (20px tall) are under 44px on every league page; not changed in this build.
+- BP-T085: components/trend-chip.tsx is a shared component, so the accessibility fix also reaches every other page that renders a trend chip.
+- BP-T077: the intro no longer prints an as-of time (plan 9.1 has one); the body's notes and the stale or failed sentence carry it, because the intro row is read before the body may rebuild.
+- BP-T077: the profile band now uses the stored market_signal_settings row rather than the code defaults, which closes the BP-T065 note about the badge and band disagreeing after an admin change.
+- BP-T080: git mv could not be used because the plan was never committed (git status lists docs/team-blueprint/ as untracked); a plain mv gives the same working tree.
+
+## Tasks done this build
+
+- BP-T001 completed: Plan row in docs/README.md Active table set to Approved, building
+- BP-T002 completed: Migration 0340 league_blueprint_settings (singleton jsonb row, service role only)
+- BP-T003 completed: lib/league-blueprint/default-settings.ts: every plan 13.1 default, RB sell cutoff 28
+- BP-T004 completed: lib/league-blueprint/settings.ts (zod schema, cross-field rules, merge, memoized load, save) plus test
+- BP-T005 completed: app/admin/league-blueprint/actions.ts: requireAdmin, server-side validation, save, memo bust
+- BP-T006 completed: Blueprint admin settings form, every 13.1 field grouped by effect; shared form kit for the two new admin managers
+- BP-T007 completed: /admin/league-blueprint page behind requireAdmin, nav-tree entry after Power Pulse Model
+- BP-T008 completed: lib/league-blueprint/types.ts (BlueprintView, the rules header incl. naming and viewer independence); naming test scans lib/league-blueprint and lib/market-signals
+- BP-T009 completed: Migration 0342 market signals: player_value_signals (latest only), player_value_signal_changes (change only), market_signal_runs, market_signal_settings, indexes and policies
+- BP-T010 completed: lib/market-signals/default-settings.ts (plan 5.8 defaults, the 10-point band floor and the 25-player partition floor)
+- BP-T011 completed: lib/market-signals/settings.ts (zod bounds of plan 13.2, min points within window, lookback at least window, merge, memoized load, save) plus test
+- BP-T012 completed: lib/market-signals/bollinger.ts (pure: day collapse, calendar window, sample stdev bands, five states with hysteresis, thin floor, stale skip, change and since rules, rollingBands) plus test and fixtures
+- BP-T013 completed: lib/market-signals/partitions.ts (format x source pairs from source_registry supported_format_slugs, NULL means all active; default source first then priority then format display_order; latest history day per partition via the 0122 index; freshness against market_signal_runs) plus test
+- BP-T014 completed: lib/market-signals/run-partition.ts (one keyset walk on captured_at,id per partition, fold to daily series, existing rows paged by player_id, pure computePartition, 500-row upserts, change rows with ignoreDuplicates, run stamp after writes; IO injected) plus test
+- BP-T015 completed: lib/market-signals/engine.ts (deadline loop: stop before a partition that would pass budget minus 10s using the longest so far, partial with no failedSteps; a throwing partition goes to failedSteps and the next runs; fresh partitions skipped; one-DELETE prunes of changes past 730 days and runs past 90 days only on a complete run) plus test
+- BP-T016 completed: app/api/cron/market-signals/route.ts (verifyCronRequest, recordCronRun with timeoutMs 280000 and quietWhen for the catch-up, revalidateTag playerValues when rows were written); CronJobName and CRON_JOBS entry with extraSchedules; vercel.json 30 10 and 50 10 UTC
+- BP-T017 completed: scripts/backfill-market-signal-changes.ts (refuses without --from and --to, optional --partition and --dry-run; pure replayChanges with the cron computeSignal; writes change rows only through the idempotent unique key) and npm run backfill:market-signals
+- BP-T018 completed: lib/market-signals/read.ts (loadPlayerSignal and loadSignalChanges in React cache, loadSignalsFor chunked 200 ids per in(), latestSignalComputedAt for the fingerprint)
+- BP-T019 completed: /admin/market-signals: settings form (13.2 bounds), Run now for one declared partition through the cron runner under requireAdmin, last 40 runs with Eastern times, row counts for the five size-rule tables; nav-tree entry
+- BP-T020 completed: First manual Market Signals run against prod (local dev server, curl with CRON_SECRET), catch-up run, 365-day backfill, size check
+- BP-T021 completed: lib/league-blueprint/grades.ts (rankScore, value and points blend, bench with depth, picks dynasty only, weighted overall to one decimal, superflex QB weight, because sentence) plus test
+- BP-T022 completed: lib/league-blueprint/archetype.ts (value archetype, roster archetype, two-year outlook with a reason citing age gap, picks grade and young share) plus test
+- BP-T023 completed: lib/league-blueprint/age.ts (value-weighted mean decimal age per position and overall, league reference, gap, young core share) plus test
+- BP-T024 completed: lib/rankings/insights.ts: movers math moved onto a minimal MoverInput row (topMoversFrom, boardRowToMoverInput, moverFloorFor); topMovers and boardPulse keep their signatures
+- BP-T025 completed: lib/league-blueprint/movers.ts (roster movers on the format top floor, 7-day fallback with its sentence) plus test
+- BP-T026 completed: lib/league-blueprint/calls.ts (roster call then market overlay, the 6.7 table row by row, dynasty keep value, buy targets from acquirablePool inside the value window ranked market buy first then projection) plus test and a 12-team fixture
+- BP-T027 completed: lib/league-blueprint/activity.ts (formula, bands, driver sentence from the largest term, split percentages, buy target counts) plus test
+- BP-T028 completed: lib/league-blueprint/priorities.ts (P1 to P10 templates plus two figure-citing fallbacks) plus test
+- BP-T029 completed: lib/league-blueprint/strategy.ts (downtier, uptier, pivot classification with the engine's TIER_JUMP, best score per shape, goal reruns capped at three runs, one grade batch, empty-shape sentence with the finder notice, proposals for the builder) plus test; TIER_JUMP exported from lib/trade-finder/rank.ts
+- BP-T030 completed: lib/league-blueprint/partners.ts (need fit, give fit, direction, tendency fixed at 0.5, league max normalization, roster id tie break, reason naming the largest term) plus test
+- BP-T031 completed: lib/league-blueprint/capital.ts (per-pick finder values grouped by season, season rank across rosters, unpriced counted, via handle) plus test
+- BP-T032 completed: lib/league-blueprint/spotlight.ts (week top scorer with projection difference, else top riser, else most valuable, label says which) plus test
+- BP-T033 completed: lib/league-blueprint/shares.ts (value share and rank, production share ranked by points for with roster id ties, preseason null) plus test
+- BP-T034 completed: lib/league-blueprint/build.ts (pure assembler: players stored once, lineup from Sleeper positional starters with empty slots, depth with IR, taxi and no-value groups, calls, buys, grades, age, standing, shares, movers, activity, capital, partners, priorities, spotlight; profilesFor shared with data.ts) plus fixture test and a team card fixture
+- BP-T035 completed: lib/league-blueprint/ring-geometry.ts, gauge-geometry.ts, age-geometry.ts (arcs, half-circle gauge with band ticks, horizontal age bar pairs; SVG strings for the images) plus tests
+- BP-T036 completed: lib/league-blueprint/share.ts (buildBlueprintShareCard from the stored view only, describeBlueprint) and share-layout.ts (portrait height from section heights) plus tests
+- BP-T037 completed: Migration 0341 league_blueprint_cache (service role only, unique league roster season source) and league_roster_age_history (public select, service role writes), indexes including the two prune indexes
+- BP-T038 completed: league-maintenance cron: pruneBlueprintTables, one DELETE each (blueprint cache past 14 days by generated_at, age history past 730 days by as_of_day), plus test
+- BP-T039 completed: lib/league-view-data.ts loadTrends: optional { window: "30d" } adds the 30-day fields and both window gates through overloads; existing callers unchanged, plus test
+- BP-T040 completed: lib/league-blueprint/rate-limit.ts claimBlueprintBuildSlot: bucket blueprint-build, 12 per 60 s per actor, fails closed
+- BP-T041 completed: lib/league-blueprint/cache.ts (sha1 fingerprint of sorted player ids and every read cache timestamp, signals computed_at, Pulse week, settings and model version; isFresh with TTL; the six-query warm path; read and write of league_blueprint_cache) plus test
+- BP-T042 completed: lib/league-blueprint/age-history.ts (Eastern-day upsert of one compact row per roster per day) plus test
+- BP-T043 completed: lib/league-blueprint/data.ts loadBlueprint: context, settings, warm path (fingerprint plus one cache row), slot claim only when stale, coalesce, rebuild (derived sync with Positional WAR and Ledger off, team cards, Power Pulse, ledger slice, trade finder league, roster metadata reserve and taxi, signals for the league, 30-day trends, strategy board, spotlight, fingerprint after the sync, cache write, age history write); staleOrFailed in cache.ts
+- BP-T044 completed: components/league-lineups/roster-select.tsx extracted from LineupControls (same CONTROL classes, sr-only label by default, optional visible label); LineupControls uses it
+- BP-T045 completed: components/share-strip.tsx (h2 Share, Copy image, Copy image link with prewarm, Copy page link; caller-supplied accessible names leading with the visible label); matchup page uses it
+- BP-T046 completed: Leaderboards page onto components/share-strip.tsx (decision 3.15); it gains the Copy image link button the shared strip carries
+- BP-T047 completed: components/league-blueprint/call-tag.tsx (CallTag, BuyTag, NoMarketValue; full words, plan 9.18 colors) and bits.tsx (figure classes of 10.1, formats, builder href built at render with the reader own username)
+- BP-T048 completed: standing-panel.tsx (hero overall grade StatTile, status and reason, three readouts, null sentences)
+- BP-T049 completed: grade-rings.tsx (six role=img rings named with the grade, numeral inside the img, reasons table under a disclosure)
+- BP-T050 completed: lineup-table.tsx (slot row header named by the spelled-out slot only, value with sr-only unit, No market value for defenders, Empty slots; below sm value and position rank merge into one cell)
+- BP-T051 completed: depth-lists.tsx (four position lists with ST starter mark, IR, taxi, defense and specialists)
+- BP-T052 completed: shares-panel.tsx (two equal secondaries with rank lines and beacon share bars, preseason sentence)
+- BP-T053 completed: age-chart.tsx (ChartFigure, SeriesLegend, bar pairs from age-geometry, sr-only summary, data table)
+- BP-T054 completed: movers-panel.tsx (Rising and Falling lists with TrendChip, empty sentence, fallback helper)
+- BP-T055 completed: gauge.tsx (role=img named with band and score, band word as the gradient hero) and calls-panel.tsx (split percentages, buy target count, Sell, Build around, Hold, Buy targets by position with builder links, Cut candidates with the keep note)
+- BP-T056 completed: capital-panel.tsx (season rows, value figure, rank, picks with via, unpriced count, redraft sentence, pick source footnote)
+- BP-T057 completed: priorities-panel.tsx (ol of three, first as the hero sentence, RankMark numerals)
+- BP-T058 completed: strategy-panel.tsx (three shape cards: headline, send for get, value and projected wins, verdict, acceptance, builder link, empty sentence) and partners-list.tsx (two cards, reason, builder link, beacon bar on the first)
+- BP-T059 completed: spotlight-card.tsx (avatar, label, name, gradient hero figure with sr-only unit, comparison line)
+- BP-T060 completed: body-skeleton.tsx (same section order and pairs as the body, aria-busy, one status sentence, reduced motion)
+- BP-T061 completed: app/leagues/[league_id]/blueprint/page.tsx (getSyncedLeague, generateMetadata with the roster preview image, digit-only roster param or 404, viewer team then first roster with a sentence, intro with as-of and share strip when a stored view exists, sticky BlueprintControls, Suspense body with every state of 9.17, footnotes) and components/league-blueprint/blueprint-controls.tsx
+- BP-T062 completed: Blueprint tab directly after Overview (LeagueTabId, LEAGUE_NAV_ITEMS with the target icon, leagueTabHref full-route list); Open blueprint link in the team card header strip and on the team deep view beside Who should I start
+- BP-T063 completed: app/api/og/blueprint/[league_id]/[roster_id]/route.tsx (1200x630 preview) plus card.tsx (shared validation, 308 canonical, cache-only reads, 404 and placeholder cards, preview and portrait renderers, rings and gauge from the shared geometry) and route.test.ts
+- BP-T064 completed: app/api/og/blueprint/[league_id]/[roster_id]/share/route.tsx (portrait 1080 wide, height from share-layout)
+- BP-T065 completed: lib/player-profile.ts valueBandsFor (the cron rollingBands over the loaded series, nothing stored) and value-trend-chart.tsx bands prop: translucent SERIES_A band under the line, a 30-day band legend line, two data table columns
+- BP-T066 completed: components/player-profile/market-signal-badge.tsx (state word as visible text in status chip classes, since date, Why this signal disclosure with the band sentence and the last three changes, nothing for a null row) placed in the Value trend panel under the current value and TrendChip; overview-tab loads the signal and changes for the resolved format and source, never for a defender
+- BP-T067 completed: lib/league-blueprint/cta-data.ts loadBlueprintCtaFigure (one cache row: overall, status label, generated_at; null for no row or an older model) plus test
+- BP-T068 completed: components/league-blueprint/blueprint-cta.tsx (plan 20.1 markup, real stored grade or no number, one control, h2, New: eyebrow until 2027-01-31 Eastern by a dated constant, full-width button below sm)
+- BP-T069 completed: Overview page: BlueprintCtaSection mounted between SeasonResultSection and ActivitySection in its own Suspense (fallback null), viewer roster through matchViewerRoster, team name from loadRosters
+- BP-T070 completed: homepage.blueprintStrip { enabled: true } in the site layout type, defaults, merge (older rows default on) and strict schema; /admin/site-layout gains the switch and carries the flag through every homepage edit
+- BP-T071 completed: components/blueprint-feature-strip.tsx (plan 20.2 markup, one control into League Pulse, decorative aria-hidden preview SVG with no team, player or league name)
+- BP-T072 completed: app/page.tsx mounts the strip between Hero and ToolsSection, gated on layout.homepage.blueprintStrip.enabled
+- BP-T073 completed: The gate after Phases E to H: typecheck, lint (0 errors, 0 warnings), npm test, npm run build
+- BP-T082 completed: Share image fix: trade verdicts read Side A wins because readerVerdict held literal backspace characters (code 8) where the word boundaries belong, so no pattern ever matched; rewritten from character codes, test added (including a no-control-character check), BLUEPRINT_MODEL_VERSION 2 to 3 so the four cached rows rebuild
+- BP-T083 completed: Share image fix: Footer is now the wordmark row (OG_WORDMARK already reads FFBeacon.com, so the separate ffbeacon.com text that doubled it and got pushed off the edge is gone) with the source line and the defender line under it; priorities clip at 140 characters and strategy at 120; share-layout priorities 180 to 300, strategy 260 to 310, footer 100 to 110 so the longer text grows the card instead of clipping (plan 11.3 rule); preview footer band 90 to 100
+- BP-T084 completed: Share image recheck after BP-T082/083 (four portraits and the 1200x630 preview, opened directly): verdicts read You win / They win, one wordmark row, full priorities and strategy text. Follow-up fixes: the superflex slot read SU... in the 70px slot column, now SF (shareSlotLabel); priorities and strategy heights are now measured from the text with fitText line counts (prioritiesHeight, strategyHeight, capped at the fixed heights) so short text no longer leaves a blank band; preview right column 400 to 360 and rings 56/10 to 52/8 so the ring row stays inside the 40px padding
+- BP-T085 completed: Visual pass in Claude in Chrome on the local production server (BP-T078 widened): Blueprint page for both leagues and both rosters, overview CTA (no-team and own-team), homepage strip, player profile badge and band, both share images, Copy image and Copy page link, at 1440, 1280, 1024, 768, and 390 and 360 through the 500px window with a narrowed body. Fixes: (1) the sticky controls bar sat in a wrapper of its own height and never stuck; it now shares the body wrapper, as Lineups does; (2) Buy, sell, hold left a large empty block beside a 25-row Hold list: Sell and Build around now stack in one column and Hold spans two, flowing into two columns from sm when over 8 rows; (3) the lineup table scrolled sideways at 360 (398 in 326): below sm it is three columns (SF for superflex, player with the call note under the name, one cell stacking value, position rank and the call tag), the separate columns return from sm; (4) the age chart shrank its labels under 5px on a phone: a 280-wide copy draws below sm and the 480 copy from sm; (5) components/trend-chip.tsx hid its visible figures with aria-hidden and named a p element with aria-label: the figure is now the real text with sr-only words inside the same element
+- BP-T077 completed: One review sub-agent (security, implementation, accessibility, performance; no high findings, 2 medium, 6 low) and every finding fixed: (1) a stale signal row read as current: isSignalCurrent in lib/market-signals/read.ts, and loadPlayerSignal and loadSignalsFor take staleDays and return no signal for a row older than it; (2) badge, page and chart copy said 30 days whatever the setting: the stored windowDays and minPoints now reach the badge, the calls helper, the page notes and the chart labels, the profile band uses the stored settings, and the two stored call notes say his own market band (model version 3 to 4); (3) a failed blueprint prune stopped the not-found recheck: it is now a failed step; (4) the runs prune filters on the indexed ran_at; (5) the overview CTA selects view->standing only; (6) the warm path resolved the context and read the row twice: the page passes both into loadBlueprint; (7) the intro could show an older as-of time than the body: the intro carries no time; (8) the depth starter mark was a hidden ST with a spoken twin: it is now the visible word Starter
+- BP-T079 completed: CLAUDE.md gains Team Blueprint (League Pulse) and Market Signals sections after Trade Ideas, in the style of the League Pulse sections: the rules (one view model, cache-only images, viewer independence, no engine on the warm path, rate limit after validation, on demand only, latest-only and change-only storage, partition-only cron with the deadline loop), format and source, design rules, the two CTAs, settings and module maps
+- BP-T080 completed: Plan moved to docs/completed/team-blueprint/team-blueprint-plan.md (status line BUILT, contents entry and section 21 What shipped differently); docs/README.md row moved from Active to Completed with what is left over, cited as the old path like every other moved plan

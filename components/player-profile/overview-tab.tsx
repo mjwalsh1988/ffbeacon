@@ -25,6 +25,12 @@ import { PlayerBioOverview } from "@/components/player-profile/player-bio-overvi
 import { DepthChartCard } from "@/components/player-profile/depth-chart-card";
 import { OverviewGameLog } from "@/components/player-profile/overview-game-log";
 import { OverviewSidebar } from "@/components/player-profile/overview-sidebar";
+import { MarketSignalBadge } from "@/components/player-profile/market-signal-badge";
+import { loadPlayerSignal, loadSignalChanges } from "@/lib/market-signals/read";
+import { loadMarketSignalSettings } from "@/lib/market-signals/settings";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isDefender } from "@/lib/site";
+import { valueBandsFor } from "@/lib/player-profile";
 import {
   summarizeProjections,
   SCORING_KEYS,
@@ -152,6 +158,21 @@ export async function OverviewTab({
       loadCommunityRank(player.id, context.formatSlug, context.formatConfigId),
     ]);
 
+  // The market signal for the reader's resolved format and source (Team
+  // Blueprint plan 12.2). Defenders carry no market value, so none is read.
+  const signalFormat = context.formatConfigId;
+  const signalSource = context.valueSourceSlug;
+  // The settings row is service-role only; the window, minimum and stale
+  // cutoff it holds are what the badge, the band and the stale check must use.
+  const marketSettings = await loadMarketSignalSettings(createAdminClient());
+  const [marketSignal, marketSignalChanges] =
+    signalFormat && signalSource && !isDefender(player.position)
+      ? await Promise.all([
+          loadPlayerSignal(supabase, player.id, signalFormat, signalSource, marketSettings.staleDays),
+          loadSignalChanges(supabase, player.id, signalFormat, signalSource),
+        ])
+      : [null, []];
+
   const scoringLabel =
     SCORING_KEYS.find((s) => s.key === context.scoringKey)?.label ?? "PPR";
   const tePremiumBonus = player.position === "TE" ? context.tePremiumBonus : 0;
@@ -236,6 +257,17 @@ export async function OverviewTab({
           <OverviewSidebar
             valuePoints={valueSeries.points}
             windowed={valueSeries.windowed}
+            valueBands={valueBandsFor(valueSeries.points, marketSettings)}
+            valueBandWindowDays={marketSettings.windowDays}
+            marketSignal={
+              <MarketSignalBadge
+                signal={marketSignal}
+                changes={marketSignalChanges}
+                sourceDisplay={context.valueSourceDisplay}
+                windowDays={marketSettings.windowDays}
+                minPoints={marketSettings.minPoints}
+              />
+            }
             latestValue={latestValue}
             trends={trends}
             sourceDisplay={context.valueSourceDisplay}

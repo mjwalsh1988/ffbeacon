@@ -349,8 +349,11 @@ function baseAcceptanceOf(
  * Consolidating two players into one of equal value is not consolidating, it is
  * shuffling. Fifteen percent on the lead asset is the point at which the reader
  * is demonstrably holding a better player than either of the ones they sent.
+ *
+ * Exported for the Team Blueprint's uptier shape (lib/league-blueprint/
+ * strategy.ts), which must use the same jump the engine's goal gate does.
  */
-const TIER_JUMP = 1.15;
+export const TIER_JUMP = 1.15;
 
 /** The shape of a candidate deal, as the goal tests need to read it. */
 export type TradeShape = {

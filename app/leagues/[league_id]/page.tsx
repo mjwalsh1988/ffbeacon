@@ -17,6 +17,9 @@ import { loadPowerPulseView, buildPulseLeaders } from "@/lib/league-power-pulse-
 import { loadTransactionVolume } from "@/lib/league-transaction-volume";
 import { loadViewerCandidates } from "@/lib/league-positional-war-data";
 import { matchViewerRoster } from "@/lib/league-viewer";
+import { loadRosters } from "@/lib/power-pulse/load";
+import { loadBlueprintCtaFigure } from "@/lib/league-blueprint/cta-data";
+import { BlueprintCta } from "@/components/league-blueprint/blueprint-cta";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import {
   viewerLinkUsername,
@@ -436,6 +439,22 @@ export default async function LeagueDeepViewPage({
               <SeasonResultSection
                 leagueRowId={league.id}
                 season={league.season != null ? Number(league.season) : null}
+              />
+            </Suspense>
+
+            {/* The Team Blueprint call to action (plan 20.1), above the
+                activity panel. One stored row, awaited inside its own
+                boundary so the card renders once, with or without a figure. */}
+            <Suspense fallback={null}>
+              <BlueprintCtaSection
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
+                season={league.season != null ? String(league.season) : null}
+                sourceSlug={context.sourceSlug}
+                linkUsername={linkUsername}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+                viewerSleeperUserId={viewer?.sleeperUserId ?? null}
               />
             </Suspense>
 
@@ -1609,4 +1628,51 @@ function formatRelative(date: Date): string {
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.round(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/**
+ * The Team Blueprint call to action on the overview (plan 20.1). Reads one
+ * stored blueprint row for the viewer's roster; never builds one.
+ */
+async function BlueprintCtaSection({
+  leagueRowId,
+  sleeperLeagueId,
+  season,
+  sourceSlug,
+  linkUsername,
+  searchedUsername,
+  focusedRosterId,
+  viewerSleeperUserId,
+}: {
+  leagueRowId: string;
+  sleeperLeagueId: string;
+  season: string | null;
+  sourceSlug: string;
+  linkUsername: string | null;
+  searchedUsername: string | null;
+  focusedRosterId: number | null;
+  viewerSleeperUserId: string | null;
+}) {
+  const supabase = await createClient();
+  const admin = createAdminClient();
+  const [candidates, rosters] = await Promise.all([
+    loadViewerCandidates(supabase, leagueRowId),
+    loadRosters(admin, leagueRowId),
+  ]);
+  const viewerRosterId = matchViewerRoster(candidates, searchedUsername, focusedRosterId, viewerSleeperUserId);
+  const viewerTeamName =
+    viewerRosterId != null ? (rosters.find((r) => r.sleeperRosterId === viewerRosterId)?.teamName ?? null) : null;
+  const figure =
+    viewerRosterId != null && season && sourceSlug
+      ? await loadBlueprintCtaFigure(admin, leagueRowId, viewerRosterId, season, sourceSlug)
+      : null;
+  return (
+    <BlueprintCta
+      sleeperLeagueId={sleeperLeagueId}
+      linkUsername={linkUsername}
+      viewerRosterId={viewerRosterId}
+      viewerTeamName={viewerTeamName}
+      figure={figure}
+    />
+  );
 }

@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { MemberHeroCta } from "@/components/member-hero-cta";
+import { BlueprintFeatureStrip } from "@/components/blueprint-feature-strip";
 import { isDiscordMember } from "@/lib/discord-membership";
 import {
   getDiscordGuildStats,
@@ -211,6 +212,9 @@ export default async function HomePage() {
   return (
     <main id="main">
       <Hero memberContext={memberContext} />
+      {layout.homepage.blueprintStrip.enabled && (
+        <BlueprintFeatureStrip eyebrow={<SectionEyebrow>New in League Pulse</SectionEyebrow>} />
+      )}
       <ToolsSection cards={layout.homepage.cards} />
       <GamesSection />
       <GuidesSection />

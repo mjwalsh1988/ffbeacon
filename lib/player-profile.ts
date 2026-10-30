@@ -29,6 +29,8 @@ import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { lineFromProjection, type StatLine } from "@/components/player-profile/stat-shaping";
 import { IDP_POSITIONS, isDefender } from "@/lib/site";
 import { defenderDepthRole, subPositionLabel } from "@/lib/player-profile/defender-depth";
+import { collapseToDays, rollingBands } from "@/lib/market-signals/bollinger";
+import { DEFAULT_MARKET_SIGNAL_SETTINGS, type MarketSignalSettings } from "@/lib/market-signals/default-settings";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -997,4 +999,21 @@ export async function loadLatestArticle(
     published_at: data.source_posted_at,
     href: `/brief/relay/${data.slug}`,
   };
+}
+
+export type ValueBand = { day: string; upper: number; lower: number };
+
+/**
+ * The Market Signals band for each day of a loaded value series, for the
+ * profile chart (Team Blueprint plan 12.3). The SAME pure function the nightly
+ * job uses (lib/market-signals/bollinger.ts rollingBands), on the series this
+ * page already loads, so the chart and the badge agree by construction and
+ * nothing is stored per day. The caller passes the stored settings so the band
+ * and the badge use the same window. A day gets a band once the minimum of
+ * points exists in its window, so a 30-day series shows the band on its last
+ * days only.
+ */
+export function valueBandsFor(points: ValuePoint[], settings: MarketSignalSettings = DEFAULT_MARKET_SIGNAL_SETTINGS): ValueBand[] {
+  const series = collapseToDays(points.map((p) => ({ value: p.value, formula_offset: 0, captured_at: p.t })));
+  return rollingBands(series, settings);
 }

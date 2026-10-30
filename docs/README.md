@@ -63,6 +63,7 @@ data/ is in the ESLint ignore list, the same as docs/.
 
 | Folder | File | What it is | Left over | Cited as |
 | --- | --- | --- | --- | --- |
+| completed/team-blueprint | team-blueprint-plan.md | Team Blueprint inside League Pulse (page, link preview and portrait share image, overview and homepage calls to action) and the nightly Market Signals engine behind its calls and the player profile badge, with section 21 on what shipped differently | Deploy, then confirm the 10:30 and 10:50 UTC market-signals runs in cron_runs and record the first-week table sizes (BP-T020); BP-T081 (commit) skipped by the owner | docs/team-blueprint/team-blueprint-plan.md |
 | completed/beacon-brief | relays-and-briefs-plan.md | 2026-09-16 plan: keep posts as structured Relays and write one indexed Brief per period from them | Owner steps BD-T051 and BD-T052 (first editions, AdSense re-review) and BD-T108 (migration 0334) are pending; BD-T109 (week 3 redo) is in progress | docs/beacon-brief/relays-and-briefs-plan.md |
 | completed/beacon-brief | reviews/ | The nine review reports from that build (accessibility, implementation, performance, security, SEO) | None | docs/beacon-brief/reviews/ |
 | completed/faab | faab-calculator-overhaul-plan.md | FAAB calculator audit, decisions and build spec | FB-R03, FB-R05 and FB-R07 are pending in progress.md | docs/faab/faab-calculator-overhaul-plan.md |

@@ -101,7 +101,15 @@ export function mergeSiteLayout(raw: unknown): SiteLayoutSettings {
         toolsLedBy(d.toolsPage.toolOrder),
       ),
     },
-    homepage: { cards: mergeCards(homepage.cards) },
+    homepage: {
+      cards: mergeCards(homepage.cards),
+      blueprintStrip: {
+        enabled:
+          typeof record(homepage.blueprintStrip).enabled === "boolean"
+            ? (record(homepage.blueprintStrip).enabled as boolean)
+            : d.homepage.blueprintStrip.enabled,
+      },
+    },
   };
 }
 
@@ -129,6 +137,7 @@ const strictSchema = z.strictObject({
         }),
       )
       .max(50),
+    blueprintStrip: z.strictObject({ enabled: z.boolean() }),
   }),
 });
 

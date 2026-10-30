@@ -16,7 +16,7 @@ import type { LeaderboardsView } from "@/lib/league-leaderboards/types";
 import { LeagueShell } from "@/components/league-shell";
 import { Panel } from "@/components/dashboard-panel";
 import { CopyImageButton } from "@/components/copy-image-button";
-import { CopyLinkButton } from "@/components/copy-link-button";
+import { ShareStrip } from "@/components/share-strip";
 import { withUsername } from "@/components/league-schedule/format";
 import { Podium } from "@/components/league-leaderboards/podium";
 import { PlayerBoard } from "@/components/league-leaderboards/player-board";
@@ -311,27 +311,16 @@ async function LeaderboardsBody({
             Week {requestedWeek} has no final results in this league, so this shows the whole season.
           </p>
         )}
-        <section
-          aria-labelledby="leaderboards-share"
-          className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface/50 px-3 py-2.5"
-        >
-          <h2 id="leaderboards-share" className="mr-1 text-[11px] font-bold uppercase tracking-[0.18em] text-ink-subtle">
-            Share
-          </h2>
-          <CopyImageButton
-            imageHref={imageHref}
-            description={describeLeaderboards(view, leagueName)}
-            ariaLabel={`Copy image: the ${scopeTitle.toLowerCase()} leaders for ${leagueName}, as a picture on the clipboard`}
-          />
-          <CopyLinkButton
-            href={pageHref}
-            icon="link"
-            noun="Leaderboards link"
-            label="Copy page link"
-            size="md"
-            ariaLabel={`Copy page link: a web address for these ${scopeTitle.toLowerCase()} leaderboards`}
-          />
-        </section>
+        <ShareStrip
+          id="leaderboards-share"
+          imageHref={imageHref}
+          imageDescription={describeLeaderboards(view, leagueName)}
+          imageAriaLabel={`Copy image: the ${scopeTitle.toLowerCase()} leaders for ${leagueName}, as a picture on the clipboard`}
+          imageLinkAriaLabel={`Copy image link: a web address for the ${scopeTitle.toLowerCase()} leaders picture for ${leagueName}`}
+          pageHref={pageHref}
+          pageNoun="Leaderboards link"
+          pageAriaLabel={`Copy page link: a web address for these ${scopeTitle.toLowerCase()} leaderboards`}
+        />
       </div>
 
       <Panel

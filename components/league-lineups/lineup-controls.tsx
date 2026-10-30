@@ -26,12 +26,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { HAIRLINE_STYLE, recordLabel, withUsername } from "@/components/league-schedule/format";
+import { HAIRLINE_STYLE, withUsername } from "@/components/league-schedule/format";
+import { CONTROL, RosterSelect } from "@/components/league-lineups/roster-select";
 import type { LineupTeamOption } from "@/lib/league-lineups/types";
 import type { LineupWeekOption } from "@/lib/league-lineups/weeks";
-
-const CONTROL =
-  "min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
 const STEPPER =
   "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-40";
@@ -108,21 +106,7 @@ export function LineupControls({
           the control would repeat what the control says. */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
         <div className="min-w-0 flex-1 basis-full sm:basis-0">
-          <label htmlFor="lineup-team-select" className="sr-only">
-            Team
-          </label>
-          <select
-            id="lineup-team-select"
-            value={rosterId}
-            onChange={(event) => goTeam(Number(event.target.value))}
-            className={CONTROL}
-          >
-            {teams.map((team) => (
-              <option key={team.sleeperRosterId} value={team.sleeperRosterId}>
-                {team.teamName} ({recordLabel(team.record)})
-              </option>
-            ))}
-          </select>
+          <RosterSelect id="lineup-team-select" rosterId={rosterId} teams={teams} onChange={goTeam} />
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">

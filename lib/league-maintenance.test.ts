@@ -6,9 +6,12 @@ vi.mock("@/lib/league-removal", () => ({
 }));
 
 import {
+  BLUEPRINT_CACHE_RETENTION_DAYS,
   NOT_FOUND_BATCH_SIZE,
+  pruneBlueprintTables,
   recheckNotFoundLeagues,
   resetStuckSyncs,
+  runLeagueMaintenance,
   STUCK_SYNC_MS,
 } from "./league-maintenance";
 import { checkLeagueStillMissing } from "@/lib/league-removal";
@@ -94,5 +97,68 @@ describe("recheckNotFoundLeagues", () => {
       deleted: 1,
       waiting: 1,
     });
+  });
+});
+
+describe("pruneBlueprintTables", () => {
+  it("issues one dated DELETE per table", async () => {
+    const calls: Array<{ table: string; col: string; val: unknown }> = [];
+    const client = {
+      from: (table: string) => ({
+        delete: () => ({
+          lt: (col: string, val: unknown) => {
+            calls.push({ table, col, val });
+            return Promise.resolve({ count: table === "league_blueprint_cache" ? 3 : 1, error: null });
+          },
+        }),
+      }),
+    } as never;
+
+    const out = await pruneBlueprintTables(client, NOW);
+
+    expect(out).toEqual({ cacheDeleted: 3, ageHistoryDeleted: 1 });
+    expect(calls).toEqual([
+      {
+        table: "league_blueprint_cache",
+        col: "generated_at",
+        val: new Date(NOW - BLUEPRINT_CACHE_RETENTION_DAYS * 86_400_000).toISOString(),
+      },
+      { table: "league_roster_age_history", col: "as_of_day", val: "2024-09-29" },
+    ]);
+  });
+});
+
+describe("runLeagueMaintenance", () => {
+  it("records a failed blueprint prune as a step and still runs the not-found recheck", async () => {
+    const tablesRead: string[] = [];
+    // Every chain resolves; a DELETE fails, everything else returns nothing.
+    const chain = (failing: boolean): unknown =>
+      new Proxy(
+        {},
+        {
+          get: (_t, prop) => {
+            if (prop === "then") {
+              const result = failing
+                ? { data: null, count: null, error: { message: "delete timed out" } }
+                : { data: [], count: 0, error: null };
+              return (resolve: (v: unknown) => void) => resolve(result);
+            }
+            return (..._args: unknown[]) => chain(failing || prop === "delete");
+          },
+        },
+      );
+    const client = {
+      from: (table: string) => {
+        tablesRead.push(table);
+        return chain(false);
+      },
+    } as never;
+
+    const out = await runLeagueMaintenance(client, NOW);
+
+    expect(out.blueprintPrune).toBeNull();
+    expect(out.failedSteps).toEqual([expect.stringContaining("blueprintPrune")]);
+    expect(out.notFound.checked).toBe(0);
+    expect(tablesRead.filter((t) => t === "leagues").length).toBeGreaterThanOrEqual(2);
   });
 });

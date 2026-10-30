@@ -40,20 +40,21 @@ export function TrendChip({ direction, delta, deltaPct, windowLabel, cadence }: 
   const deltaText = delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
   const pctText =
     deltaPct === null ? null : `${deltaPct > 0 ? "+" : ""}${deltaPct.toFixed(1)}%`;
-  const weeklyNote = cadence === "weekly" ? ", updated weekly" : "";
-  const aria = `${windowLabel} value trend ${describe(direction)}: ${deltaText}${
-    pctText ? `, ${pctText}` : ""
-  }${weeklyNote}`;
+  // The figure is the visible text itself; only the words the eye gets from the
+  // arrow and the color are added for a screen reader, inside the same element.
+  // An aria-label on a <p> is not reliably announced, and a hidden figure goes
+  // silent when a reader points at it.
   return (
     <p
       className={`mt-2 flex items-center gap-1 text-xs font-medium ${tone}`}
-      aria-label={aria}
       title={cadence === "weekly" ? "Updated weekly" : undefined}
     >
       <span aria-hidden="true">{arrow}</span>
-      <span aria-hidden="true">
+      <span>
+        <span className="sr-only">Value trend {describe(direction)}: </span>
         {deltaText}
         {pctText ? ` (${pctText})` : ""} {windowLabel}
+        {cadence === "weekly" && <span className="sr-only">, updated weekly</span>}
       </span>
     </p>
   );

@@ -445,6 +445,18 @@ export function TeamCard({
               size="sm"
               ariaLabel={`Copy page link: a web address for the ${teamName} roster page`}
             />
+            {/* Into the Team Blueprint for this roster (plan 4.3). The same
+                44px height as the copy buttons beside it. */}
+            <Link
+              href={
+                linkUsername
+                  ? `/leagues/${sleeperLeagueId}/blueprint?roster=${sleeperRosterId}&username=${encodeURIComponent(linkUsername)}`
+                  : `/leagues/${sleeperLeagueId}/blueprint?roster=${sleeperRosterId}`
+              }
+              className="inline-flex min-h-11 items-center rounded-card border border-line bg-base px-2 text-xs font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Open blueprint<span className="sr-only"> for {teamName}</span>
+            </Link>
           </span>
         </div>
       </header>

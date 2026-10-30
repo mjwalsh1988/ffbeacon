@@ -114,13 +114,53 @@ export function enrichBoardRows(rows: RankingsBoardRow[]): BoardRow[] {
   });
 }
 
-function valueFloor(rows: BoardRow[]): number {
-  let top = 0;
-  for (const row of rows) if (row.value !== null && row.value > top) top = row.value;
-  return top * MOVER_MIN_VALUE_FRACTION;
+/**
+ * The minimal row the movers math reads. A rankings board row maps onto it
+ * through boardRowToMoverInput; the Team Blueprint builds them from one
+ * roster's value trends (lib/league-blueprint/movers.ts), so both surfaces
+ * share one definition of who moved.
+ */
+export type MoverInput = {
+  slug: string;
+  name: string;
+  position: string;
+  team: string | null;
+  sleeper_id: string | null;
+  value: number | null;
+  /** Percentage move over the window, null when unknown. */
+  pct: number | null;
+  rankChange: number | null;
+  /** The window gate: the source has a point near both ends of the window. */
+  show: boolean;
+};
+
+/** A board row read for one window. */
+export function boardRowToMoverInput(row: BoardRow, window: "7d" | "30d"): MoverInput {
+  return {
+    slug: row.slug,
+    name: row.name,
+    position: row.position,
+    team: row.team,
+    sleeper_id: row.sleeper_id,
+    value: row.value,
+    pct: window === "7d" ? row.change_7d_pct : row.change_30d_pct,
+    rankChange: window === "7d" ? row.rank_change_7d : row.rank_change_30d,
+    show: window === "7d" ? row.show_trend_7d : row.show_trend_30d,
+  };
 }
 
-type Reading = { row: BoardRow; pct: number; rankChange: number | null };
+/** Five percent of the top value among the rows. */
+export function moverFloorFor(topValue: number): number {
+  return topValue * MOVER_MIN_VALUE_FRACTION;
+}
+
+function valueFloor(rows: readonly MoverInput[]): number {
+  let top = 0;
+  for (const row of rows) if (row.value !== null && row.value > top) top = row.value;
+  return moverFloorFor(top);
+}
+
+type Reading = { row: MoverInput; pct: number; rankChange: number | null };
 
 /**
  * ONE DEFINITION OF "THIS ROW'S WINDOW IS READABLE AND WORTH READING", used by
@@ -137,31 +177,29 @@ type Reading = { row: BoardRow; pct: number; rankChange: number | null };
  * Zeroes are INCLUDED here, because a row that held is a real answer the
  * pulse needs to count. The movers list drops them itself: "moved by nothing"
  * does not belong on a list of movers.
+ *
+ * `floor` defaults to five percent of the top value among the rows; a caller
+ * holding only part of a board (one roster) passes the floor of the whole
+ * format instead, so a roster's best player does not set the bar.
  */
-function readings(rows: BoardRow[], window: "7d" | "30d"): Reading[] {
-  const floor = valueFloor(rows);
+function readings(rows: readonly MoverInput[], floor: number = valueFloor(rows)): Reading[] {
   const out: Reading[] = [];
   for (const row of rows) {
     if (row.value === null || row.value < floor) continue;
-    const shown = window === "7d" ? row.show_trend_7d : row.show_trend_30d;
-    const pct = window === "7d" ? row.change_7d_pct : row.change_30d_pct;
-    if (!shown || pct === null) continue;
+    const pct = row.pct;
+    if (!row.show || pct === null) continue;
     // Where the price started, reconstructed from the move. A -100% divides
     // by zero, and a move that wiped a player out entirely is not something
     // either surface has anything useful to say about.
     const ratio = 1 + pct / 100;
     if (ratio <= 0) continue;
     if (row.value / ratio < floor) continue;
-    out.push({
-      row,
-      pct,
-      rankChange: window === "7d" ? row.rank_change_7d : row.rank_change_30d,
-    });
+    out.push({ row, pct, rankChange: row.rankChange });
   }
   return out;
 }
 
-function toMover(row: BoardRow, pct: number, rankChange: number | null): Mover {
+function toMover(row: MoverInput, pct: number, rankChange: number | null): Mover {
   return {
     slug: row.slug,
     name: row.name,
@@ -171,6 +209,29 @@ function toMover(row: BoardRow, pct: number, rankChange: number | null): Mover {
     value: row.value,
     pct,
     rankChange,
+  };
+}
+
+/**
+ * The movers math over minimal rows. `floor` as in readings above.
+ */
+export function topMoversFrom(
+  rows: readonly MoverInput[],
+  { limit = 5, floor }: { limit?: number; floor?: number } = {},
+): Movers {
+  const eligible = readings(rows, floor).filter((r) => r.pct !== 0);
+  const byPct = [...eligible].sort((a, b) => b.pct - a.pct);
+  return {
+    risers: byPct
+      .filter((e) => e.pct > 0)
+      .slice(0, limit)
+      .map((e) => toMover(e.row, e.pct, e.rankChange)),
+    fallers: byPct
+      .filter((e) => e.pct < 0)
+      .slice(-limit)
+      .reverse()
+      .map((e) => toMover(e.row, e.pct, e.rankChange)),
+    considered: eligible.length,
   };
 }
 
@@ -191,20 +252,10 @@ export function topMovers(
   rows: BoardRow[],
   { window, limit = 5 }: { window: "7d" | "30d"; limit?: number },
 ): Movers {
-  const eligible = readings(rows, window).filter((r) => r.pct !== 0);
-  const byPct = [...eligible].sort((a, b) => b.pct - a.pct);
-  return {
-    risers: byPct
-      .filter((e) => e.pct > 0)
-      .slice(0, limit)
-      .map((e) => toMover(e.row, e.pct, e.rankChange)),
-    fallers: byPct
-      .filter((e) => e.pct < 0)
-      .slice(-limit)
-      .reverse()
-      .map((e) => toMover(e.row, e.pct, e.rankChange)),
-    considered: eligible.length,
-  };
+  return topMoversFrom(
+    rows.map((r) => boardRowToMoverInput(r, window)),
+    { limit },
+  );
 }
 
 /**
@@ -233,7 +284,7 @@ export function boardPulse(
   let falling = 0;
   let holding = 0;
 
-  const counted = readings(rows, window);
+  const counted = readings(rows.map((r) => boardRowToMoverInput(r, window)));
   for (const { pct } of counted) {
     if (pct > 0) rising += 1;
     else if (pct < 0) falling += 1;

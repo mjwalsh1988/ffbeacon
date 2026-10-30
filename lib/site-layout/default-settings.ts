@@ -215,6 +215,12 @@ export type SiteLayoutSettings = {
   };
   homepage: {
     cards: HomepageToolCard[];
+    /**
+     * The Team Blueprint feature strip under the homepage hero (Team
+     * Blueprint plan 20.2). Switchable here so it can be retired without a
+     * deploy.
+     */
+    blueprintStrip: { enabled: boolean };
   };
 };
 
@@ -238,6 +244,7 @@ export const DEFAULT_SITE_LAYOUT: SiteLayoutSettings = {
     toolOrder: [...IN_SEASON_TOOL_ORDER],
   },
   homepage: {
+    blueprintStrip: { enabled: true },
     cards: [
       { href: "/tools/league-pulse", width: 1, badge: "new-features", highlight: "green" },
       { href: "/tools/trade-calculator", width: 1, badge: null, highlight: null },

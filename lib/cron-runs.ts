@@ -109,6 +109,7 @@ export type CronJobName =
   | "league-relay"
   | "ranking-guest-cleanup"
   | "community-rankings"
+  | "market-signals"
   | "league-maintenance"
   | "cron-health";
 
@@ -381,6 +382,14 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     schedule: "45 10 * * *",
     description:
       "Rebuilds the community rankings from every saved board that counts: one pairwise strength fit per format over aggregated head-to-head counts, written to community_rankings. Runs after the rankings recalc so each board's pool is read from today's seed rankings. Iterates formats, never leagues or users one by one. A format below the published threshold is still built and stored, so the page can say how many more boards it needs.",
+  },
+  {
+    name: "market-signals",
+    label: "Market Signals",
+    schedule: "30 10 * * *",
+    extraSchedules: ["50 10 * * *"],
+    description:
+      "Places every priced player's current value inside a band built from his own last 30 days of values and labels him buy, watch buy, hold, watch sell or sell, per format and source, in player_value_signals (latest only) with one row per state change. Runs after the derived recalc. Works one (format, source) at a time and stops before its deadline; the 10:50 run finishes whatever the 10:30 run left and is quiet on a night with nothing left. Iterates formats and sources, never leagues. Settings at /admin/market-signals.",
   },
   {
     name: "league-maintenance",

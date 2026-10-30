@@ -80,6 +80,8 @@ const LAYOUT_TODAY = {
   ...LAYOUT_2026_09_14,
   toolsPage: { toolOrder: SHIPPED_ORDER },
   homepage: {
+    // Team Blueprint plan 20.2: the homepage strip, on by default.
+    blueprintStrip: { enabled: true },
     cards: [
       ...LAYOUT_2026_09_14.homepage.cards,
       { href: "/tools/custom-rankings", width: 1, badge: "new-tool", highlight: "cyan" },
@@ -296,5 +298,14 @@ describe("validateSiteLayout", () => {
     };
     extra.homepage.cards[0].className = "anything";
     expect(validateSiteLayout(extra).ok).toBe(false);
+  });
+});
+
+describe("homepage blueprint strip", () => {
+  it("defaults on for a stored row written before the switch existed, and keeps a stored off", () => {
+    expect(mergeSiteLayout({ homepage: { cards: [] } }).homepage.blueprintStrip).toEqual({ enabled: true });
+    expect(
+      mergeSiteLayout({ homepage: { cards: [], blueprintStrip: { enabled: false } } }).homepage.blueprintStrip,
+    ).toEqual({ enabled: false });
   });
 });

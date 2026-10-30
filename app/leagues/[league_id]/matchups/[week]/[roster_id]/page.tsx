@@ -34,8 +34,7 @@ import type {
   ScheduleBoard,
 } from "@/lib/league-schedule/types";
 import { MatchupTable } from "@/components/league-schedule/matchup-table";
-import { CopyImageButton } from "@/components/copy-image-button";
-import { CopyLinkButton } from "@/components/copy-link-button";
+import { ShareStrip as SharedShareStrip } from "@/components/share-strip";
 import {
   buildShareCard,
   describeShareCard,
@@ -650,44 +649,16 @@ function ShareStrip({
     : view.home.teamName;
 
   return (
-    <section
-      aria-labelledby="matchup-share"
-      className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface/50 px-3 py-2.5"
-    >
-      <h2
-        id="matchup-share"
-        className="mr-1 text-[11px] font-bold uppercase tracking-[0.18em] text-ink-subtle"
-      >
-        Share
-      </h2>
-      {/* EVERY ACCESSIBLE NAME LEADS WITH THE VISIBLE LABEL (WCAG 2.5.3). A
-          speech-input user says what they can see, so "Copy image" has to be the
-          start of the name and not a phrase the name happens to be about. The
-          rest of the sentence is what the button will actually put on the
-          clipboard, which is the part a reader cannot check afterwards. */}
-      <CopyImageButton
-        imageHref={imageHref}
-        description={describeShareCard(card)}
-        ariaLabel={`Copy image: the week ${week} scoreboard for ${teams}, as a picture on the clipboard`}
-      />
-      <CopyLinkButton
-        href={imageHref}
-        prewarmHref={imageHref}
-        icon="image"
-        noun="Image link"
-        label="Copy image link"
-        size="md"
-        ariaLabel={`Copy image link: a web address for the week ${week} scoreboard picture for ${teams}`}
-      />
-      <CopyLinkButton
-        href={pageHref}
-        icon="link"
-        noun="Matchup link"
-        label="Copy page link"
-        size="md"
-        ariaLabel={`Copy page link: a web address for this week ${week} matchup page`}
-      />
-    </section>
+    <SharedShareStrip
+      id="matchup-share"
+      imageHref={imageHref}
+      imageDescription={describeShareCard(card)}
+      imageAriaLabel={`Copy image: the week ${week} scoreboard for ${teams}, as a picture on the clipboard`}
+      imageLinkAriaLabel={`Copy image link: a web address for the week ${week} scoreboard picture for ${teams}`}
+      pageHref={pageHref}
+      pageNoun="Matchup link"
+      pageAriaLabel={`Copy page link: a web address for this week ${week} matchup page`}
+    />
   );
 }
 

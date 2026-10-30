@@ -19,6 +19,11 @@
  *    before deleting it. This takes that look, for at most
  *    NOT_FOUND_BATCH_SIZE leagues per run, oldest first, through the Sleeper
  *    call budget.
+ *
+ * 3. TEAM BLUEPRINT PRUNES (docs/team-blueprint/team-blueprint-plan.md 7.4).
+ *    One DELETE each, by an indexed date column: stored blueprints older than
+ *    14 days and roster age history older than 730 days. Neither iterates a
+ *    league; each is a single statement whatever the table holds.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -39,8 +44,17 @@ const NOT_FOUND_CONCURRENCY = 5;
 
 export const STUCK_SYNC_ERROR = "Sync interrupted before it finished; the next view resyncs it";
 
+/** Stored blueprints older than this are deleted; a view rebuilds one. */
+export const BLUEPRINT_CACHE_RETENTION_DAYS = 14;
+/** Roster age history older than this is deleted. */
+export const AGE_HISTORY_RETENTION_DAYS = 730;
+
 export type LeagueMaintenanceResult = {
   stuckSyncsReset: number;
+  /** Null when the prune failed; the failure is in failedSteps. */
+  blueprintPrune: { cacheDeleted: number; ageHistoryDeleted: number } | null;
+  /** Sub-steps that failed without stopping the others (cron-runs failedStepsOf). */
+  failedSteps?: string[];
   notFound: {
     checked: number;
     stillThere: number;
@@ -70,6 +84,27 @@ export async function resetStuckSyncs(
     .select("id");
   if (error) throw new Error(`stuck sync reset failed: ${error.message}`);
   return (data ?? []).length;
+}
+
+/** The two Team Blueprint prunes: one DELETE each, by date. */
+export async function pruneBlueprintTables(
+  supabase: ServiceClient,
+  now: number = Date.now(),
+): Promise<{ cacheDeleted: number; ageHistoryDeleted: number }> {
+  const DAY = 86_400_000;
+  const cacheCutoff = new Date(now - BLUEPRINT_CACHE_RETENTION_DAYS * DAY).toISOString();
+  const ageCutoff = new Date(now - AGE_HISTORY_RETENTION_DAYS * DAY).toISOString().slice(0, 10);
+  const cache = await supabase
+    .from("league_blueprint_cache")
+    .delete({ count: "exact" })
+    .lt("generated_at", cacheCutoff);
+  if (cache.error) throw new Error(`blueprint cache prune failed: ${cache.error.message}`);
+  const ages = await supabase
+    .from("league_roster_age_history")
+    .delete({ count: "exact" })
+    .lt("as_of_day", ageCutoff);
+  if (ages.error) throw new Error(`age history prune failed: ${ages.error.message}`);
+  return { cacheDeleted: cache.count ?? 0, ageHistoryDeleted: ages.count ?? 0 };
 }
 
 export async function recheckNotFoundLeagues(
@@ -120,8 +155,23 @@ export async function runLeagueMaintenance(
   now: number = Date.now(),
 ): Promise<LeagueMaintenanceResult> {
   const stuckSyncsReset = await resetStuckSyncs(supabase, now);
+  // The prune is housekeeping: a failed DELETE is recorded as a failed step
+  // and must not stop the not-found recheck that runs after it.
+  const failedSteps: string[] = [];
+  let blueprintPrune: LeagueMaintenanceResult["blueprintPrune"] = null;
+  try {
+    blueprintPrune = await pruneBlueprintTables(supabase, now);
+  } catch (err) {
+    failedSteps.push(`blueprintPrune: ${err instanceof Error ? err.message : String(err)}`);
+  }
   const { result: notFound, calls } = await countSleeperCalls(() =>
     recheckNotFoundLeagues(supabase, now),
   );
-  return { stuckSyncsReset, notFound, sleeperCalls: calls };
+  return {
+    stuckSyncsReset,
+    blueprintPrune,
+    notFound,
+    sleeperCalls: calls,
+    ...(failedSteps.length > 0 ? { failedSteps } : {}),
+  };
 }

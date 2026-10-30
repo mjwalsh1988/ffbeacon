@@ -921,6 +921,162 @@ teams use the freshly computed baseline on BOTH sides of the comparison, never
 the cached one, or every difference between the two computations gets attributed
 to the trade.
 
+## Team Blueprint (League Pulse)
+
+`/leagues/[id]/blueprint?roster=N`, nav label "Blueprint", directly after
+Overview. One roster read as a one-page plan: standing and overall grade,
+grades by position, the starting lineup and depth with a call on every priced
+player, value and production share, age by position, risers and fallers, the
+trade activity gauge with buy, sell and hold lists and buy targets, draft
+capital, three priorities, three trade shapes and two trade partners, and a
+spotlight on the week. Plan of record:
+`docs/completed/team-blueprint/team-blueprint-plan.md`. With no `?roster=`
+the viewer's own team is chosen through `lib/sleeper-handle/resolve.ts`, else
+the first roster, with a sentence saying no team was chosen.
+
+ABSOLUTE RULE: ONE view model, three readers. The page, the 1200x630 preview
+(`/api/og/blueprint/[league_id]/[roster_id]`) and the portrait share card
+(`.../share`) all render the stored `BlueprintView` from
+`league_blueprint_cache`, so a page and its picture show the same numbers by
+construction. The image routes read the cache ONLY: no `pulseLeague`, no
+trade finder, no rebuild. A roster with no stored row gets the placeholder
+card.
+
+ABSOLUTE RULE: no new prediction model. Every figure is read from an existing
+cache (power rankings, Power Pulse, the Manager Ledger slice, Market Signals,
+value trends) or is arithmetic over those. The one engine a build runs is the
+trade finder, for the trade shapes and partners, and its proposals are graded
+by Signal Check. Never recompute Power Pulse, Positional WAR or the ledger
+from here.
+
+ABSOLUTE RULE: the stored view is VIEWER INDEPENDENT, because every reader of
+the same (league, roster, season, source) shares one row. No searched username
+inside a stored link (trade proposals are stored as `TradeProposal` and turned
+into builder hrefs at render with the reader's own username), no manager
+tendency (the partner tendency term is fixed at 0.5) and no declined-trade
+list. Signal Check's "Side A" and "Side B" are renamed for the reader by
+`readerVerdict` in `lib/league-blueprint/strategy.ts`; its test fails if the
+pattern ever holds a control character instead of a word boundary.
+
+ABSOLUTE RULE: the warm path makes no engine call. `lib/league-blueprint/cache.ts`
+fingerprints the sorted roster ids plus every read cache's timestamp, the
+latest signals `computed_at`, the Pulse week, the settings `version` and
+`BLUEPRINT_MODEL_VERSION`; a matching fingerprint inside the 12-hour TTL
+serves the row after six small reads. Bump `BLUEPRINT_MODEL_VERSION` on any
+formula or stored-wording change, or the old rows keep being served. A rebuild
+that throws leaves the old row, and the page says the latest rebuild failed.
+
+ABSOLUTE RULE: the rebuild is rate limited by `claimBlueprintBuildSlot`
+(bucket `blueprint-build`, 12 a minute per actor, fails closed), claimed only
+after the roster is validated and the league found and only when a rebuild is
+actually going to run, and coalesced per (league, roster, source) through
+`lib/request-coalesce.ts`. A refusal serves the stale row when one exists.
+
+ABSOLUTE RULE: recomputed ONLY on demand, on a view. No cron iterates leagues
+for the Blueprint. The league-maintenance cron's only Blueprint work is two
+single-DELETE prunes: `league_blueprint_cache` past 14 days and
+`league_roster_age_history` past 730 days.
+
+Format and source follow the League Pulse Format Resolution rule below
+(`resolveLeagueContext`): the format is the league's own, the source is the
+reader's, and a source that cannot cover the format falls back with the
+banner or shows the no-values panel. Defenders and specialists appear on the
+roster with "No market value", get no call and no grade, and are never given
+a market signal. The token "WAR" names nothing here.
+
+Calls are the roster call first (`lib/league-blueprint/calls.ts`, plan 6.7),
+then the market overlay from `player_value_signals`. A dynasty or keeper
+roster is never told to cut a player worth `DYNASTY_KEEP_VALUE` or more, and
+a rebuilding roster does not sell a player under his position's age cutoff
+(QB 33, RB 28, WR 30, TE 30) for being trade-finder surplus.
+
+The page follows the Leaderboards design rules: one hero figure per section
+(Standing's overall grade, the activity band word, the first priority, the
+spotlight figure), every figure one real text node, every chart `role="img"`
+with a summary and a real table under a disclosure, nothing hidden at any
+breakpoint (below `sm` the lineup is three columns with value, position rank
+and call stacked in one cell). The roster select is the shared
+`components/league-lineups/roster-select.tsx` in a sticky bar that shares the
+body wrapper (a sticky element inside a wrapper of its own height pins
+nowhere). Sharing is `components/share-strip.tsx`, the strip Leaderboards and
+the matchup page use.
+
+Two calls to action: `components/league-blueprint/blueprint-cta.tsx` on the
+league overview (the viewer's real stored grade through
+`lib/league-blueprint/cta-data.ts`, or no number at all, never a sample) and
+`components/blueprint-feature-strip.tsx` on the homepage, behind the site
+layout's `homepage.blueprintStrip.enabled`.
+
+Settings: `league_blueprint_settings` (one `id='global'` row, service role
+only), admin-edited at `/admin/league-blueprint`, validated server-side by
+`lib/league-blueprint/settings.ts`, with code fallbacks in
+`lib/league-blueprint/default-settings.ts`. Saving rebuilds nothing; bumping
+`version` makes every stored blueprint rebuild on its next view.
+
+Module map:
+- `lib/league-blueprint/types.ts`: the view model and its rules header.
+- `grades.ts`, `archetype.ts`, `age.ts`, `shares.ts`, `movers.ts`, `calls.ts`, `activity.ts`, `priorities.ts`, `strategy.ts`, `partners.ts`, `capital.ts`, `spotlight.ts`: one pure module per section.
+- `build.ts`: the pure assembler. `data.ts`: every read and the rebuild. `cache.ts`: fingerprint, freshness, the warm path, the row read and write. `age-history.ts`: one compact row per roster per Eastern day.
+- `share.ts` and `share-layout.ts`: the share card from the stored view only, and the portrait height (text sections sized from their text, never clipped).
+- `ring-geometry.ts`, `gauge-geometry.ts`, `age-geometry.ts`: shared by the page and the images.
+
+## Market Signals
+
+A nightly engine that places every priced player's current value inside
+bands built from his own last 30 calendar days of values (mean plus or minus
+2 sample standard deviations) and labels him buy window, watch buy, hold,
+watch sell or sell window, per (format, source) partition, with hysteresis so
+a call does not flicker. The Blueprint's calls read it, and the player profile
+shows it as a badge beside the value trend with the band drawn under the
+chart. Admin label "Market Signals"; on a reader's screen it is a "market
+signal" inside a sentence and the badge reads the state word.
+
+ABSOLUTE RULE: database size is a design constraint. `player_value_signals`
+holds the LATEST row only, one per priced player per partition, overwritten
+nightly. `player_value_signal_changes` gets a row only when a player moves
+INTO a new state, pruned past 730 days. `market_signal_runs` is one row per
+partition per day, pruned past 90 days. `player_value_history` is never
+touched: no band columns, no flags, no extra rows. Bands are never stored per
+day; the profile chart recomputes them from the series it already loads with
+the same pure `rollingBands`.
+
+ABSOLUTE RULE: the cron (`/api/cron/market-signals`, 10:30 and 10:50 UTC)
+iterates PARTITIONS, never leagues and never players one at a time. Each
+partition is one keyset walk over history, a pure fold, 500-row upserts and
+one change insert with `ignoreDuplicates`. The run stops BEFORE a partition
+that would pass the 300-second budget minus 10 seconds (judged by the longest
+partition so far) and records itself as partial; the 10:50 run finishes what
+is left and is quiet when nothing is. Prunes run only at the end of a
+COMPLETE run, one DELETE each by an indexed date column.
+
+ABSOLUTE RULE: a partition is every active source times every format it
+declares in `source_registry.supported_format_slugs` (NULL means every active
+format). A partition with fewer than 25 priced players on its latest day, or
+whose latest day is older than `staleDays`, is skipped and logged with zero
+rows. DynastyProcess publishes weekly, so it rarely clears the 24-point
+minimum and is effectively unsignaled; that is correct, not a bug.
+
+Reads go through `lib/market-signals/read.ts` (`loadPlayerSignal`,
+`loadSignalChanges`, `loadSignalsFor`, chunked 200 ids per `in()`), always
+for the resolved format and source, never for a defender.
+
+The one-time 365-day backfill of change rows is `npm run
+backfill:market-signals -- --from YYYY-MM-DD --to YYYY-MM-DD`. It refuses to
+run without a window, is idempotent through the change table's unique key,
+and is never scheduled.
+
+Settings: `market_signal_settings` (service role only), admin-edited at
+`/admin/market-signals` with Run now for one partition, the last 40 runs and
+row counts for the size-rule tables; code fallbacks in
+`lib/market-signals/default-settings.ts`. Changing `windowDays` or `k`
+changes every row on the next run. The profile band uses the code defaults,
+so keep those in step with the stored row.
+
+Module map: `bollinger.ts` (pure: day collapse, bands, the five states,
+hysteresis, change rules, `rollingBands`), `partitions.ts`,
+`run-partition.ts`, `engine.ts` (the deadline loop and the prunes),
+`settings.ts`, `read.ts`.
+
 ## League Pulse Format Resolution
 
 ABSOLUTE RULE: Inside league views (`/leagues/[id]` and all descendants, plus `/api/og/*` routes that render values from those views), the format used for value calculations is derived from the league's actual Sleeper scoring settings, NOT the user's global format toggle. Source remains user-controlled. Pick values always fall back to KTC. The global header format toggle has no effect inside a league view. This will change when FF Beacon native rankings with custom scoring exist (see plan.md "Future: User Custom Scoring Formats").

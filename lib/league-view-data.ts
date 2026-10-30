@@ -31,6 +31,20 @@ export type TrendLite = {
   trend_7d: "up" | "down" | "stable" | null;
 };
 
+/**
+ * TrendLite plus the 30-day fields and both window gates, for a caller that
+ * passes `{ window: "30d" }` to loadTrends (the Team Blueprint's movers).
+ */
+export type TrendWithMonth = TrendLite & {
+  value_30d_ago: number | null;
+  change_30d: number | null;
+  change_30d_pct: number | null;
+  rank_change_30d: number | null;
+  show_trend_30d: boolean;
+  rank_change_7d: number | null;
+  show_trend_7d: boolean;
+};
+
 export type DraftPickAsset = {
   season: number;
   round: number;
@@ -472,32 +486,64 @@ export async function loadPositionRanks(
 }
 
 /** Current value + 7d movement per player for one (format, source). Exported
- * for the same reason `resolvePlayers` is. */
+ * for the same reason `resolvePlayers` is. `{ window: "30d" }` also selects
+ * the 30-day fields and both window gates; every existing caller passes
+ * nothing and reads exactly what it always did. */
 export async function loadTrends(
   supabase: AnySupabase,
   playerIds: string[],
   formatConfigId: string,
   source: string,
-): Promise<Record<string, TrendLite>> {
-  const out: Record<string, TrendLite> = {};
+): Promise<Record<string, TrendLite>>;
+export async function loadTrends(
+  supabase: AnySupabase,
+  playerIds: string[],
+  formatConfigId: string,
+  source: string,
+  opts: { window: "30d" },
+): Promise<Record<string, TrendWithMonth>>;
+export async function loadTrends(
+  supabase: AnySupabase,
+  playerIds: string[],
+  formatConfigId: string,
+  source: string,
+  opts?: { window: "30d" },
+): Promise<Record<string, TrendLite | TrendWithMonth>> {
+  const out: Record<string, TrendLite | TrendWithMonth> = {};
   if (playerIds.length === 0) return out;
+  const month = opts?.window === "30d";
+  const columns = month
+    ? "player_id, current_value, change_7d, change_7d_pct, trend_7d, rank_change_7d, show_trend_7d, value_30d_ago, change_30d, change_30d_pct, rank_change_30d, show_trend_30d"
+    : "player_id, current_value, change_7d, change_7d_pct, trend_7d";
+  const num = (v: unknown) => (v != null ? Number(v) : null);
   const CHUNK = 300;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
     const { data } = await supabase
       .from("player_value_trends")
-      .select("player_id, current_value, change_7d, change_7d_pct, trend_7d")
+      .select(columns)
       .eq("format_config_id", formatConfigId)
       .eq("source", source)
       .in("player_id", chunk);
-    for (const row of data ?? []) {
-      out[row.player_id] = {
-        current_value: Number(row.current_value),
-        change_7d: row.change_7d != null ? Number(row.change_7d) : null,
-        change_7d_pct:
-          row.change_7d_pct != null ? Number(row.change_7d_pct) : null,
-        trend_7d: (row.trend_7d as TrendLite["trend_7d"]) ?? null,
+    for (const raw of (data ?? []) as unknown as Array<Record<string, unknown>>) {
+      const base: TrendLite = {
+        current_value: Number(raw.current_value),
+        change_7d: num(raw.change_7d),
+        change_7d_pct: num(raw.change_7d_pct),
+        trend_7d: (raw.trend_7d as TrendLite["trend_7d"]) ?? null,
       };
+      out[raw.player_id as string] = month
+        ? {
+            ...base,
+            value_30d_ago: num(raw.value_30d_ago),
+            change_30d: num(raw.change_30d),
+            change_30d_pct: num(raw.change_30d_pct),
+            rank_change_30d: num(raw.rank_change_30d),
+            show_trend_30d: raw.show_trend_30d === true,
+            rank_change_7d: num(raw.rank_change_7d),
+            show_trend_7d: raw.show_trend_7d === true,
+          }
+        : base;
     }
   }
   return out;

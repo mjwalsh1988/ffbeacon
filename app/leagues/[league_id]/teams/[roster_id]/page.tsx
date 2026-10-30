@@ -329,6 +329,16 @@ export default async function TeamDetailPage({
           >
             Who should I start from this roster?
           </Link>
+          <Link
+            href={
+              linkUsername
+                ? `/leagues/${sleeperLeagueId}/blueprint?roster=${sleeperRosterId}&username=${encodeURIComponent(linkUsername)}`
+                : `/leagues/${sleeperLeagueId}/blueprint?roster=${sleeperRosterId}`
+            }
+            className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-base px-4 py-2 text-sm font-semibold text-ink hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            Open blueprint
+          </Link>
           <p className="text-xs text-ink-subtle">
             Opens the Beacon Breakdown with this league connected, so it prices both players
             against this roster.
