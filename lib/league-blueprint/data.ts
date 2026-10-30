@@ -69,7 +69,7 @@ import {
 } from "./cache";
 import { claimBlueprintBuildSlot } from "./rate-limit";
 import { loadLeagueBlueprintSettings, type LeagueBlueprintSettings } from "./settings";
-import { buildStrategy } from "./strategy";
+import { buildStrategy, type StrategyBuild } from "./strategy";
 import type { BlueprintView, MarketSignalState } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -235,27 +235,6 @@ async function rebuildBlueprint(
   const quality =
     signalCheck && signalCheck.qualityEnabled ? signalCheck.quality : DEFAULT_TRADE_QUALITY_CONFIG;
   const pickByKey = new Map(finder.teams.flatMap((t) => t.picks.map((p) => [p.key, p] as const)));
-  const strategy = await buildStrategy({
-    run: (goal?: TradeGoal) =>
-      findTrades({
-        myRosterId: rosterId,
-        teams: finder.teams,
-        startingSlots: finder.startingSlots,
-        isDynasty: finder.isDynasty,
-        allowPicks: finder.allowPicks,
-        strategy: strategyMode,
-        goal,
-        targetPlayerIds: [],
-        offerPlayerIds: [],
-        excludeKeys: [],
-        quality: { config: quality, poolMax: finder.poolMax },
-      }),
-    grade: (suggestions) => gradeSuggestions(admin, finder.sleeperLeague, suggestions),
-    myRosterId: rosterId,
-    picks: pickByKey,
-    maxRuns: settings.strategy.maxRuns,
-    pivotGapPct: settings.strategy.pivotGapPct,
-  });
 
   const spotlightWeek = await loadSpotlightWeek(league.id, rosterId).catch(() => null);
 
@@ -290,7 +269,7 @@ async function rebuildBlueprint(
   }));
 
   const generatedAt = now.toISOString();
-  const view = buildBlueprintView({
+  const inputsWith = (strategy: StrategyBuild): BlueprintInputs => ({
     sleeperLeagueId: league.sleeper_league_id,
     season,
     rosterId,
@@ -322,6 +301,41 @@ async function rebuildBlueprint(
     strategy,
     settings,
   });
+
+  // The calls come first and the strategy board respects them: a "Build
+  // around" player is never on the outgoing side of a card, or the page would
+  // say "keep the core" in one section and "send him" in the next. The
+  // assembler is pure arithmetic, so running it once without a board to read
+  // the calls, then again with the board, costs nothing against the finder.
+  const draft = buildBlueprintView(inputsWith({ entries: [], playerIds: [], runs: 0 }));
+  const protectedIds = new Set(
+    Object.entries(draft.calls)
+      .filter(([, c]) => c.call === "build")
+      .map(([id]) => id),
+  );
+  const strategy = await buildStrategy({
+    run: (goal?: TradeGoal) =>
+      findTrades({
+        myRosterId: rosterId,
+        teams: finder.teams,
+        startingSlots: finder.startingSlots,
+        isDynasty: finder.isDynasty,
+        allowPicks: finder.allowPicks,
+        strategy: strategyMode,
+        goal,
+        targetPlayerIds: [],
+        offerPlayerIds: [],
+        excludeKeys: [],
+        quality: { config: quality, poolMax: finder.poolMax },
+      }),
+    grade: (suggestions) => gradeSuggestions(admin, finder.sleeperLeague, suggestions),
+    myRosterId: rosterId,
+    picks: pickByKey,
+    maxRuns: settings.strategy.maxRuns,
+    pivotGapPct: settings.strategy.pivotGapPct,
+    protectedIds,
+  });
+  const view = buildBlueprintView(inputsWith(strategy));
 
   // Fingerprint after the derived sync, so the stored row names what it read.
   const fpInput = await loadFingerprintInput(admin, {

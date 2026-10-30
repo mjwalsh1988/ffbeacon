@@ -5,9 +5,14 @@
  * page and its picture show the same numbers because both draw the stored
  * view.
  *
- * Brand: FF Beacon dark, purple to cyan, Geist; no gold, no #0c0c18, no DPC
- * wording. The gradient appears only on the overall grade and the rank
- * numerals.
+ * Both pictures are the page's report card in picture form: an FF Beacon
+ * brand band first (the site is free, and a shared picture is where it gets
+ * seen), then a letterhead with the team and the grade box, then ruled
+ * two-column sections with the label in a margin column and the content in
+ * the body column, so every figure sits on the same two vertical lines.
+ *
+ * Brand: FF Beacon dark, purple to cyan, Geist; no DPC colors or wording. The
+ * gradient appears on the overall grade, the rank numerals and the bar fills.
  */
 
 import { ImageResponse } from "next/og";
@@ -17,9 +22,9 @@ import { ordinal } from "@/lib/league-team-status";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { readCachedBlueprint } from "@/lib/league-blueprint/cache";
 import { buildBlueprintShareCard, type BlueprintShareCard } from "@/lib/league-blueprint/share";
-import { SHARE_WIDTH, shareLayout } from "@/lib/league-blueprint/share-layout";
+import { SHARE_GAP, SHARE_WIDTH, shareLayout } from "@/lib/league-blueprint/share-layout";
 import { ringRowSvg, ringRowWidth } from "@/lib/league-blueprint/ring-geometry";
-import { gaugeSvg } from "@/lib/league-blueprint/gauge-geometry";
+import { gaugeGeometry, gaugeSvg } from "@/lib/league-blueprint/gauge-geometry";
 import { loadRemoteImages, OG_FONTS, sleeperPlayerImageUrl } from "@/lib/og/assets";
 import {
   fitText,
@@ -39,6 +44,13 @@ import type { SleeperLeague } from "@/lib/sleeper";
 export const SUCCESS_CACHE = "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
 export const MISSING_ROW_CACHE = "public, max-age=60, s-maxage=300";
 export const MISSING_LEAGUE_CACHE = "public, max-age=0, s-maxage=60";
+
+/** The tools the brand band advertises, in the site's own display order. */
+export const SHARE_TOOLS = ["League Pulse", "Trade Calculator", "Rankings Builder", "Manager Pulse", "On The Clock", "Start / Sit"];
+export const SHARE_TAGLINE = "Free fantasy football tools for Sleeper leagues";
+
+const LINE_ACCENT = "#2A2A47";
+const WARNING = "#F59E0B";
 
 export type BlueprintImageLoad =
   | { kind: "response"; response: Response }
@@ -111,7 +123,7 @@ export async function loadBlueprintImage(
     );
     return { kind: "response", response: img };
   }
-  return { kind: "card", card: buildBlueprintShareCard(cached.view) };
+  return { kind: "card", card: buildBlueprintShareCard(cached.view, { leagueName: league.name }) };
 }
 
 async function rosterTeamName(
@@ -135,22 +147,107 @@ async function rosterTeamName(
   return user?.team_name || user?.display_name || "This team";
 }
 
+// ---- shared pieces ---------------------------------------------------------
+
 const RING_OPTS = { stroke: 7, trackColor: C.line, fromColor: C.purple, toColor: C.cyan };
 
-function Pill({ text }: { text: string }) {
+function Pill({ text, size = 20 }: { text: string; size?: number }) {
   return (
     <div
       style={{
         display: "flex",
-        padding: "6px 14px",
+        padding: `${Math.round(size * 0.3)}px ${Math.round(size * 0.7)}px`,
         borderRadius: 999,
         border: `1px solid ${C.line}`,
         color: C.ink,
-        fontSize: 20,
+        fontSize: size,
         fontWeight: 500,
       }}
     >
       {text}
+    </div>
+  );
+}
+
+/** A small uppercase label, the kind a form prints beside a blank. */
+function Label({ children, size = 15, color = C.inkSubtle }: { children: string; size?: number; color?: string }) {
+  return (
+    <div style={{ display: "flex", fontSize: size, fontWeight: 900, color, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The FF Beacon band across the top of both pictures: the mark and the
+ * wordmark, the tagline, and the tools as pills, with a rule under it.
+ */
+function BrandBand({ width, height, pillSize, tools }: { width: number; height: number; pillSize: number; tools: string[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", width, height }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", width }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <OgBrandMark size={pillSize >= 16 ? 42 : 36} />
+          <div style={{ display: "flex", marginTop: 8, fontSize: pillSize + 2, color: C.inkMuted }}>{SHARE_TAGLINE}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <Label size={pillSize - 3} color={C.cyan}>Free tools</Label>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8, marginTop: 8, maxWidth: Math.round(width * 0.58) }}>
+            {tools.map((t) => (
+              <Pill key={t} text={t} size={pillSize} />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", width, height: 1, background: LINE_ACCENT }} />
+    </div>
+  );
+}
+
+/** A label, a leader line and a value, the way a printed form draws one. */
+function LeaderRow({ label, value, width, size = 18 }: { label: string; value: string; width: number; size?: number }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", width, height: Math.round(size * 1.7) }}>
+      <Label size={Math.round(size * 0.72)}>{label}</Label>
+      <div style={{ display: "flex", flex: 1, height: 1, marginLeft: 10, marginRight: 10, marginBottom: 5, borderBottom: `1px solid ${LINE_ACCENT}` }} />
+      <div style={{ display: "flex", fontSize: size, fontWeight: 500, color: C.ink, whiteSpace: "nowrap" }}>{value}</div>
+    </div>
+  );
+}
+
+/** The overall grade in a grade box, the report card's mark. */
+function GradeBox({ overall, width, numberSize }: { overall: number; width: number; numberSize: number }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        width,
+        padding: "22px 16px 20px 16px",
+        border: `2px solid ${LINE_ACCENT}`,
+        borderRadius: 18,
+        background: "rgba(7,7,13,0.45)",
+      }}
+    >
+      <Label size={15} color={C.cyan}>Overall grade</Label>
+      <div
+        style={{
+          display: "flex",
+          marginTop: 6,
+          fontSize: numberSize,
+          fontWeight: 900,
+          lineHeight: 1,
+          paddingBottom: 6,
+          backgroundImage: OG_GRADIENT,
+          backgroundClip: "text",
+          color: "transparent",
+        }}
+      >
+        {overall.toFixed(1)}
+      </div>
+      <Label size={13}>of 10</Label>
     </div>
   );
 }
@@ -198,7 +295,7 @@ function Rings({ card, size, gap }: { card: BlueprintShareCard; size: number; ga
               width: size,
               marginLeft: i === 0 ? 0 : gap,
               justifyContent: "center",
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: 900,
               color: C.inkMuted,
               letterSpacing: "0.12em",
@@ -212,97 +309,25 @@ function Rings({ card, size, gap }: { card: BlueprintShareCard; size: number; ga
   );
 }
 
-/**
- * The slot column is 70px wide. SUPERFLEX is the one shared label that does not
- * fit, so the image prints the SF the format pills above it already use.
- */
-function shareSlotLabel(label: string): string {
-  return label === "SUPERFLEX" ? "SF" : label;
-}
-
-/**
- * The wordmark already reads FFBeacon.com, so the footer is that row alone with
- * the source line under it: no second domain for a long format name to push off
- * the edge.
- */
-function Footer({ card }: { card: BlueprintShareCard }) {
+/** A thin bar filled to a fraction of its track, with an optional mark. */
+function Bar({ fraction, width, height = 8, fill = OG_GRADIENT, mark }: { fraction: number; width: number; height?: number; fill?: string; mark?: number }) {
+  const f = Math.min(1, Math.max(0, fraction));
   return (
-    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, width: "100%" }}>
-      <OgBrandMark size={30} />
-      <div style={{ display: "flex", fontSize: 18, color: C.inkSubtle }}>
-        {clip(`${card.formatDisplay} values by ${card.sourceDisplay}, as of ${formatEastern(card.generatedAt)}`, 100)}
-      </div>
-      {card.hasDefenders && (
-        <div style={{ display: "flex", fontSize: 16, color: C.inkSubtle }}>Defenders carry no market value.</div>
+    <div style={{ display: "flex", position: "relative", width, height, borderRadius: 999, background: "rgba(255,255,255,0.08)" }}>
+      <div style={{ display: "flex", width: Math.round(width * f), height, borderRadius: 999, background: fill }} />
+      {mark !== undefined && (
+        <div style={{ display: "flex", position: "absolute", left: Math.round(width * Math.min(1, Math.max(0, mark))) - 1, top: -3, width: 2, height: height + 6, background: "rgba(244,244,248,0.7)" }} />
       )}
     </div>
   );
 }
 
-/** 1200 x 630 link preview (plan 11.2). */
-export function renderPreview(card: BlueprintShareCard): ImageResponse {
-  const name = fitText(card.teamName, { width: 680, maxSize: 64, minSize: 36, maxLines: 2 });
-  const first = fitText(card.priorities[0] ?? "", { width: 680, maxSize: 28, minSize: 22, maxLines: 2, weight: 500 });
-  const pills = [card.statusLabel, card.valueArchetype, card.rosterArchetype].filter((x): x is string => !!x);
-  return new ImageResponse(
-    (
-      <div style={{ ...OG_ROOT_STYLE, padding: "56px 40px 0 40px" }}>
-        <OgAccentBar />
-        <div style={{ display: "flex", flex: 1 }}>
-          <div style={{ display: "flex", flexDirection: "column", width: 720 }}>
-            <div style={{ display: "flex", fontSize: 22, fontWeight: 900, color: C.cyan, letterSpacing: "0.18em" }}>
-              TEAM BLUEPRINT
-            </div>
-            <div style={{ display: "flex", marginTop: 14, fontSize: name.fontSize, fontWeight: 900, lineHeight: 1.05 }}>
-              {name.text}
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 20 }}>
-              {pills.map((p) => (
-                <Pill key={p} text={p} />
-              ))}
-            </div>
-            {first.text && (
-              <div style={{ display: "flex", marginTop: 28, fontSize: first.fontSize, fontWeight: 500, color: C.ink, lineHeight: 1.3 }}>
-                {first.text}
-              </div>
-            )}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", marginLeft: 40, width: 360, alignItems: "flex-start" }}>
-            <div style={{ display: "flex", fontSize: 20, fontWeight: 900, color: C.cyan, letterSpacing: "0.18em" }}>OVERALL</div>
-            <div
-              style={{
-                display: "flex",
-                fontSize: 160,
-                fontWeight: 900,
-                lineHeight: 1,
-                backgroundImage: OG_GRADIENT,
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
-              {card.overall.toFixed(1)}
-            </div>
-            <div style={{ display: "flex", fontSize: 22, color: C.inkMuted }}>of 10</div>
-            <div style={{ display: "flex", marginTop: 24 }}>
-              <Rings card={card} size={52} gap={8} />
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", height: 100, alignItems: "center", borderTop: `1px solid ${C.line}` }}>
-          <Footer card={card} />
-        </div>
-      </div>
-    ),
-    ogResponseOptions(SUCCESS_CACHE),
-  );
-}
-
-function SectionTitle({ children }: { children: string }) {
-  return (
-    <div style={{ display: "flex", fontSize: 18, fontWeight: 900, color: C.inkSubtle, letterSpacing: "0.16em" }}>
-      {children}
-    </div>
-  );
+/**
+ * The slot column is 60px wide. SUPERFLEX is the one shared label that does not
+ * fit, so the image prints the SF the page already uses on a phone.
+ */
+function shareSlotLabel(label: string): string {
+  return label === "SUPERFLEX" ? "SF" : label;
 }
 
 function pct(v: number | null): string {
@@ -318,97 +343,190 @@ function priorityText(p: string): string {
 }
 
 function strategyText(s: BlueprintShareCard["strategy"][number]): string {
-  return s.empty ? clip(s.empty, 80) : clip(`${s.out} for ${s.in}${s.verdict ? `. ${s.verdict}` : ""}`, 120);
+  return s.empty ? clip(s.empty, 110) : clip(`${s.out} for ${s.in}${s.verdict ? `. ${s.verdict}` : ""}`, 120);
+}
+
+function metaLine(card: BlueprintShareCard, max: number): string {
+  return clip(
+    [card.ownerHandle ? `@${card.ownerHandle}` : null, card.record, card.leagueName]
+      .filter(Boolean)
+      .join("  /  "),
+    max,
+  );
+}
+
+// ---- 1200 x 630 link preview -----------------------------------------------
+
+/** 1200 x 630 link preview (plan 11.2). */
+export function renderPreview(card: BlueprintShareCard): ImageResponse {
+  const W = 1200 - 80;
+  const leftW = 700;
+  const name = fitText(card.teamName, { width: leftW, maxSize: 58, minSize: 34, maxLines: 2 });
+  const first = fitText(card.priorities[0] ?? "", { width: leftW, maxSize: 24, minSize: 20, maxLines: 2, weight: 500 });
+  const rest = card.priorities.slice(1, 3).map((p) => fitText(p, { width: leftW - 36, maxSize: 19, minSize: 19, maxLines: 2, weight: 500 }));
+  return new ImageResponse(
+    (
+      <div style={{ ...OG_ROOT_STYLE, padding: "30px 40px 0 40px" }}>
+        <OgAccentBar />
+        <BrandBand width={W} height={92} pillSize={15} tools={SHARE_TOOLS.slice(0, 5)} />
+
+        <div style={{ display: "flex", flex: 1, paddingTop: 26 }}>
+          <div style={{ display: "flex", flexDirection: "column", width: leftW }}>
+            <Label size={17} color={C.cyan}>Team Blueprint</Label>
+            <div style={{ display: "flex", marginTop: 10, fontSize: name.fontSize, fontWeight: 900, lineHeight: 1.05, letterSpacing: -1 }}>
+              {name.text}
+            </div>
+            <div style={{ display: "flex", marginTop: 10, fontSize: 19, color: C.inkMuted }}>{metaLine(card, 70)}</div>
+            <div style={{ display: "flex", gap: 24, marginTop: 14 }}>
+              <LeaderRow label="Standing" value={clip(card.statusLabel ?? "Not computed yet", 22)} width={(leftW - 24) / 2} size={17} />
+              <LeaderRow label="Format" value={clip(card.formatDisplay, 24)} width={(leftW - 24) / 2} size={17} />
+            </div>
+            <div style={{ display: "flex", gap: 24 }}>
+              <LeaderRow label="Roster" value={clip(card.rosterArchetype, 22)} width={(leftW - 24) / 2} size={17} />
+              <LeaderRow label="Values" value={clip(card.sourceDisplay, 24)} width={(leftW - 24) / 2} size={17} />
+            </div>
+            {first.text && (
+              <div style={{ display: "flex", marginTop: 22, alignItems: "flex-start", gap: 12 }}>
+                <div style={{ display: "flex", fontSize: 24, fontWeight: 900, backgroundImage: OG_GRADIENT, backgroundClip: "text", color: "transparent" }}>1</div>
+                <div style={{ display: "flex", flex: 1, fontSize: first.fontSize, fontWeight: 500, color: C.ink, lineHeight: 1.3 }}>
+                  {first.text}
+                </div>
+              </div>
+            )}
+            {rest.map((r, i) => (
+              <div key={i} style={{ display: "flex", marginTop: 10, alignItems: "flex-start", gap: 12 }}>
+                <div style={{ display: "flex", width: 24, fontSize: 19, fontWeight: 900, backgroundImage: OG_GRADIENT, backgroundClip: "text", color: "transparent" }}>{String(i + 2)}</div>
+                <div style={{ display: "flex", flex: 1, fontSize: 19, fontWeight: 500, color: C.inkMuted, lineHeight: 1.3 }}>{r.text}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginLeft: "auto", width: 380 }}>
+            <GradeBox overall={card.overall} width={250} numberSize={120} />
+            <div style={{ display: "flex", marginTop: 18 }}>
+              <Rings card={card} size={48} gap={10} />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", height: 58, alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${C.line}` }}>
+          <div style={{ display: "flex", fontSize: 17, color: C.inkSubtle }}>
+            {clip(`Prepared ${formatEastern(card.generatedAt)}. ${card.formatDisplay} values by ${card.sourceDisplay}.`, 90)}
+          </div>
+          <div style={{ display: "flex", fontSize: 17, fontWeight: 900, color: C.inkMuted }}>ffbeacon.com/tools/league-pulse</div>
+        </div>
+      </div>
+    ),
+    ogResponseOptions(SUCCESS_CACHE),
+  );
+}
+
+// ---- portrait share card ----------------------------------------------------
+
+const PAD = 48;
+const LABEL_W = 170;
+
+/** One ruled section: the label in the margin column, the content beside it. */
+function Section({ label, height, width, children }: { label: string; height: number; width: number; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", width, height, borderTop: `1px solid ${C.line}`, paddingTop: 22 }}>
+      <div style={{ display: "flex", width: LABEL_W, flexShrink: 0, paddingRight: 16 }}>
+        <Label size={15}>{label}</Label>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
 }
 
 /** Portrait share card, 1080 wide, as tall as its sections (plan 11.3). */
 export async function renderPortrait(card: BlueprintShareCard): Promise<ImageResponse> {
-  const textWidth = SHARE_WIDTH - 96;
+  const W = SHARE_WIDTH - PAD * 2;
+  const CW = W - LABEL_W;
   const layout = shareLayout({
     slots: card.lineup.length,
     capitalSeasons: card.capital ? card.capital.length : null,
     // Sized from the text so three short priorities do not leave a blank band.
     priorityLines: card.priorities.map((p, i) => {
       const size = i === 0 ? 30 : 24;
-      return fitText(priorityText(p), { width: textWidth - 44, maxSize: size, minSize: size, maxLines: 6, weight: i === 0 ? 900 : 500 }).lines;
+      return fitText(priorityText(p), { width: CW - 44, maxSize: size, minSize: size, maxLines: 6, weight: i === 0 ? 900 : 500 }).lines;
     }),
-    strategyLines: card.strategy.map((s) => fitText(strategyText(s), { width: textWidth, maxSize: 20, minSize: 20, maxLines: 4, weight: 500 }).lines),
+    strategyLines: card.strategy.map((s) => fitText(strategyText(s), { width: CW, maxSize: 20, minSize: 20, maxLines: 4, weight: 500 }).lines),
   });
   const photos = await loadRemoteImages(card.lineup.slice(0, 12).map((r) => sleeperPlayerImageUrl(r.sleeperId, r.position)));
-  const name = fitText(card.teamName, { width: 980, maxSize: 56, minSize: 36, maxLines: 2 });
-  const W = layout.width - 96;
+  const nameW = W - 280;
+  const name = fitText(card.teamName, { width: nameW, maxSize: 54, minSize: 34, maxLines: 2 });
+  const gaugeW = 260;
+  const gaugeGeo = gaugeGeometry(card.activity.score, { width: gaugeW, stroke: 20 });
   const gauge = gaugeSvg(card.activity.score, {
-    width: 300,
-    stroke: 22,
+    width: gaugeW,
+    stroke: 20,
     trackColor: C.line,
     fromColor: C.purple,
     toColor: C.cyan,
     tickColor: C.inkSubtle,
   });
   const h = Object.fromEntries(layout.sections.map((s) => [s.key, s.height]));
-  const box = (key: string) => ({ display: "flex", flexDirection: "column" as const, height: h[key], width: W });
+  const topStarter = card.lineup.reduce((m, r) => Math.max(m, r.value ?? 0), 0);
+  const even = 100 / Math.max(card.teamCount, 1);
+  const shareScale = Math.max(even * 3, card.valueShare.pct ?? 0, card.productionShare.pct ?? 0);
+  const moverScale = [...card.risers, ...card.fallers].reduce((m, x) => Math.max(m, Math.abs(x.pct)), 0);
+  const topSeason = card.capital ? card.capital.reduce((m, s) => Math.max(m, s.value), 0) : 0;
+  const splitW = CW - gaugeW - 40;
 
   return new ImageResponse(
     (
-      <div style={{ ...OG_ROOT_STYLE, padding: "48px 48px 0 48px", gap: 48 }}>
+      <div style={{ ...OG_ROOT_STYLE, padding: `${PAD}px ${PAD}px 0 ${PAD}px`, gap: SHARE_GAP }}>
         <OgAccentBar />
-        <div style={box("header")}>
-          <div style={{ display: "flex", fontSize: 20, fontWeight: 900, color: C.cyan, letterSpacing: "0.18em" }}>TEAM BLUEPRINT</div>
-          <div style={{ display: "flex", fontSize: name.fontSize, fontWeight: 900, lineHeight: 1.05, marginTop: 8 }}>{name.text}</div>
-          <div style={{ display: "flex", fontSize: 22, color: C.inkMuted, marginTop: 6 }}>
-            {[card.ownerHandle ? `@${card.ownerHandle}` : null, card.record, card.statusLabel, card.valueArchetype, card.rosterArchetype, card.outlook]
-              .filter(Boolean)
-              .join("  /  ")}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-            {card.formatTags.slice(0, 6).map((t) => (
-              <Pill key={t} text={t} />
-            ))}
-          </div>
-        </div>
+        <BrandBand width={W} height={h.brand} pillSize={16} tools={SHARE_TOOLS} />
 
-        <div style={{ ...box("grades"), flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", fontSize: 20, fontWeight: 900, color: C.cyan, letterSpacing: "0.18em" }}>OVERALL</div>
-            <div
-              style={{
-                display: "flex",
-                fontSize: 140,
-                fontWeight: 900,
-                lineHeight: 1,
-                backgroundImage: OG_GRADIENT,
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
-              {card.overall.toFixed(1)}
+        {/* Letterhead: the team at left, the grade box at right. */}
+        <div style={{ display: "flex", width: W, height: h.letterhead, justifyContent: "space-between" }}>
+          <div style={{ display: "flex", flexDirection: "column", width: nameW }}>
+            <Label size={17} color={C.cyan}>Team Blueprint</Label>
+            <div style={{ display: "flex", fontSize: name.fontSize, fontWeight: 900, lineHeight: 1.05, letterSpacing: -1, marginTop: 10 }}>{name.text}</div>
+            <div style={{ display: "flex", fontSize: 20, color: C.inkMuted, marginTop: 10 }}>{metaLine(card, 64)}</div>
+            <div style={{ display: "flex", gap: 24, marginTop: 14 }}>
+              <LeaderRow label="Standing" value={clip(card.statusLabel ?? "Not computed yet", 22)} width={(nameW - 24) / 2} />
+              <LeaderRow label="Format" value={clip(card.formatDisplay, 26)} width={(nameW - 24) / 2} />
             </div>
-            <div style={{ display: "flex", fontSize: 22, color: C.inkMuted }}>of 10</div>
+            <div style={{ display: "flex", gap: 24 }}>
+              <LeaderRow label="Roster" value={clip(card.rosterArchetype, 22)} width={(nameW - 24) / 2} />
+              <LeaderRow label="Values" value={clip(card.sourceDisplay, 26)} width={(nameW - 24) / 2} />
+            </div>
           </div>
-          <Rings card={card} size={72} gap={14} />
+          <GradeBox overall={card.overall} width={240} numberSize={116} />
         </div>
 
-        <div style={box("lineup")}>
-          <SectionTitle>STARTING LINEUP</SectionTitle>
-          <div style={{ display: "flex", flexDirection: "column", marginTop: 16 }}>
+        <Section label="Grades" height={h.grades} width={W}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 36 }}>
+            <Rings card={card} size={64} gap={14} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 }}>
+              <div style={{ display: "flex", fontSize: 18, color: C.inkMuted }}>{clip(`Value archetype: ${card.valueArchetype ?? "not computed yet"}`, 32)}</div>
+              <div style={{ display: "flex", fontSize: 18, color: C.inkMuted }}>{clip(`Outlook: ${card.outlook ?? "one season"}`, 32)}</div>
+              <div style={{ display: "flex", fontSize: 16, color: C.inkSubtle }}>{`10 is the best of ${card.teamCount} teams`}</div>
+            </div>
+          </div>
+        </Section>
+
+        <Section label="Starting lineup" height={h.lineup} width={W}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
             {card.lineup.map((r, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", height: 52, gap: 14 }}>
-                <div style={{ display: "flex", width: 70, fontSize: 22, color: C.inkSubtle, fontWeight: 900 }}>{clip(shareSlotLabel(r.slotLabel), 5)}</div>
+              <div key={i} style={{ display: "flex", alignItems: "center", height: 52, gap: 14, borderBottom: i === card.lineup.length - 1 ? "none" : `1px solid rgba(31,31,51,0.7)` }}>
+                <div style={{ display: "flex", width: 60, fontSize: 20, color: C.inkSubtle, fontWeight: 900 }}>{clip(shareSlotLabel(r.slotLabel), 5)}</div>
                 {photos[i] ? (
                   // Satori renders plain img elements only; next/image cannot run here.
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photos[i]!} width={40} height={40} style={{ width: 40, height: 40, borderRadius: 999 }} alt="" />
+                  <img src={photos[i]!} width={38} height={38} style={{ width: 38, height: 38, borderRadius: 8 }} alt="" />
                 ) : (
                   <div
                     style={{
                       display: "flex",
-                      width: 40,
-                      height: 40,
-                      borderRadius: 999,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 8,
                       background: C.line,
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: 900,
                       color: OG_POSITION_COLORS[r.position ?? ""] ?? C.inkMuted,
                     }}
@@ -416,168 +534,206 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
                     {r.position ?? ""}
                   </div>
                 )}
-                <div style={{ display: "flex", flex: 1, fontSize: 26, fontWeight: 500 }}>{r.name ? clip(r.name, 26) : "Empty"}</div>
-                <div style={{ display: "flex", width: 140, justifyContent: "flex-end", fontSize: 26, fontWeight: 900 }}>
-                  {r.value === null ? (r.name ? "No value" : "") : r.value.toLocaleString("en-US")}
+                <div style={{ display: "flex", flex: 1, fontSize: 24, fontWeight: 500 }}>{r.name ? clip(r.name, 24) : "Empty"}</div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", width: 130 }}>
+                  <div style={{ display: "flex", fontSize: 24, fontWeight: 900 }}>
+                    {r.value === null ? (r.name ? "No value" : "") : r.value.toLocaleString("en-US")}
+                  </div>
+                  {r.value !== null && <Bar fraction={topStarter > 0 ? r.value / topStarter : 0} width={110} height={4} />}
                 </div>
-                <div style={{ display: "flex", width: 90, justifyContent: "flex-end", fontSize: 20, color: C.inkSubtle }}>
+                <div style={{ display: "flex", width: 76, justifyContent: "flex-end", fontSize: 18, color: C.inkSubtle }}>
                   {r.positionRank !== null && r.position ? `${r.position}${r.positionRank}` : ""}
                 </div>
-                <div style={{ display: "flex", width: 170, justifyContent: "flex-end" }}>
-                  {r.call && <Pill text={r.call} />}
+                <div style={{ display: "flex", width: 150, justifyContent: "flex-end" }}>
+                  {r.call && <Pill text={r.call} size={16} />}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Section>
 
-        <div style={{ ...box("shares"), flexDirection: "row", gap: 48 }}>
-          {(
-            [
-              ["VALUE SHARE", card.valueShare],
-              ["PRODUCTION SHARE", card.productionShare],
-            ] as const
-          ).map(([label, f]) => (
-            <div key={label} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-              <SectionTitle>{label}</SectionTitle>
-              <div style={{ display: "flex", fontSize: 64, fontWeight: 900 }}>{pct(f.pct)}</div>
-              <div style={{ display: "flex", fontSize: 20, color: C.inkSubtle }}>{ordinalShort(f.rank, card.teamCount)}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ ...box("calls"), flexDirection: "row", gap: 40 }}>
-          <div style={{ display: "flex", flexDirection: "column", width: 320 }}>
-            <SectionTitle>TRADE ACTIVITY</SectionTitle>
-            {/* Satori renders plain img elements only; next/image cannot run here. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={svgToDataUri(gauge)} width={300} height={161} style={{ width: 300, height: 161, marginTop: 12 }} alt="" />
-            <div style={{ display: "flex", fontSize: 40, fontWeight: 900 }}>{`${card.activity.band}, ${card.activity.score}`}</div>
+        <Section label="Share of league" height={h.shares} width={W}>
+          <div style={{ display: "flex", gap: 40 }}>
+            {(
+              [
+                ["Value share", card.valueShare],
+                ["Production share", card.productionShare],
+              ] as const
+            ).map(([label, f]) => (
+              <div key={label} style={{ display: "flex", flexDirection: "column", width: (CW - 40) / 2 }}>
+                <Label size={14}>{label}</Label>
+                <div style={{ display: "flex", fontSize: 54, fontWeight: 900, lineHeight: 1.05 }}>{pct(f.pct)}</div>
+                <div style={{ display: "flex", fontSize: 17, color: C.inkSubtle, marginBottom: 10 }}>{ordinalShort(f.rank, card.teamCount)}</div>
+                {f.pct !== null && <Bar fraction={f.pct / shareScale} width={(CW - 40) / 2} height={10} mark={even / shareScale} />}
+              </div>
+            ))}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            <div style={{ display: "flex", gap: 32 }}>
-              {(
-                [
-                  ["SELLS", card.activity.sellsPct],
-                  ["BUILDS", card.activity.buildsPct],
-                  ["HOLDS", card.activity.holdsPct],
-                ] as const
-              ).map(([l, v]) => (
-                <div key={l} style={{ display: "flex", flexDirection: "column" }}>
-                  <SectionTitle>{l}</SectionTitle>
-                  <div style={{ display: "flex", fontSize: 44, fontWeight: 900 }}>{`${v}%`}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 32, marginTop: 20 }}>
-              {(
-                [
-                  ["TOP SELLS", card.sells],
-                  ["BUY TARGETS", card.buys],
-                ] as const
-              ).map(([l, list]) => (
-                <div key={l} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-                  <SectionTitle>{l}</SectionTitle>
-                  {list.length === 0 ? (
-                    <div style={{ display: "flex", fontSize: 22, color: C.inkMuted }}>None</div>
-                  ) : (
-                    list.map((x) => (
-                      <div key={x.name} style={{ display: "flex", fontSize: 22, gap: 8 }}>
-                        <div style={{ display: "flex", color: OG_POSITION_COLORS[x.position] ?? C.inkMuted, fontWeight: 900 }}>{x.position}</div>
-                        <div style={{ display: "flex" }}>{clip(x.name, 22)}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+          <div style={{ display: "flex", fontSize: 15, color: C.inkSubtle, marginTop: 10 }}>{`The mark on each bar is an even ${even.toFixed(1)}% share.`}</div>
+        </Section>
 
-        <div style={{ ...box("movers"), flexDirection: "row", gap: 32 }}>
-          {(
-            [
-              [`RISERS, ${card.moversWindow.toUpperCase()}`, card.risers],
-              [`FALLERS, ${card.moversWindow.toUpperCase()}`, card.fallers],
-            ] as const
-          ).map(([l, list]) => (
-            <div key={l} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-              <SectionTitle>{l}</SectionTitle>
-              {list.length === 0 ? (
-                <div style={{ display: "flex", fontSize: 22, color: C.inkMuted }}>Nothing moved more than the floor.</div>
-              ) : (
-                list.map((m) => (
-                  <div key={m.name} style={{ display: "flex", fontSize: 22, justifyContent: "space-between" }}>
-                    <div style={{ display: "flex" }}>{clip(m.name, 22)}</div>
-                    <div style={{ display: "flex", fontWeight: 900 }}>{`${m.pct > 0 ? "+" : ""}${m.pct.toFixed(1)}%`}</div>
+        <Section label="Trade activity" height={h.calls} width={W}>
+          <div style={{ display: "flex", gap: 40 }}>
+            <div style={{ display: "flex", flexDirection: "column", width: gaugeW }}>
+              {/* Satori renders plain img elements only; next/image cannot run here. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={svgToDataUri(gauge)} width={gaugeW} height={gaugeGeo.height} style={{ width: gaugeW, height: gaugeGeo.height }} alt="" />
+              <div style={{ display: "flex", fontSize: 36, fontWeight: 900, backgroundImage: OG_GRADIENT, backgroundClip: "text", color: "transparent", paddingBottom: 4 }}>
+                {card.activity.band}
+              </div>
+              <div style={{ display: "flex", fontSize: 16, color: C.inkSubtle }}>{`${card.activity.score} of 100`}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", width: splitW }}>
+              <div style={{ display: "flex", width: splitW, height: 14, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.08)", gap: 2 }}>
+                <div style={{ display: "flex", width: Math.round((splitW * card.activity.sellsPct) / 100), height: 14, background: WARNING }} />
+                <div style={{ display: "flex", width: Math.round((splitW * card.activity.buildsPct) / 100), height: 14, background: C.purple }} />
+                <div style={{ display: "flex", width: Math.round((splitW * card.activity.holdsPct) / 100), height: 14, background: "rgba(244,244,248,0.35)" }} />
+              </div>
+              <div style={{ display: "flex", gap: 28, marginTop: 12 }}>
+                {(
+                  [
+                    ["Sells", card.activity.sellsPct, WARNING],
+                    ["Builds", card.activity.buildsPct, C.purple],
+                    ["Holds", card.activity.holdsPct, "rgba(244,244,248,0.5)"],
+                  ] as const
+                ).map(([l, v, color]) => (
+                  <div key={l} style={{ display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ display: "flex", width: 10, height: 10, borderRadius: 2, background: color }} />
+                      <Label size={13}>{l}</Label>
+                    </div>
+                    <div style={{ display: "flex", fontSize: 34, fontWeight: 900 }}>{`${v}%`}</div>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 28, marginTop: 14 }}>
+                {(
+                  [
+                    ["Top sells", card.sells],
+                    ["Buy targets", card.buys],
+                  ] as const
+                ).map(([l, list]) => (
+                  <div key={l} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+                    <Label size={13}>{l}</Label>
+                    {list.length === 0 ? (
+                      <div style={{ display: "flex", fontSize: 18, color: C.inkMuted, marginTop: 4 }}>None</div>
+                    ) : (
+                      list.map((x) => (
+                        <div key={x.name} style={{ display: "flex", fontSize: 18, gap: 8, marginTop: 4 }}>
+                          <div style={{ display: "flex", width: 34, color: OG_POSITION_COLORS[x.position] ?? C.inkMuted, fontWeight: 900 }}>{x.position}</div>
+                          <div style={{ display: "flex" }}>{clip(x.name, 20)}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        </Section>
 
-        <div style={box("capital")}>
-          <SectionTitle>DRAFT CAPITAL</SectionTitle>
+        <Section label={`Movers, ${card.moversWindow}`} height={h.movers} width={W}>
+          <div style={{ display: "flex", gap: 40 }}>
+            {(
+              [
+                ["Rising", card.risers, "#10B981"],
+                ["Falling", card.fallers, WARNING],
+              ] as const
+            ).map(([l, list, color]) => (
+              <div key={l} style={{ display: "flex", flexDirection: "column", width: (CW - 40) / 2 }}>
+                <Label size={13}>{l}</Label>
+                {list.length === 0 ? (
+                  <div style={{ display: "flex", fontSize: 18, color: C.inkMuted, marginTop: 6 }}>Nothing moved more than the floor.</div>
+                ) : (
+                  list.map((m) => (
+                    <div key={m.name} style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
+                      <div style={{ display: "flex", fontSize: 19, justifyContent: "space-between" }}>
+                        <div style={{ display: "flex" }}>{clip(m.name, 22)}</div>
+                        <div style={{ display: "flex", fontWeight: 900 }}>{`${m.pct > 0 ? "+" : ""}${m.pct.toFixed(1)}%`}</div>
+                      </div>
+                      <div style={{ display: "flex", marginTop: 4 }}>
+                        <Bar fraction={moverScale > 0 ? Math.abs(m.pct) / moverScale : 0} width={(CW - 40) / 2} height={5} fill={color} />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section label="Draft capital" height={h.capital} width={W}>
           {card.capital === null ? (
-            <div style={{ display: "flex", fontSize: 24, color: C.inkMuted, marginTop: 12 }}>Redraft leagues hold no future picks.</div>
+            <div style={{ display: "flex", fontSize: 20, color: C.inkMuted }}>Redraft leagues hold no future picks.</div>
+          ) : card.capital.length === 0 ? (
+            <div style={{ display: "flex", fontSize: 20, color: C.inkMuted }}>This roster holds no future picks.</div>
           ) : (
             card.capital.map((s) => (
-              <div key={s.season} style={{ display: "flex", fontSize: 24, height: 40, alignItems: "center", gap: 24 }}>
-                <div style={{ display: "flex", width: 90, fontWeight: 900 }}>{String(s.season)}</div>
-                <div style={{ display: "flex", width: 160, fontWeight: 900 }}>{s.value.toLocaleString("en-US")}</div>
-                <div style={{ display: "flex", color: C.inkSubtle }}>{ordinalShort(s.rank, card.teamCount)}</div>
+              <div key={s.season} style={{ display: "flex", height: 44, alignItems: "center", gap: 20 }}>
+                <div style={{ display: "flex", width: 70, fontSize: 22, fontWeight: 900 }}>{String(s.season)}</div>
+                <div style={{ display: "flex", flex: 1 }}>
+                  <Bar fraction={topSeason > 0 ? s.value / topSeason : 0} width={CW - 70 - 150 - 150 - 60} height={10} />
+                </div>
+                <div style={{ display: "flex", width: 150, justifyContent: "flex-end", fontSize: 22, fontWeight: 900 }}>{s.value.toLocaleString("en-US")}</div>
+                <div style={{ display: "flex", width: 150, justifyContent: "flex-end", fontSize: 17, color: C.inkSubtle }}>{ordinalShort(s.rank, card.teamCount)}</div>
               </div>
             ))
           )}
-        </div>
+        </Section>
 
-        <div style={box("priorities")}>
-          <SectionTitle>TOP PRIORITIES</SectionTitle>
+        <Section label="The plan" height={h.priorities} width={W}>
           {card.priorities.map((p, i) => (
-            <div key={i} style={{ display: "flex", gap: 14, marginTop: 8, alignItems: "flex-start" }}>
+            <div key={i} style={{ display: "flex", gap: 14, marginBottom: 10, alignItems: "flex-start" }}>
               <div
                 style={{
                   display: "flex",
+                  width: 30,
                   fontSize: i === 0 ? 30 : 24,
                   fontWeight: 900,
-                  backgroundImage: OG_GRADIENT,
-                  backgroundClip: "text",
-                  color: "transparent",
+                  backgroundImage: i < 3 ? OG_GRADIENT : undefined,
+                  backgroundClip: i < 3 ? "text" : undefined,
+                  color: i < 3 ? "transparent" : C.inkSubtle,
                 }}
               >
                 {String(i + 1)}
               </div>
-              <div style={{ display: "flex", flex: 1, fontSize: i === 0 ? 30 : 24, fontWeight: i === 0 ? 900 : 500, color: i === 0 ? C.ink : C.inkMuted }}>
+              <div style={{ display: "flex", flex: 1, fontSize: i === 0 ? 30 : 24, lineHeight: 1.27, fontWeight: i === 0 ? 900 : 500, color: i === 0 ? C.ink : C.inkMuted }}>
                 {priorityText(p)}
               </div>
             </div>
           ))}
-        </div>
+        </Section>
 
-        <div style={box("strategy")}>
-          <SectionTitle>TRADE STRATEGY</SectionTitle>
+        <Section label="Trade shapes" height={h.strategy} width={W}>
           {card.strategy.map((s) => (
-            <div key={s.label} style={{ display: "flex", flexDirection: "column", marginTop: 10 }}>
+            <div key={s.label} style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}>
               <div style={{ display: "flex", fontSize: 22, fontWeight: 900 }}>{s.label}</div>
-              <div style={{ display: "flex", fontSize: 20, color: C.inkMuted }}>
-                {strategyText(s)}
-              </div>
+              <div style={{ display: "flex", fontSize: 20, lineHeight: 1.25, color: C.inkMuted }}>{strategyText(s)}</div>
             </div>
           ))}
-        </div>
+        </Section>
 
-        <div style={box("partners")}>
-          <SectionTitle>IDEAL PARTNERS</SectionTitle>
-          <div style={{ display: "flex", fontSize: 24, marginTop: 10 }}>
+        <Section label="Partners" height={h.partners} width={W}>
+          <div style={{ display: "flex", fontSize: 22, lineHeight: 1.3 }}>
             {card.partners.length === 0
               ? "Not enough priced rosters to name a partner."
               : clip(card.partners.map((p) => (p.handle && !p.teamName.includes(`@${p.handle}`) ? `${p.teamName} (@${p.handle})` : p.teamName)).join(", "), 80)}
           </div>
-        </div>
+        </Section>
 
-        <div style={{ display: "flex", height: h.footer, alignItems: "center", borderTop: `1px solid ${C.line}` }}>
-          <Footer card={card} />
+        <div style={{ display: "flex", width: W, height: h.footer, alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${LINE_ACCENT}` }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <OgBrandMark size={32} />
+            <div style={{ display: "flex", fontSize: 16, color: C.inkSubtle }}>
+              {clip(`Prepared ${formatEastern(card.generatedAt)}. ${card.formatDisplay} values by ${card.sourceDisplay}.`, 96)}
+            </div>
+            <div style={{ display: "flex", fontSize: 15, color: C.inkSubtle }}>
+              {card.hasDefenders ? "Defenders carry no market value. Not a promise about any player." : "Not a promise about any player; the league's numbers as they stand."}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+            <Label size={13} color={C.cyan}>Build yours</Label>
+            <div style={{ display: "flex", fontSize: 17, fontWeight: 900, color: C.inkMuted, marginTop: 4 }}>ffbeacon.com/tools/league-pulse</div>
+          </div>
         </div>
       </div>
     ),

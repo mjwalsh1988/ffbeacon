@@ -49,7 +49,7 @@ import type { BlueprintPosition } from "./default-settings";
 export type { BlueprintPosition };
 
 /** Bumped on any formula change; a stale version rebuilds on next view. */
-export const BLUEPRINT_MODEL_VERSION = 4;
+export const BLUEPRINT_MODEL_VERSION = 5;
 
 /** The market signal states (lib/market-signals), as the Blueprint reads them. */
 export type MarketSignalState =

@@ -5,15 +5,15 @@
  * what the table says; geometry is lib/league-blueprint/age-geometry.ts.
  */
 
-import { Panel } from "@/components/dashboard-panel";
 import { ChartFigure, DataTable, SERIES_A, SERIES_B, SeriesLegend, Td, Th } from "@/components/chart-kit";
 import { positionHeading } from "@/lib/site";
 import { ageChart } from "@/lib/league-blueprint/age-geometry";
 import type { BlueprintAge } from "@/lib/league-blueprint/types";
+import { SheetSection } from "./sheet";
 
 const WIDTH = 480;
 /**
- * Below sm the panel is about 260px wide, so a 480 viewBox would shrink the
+ * Below sm the body is about 260px wide, so a 480 viewBox would shrink the
  * axis labels to under five pixels. The phone copy is drawn at its own width.
  */
 const PHONE_WIDTH = 280;
@@ -69,13 +69,16 @@ function summary(age: BlueprintAge): string {
   return parts.length > 0 ? parts.join(" ") : "No priced players to measure.";
 }
 
-export function AgeChart({ age }: { age: BlueprintAge }) {
+export function AgeChart({ age, number }: { age: BlueprintAge; number: string }) {
   const overall =
     age.rosterMean !== null && age.gap !== null
-      ? `The roster averages ${age.rosterMean.toFixed(1)}, ${Math.abs(age.gap).toFixed(1)} years ${age.gap >= 0 ? "younger" : "older"} than the league's ${age.leagueMean!.toFixed(1)}.`
+      ? `Value weighted. The roster averages ${age.rosterMean.toFixed(1)}, ${Math.abs(age.gap).toFixed(1)} years ${age.gap >= 0 ? "younger" : "older"} than the league's ${age.leagueMean!.toFixed(1)}.`
       : "No priced players to measure an age against.";
   return (
-    <Panel id="bp-age" eyebrow="Value weighted" title="Age by position" helper={overall}>
+    <SheetSection id="bp-age" number={number} title="Age by position" helper={overall}>
+      {/* The body column can run past 1000px, which would scale a 480-wide
+          viewBox into bars taller than the text; the figure stops at 2xl. */}
+      <div className="max-w-2xl">
       <ChartFigure
         titleLevel={3}
         title="This roster against the league"
@@ -111,6 +114,7 @@ export function AgeChart({ age }: { age: BlueprintAge }) {
         <AgeBars rows={age.rows} width={PHONE_WIDTH} className="sm:hidden" />
         <AgeBars rows={age.rows} width={WIDTH} className="hidden sm:block" />
       </ChartFigure>
-    </Panel>
+      </div>
+    </SheetSection>
   );
 }

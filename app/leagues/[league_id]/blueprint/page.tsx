@@ -25,7 +25,9 @@ import { Panel } from "@/components/dashboard-panel";
 import { ShareStrip } from "@/components/share-strip";
 import { withUsername } from "@/components/league-schedule/format";
 import { BlueprintControls } from "@/components/league-blueprint/blueprint-controls";
-import { BodySkeleton } from "@/components/league-blueprint/body-skeleton";
+import { SheetSkeleton } from "@/components/league-blueprint/body-skeleton";
+import { Sheet } from "@/components/league-blueprint/sheet";
+import { BLUEPRINT_TITLE_ID, Letterhead } from "@/components/league-blueprint/letterhead";
 import { StandingPanel } from "@/components/league-blueprint/standing-panel";
 import { GradeRings } from "@/components/league-blueprint/grade-rings";
 import { LineupTable } from "@/components/league-blueprint/lineup-table";
@@ -43,14 +45,16 @@ import { StrategyPanel } from "@/components/league-blueprint/strategy-panel";
 export const dynamic = "force-dynamic";
 
 /**
- * Team Blueprint: one roster read as a one-page plan. Plan of record:
- * docs/team-blueprint/team-blueprint-plan.md section 9.
+ * Team Blueprint: one roster read as a one-page report card. Plan of record:
+ * docs/completed/team-blueprint/team-blueprint-plan.md section 9; the sheet
+ * layout is components/league-blueprint/sheet.tsx.
  *
  * The core sync and the league row, once per request, shared by
- * generateMetadata and the page (the leaderboards page's pattern). The body
- * awaits loadBlueprint inside one Suspense boundary; it serves a stored view
- * when its fingerprint and TTL say it is fresh and builds one, metered,
- * otherwise.
+ * generateMetadata and the page (the leaderboards page's pattern). The whole
+ * sheet, letterhead included, awaits loadBlueprint inside one Suspense
+ * boundary, so the grade in the letterhead and the figures under it are
+ * always from the same stored view; the skeleton prints the team name and
+ * league, which are known before the body runs.
  */
 const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
   const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
@@ -151,7 +155,7 @@ export default async function LeagueBlueprintPage({
   if (teams.length === 0) notFound();
 
   // Which roster: the ?roster= param (validated, must be in this league), else
-  // the viewer's own team, else the first roster with the intro saying so.
+  // the viewer's own team, else the first roster with the sheet saying so.
   const requested = rosterParam(sp.roster);
   if (sp.roster !== undefined && (requested === null || !teams.some((t) => t.sleeperRosterId === requested))) {
     notFound();
@@ -167,8 +171,8 @@ export default async function LeagueBlueprintPage({
     resolvedSource.slug,
   );
   const season = String(league.season ?? new Date().getUTCFullYear());
-  // A stored view already in hand paints the "as of" line and the share strip
-  // before the body resolves. One indexed row; no build.
+  // A stored view already in hand lets loadBlueprint skip one read on its
+  // warm path. One indexed row; no build.
   const cachedNow =
     context.coverage === "none"
       ? null
@@ -197,65 +201,32 @@ export default async function LeagueBlueprintPage({
       otherLeagues={otherLeagues}
       masthead={leagueMastheadProps(league, context, pulseCached)}
     >
-      <>
-        <section
-          aria-labelledby="blueprint-intro"
-          className="relative overflow-hidden rounded-modal border border-line-accent p-5 sm:p-6"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.16) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.12) 0%, transparent 60%)",
-          }}
-        >
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-px"
-            style={{
-              backgroundImage:
-                "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-            }}
-          />
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-cyan">Team Blueprint</p>
-          <h2 id="blueprint-intro" className="mt-1 break-words text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-            {team.teamName}: the plan
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            {/* No time here: this row was read before the body ran, and the body
-                may rebuild. The body's notes carry the "As of" line. */}
-            Where this team stands, what it is built from, and the moves worth making, from the league&apos;s own
-            numbers.
+      {/* The controls share a wrapper with the sheet so the sticky bar has the
+          whole page to travel in; a wrapper of its own height pins it nowhere. */}
+      <div className="mt-6">
+        <BlueprintControls sleeperLeagueId={sleeperLeagueId} linkUsername={linkUsername} rosterId={rosterId} teams={teams} />
+        {chosenByDefault && (
+          <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+            No team was chosen, so this is the first team in the league. Pick yours above.
           </p>
-          {chosenByDefault && (
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              No team was chosen, so this is the first team in the league. Pick yours below.
-            </p>
-          )}
-          {cachedNow && (
-            <div className="mt-4">
-              <BlueprintShare view={cachedNow.view} canonical={canonical} sleeperLeagueId={sleeperLeagueId} linkUsername={linkUsername} />
-            </div>
-          )}
-        </section>
+        )}
 
-        {/* The controls share a wrapper with the body so the sticky bar has the
-            whole page to travel in; a wrapper of its own height pins it nowhere. */}
-        <div className="mt-6">
-          <BlueprintControls sleeperLeagueId={sleeperLeagueId} linkUsername={linkUsername} rosterId={rosterId} teams={teams} />
-
-          <Suspense key={`${rosterId}-${context.sourceSlug}`} fallback={<BodySkeleton withShare={!cachedNow} />}>
-            <BlueprintBody
-              leagueId={sleeperLeagueId}
-              league={league}
-              rosterId={rosterId}
-              sourceSlug={resolvedSource.slug}
-              resynced={!pulseCached}
-              linkUsername={linkUsername}
-              canonical={canonical}
-              shareInIntro={!!cachedNow}
-              prefetched={{ context, cached: cachedNow }}
-            />
-          </Suspense>
-        </div>
-      </>
+        <Suspense
+          key={`${rosterId}-${context.sourceSlug}`}
+          fallback={<SheetSkeleton teamName={team.teamName} leagueName={league.name} season={season} />}
+        >
+          <BlueprintBody
+            leagueId={sleeperLeagueId}
+            league={league}
+            rosterId={rosterId}
+            sourceSlug={resolvedSource.slug}
+            resynced={!pulseCached}
+            linkUsername={linkUsername}
+            canonical={canonical}
+            prefetched={{ context, cached: cachedNow }}
+          />
+        </Suspense>
+      </div>
     </LeagueShell>
   );
 }
@@ -296,7 +267,6 @@ async function BlueprintBody({
   resynced,
   linkUsername,
   canonical,
-  shareInIntro,
   prefetched,
 }: {
   leagueId: string;
@@ -306,7 +276,6 @@ async function BlueprintBody({
   resynced: boolean;
   linkUsername: string | null;
   canonical: string;
-  shareInIntro: boolean;
   prefetched: LoadBlueprintArgs["prefetched"];
 }) {
   const admin = createAdminClient();
@@ -354,52 +323,53 @@ async function BlueprintBody({
   const bands: [number, number] = [settings.activity.lowBelow, settings.activity.highAbove];
   const T = view.header.teamCount;
   return (
-    <div className="mt-6 space-y-6">
+    <>
       {result.kind === "stale" && (
-        <p role="status" className="rounded-card border border-signal-warning/40 bg-signal-warning/10 px-4 py-3 text-sm text-ink">
+        <p role="status" className="mt-6 rounded-card border border-signal-warning/40 bg-signal-warning/10 px-4 py-3 text-sm text-ink">
           {result.reason === "failed"
             ? "The latest rebuild failed; showing the previous blueprint."
             : "Too many blueprints were built from here in the last minute; showing the previous blueprint."}{" "}
           As of {formatEastern(view.generatedAt)}.
         </p>
       )}
-      {!shareInIntro && (
-        <BlueprintShare view={view} canonical={canonical} sleeperLeagueId={leagueId} linkUsername={linkUsername} />
-      )}
-      <StandingPanel view={view} />
-      <GradeRings grades={view.grades} teamCount={T} />
-      <LineupTable view={view} />
-      <DepthLists view={view} />
-      <div className="grid items-start gap-6 xl:grid-cols-2">
-        <SharesPanel view={view} />
-        <AgeChart age={view.age} />
-      </div>
-      <div className="grid items-start gap-6 xl:grid-cols-2">
-        <MoversPanel view={view} />
-        <SpotlightCard view={view} />
-      </div>
-      <CallsPanel view={view} bands={bands} linkUsername={linkUsername} signalWindowDays={marketSettings.windowDays} />
-      <div className="grid items-start gap-6 xl:grid-cols-2">
-        <CapitalPanel view={view} />
-        <PrioritiesPanel priorities={view.priorities} />
-      </div>
-      <StrategyPanel view={view} linkUsername={linkUsername} />
-      <section aria-labelledby="bp-notes" className="space-y-1 text-xs leading-relaxed text-ink-muted">
-        <h2 id="bp-notes" className="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-subtle">
-          How this is read
-        </h2>
-        <p>
-          {view.header.formatDisplay} values by {view.header.sourceDisplay}.
-          {view.header.pickSourceDisplay ? ` Draft pick values powered by ${view.header.pickSourceDisplay}.` : ""}
-        </p>
-        <p>Defenders carry no market value and receive no call.</p>
-        <p>Grades are league relative: 10 is the best of {T} teams.</p>
-        <p>
-          Market signals compare each player with his own last {marketSettings.windowDays} days of {view.header.sourceDisplay} values.
-        </p>
-        <p>As of {formatEastern(view.generatedAt)}.</p>
-        <p>Not a promise about any player; the league&apos;s numbers as they stand.</p>
-      </section>
-    </div>
+      <Sheet labelledBy={BLUEPRINT_TITLE_ID}>
+        <Letterhead view={view} leagueName={league.name}>
+          <BlueprintShare view={view} canonical={canonical} sleeperLeagueId={leagueId} linkUsername={linkUsername} />
+        </Letterhead>
+        <StandingPanel view={view} number="01" />
+        <PrioritiesPanel priorities={view.priorities} number="02" />
+        <GradeRings grades={view.grades} teamCount={T} number="03" />
+        <LineupTable view={view} number="04" />
+        <DepthLists view={view} number="05" />
+        <SharesPanel view={view} number="06" />
+        <AgeChart age={view.age} number="07" />
+        <MoversPanel view={view} number="08" />
+        <SpotlightCard view={view} number="09" />
+        <CallsPanel view={view} bands={bands} linkUsername={linkUsername} signalWindowDays={marketSettings.windowDays} number="10" />
+        <CapitalPanel view={view} number="11" />
+        <StrategyPanel view={view} linkUsername={linkUsername} number="12" />
+        <footer
+          aria-labelledby="bp-notes"
+          className="grid gap-4 border-t border-line bg-base/30 px-5 py-6 sm:px-8 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8"
+        >
+          <h2 id="bp-notes" className="text-sm font-bold uppercase tracking-[0.14em] text-ink">
+            How this is read
+          </h2>
+          <div className="min-w-0 space-y-1 text-xs leading-relaxed text-ink-muted">
+            <p>
+              {view.header.formatDisplay} values by {view.header.sourceDisplay}.
+              {view.header.pickSourceDisplay ? ` Draft pick values powered by ${view.header.pickSourceDisplay}.` : ""}
+            </p>
+            <p>Defenders carry no market value and receive no call.</p>
+            <p>Grades are league relative: 10 is the best of {T} teams.</p>
+            <p>
+              Market signals compare each player with his own last {marketSettings.windowDays} days of {view.header.sourceDisplay} values.
+            </p>
+            <p>Trade shapes never send a Build around player, so the plan and the trades agree.</p>
+            <p>Prepared {formatEastern(view.generatedAt)} by FF Beacon, ffbeacon.com. Not a promise about any player; the league&apos;s numbers as they stand.</p>
+          </div>
+        </footer>
+      </Sheet>
+    </>
   );
 }

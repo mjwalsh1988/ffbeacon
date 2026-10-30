@@ -990,9 +990,32 @@ roster is never told to cut a player worth `DYNASTY_KEEP_VALUE` or more, and
 a rebuilding roster does not sell a player under his position's age cutoff
 (QB 33, RB 28, WR 30, TE 30) for being trade-finder surplus.
 
+ABSOLUTE RULE: the trade strategy board respects the calls. A player the calls
+mark "Build around" is never on the outgoing side of a trade shape, because
+the priorities say "Keep the core: ..." about him and a card on the same page
+that sends him contradicts both. `lib/league-blueprint/data.ts` runs the pure
+assembler once without a board to read the calls, passes those ids to
+`buildStrategy` as `protectedIds`, then assembles again with the board. When
+protection is the only reason a shape is empty, the sentence names the player
+the finder wanted to send, so the two sections visibly agree.
+
+The page is ONE REPORT CARD SHEET (`components/league-blueprint/sheet.tsx`),
+not a stack of dashboard panels: a letterhead (FF Beacon mark, team, the
+report details as a form with dotted leaders, the overall grade in a grade
+box), then twelve numbered sections divided by full-width rules, each with
+its number and title in a margin column from `lg` and its content beside it.
+Inside a section nothing is boxed: lists are ruled rows (`RULED`), figures sit
+on the sheet, and drawn bars (`Bar`) sit under values wherever a proportion
+exists (lineup value to the top starter, shares against the even split,
+movers to the largest move, draft capital to the richest season, the
+sell/build/hold split as one stacked bar). The two share images draw the same
+letterhead and the same ruled two-column sections, with an FF Beacon brand
+band (mark, wordmark, tagline, the tools as pills) across the top of both,
+because a shared picture is where a free site gets seen.
+
 The page follows the Leaderboards design rules: one hero figure per section
-(Standing's overall grade, the activity band word, the first priority, the
-spotlight figure), every figure one real text node, every chart `role="img"`
+(the letterhead's overall grade, the activity band word, the first priority,
+the spotlight figure), every figure one real text node, every chart `role="img"`
 with a summary and a real table under a disclosure, nothing hidden at any
 breakpoint (below `sm` the lineup is three columns with value, position rank
 and call stacked in one cell). The roster select is the shared

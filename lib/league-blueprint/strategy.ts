@@ -8,6 +8,14 @@
  * stays empty when the base run had none. At most `maxRuns` finder runs per
  * build. The chosen cards are graded in one Signal Check batch.
  *
+ * THE BOARD RESPECTS THE CALLS. A player the calls section marks "Build
+ * around" is the core, and the priorities say so in words ("Keep the core:
+ * ..."). A card on the same page that sends him out contradicts both, so a
+ * suggestion whose outgoing side names a protected player is never chosen.
+ * When that is the only reason a shape is empty, the sentence says which
+ * player the finder wanted to send, so the reader can see the two sections
+ * agreeing rather than a blank.
+ *
  * The finder and the grader are injected so this file is testable; data.ts
  * wires the real ones. Nothing here decides who the reader is: the build runs
  * for the viewed roster with no per-viewer inputs (see types.ts rule 3).
@@ -74,6 +82,33 @@ export function bestByShape(
   return out;
 }
 
+/** The first protected player a suggestion would send out, or null. */
+export function protectedOutgoing(
+  s: TradeSuggestion,
+  protectedIds: ReadonlySet<string>,
+): Extract<SuggestionAsset, { kind: "player" }> | null {
+  for (const a of s.outgoing) if (a.kind === "player" && protectedIds.has(a.playerId)) return a;
+  return null;
+}
+
+/**
+ * The sentence for a shape that is empty ONLY because every candidate sent a
+ * core player: the best candidate of that shape and the player it would have
+ * sent. Null when the shape had no candidate at all.
+ */
+export function protectedEmptyText(
+  suggestions: readonly TradeSuggestion[],
+  shape: TradeShape,
+  pivotGapPct: number,
+  protectedIds: ReadonlySet<string>,
+): string | null {
+  const best = bestByShape(suggestions, pivotGapPct)[shape];
+  if (!best) return null;
+  const hit = protectedOutgoing(best, protectedIds);
+  if (!hit) return null;
+  return `No ${SHAPE_WORD[shape]} that keeps the core: the best one sends ${hit.name}, a Build around call, so it is not proposed.`;
+}
+
 function toBuildAsset(a: SuggestionAsset, picks: ReadonlyMap<string, FinderPick>): BuildAsset | null {
   if (a.kind === "player") return { kind: "player", playerId: a.playerId };
   const p = picks.get(a.key);
@@ -113,6 +148,12 @@ export type StrategyDeps = {
   picks: ReadonlyMap<string, FinderPick>;
   maxRuns: number;
   pivotGapPct: number;
+  /**
+   * players.id of every "Build around" call on the viewed roster. A
+   * suggestion that sends one of them is never chosen. Absent means nothing is
+   * protected (the tests, and a roster with no core).
+   */
+  protectedIds?: ReadonlySet<string>;
 };
 
 export type StrategyBuild = {
@@ -122,24 +163,43 @@ export type StrategyBuild = {
   runs: number;
 };
 
+const NONE: ReadonlySet<string> = new Set();
+
 export async function buildStrategy(deps: StrategyDeps): Promise<StrategyBuild> {
+  const protectedIds = deps.protectedIds ?? NONE;
+  const keepsCore = (s: TradeSuggestion) => protectedOutgoing(s, protectedIds) === null;
+
   let runs = 1;
   const base = deps.run();
-  const chosen = bestByShape(base.suggestions, deps.pivotGapPct);
-  const notices: Partial<Record<TradeShape, string | null>> = {};
+  const chosen = bestByShape(base.suggestions.filter(keepsCore), deps.pivotGapPct);
+  const emptyTexts: Partial<Record<TradeShape, string | null>> = {};
+  const blockedText = (suggestions: readonly TradeSuggestion[], shape: TradeShape) =>
+    protectedEmptyText(suggestions, shape, deps.pivotGapPct, protectedIds);
 
   for (const [shape, goal] of [
     ["downtier", "split-assets"],
     ["uptier", "consolidate"],
   ] as const) {
-    if (chosen[shape] || runs >= deps.maxRuns) continue;
+    if (chosen[shape]) continue;
+    if (runs >= deps.maxRuns) {
+      emptyTexts[shape] = blockedText(base.suggestions, shape);
+      continue;
+    }
     runs += 1;
     const extra = deps.run(goal);
-    const best = bestByShape(extra.suggestions, deps.pivotGapPct)[shape];
+    const best = bestByShape(extra.suggestions.filter(keepsCore), deps.pivotGapPct)[shape];
     if (best) chosen[shape] = best;
-    else notices[shape] = noticeText(extra.notice);
+    else {
+      const blocked = blockedText(extra.suggestions, shape) ?? blockedText(base.suggestions, shape);
+      const notice = noticeText(extra.notice);
+      emptyTexts[shape] = blocked ?? `No ${SHAPE_WORD[shape]} worth proposing this week.${notice ? ` ${notice}` : ""}`;
+    }
   }
-  if (!chosen.pivot) notices.pivot = noticeText(base.notice);
+  if (!chosen.pivot) {
+    const notice = noticeText(base.notice);
+    emptyTexts.pivot =
+      blockedText(base.suggestions, "pivot") ?? `No pivot worth proposing this week.${notice ? ` ${notice}` : ""}`;
+  }
 
   const picked = SHAPES.map((s) => chosen[s]).filter((s): s is TradeSuggestion => !!s);
   const grades = picked.length > 0 ? await deps.grade(picked) : [];
@@ -149,12 +209,11 @@ export async function buildStrategy(deps: StrategyDeps): Promise<StrategyBuild> 
   const entries: StrategyEntry[] = SHAPES.map((shape) => {
     const s = chosen[shape];
     if (!s) {
-      const notice = notices[shape];
       return {
         shape,
         label: SHAPE_LABEL[shape],
         card: null,
-        emptyText: `No ${SHAPE_WORD[shape]} worth proposing this week.${notice ? ` ${notice}` : ""}`,
+        emptyText: emptyTexts[shape] ?? `No ${SHAPE_WORD[shape]} worth proposing this week.`,
       };
     }
     const incoming = s.incoming.map((a) => toBuildAsset(a, deps.picks));

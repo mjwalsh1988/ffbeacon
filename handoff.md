@@ -1,6 +1,6 @@
 # Handoff: Team Blueprint and Market Signals build
 
-Updated after BP-T080. Plan of record: docs/completed/team-blueprint/team-blueprint-plan.md
+Updated after BP-T088 (2026-10-30 launch follow-ups: strategy respects the calls, report card sheet, branded share images). Plan of record: docs/completed/team-blueprint/team-blueprint-plan.md
 (build order in section 17, phases A to I). Task lines: progress.md, BP-T### entries
 under the heading "Team Blueprint and Market Signals" at the bottom of the file.
 
@@ -9,8 +9,8 @@ per tool call; the gate after each phase; one review sub-agent at the end (not t
 
 ## State
 
-- Last task completed: BP-T080 (Plan moved to docs/completed/team-blueprint/team-blueprint-plan.md (status line BUILT, contents entry and section 21 What shipped differently); docs/README.md row moved from Active to Completed with what is left over, cited as the old path like every other moved plan)
-- Next task: Build complete apart from BP-T081 (commit, skipped by the owner). Owner steps: deploy, check CRON_SECRET on Vercel, confirm the 10:30 and 10:50 UTC market-signals runs in cron_runs, and the first-week table size check (BP-T020)
+- Last task completed: BP-T088 (share images redrawn as the report card with the FF Beacon brand band)
+- Next task: owner review of BP-T086 to BP-T088 on the dev server, then commit when approved. Previously: build complete apart from BP-T081 (commit, skipped by the owner). Owner steps: deploy, check CRON_SECRET on Vercel, confirm the 10:30 and 10:50 UTC market-signals runs in cron_runs, and the first-week table size check (BP-T020)
 - Partial file in progress: none
 
 ## Migrations applied to prod (cilvpyivysjxpxbudkfa)

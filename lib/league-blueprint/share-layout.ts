@@ -2,29 +2,32 @@
  * Portrait share card height (plan 11.3). Pure.
  *
  * The card is as tall as its sections, so a league with more starting slots
- * (an IDP league) gets a taller card rather than a clipped one.
+ * (an IDP league) gets a taller card rather than a clipped one. The sections
+ * are the report card's: the FF Beacon brand band, the letterhead with the
+ * grade box, then the ruled two-column sections in the page's order (less
+ * the ones a picture cannot carry), and the footer.
  */
 
 export const SHARE_WIDTH = 1080;
-export const SHARE_GAP = 48;
+export const SHARE_GAP = 40;
 
 export const SECTION_HEIGHT = {
-  header: 200,
-  grades: 220,
+  brand: 110,
+  letterhead: 215,
+  grades: 130,
   lineupRow: 52,
-  lineupHead: 60,
-  shares: 150,
-  calls: 260,
-  movers: 150,
-  // The title block plus slack; the rows add 40 each. 110 left a blank band
-  // under three seasons.
-  capitalBase: 64,
-  capitalSeason: 40,
-  capitalRedraft: 110,
-  priorities: 310,
+  lineupHead: 26,
+  shares: 170,
+  calls: 250,
+  movers: 170,
+  // The rule and padding plus slack; the rows add 44 each.
+  capitalBase: 30,
+  capitalSeason: 44,
+  capitalRedraft: 100,
+  priorities: 300,
   strategy: 310,
-  partners: 110,
-  footer: 110,
+  partners: 80,
+  footer: 130,
 } as const;
 
 /**
@@ -39,8 +42,12 @@ export type ShareSections = {
   strategyLines?: number[];
 };
 
-/** Line heights the portrait draws at: the first priority 30px, the rest 24px, strategy 20px. */
-export const SHARE_LINE = { titleBlock: 44, priorityFirst: 38, priorityRest: 31, priorityGap: 8, strategyLabel: 28, strategyLine: 25, strategyGap: 10 } as const;
+/**
+ * Line heights the portrait draws at: the first priority 30px, the rest 24px,
+ * strategy 20px. The title block is the rule plus the section's top padding;
+ * the section label sits in the margin column and takes no height of its own.
+ */
+export const SHARE_LINE = { titleBlock: 24, priorityFirst: 38, priorityRest: 31, priorityGap: 10, strategyLabel: 28, strategyLine: 25, strategyGap: 12 } as const;
 
 export function prioritiesHeight(lines: number[] | undefined): number {
   if (!lines) return SECTION_HEIGHT.priorities;
@@ -66,7 +73,8 @@ export type ShareLayout = {
 export function shareLayout(s: ShareSections): ShareLayout {
   const h = SECTION_HEIGHT;
   const sections = [
-    { key: "header", height: h.header },
+    { key: "brand", height: h.brand },
+    { key: "letterhead", height: h.letterhead },
     { key: "grades", height: h.grades },
     { key: "lineup", height: h.lineupHead + h.lineupRow * s.slots },
     { key: "shares", height: h.shares },

@@ -1,8 +1,11 @@
 /**
- * Trade strategy (plan 9.13): three cards, one per shape (downtier, uptier,
- * pivot), each the finder's best deal of that shape with the Signal Check
- * verdict, the reader's wins and value change, the acceptance band and a link
- * into the builder. An empty shape says so. The ideal trade partners follow.
+ * Trade strategy (plan 9.13): three ruled entries, one per shape (downtier,
+ * uptier, pivot), each the finder's best deal of that shape with the Signal
+ * Check verdict, the reader's wins and value change, the acceptance band and
+ * a link into the builder. An empty shape says so, and when the only deals
+ * of a shape would have sent a Build around player the sentence names him,
+ * so this section and the calls section visibly agree. The ideal trade
+ * partners follow.
  *
  * "Projected wins" names the trade finder's team-specific estimate; nothing
  * here is Positional WAR.
@@ -10,11 +13,11 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { Panel } from "@/components/dashboard-panel";
 import { ACCEPTANCE_LABEL } from "@/lib/trade-finder/types";
 import type { BlueprintView, StrategyAsset, StrategyEntry } from "@/lib/league-blueprint/types";
 import { PartnersList } from "./partners-list";
-import { builderHref, teamWithHandle, fmtSigned, INNER_CARD, LINK, SECONDARY_LABEL, SUBLIST_HEADING } from "./bits";
+import { builderHref, teamWithHandle, fmtSigned, LINK, SECONDARY_LABEL, SUBLIST_HEADING } from "./bits";
+import { SheetSection } from "./sheet";
 
 function Assets({ label, assets }: { label: string; assets: StrategyAsset[] }) {
   return (
@@ -32,7 +35,7 @@ function Assets({ label, assets }: { label: string; assets: StrategyAsset[] }) {
   );
 }
 
-function ShapeCard({
+function Shape({
   entry,
   view,
   linkUsername,
@@ -44,7 +47,7 @@ function ShapeCard({
   const [shape, detail] = entry.label.split(": ");
   const c = entry.card;
   return (
-    <article aria-labelledby={`bp-shape-${entry.shape}`} className={`${INNER_CARD} flex flex-col px-4 py-4`}>
+    <article aria-labelledby={`bp-shape-${entry.shape}`} className="flex min-w-0 flex-col border-t border-line pt-3">
       <h3 id={`bp-shape-${entry.shape}`} className="text-sm font-semibold text-ink">
         {shape}
       </h3>
@@ -102,21 +105,21 @@ function ShapeCard({
   );
 }
 
-export function StrategyPanel({ view, linkUsername }: { view: BlueprintView; linkUsername: string | null }) {
+export function StrategyPanel({ view, linkUsername, number }: { view: BlueprintView; linkUsername: string | null; number: string }) {
   return (
-    <Panel
+    <SheetSection
       id="bp-strategy"
-      eyebrow="Trade shapes"
+      number={number}
       title="Trade strategy"
-      helper="The trade finder's best deal of each shape for this roster, graded by Signal Check."
+      helper="The trade finder's best deal of each shape for this roster, graded by Signal Check. No deal here sends a Build around player."
     >
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+      <div className="grid items-stretch gap-x-8 gap-y-5 lg:grid-cols-3">
         {view.strategy.map((e) => (
-          <ShapeCard key={e.shape} entry={e} view={view} linkUsername={linkUsername} />
+          <Shape key={e.shape} entry={e} view={view} linkUsername={linkUsername} />
         ))}
       </div>
-      <h3 className={`mt-6 ${SUBLIST_HEADING}`}>Ideal trade partners</h3>
+      <h3 className={`mt-8 ${SUBLIST_HEADING}`}>Ideal trade partners</h3>
       <PartnersList view={view} linkUsername={linkUsername} />
-    </Panel>
+    </SheetSection>
   );
 }

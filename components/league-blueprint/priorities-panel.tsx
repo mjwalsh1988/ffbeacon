@@ -1,19 +1,25 @@
 /**
- * Top priorities (plan 9.12). An ordered list of three; the first is the
- * section's hero (larger, full ink), the other two follow at body size. The
- * numerals are RankMarks, the top three in the beacon gradient.
+ * Top priorities (plan 9.12): the written part of the report card. An
+ * ordered list of three; the first is the section's hero (larger, full
+ * ink), the other two follow at body size. The numerals are RankMarks, the
+ * top three in the beacon gradient, and each priority is a ruled row.
  */
 
-import { Panel } from "@/components/dashboard-panel";
 import { RankMark } from "@/components/league-leaderboards/leader-row";
 import type { Priority } from "@/lib/league-blueprint/types";
+import { RULED, SheetSection } from "./sheet";
 
-export function PrioritiesPanel({ priorities }: { priorities: Priority[] }) {
+export function PrioritiesPanel({ priorities, number }: { priorities: Priority[]; number: string }) {
   return (
-    <Panel id="bp-priorities" eyebrow="In order" title="Top priorities">
-      <ol className="space-y-3">
+    <SheetSection
+      id="bp-priorities"
+      number={number}
+      title="The plan"
+      helper="Three priorities, in order. Each one cites a figure from this report."
+    >
+      <ol className={RULED}>
         {priorities.map((p, i) => (
-          <li key={p.id} className="flex items-start gap-3">
+          <li key={p.id} className="flex items-start gap-3 py-3.5">
             <RankMark rank={i + 1} />
             <p
               className={
@@ -27,6 +33,6 @@ export function PrioritiesPanel({ priorities }: { priorities: Priority[] }) {
           </li>
         ))}
       </ol>
-    </Panel>
+    </SheetSection>
   );
 }

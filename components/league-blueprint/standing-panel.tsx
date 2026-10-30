@@ -1,17 +1,17 @@
 /**
- * Standing (plan 9.3). The one hero figure is the overall grade; beside it the
- * Power Pulse status in words, then three secondary readouts: value
- * archetype, roster archetype, outlook. Every null renders its sentence.
+ * Standing (plan 9.3). The overall grade lives in the letterhead's grade
+ * box; this section is the reading of it: the Power Pulse status in words
+ * with its reason, then the value archetype, the roster archetype and the
+ * outlook as three labeled readouts. Every null renders its sentence.
  */
 
-import { Panel } from "@/components/dashboard-panel";
-import { StatTile } from "@/components/manager-pulse/stat-tile";
 import type { BlueprintView } from "@/lib/league-blueprint/types";
 import { SECONDARY_LABEL } from "./bits";
+import { SheetSection } from "./sheet";
 
 function Readout({ label, value, note }: { label: string; value: string; note?: string | null }) {
   return (
-    <div className="rounded-card border border-line bg-base/40 px-3 py-2.5">
+    <div className="min-w-0 border-t border-line pt-3">
       <dt className={SECONDARY_LABEL}>{label}</dt>
       <dd className="mt-1">
         <span className="block text-base font-bold text-ink">{value}</span>
@@ -21,38 +21,31 @@ function Readout({ label, value, note }: { label: string; value: string; note?: 
   );
 }
 
-export function StandingPanel({ view }: { view: BlueprintView }) {
+export function StandingPanel({ view, number }: { view: BlueprintView; number: string }) {
   const s = view.standing;
   return (
-    <Panel id="bp-standing" eyebrow="Where this team stands" title="Standing" glow>
-      <div className="grid items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)]">
-        <div className="sm:w-48">
-          <StatTile label="Overall grade" value={s.overall.toFixed(1)} sub="of 10" size="hero" />
+    <SheetSection id="bp-standing" number={number} title="Standing" helper="Where this team stands in its own league right now.">
+      {s.status ? (
+        <div>
+          <p className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{s.status.label}</p>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">{s.status.reason}</p>
         </div>
-        <div className="min-w-0 space-y-3">
-          {s.status ? (
-            <div>
-              <p className="text-lg font-bold text-ink">{s.status.label}</p>
-              <p className="mt-0.5 text-sm leading-relaxed text-ink-muted">{s.status.reason}</p>
-            </div>
-          ) : (
-            <p className="text-sm leading-relaxed text-ink-muted">{s.standingNote}</p>
-          )}
-          <dl className="grid gap-2 sm:grid-cols-3">
-            <Readout
-              label="Value archetype"
-              value={s.valueArchetype ?? "Not computed yet"}
-              note={s.valueArchetype ? null : s.standingNote}
-            />
-            <Readout label="Roster archetype" value={s.rosterArchetype} />
-            <Readout
-              label="Outlook"
-              value={s.outlook ? s.outlook.text : view.header.isDynasty ? "Not computed yet" : "One season"}
-              note={s.outlook ? s.outlook.reason : s.outlookNote}
-            />
-          </dl>
-        </div>
-      </div>
-    </Panel>
+      ) : (
+        <p className="max-w-2xl text-sm leading-relaxed text-ink-muted">{s.standingNote}</p>
+      )}
+      <dl className="mt-5 grid gap-4 sm:grid-cols-3">
+        <Readout
+          label="Value archetype"
+          value={s.valueArchetype ?? "Not computed yet"}
+          note={s.valueArchetype ? null : s.standingNote}
+        />
+        <Readout label="Roster archetype" value={s.rosterArchetype} />
+        <Readout
+          label="Outlook"
+          value={s.outlook ? s.outlook.text : view.header.isDynasty ? "Not computed yet" : "One season"}
+          note={s.outlook ? s.outlook.reason : s.outlookNote}
+        />
+      </dl>
+    </SheetSection>
   );
 }

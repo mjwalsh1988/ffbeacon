@@ -4,18 +4,18 @@
  * top scorer, the top riser, or the most valuable player).
  */
 
-import { Panel } from "@/components/dashboard-panel";
 import { PlayerAvatar } from "@/components/season-pulse/bits";
 import { PositionChip } from "@/components/position-chip";
 import type { SeasonPosition } from "@/lib/season-pulse/types";
 import type { BlueprintView } from "@/lib/league-blueprint/types";
 import { HERO_FIGURE, HERO_LABEL } from "./bits";
+import { SheetSection } from "./sheet";
 
-export function SpotlightCard({ view }: { view: BlueprintView }) {
+export function SpotlightCard({ view, number }: { view: BlueprintView; number: string }) {
   const s = view.spotlight;
   const p = s ? view.players[s.playerId] : null;
   return (
-    <Panel id="bp-spotlight" eyebrow="One player" title="Spotlight">
+    <SheetSection id="bp-spotlight" number={number} title="Spotlight" helper="One player on this roster and the one figure that puts him here.">
       {!s || !p ? (
         <p className="text-sm leading-relaxed text-ink-muted">No priced player on this roster to spotlight yet.</p>
       ) : (
@@ -36,6 +36,6 @@ export function SpotlightCard({ view }: { view: BlueprintView }) {
           </div>
         </div>
       )}
-    </Panel>
+    </SheetSection>
   );
 }

@@ -105,6 +105,37 @@ describe("buildStrategy", () => {
     });
   });
 
+  it("never sends a Build around player, and says which one it declined to send", async () => {
+    const out = await buildStrategy({
+      run: (goal) => {
+        if (goal === undefined) {
+          return result([
+            // The best downtier sends the core player; the second does not.
+            sug("d-core", [pl("core", "WR", 9000)], [pl("b", "RB", 4500), pl("c", "TE", 4500)], 5),
+            sug("d-ok", [pl("star", "WR", 8000)], [pl("e", "RB", 4000), pl("f", "TE", 4000)], 2),
+            // Every pivot sends him.
+            sug("p-core", [pl("core", "WR", 9000)], [pl("g", "RB", 9100)], 4),
+          ]);
+        }
+        return result([]);
+      },
+      grade,
+      myRosterId: 1,
+      picks: new Map(),
+      maxRuns: 3,
+      pivotGapPct: 0.12,
+      protectedIds: new Set(["core"]),
+    });
+    const down = out.entries.find((e) => e.shape === "downtier")!;
+    expect(down.card?.outgoing.map((a) => a.playerId)).toEqual(["star"]);
+    expect(out.playerIds).not.toContain("core");
+    const pivot = out.entries.find((e) => e.shape === "pivot")!;
+    expect(pivot.card).toBeNull();
+    expect(pivot.emptyText).toBe(
+      "No pivot that keeps the core: the best one sends core, a Build around call, so it is not proposed.",
+    );
+  });
+
   it("renders the empty sentence for a shape with nothing", async () => {
     const out = await buildStrategy({
       run: () => result([]),

@@ -20,6 +20,9 @@ export type ShareLineupRow = {
 
 export type BlueprintShareCard = {
   teamName: string;
+  /** The league the team plays in; null when the caller did not have it. */
+  leagueName: string | null;
+  season: string;
   ownerHandle: string | null;
   record: string;
   formatTags: string[];
@@ -60,7 +63,10 @@ const GRADE_CODE: Record<string, string> = {
 
 const names = (assets: StrategyAsset[]) => assets.map((a) => a.label).join(", ");
 
-export function buildBlueprintShareCard(view: BlueprintView): BlueprintShareCard {
+export function buildBlueprintShareCard(
+  view: BlueprintView,
+  opts: { leagueName?: string | null } = {},
+): BlueprintShareCard {
   const p = (id: string | null) => (id ? (view.players[id] ?? null) : null);
   const r = view.header.record;
   const sells = Object.entries(view.calls)
@@ -78,6 +84,8 @@ export function buildBlueprintShareCard(view: BlueprintView): BlueprintShareCard
     .map((x) => ({ name: x.name, position: x.position }));
   return {
     teamName: view.header.teamName,
+    leagueName: opts.leagueName ?? null,
+    season: view.season,
     ownerHandle: view.header.ownerHandle,
     record: `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ""}`,
     formatTags: view.header.formatTags.map((t) => t.label),

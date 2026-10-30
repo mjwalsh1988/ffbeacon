@@ -1,20 +1,21 @@
 /**
- * Grades by position (plan 9.4). Six equal rings, no hero (the overall lives
- * in Standing). Each ring is one SVG with role="img" and a name that states
+ * Grades by position (plan 9.4): the marks table of the report card. Six
+ * rings in a row first (each one SVG with role="img" and a name that states
  * the grade; the numeral inside it is real text, drawn once, inside the same
- * labelled element so a pointer reader lands on a named object. The reasons
- * are a real table under a disclosure.
+ * labelled element so a pointer reader lands on a named object), then the
+ * marks themselves as a visible table: group, grade, value rank, projected
+ * rank and the reason in words. A report card does not hide its marks behind
+ * a disclosure.
  *
  * Geometry is lib/league-blueprint/ring-geometry.ts, the same the share
  * images draw from.
  */
 
-import { Panel } from "@/components/dashboard-panel";
-import { DataTable, Td, Th } from "@/components/chart-kit";
 import { positionNoun } from "@/lib/site";
 import { ringGeometry } from "@/lib/league-blueprint/ring-geometry";
 import type { BlueprintGrade } from "@/lib/league-blueprint/types";
 import { rankOf, SECONDARY_LABEL } from "./bits";
+import { SheetSection } from "./sheet";
 
 const SIZE = 76;
 const STROKE = 7;
@@ -70,43 +71,63 @@ function Ring({ grade }: { grade: BlueprintGrade }) {
   );
 }
 
-export function GradeRings({ grades, teamCount }: { grades: BlueprintGrade[]; teamCount: number }) {
+const TH = "py-2 pr-3 text-left text-[10px] font-semibold uppercase tracking-wide text-ink-subtle";
+const TD = "py-2.5 pr-3 align-top text-sm";
+
+export function GradeRings({ grades, teamCount, number }: { grades: BlueprintGrade[]; teamCount: number; number: string }) {
   return (
-    <Panel id="bp-grades" eyebrow="Grades" title="Grades by position" helper={`League relative: 10 is the best of ${teamCount} teams.`}>
+    <SheetSection
+      id="bp-grades"
+      number={number}
+      title="Grades by position"
+      helper={`League relative: 10 is the best of ${teamCount} teams. Each grade blends value rank and projected points rank.`}
+    >
       <ul role="list" className="grid grid-cols-3 gap-y-4 sm:grid-cols-6">
         {grades.map((g) => (
           <Ring key={g.key} grade={g} />
         ))}
       </ul>
-      <details className="mt-4">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center text-xs font-medium text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
-          Why each grade
-        </summary>
-        <div className="mt-2 overflow-x-auto" tabIndex={0} role="region" aria-label="Why each grade, the numbers">
-          <DataTable
-            caption="Why each grade"
-            head={
-              <>
-                <Th>Group</Th>
-                <Th numeric>Grade</Th>
-                <Th>Value rank</Th>
-                <Th>Projected rank</Th>
-                <Th>Because</Th>
-              </>
-            }
-          >
+      <div className="mt-6 overflow-x-auto">
+        <table className="w-full border-collapse">
+          <caption className="sr-only">The marks: grade, value rank, projected rank and the reason for each group</caption>
+          <thead className="border-b border-line">
+            <tr>
+              <th scope="col" className={TH}>Group</th>
+              <th scope="col" className={`${TH} text-right`}>Grade</th>
+              <th scope="col" className={`${TH} hidden md:table-cell`}>Value rank</th>
+              <th scope="col" className={`${TH} hidden md:table-cell`}>Projected rank</th>
+              <th scope="col" className={`${TH} w-full`}>Because</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line/70">
             {grades.map((g) => (
               <tr key={g.key}>
-                <Td>{spoken(g)}</Td>
-                <Td numeric>{g.grade === null ? "Not scored" : `${g.grade} of 10`}</Td>
-                <Td>{g.valueRank === null ? "None" : rankOf(g.valueRank, teamCount)}</Td>
-                <Td>{g.pointsRank === null ? "None" : rankOf(g.pointsRank, teamCount)}</Td>
-                <Td>{g.reason}</Td>
+                <th scope="row" className={`${TD} whitespace-nowrap text-left font-semibold text-ink`}>
+                  {spoken(g)}
+                </th>
+                <td className={`${TD} whitespace-nowrap text-right font-mono font-black tabular-nums text-ink`}>
+                  {g.grade === null ? <span className="text-xs font-medium text-ink-subtle">Not scored</span> : g.grade}
+                </td>
+                <td className={`${TD} hidden whitespace-nowrap font-mono text-xs tabular-nums text-ink-muted md:table-cell`}>
+                  {g.valueRank === null ? "None" : rankOf(g.valueRank, teamCount)}
+                </td>
+                <td className={`${TD} hidden whitespace-nowrap font-mono text-xs tabular-nums text-ink-muted md:table-cell`}>
+                  {g.pointsRank === null ? "None" : rankOf(g.pointsRank, teamCount)}
+                </td>
+                <td className={`${TD} leading-relaxed text-ink-muted`}>
+                  {/* Below md the two rank columns fold into this sentence, so
+                      no figure leaves the phone. */}
+                  <span className="md:hidden">
+                    {g.valueRank === null ? "" : `Value ${rankOf(g.valueRank, teamCount)}. `}
+                    {g.pointsRank === null ? "" : `Projected ${rankOf(g.pointsRank, teamCount)}. `}
+                  </span>
+                  {g.reason}
+                </td>
               </tr>
             ))}
-          </DataTable>
-        </div>
-      </details>
-    </Panel>
+          </tbody>
+        </table>
+      </div>
+    </SheetSection>
   );
 }

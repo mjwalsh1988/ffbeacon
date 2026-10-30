@@ -21,8 +21,6 @@ export const ROW_FIGURE = "font-mono text-base font-extrabold tabular-nums text-
 export const ROW_SUB = "whitespace-nowrap font-mono text-[11px] tabular-nums text-ink-subtle";
 /** Sub-list heading. */
 export const SUBLIST_HEADING = "text-[11px] font-bold uppercase tracking-[0.14em] text-ink-subtle";
-/** Inner card. */
-export const INNER_CARD = "rounded-card border border-line bg-base/40";
 /** A text link with a 44px target. */
 export const LINK =
   "inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-cyan underline-offset-4 transition-colors duration-[180ms] hover:text-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
