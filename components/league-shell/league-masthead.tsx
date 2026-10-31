@@ -47,10 +47,18 @@ export type LeagueMastheadProps = {
   fallbackDisplay: string | null;
   /** pickSource.display when it differs from the value source, else null. */
   pickSourceDisplay: string | null;
+  /**
+   * A page that is not one of the league's sections (the review checkout)
+   * names itself in the h1, and the league's name drops to the line under it.
+   */
+  pageTitle?: string;
+  pageDescription?: string;
 };
 
 export function LeagueMasthead({
   leagueName,
+  pageTitle,
+  pageDescription,
   avatarId = null,
   season,
   teamCount,
@@ -104,9 +112,13 @@ export function LeagueMasthead({
               id="league-masthead-title"
               className="lp-league-name min-w-0 text-[clamp(1.9rem,5.2vw,3.5rem)]"
             >
-              {leagueName}
+              {pageTitle ?? leagueName}
             </h1>
           </div>
+          {pageTitle && <p className="mt-2 text-sm font-semibold text-ink">{leagueName}</p>}
+          {pageDescription && (
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">{pageDescription}</p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <StatusPill status={status} />
             {season != null && (

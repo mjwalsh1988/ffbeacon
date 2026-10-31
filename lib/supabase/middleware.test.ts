@@ -79,6 +79,7 @@ describe("the middleware matcher", () => {
       // Authenticates with an HMAC. Kept out so a forged POST cannot force an
       // auth request before the signature check runs.
       "/api/donate/webhook",
+      "/api/orders/webhook",
       // CRON_SECRET.
       "/api/cron/league-sync-worker",
       // Renders from an id in the path, through the service-role client.
@@ -123,6 +124,7 @@ describe("the middleware matcher", () => {
       "/api/ogsomething",
       "/api/cronx",
       "/api/donate/webhookx",
+      "/api/orders/webhookx",
     ]) {
       expect(
         matcher.test(path),

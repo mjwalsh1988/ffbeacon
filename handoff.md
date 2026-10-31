@@ -1,134 +1,60 @@
-# Handoff: Team Blueprint and Market Signals build
+# Handoff: Beacon Store and Personal Team Review build
 
-Updated after BP-T088 (2026-10-30 launch follow-ups: strategy respects the calls, report card sheet, branded share images). Plan of record: docs/completed/team-blueprint/team-blueprint-plan.md
-(build order in section 17, phases A to I). Task lines: progress.md, BP-T### entries
-under the heading "Team Blueprint and Market Signals" at the bottom of the file.
-
-Owner rules for this build: do NOT commit or push; skip BP-T081; one shell command
-per tool call; the gate after each phase; one review sub-agent at the end (not three).
+Build complete through CM-T083 (the second, whole-build review). CM-T082 is the owner's. Nothing is committed. Plan: docs/completed/commerce/commerce-and-team-review-plan.md, section 22 lists what shipped differently, including the second review's changes and what it left. Task lines: progress.md, heading "Beacon Store and Personal Team Review".
 
 ## State
 
-- Last task completed: BP-T088 (share images redrawn as the report card with the FF Beacon brand band)
-- Next task: owner review of BP-T086 to BP-T088 on the dev server, then commit when approved. Previously: build complete apart from BP-T081 (commit, skipped by the owner). Owner steps: deploy, check CRON_SECRET on Vercel, confirm the 10:30 and 10:50 UTC market-signals runs in cron_runs, and the first-week table size check (BP-T020)
-- Partial file in progress: none
+- Last task completed: CM-T083: second review by five reviewers over every file, every finding resolved or recorded in plan section 22
+- Next task to start: Owner commit and deploy, then CM-T082
+- Half-finished: none. No server running
+- Gate after the second review: typecheck clean, lint 0 and 0, 7,754 tests in 561 files, build pass; neither review's fixes were re-run in a browser
 
-## Migrations applied to prod (cilvpyivysjxpxbudkfa)
+## Migrations applied and verified
 
-- 0340_league_blueprint_settings (applied 2026-10-29)
-- 0342_market_signals (applied 2026-10-29 as four MCP migrations named 0342_market_signals, 0342_market_signals_runs, 0342_market_signals_changes, 0342_market_signals_latest; the repo file is one file)
-- 0341 (applied 2026-10-29 as two MCP migrations, 0341_league_roster_age_history and 0341_league_blueprint_cache, after one more requestState rejection; the repo file is one file)
+- 0343 to 0352 as planned, 0353_orders_owner_columns from the first review. All probed live with begin/rollback. Types regenerated after 0352; 0353 changes grants only, so types are unchanged.
+- 0354 (initplan form for the four owner-read policies, indexes on orders.product_id and payment_webhook_events.order_id) and 0355 (receipt retry index covering skipped, partial indexes on paid_at and delivered_at) from the second review. Applied via MCP and read back from pg_policies and pg_indexes. Indexes and policy expressions only, so types are unchanged.
+- 0356: the Basic Review priced at $4.95 (the owner's call, 2026-10-30). One data update on products, read back as 495.
 
-## Unverified or pending
+## Reviewer findings (one reviewer, all resolved in code)
 
-- Market Signals has not run on Vercel: deploy, then confirm the 10:30 and 10:50 UTC entries record in cron_runs and check table sizes after the first week.
+- HIGH closeOpenSession skipped expired orders and the cron expired settling payments: both now ask Stripe; new pending answer.
+- HIGH paid event on a cancelled order stored the intent silently: now reported as a duplicate.
+- MEDIUM reopening an expired order skipped coupon, capacity, storefront: rechecked.
+- MEDIUM status form could deliver with no email, and move unpaid orders: refused, form narrowed.
+- MEDIUM manual confirm left the card session payable: closed first.
+- MEDIUM lost refund update read as already recorded: now a conflict, webhook retries.
+- MEDIUM owner could read internal columns: migration 0353 and named columns.
+- MEDIUM failed email showed as sent to the customer: row visible only when sent.
+- MEDIUM checkout ignored ?source=: source now posted.
+- MEDIUM Not received could expire within the hour: fresh expiry and reminder.
+- LOW session write status guard, Open tile counting expired, E13 note lost on retry, focus and pending announcements: all fixed.
+- Deliberately not acted on: none. Not reached by the reviewer: see plan section 22.
 
-## Notes and deviations for the final report
+## Assumptions made
 
-- BP-T006: components/admin/settings-form-kit.tsx is new (not in the plan). Every existing admin manager carries its own local copy of the field helpers; the two new managers share one copy instead of adding two more.
-- Cached view is viewer independent: proposals are stored and turned into hrefs at render (so no searched username is baked in), and the shared build runs findTrades with no manager tendencies and no declined keys (partner tendency term fixed at 0.5). Plan 18.6 asks for signed-in extras as Trade Ideas does; a shared cache row cannot carry one reader s declines or show a guest tendency data that is gated behind sign-in.
-- BP-T009: the MCP apply_migration call rejected the whole 0342 file twice with Invalid or expired requestState (it applied nothing); split into four smaller MCP migrations with identical SQL. Also added an index on player_value_signal_changes(changed_on) for the 730-day prune and one on market_signal_runs(ran_at desc) for the admin table.
-- BP-T012: a change is logged on a move INTO a call state, including the first run (from null), so the first night writes about one row per signaled player once; baseline and thin never log.
-- BP-T013: source_registry has no display_order column, so sources are ordered is_default first then priority (the order every other source list in the code uses). The 25-player floor is applied inside run-partition, where the latest day count is known.
-- BP-T019: the table-size readout shows ROW COUNTS from exact head counts, not bytes. Bytes from pg_stat_user_tables or pg_total_relation_size need a SECURITY DEFINER function (a migration the plan does not list); BP-T020 records bytes through the MCP instead. Signal days (UTC calendar days) are formatted at UTC noon so the Eastern date never prints a day early.
-- BP-T020: DynastyProcess publishes weekly, so with stale_days 3 it has no partition most nights and its series never reach 24 points in 30 days; it is effectively unsignaled. Changes run about 360 a day averaged over the year and 957 on the first live day, so the 730-day table will be roughly 60 to 90 MB with indexes, above the plan estimate of 30 MB a year. The first-week size check (plan BP-T020) still needs doing after deploy.
-- BP-T028: two fallbacks added below P10 (P11 'Lean on {strongest position}', P12 'Track the total'), both citing figures, so exactly three priorities always render as plan 16 requires; P8 (Hold steady) is suppressed whenever an action priority (P1, P2, P3, P5, P6, P7) fires, so the page never says both. P9 reads 'A gained 18.2% and B gained 12.0% in 30 days' and uses the movers window label.
-- BP-T039: the 30d option also selects rank_change_7d and show_trend_7d, because the movers 7-day fallback (plan 6.6) needs the 7-day gate.
-- BP-T043: (1) the derived league sync runs only on the rebuild path, so the warm path really is six small reads and one row; the fingerprint is taken after the sync. (2) Spotlight compares the week top scorer with his season per-game average from the Leaderboards views, because league_power_pulse_cache.weekly holds team distributions, not player projections. (3) loadTeamShareCard is not called: loadLeagueTeamCards already carries every field the depth lists need, and a second read of the same roster would only add queries. (4) Dynasty means context.derived.league_type dynasty, the rule the team page uses.
-- BP-T051: depth columns are grid sm:grid-cols-2 xl:grid-cols-4 rather than grid-cols-2 sm:grid-cols-4, so a row of name, value, rank and call fits without truncation at 390 and 768 wide.
-- BP-T061 live-check fixes: (1) a rebuilding roster no longer sells an under-cutoff player for being trade-finder surplus (the taxi rookies read Sell; calls.ts); (2) finder team names already carry (@handle), so teamWithHandle stops doubling it; (3) Signal Check Side A or Side B verdicts read You win or They win (strategy.ts readerVerdict); (4) the spotlight season average also searches the position boards, since the overall season board is truncated.
-- BP-T063: the missing-league card is renderHeadlineCard re-wrapped as a 404 response, because renderHeadlineCard takes no status.
-- BP-T065: the profile loads 30 days of history, and a band needs 24 points in its own 30-day window, so the band covers only the last week or so of the chart. The profile band uses the code default settings rather than the stored market_signal_settings row, so after an admin changes window or k the badge (stored row) and the chart band can differ until the defaults are changed to match.
-- BP-T071: the strip takes the eyebrow as a prop so the homepage passes its own SectionEyebrow (defined privately in app/page.tsx) rather than a second copy.
-- Gate timing: Phase E, F and G ran their own typecheck and lint as they went, and one full gate (tests and build) covered E through H together, because next build and the dev server share .next.
-- BP-T082: the editing tool turned a typed backslash-b into a backspace character inside a regex literal. lib/guides/idp-fantasy-football.test.ts line 236 has the same corruption (pre-existing, outside this build, the assertion is weaker than written); not changed.
-- BP-T083: plan 11.3 lists priorities 180, strategy 260, footer 100; raised to 300, 310 and 110 because 140 and 120 character runs need three lines and two lines, and the same section says a taller card beats a clipped one.
-- BP-T084: the portrait's priorities and strategy sections are sized from their text (line counts estimated with fitText) rather than the fixed 180 and 260 of plan 11.3; the fixed heights remain the cap.
-- BP-T085: two disclosure tables still scroll sideways inside a focusable region at 360 (grade reasons, age numbers); that is the shared chart-kit DataTable pattern. The shared league shell's back link (24px) and league crumb (20px tall) are under 44px on every league page; not changed in this build.
-- BP-T085: components/trend-chip.tsx is a shared component, so the accessibility fix also reaches every other page that renders a trend chip.
-- BP-T077: the intro no longer prints an as-of time (plan 9.1 has one); the body's notes and the stale or failed sentence carry it, because the intro row is read before the body may rebuild.
-- BP-T077: the profile band now uses the stored market_signal_settings row rather than the code defaults, which closes the BP-T065 note about the badge and band disagreeing after an admin change.
-- BP-T080: git mv could not be used because the plan was never committed (git status lists docs/team-blueprint/ as untracked); a plain mv gives the same working tree.
+- CM-T002: Phase A reviews (CM-T012, CM-T053, CM-T069) are done by the main build agent, not sub-agents, because the owner asked for exactly one reviewer sub-agent at the end.
+- CM-T005: order_events.body is capped at 5000, not the 2000 in plan 5.4, because the same section says an internal note (max 5000) is stored in that column.
+- CM-T013: expireCheckoutSession treats any Stripe 400 as already-closed rather than matching an error code, because the caller retrieves the session and decides from its status either way; a retrieved open session aborts.
+- CM-T015: formatMoney in lib/commerce/constants.ts always prints cents, because formatUsd prints $10 and $0 where the plan's copy says $5.00 off and $0.00.
+- CM-T022: Plan step order kept: the coupon check (6.1 step 7) runs before the duplicate guard (step 9), so a customer who presses order again with a capped code while an unpaid order holds it reads You have already used that c...
+- CM-T024: ATTENTION_FILTER became attentionFilter(now), a function, because the predicate holds two timestamps.
+- CM-T025: Signed upload URLs use upsert true so a Retry can re-upload to the same path after a partial first attempt. Editing a published section is live at once (plan 3.7); Save changes publishes new rows and records delivery...
+- CM-T027: markPaidIfWon returns a followUp closure for the receipt and A2, so each caller runs it in after(). The receipt for an admin-created order is E13 and goes through sendReceipt, so its status is tracked the same way. e...
+- CM-T030: A lost chargeback's refunded event is written invisible, because plan 5.4 keeps chargeback rows from the customer.
+- CM-T035: middleware.ts now excludes /api/orders/webhook like the donation webhook (not in the plan), so a forged POST cannot force an auth request before the signature check. A paid event on a card order the admin confirmed b...
+- CM-T036: The donation webhook had no test file, so app/api/donate/webhook/route.test.ts is new.
+- CM-T037: lib/commerce/context.ts is new, so the customer checkout and the admin complimentary order build the same context. The method switch is not in the 7.1 table; the action guards it with a conditional update instead.
+- CM-T041: lib/commerce/offer.ts is new: the offer sits on busy league pages, so products, settings and the open count are memoized for 60 seconds in process, and createOrderAction counts again at order time.
+- CM-T043: Changing the tier clears an applied code and says so, rather than re-previewing, because arrow keys change a radio on every press and the preview is rate limited.
+- CM-T044: The checkout h1 is Personal Team Review through a new optional masthead prop; the league name drops to the line under it. Leader's dd changed from shrink-0 to max-w-[70%] with word breaks so a long league name cannot...
+- CM-T045: My Beacon's layout holds the page h1, so the list's title and Order FFB-100001 are h2 (plan 12 says h1); the one-h1 rule wins. The product name sits under the order number as a paragraph.
+- CM-T051: The My Beacon tile honors placements.myBeaconTile and that placement's view event fires from the tile.
+- CM-T055: Added moveDeliverableAction (the section arrows), retryAttachmentUploadAction (the Retry button) and eastern-input.ts, because date-time inputs must read Eastern, not the device zone. loadSleeperHandleForUser lives i...
+- CM-T075: The Stripe CLI is not installed and the owner ruled out endpoint changes, so CM-T076 uses real test-mode sessions through the app, and hand-signed events delivered to localhost for refund, chargeback, duplicate and r...
+- CM-T076: Test emails went to the admin account through real Resend sends.
+- CM-T078: Verification used an in-page audit script rather than a person walking every view at every width, because the extension disconnected mid-pass.
 
-## Tasks done this build
+## Owner steps
 
-- BP-T001 completed: Plan row in docs/README.md Active table set to Approved, building
-- BP-T002 completed: Migration 0340 league_blueprint_settings (singleton jsonb row, service role only)
-- BP-T003 completed: lib/league-blueprint/default-settings.ts: every plan 13.1 default, RB sell cutoff 28
-- BP-T004 completed: lib/league-blueprint/settings.ts (zod schema, cross-field rules, merge, memoized load, save) plus test
-- BP-T005 completed: app/admin/league-blueprint/actions.ts: requireAdmin, server-side validation, save, memo bust
-- BP-T006 completed: Blueprint admin settings form, every 13.1 field grouped by effect; shared form kit for the two new admin managers
-- BP-T007 completed: /admin/league-blueprint page behind requireAdmin, nav-tree entry after Power Pulse Model
-- BP-T008 completed: lib/league-blueprint/types.ts (BlueprintView, the rules header incl. naming and viewer independence); naming test scans lib/league-blueprint and lib/market-signals
-- BP-T009 completed: Migration 0342 market signals: player_value_signals (latest only), player_value_signal_changes (change only), market_signal_runs, market_signal_settings, indexes and policies
-- BP-T010 completed: lib/market-signals/default-settings.ts (plan 5.8 defaults, the 10-point band floor and the 25-player partition floor)
-- BP-T011 completed: lib/market-signals/settings.ts (zod bounds of plan 13.2, min points within window, lookback at least window, merge, memoized load, save) plus test
-- BP-T012 completed: lib/market-signals/bollinger.ts (pure: day collapse, calendar window, sample stdev bands, five states with hysteresis, thin floor, stale skip, change and since rules, rollingBands) plus test and fixtures
-- BP-T013 completed: lib/market-signals/partitions.ts (format x source pairs from source_registry supported_format_slugs, NULL means all active; default source first then priority then format display_order; latest history day per partition via the 0122 index; freshness against market_signal_runs) plus test
-- BP-T014 completed: lib/market-signals/run-partition.ts (one keyset walk on captured_at,id per partition, fold to daily series, existing rows paged by player_id, pure computePartition, 500-row upserts, change rows with ignoreDuplicates, run stamp after writes; IO injected) plus test
-- BP-T015 completed: lib/market-signals/engine.ts (deadline loop: stop before a partition that would pass budget minus 10s using the longest so far, partial with no failedSteps; a throwing partition goes to failedSteps and the next runs; fresh partitions skipped; one-DELETE prunes of changes past 730 days and runs past 90 days only on a complete run) plus test
-- BP-T016 completed: app/api/cron/market-signals/route.ts (verifyCronRequest, recordCronRun with timeoutMs 280000 and quietWhen for the catch-up, revalidateTag playerValues when rows were written); CronJobName and CRON_JOBS entry with extraSchedules; vercel.json 30 10 and 50 10 UTC
-- BP-T017 completed: scripts/backfill-market-signal-changes.ts (refuses without --from and --to, optional --partition and --dry-run; pure replayChanges with the cron computeSignal; writes change rows only through the idempotent unique key) and npm run backfill:market-signals
-- BP-T018 completed: lib/market-signals/read.ts (loadPlayerSignal and loadSignalChanges in React cache, loadSignalsFor chunked 200 ids per in(), latestSignalComputedAt for the fingerprint)
-- BP-T019 completed: /admin/market-signals: settings form (13.2 bounds), Run now for one declared partition through the cron runner under requireAdmin, last 40 runs with Eastern times, row counts for the five size-rule tables; nav-tree entry
-- BP-T020 completed: First manual Market Signals run against prod (local dev server, curl with CRON_SECRET), catch-up run, 365-day backfill, size check
-- BP-T021 completed: lib/league-blueprint/grades.ts (rankScore, value and points blend, bench with depth, picks dynasty only, weighted overall to one decimal, superflex QB weight, because sentence) plus test
-- BP-T022 completed: lib/league-blueprint/archetype.ts (value archetype, roster archetype, two-year outlook with a reason citing age gap, picks grade and young share) plus test
-- BP-T023 completed: lib/league-blueprint/age.ts (value-weighted mean decimal age per position and overall, league reference, gap, young core share) plus test
-- BP-T024 completed: lib/rankings/insights.ts: movers math moved onto a minimal MoverInput row (topMoversFrom, boardRowToMoverInput, moverFloorFor); topMovers and boardPulse keep their signatures
-- BP-T025 completed: lib/league-blueprint/movers.ts (roster movers on the format top floor, 7-day fallback with its sentence) plus test
-- BP-T026 completed: lib/league-blueprint/calls.ts (roster call then market overlay, the 6.7 table row by row, dynasty keep value, buy targets from acquirablePool inside the value window ranked market buy first then projection) plus test and a 12-team fixture
-- BP-T027 completed: lib/league-blueprint/activity.ts (formula, bands, driver sentence from the largest term, split percentages, buy target counts) plus test
-- BP-T028 completed: lib/league-blueprint/priorities.ts (P1 to P10 templates plus two figure-citing fallbacks) plus test
-- BP-T029 completed: lib/league-blueprint/strategy.ts (downtier, uptier, pivot classification with the engine's TIER_JUMP, best score per shape, goal reruns capped at three runs, one grade batch, empty-shape sentence with the finder notice, proposals for the builder) plus test; TIER_JUMP exported from lib/trade-finder/rank.ts
-- BP-T030 completed: lib/league-blueprint/partners.ts (need fit, give fit, direction, tendency fixed at 0.5, league max normalization, roster id tie break, reason naming the largest term) plus test
-- BP-T031 completed: lib/league-blueprint/capital.ts (per-pick finder values grouped by season, season rank across rosters, unpriced counted, via handle) plus test
-- BP-T032 completed: lib/league-blueprint/spotlight.ts (week top scorer with projection difference, else top riser, else most valuable, label says which) plus test
-- BP-T033 completed: lib/league-blueprint/shares.ts (value share and rank, production share ranked by points for with roster id ties, preseason null) plus test
-- BP-T034 completed: lib/league-blueprint/build.ts (pure assembler: players stored once, lineup from Sleeper positional starters with empty slots, depth with IR, taxi and no-value groups, calls, buys, grades, age, standing, shares, movers, activity, capital, partners, priorities, spotlight; profilesFor shared with data.ts) plus fixture test and a team card fixture
-- BP-T035 completed: lib/league-blueprint/ring-geometry.ts, gauge-geometry.ts, age-geometry.ts (arcs, half-circle gauge with band ticks, horizontal age bar pairs; SVG strings for the images) plus tests
-- BP-T036 completed: lib/league-blueprint/share.ts (buildBlueprintShareCard from the stored view only, describeBlueprint) and share-layout.ts (portrait height from section heights) plus tests
-- BP-T037 completed: Migration 0341 league_blueprint_cache (service role only, unique league roster season source) and league_roster_age_history (public select, service role writes), indexes including the two prune indexes
-- BP-T038 completed: league-maintenance cron: pruneBlueprintTables, one DELETE each (blueprint cache past 14 days by generated_at, age history past 730 days by as_of_day), plus test
-- BP-T039 completed: lib/league-view-data.ts loadTrends: optional { window: "30d" } adds the 30-day fields and both window gates through overloads; existing callers unchanged, plus test
-- BP-T040 completed: lib/league-blueprint/rate-limit.ts claimBlueprintBuildSlot: bucket blueprint-build, 12 per 60 s per actor, fails closed
-- BP-T041 completed: lib/league-blueprint/cache.ts (sha1 fingerprint of sorted player ids and every read cache timestamp, signals computed_at, Pulse week, settings and model version; isFresh with TTL; the six-query warm path; read and write of league_blueprint_cache) plus test
-- BP-T042 completed: lib/league-blueprint/age-history.ts (Eastern-day upsert of one compact row per roster per day) plus test
-- BP-T043 completed: lib/league-blueprint/data.ts loadBlueprint: context, settings, warm path (fingerprint plus one cache row), slot claim only when stale, coalesce, rebuild (derived sync with Positional WAR and Ledger off, team cards, Power Pulse, ledger slice, trade finder league, roster metadata reserve and taxi, signals for the league, 30-day trends, strategy board, spotlight, fingerprint after the sync, cache write, age history write); staleOrFailed in cache.ts
-- BP-T044 completed: components/league-lineups/roster-select.tsx extracted from LineupControls (same CONTROL classes, sr-only label by default, optional visible label); LineupControls uses it
-- BP-T045 completed: components/share-strip.tsx (h2 Share, Copy image, Copy image link with prewarm, Copy page link; caller-supplied accessible names leading with the visible label); matchup page uses it
-- BP-T046 completed: Leaderboards page onto components/share-strip.tsx (decision 3.15); it gains the Copy image link button the shared strip carries
-- BP-T047 completed: components/league-blueprint/call-tag.tsx (CallTag, BuyTag, NoMarketValue; full words, plan 9.18 colors) and bits.tsx (figure classes of 10.1, formats, builder href built at render with the reader own username)
-- BP-T048 completed: standing-panel.tsx (hero overall grade StatTile, status and reason, three readouts, null sentences)
-- BP-T049 completed: grade-rings.tsx (six role=img rings named with the grade, numeral inside the img, reasons table under a disclosure)
-- BP-T050 completed: lineup-table.tsx (slot row header named by the spelled-out slot only, value with sr-only unit, No market value for defenders, Empty slots; below sm value and position rank merge into one cell)
-- BP-T051 completed: depth-lists.tsx (four position lists with ST starter mark, IR, taxi, defense and specialists)
-- BP-T052 completed: shares-panel.tsx (two equal secondaries with rank lines and beacon share bars, preseason sentence)
-- BP-T053 completed: age-chart.tsx (ChartFigure, SeriesLegend, bar pairs from age-geometry, sr-only summary, data table)
-- BP-T054 completed: movers-panel.tsx (Rising and Falling lists with TrendChip, empty sentence, fallback helper)
-- BP-T055 completed: gauge.tsx (role=img named with band and score, band word as the gradient hero) and calls-panel.tsx (split percentages, buy target count, Sell, Build around, Hold, Buy targets by position with builder links, Cut candidates with the keep note)
-- BP-T056 completed: capital-panel.tsx (season rows, value figure, rank, picks with via, unpriced count, redraft sentence, pick source footnote)
-- BP-T057 completed: priorities-panel.tsx (ol of three, first as the hero sentence, RankMark numerals)
-- BP-T058 completed: strategy-panel.tsx (three shape cards: headline, send for get, value and projected wins, verdict, acceptance, builder link, empty sentence) and partners-list.tsx (two cards, reason, builder link, beacon bar on the first)
-- BP-T059 completed: spotlight-card.tsx (avatar, label, name, gradient hero figure with sr-only unit, comparison line)
-- BP-T060 completed: body-skeleton.tsx (same section order and pairs as the body, aria-busy, one status sentence, reduced motion)
-- BP-T061 completed: app/leagues/[league_id]/blueprint/page.tsx (getSyncedLeague, generateMetadata with the roster preview image, digit-only roster param or 404, viewer team then first roster with a sentence, intro with as-of and share strip when a stored view exists, sticky BlueprintControls, Suspense body with every state of 9.17, footnotes) and components/league-blueprint/blueprint-controls.tsx
-- BP-T062 completed: Blueprint tab directly after Overview (LeagueTabId, LEAGUE_NAV_ITEMS with the target icon, leagueTabHref full-route list); Open blueprint link in the team card header strip and on the team deep view beside Who should I start
-- BP-T063 completed: app/api/og/blueprint/[league_id]/[roster_id]/route.tsx (1200x630 preview) plus card.tsx (shared validation, 308 canonical, cache-only reads, 404 and placeholder cards, preview and portrait renderers, rings and gauge from the shared geometry) and route.test.ts
-- BP-T064 completed: app/api/og/blueprint/[league_id]/[roster_id]/share/route.tsx (portrait 1080 wide, height from share-layout)
-- BP-T065 completed: lib/player-profile.ts valueBandsFor (the cron rollingBands over the loaded series, nothing stored) and value-trend-chart.tsx bands prop: translucent SERIES_A band under the line, a 30-day band legend line, two data table columns
-- BP-T066 completed: components/player-profile/market-signal-badge.tsx (state word as visible text in status chip classes, since date, Why this signal disclosure with the band sentence and the last three changes, nothing for a null row) placed in the Value trend panel under the current value and TrendChip; overview-tab loads the signal and changes for the resolved format and source, never for a defender
-- BP-T067 completed: lib/league-blueprint/cta-data.ts loadBlueprintCtaFigure (one cache row: overall, status label, generated_at; null for no row or an older model) plus test
-- BP-T068 completed: components/league-blueprint/blueprint-cta.tsx (plan 20.1 markup, real stored grade or no number, one control, h2, New: eyebrow until 2027-01-31 Eastern by a dated constant, full-width button below sm)
-- BP-T069 completed: Overview page: BlueprintCtaSection mounted between SeasonResultSection and ActivitySection in its own Suspense (fallback null), viewer roster through matchViewerRoster, team name from loadRosters
-- BP-T070 completed: homepage.blueprintStrip { enabled: true } in the site layout type, defaults, merge (older rows default on) and strict schema; /admin/site-layout gains the switch and carries the flag through every homepage edit
-- BP-T071 completed: components/blueprint-feature-strip.tsx (plan 20.2 markup, one control into League Pulse, decorative aria-hidden preview SVG with no team, player or league name)
-- BP-T072 completed: app/page.tsx mounts the strip between Hero and ToolsSection, gated on layout.homepage.blueprintStrip.enabled
-- BP-T073 completed: The gate after Phases E to H: typecheck, lint (0 errors, 0 warnings), npm test, npm run build
-- BP-T082 completed: Share image fix: trade verdicts read Side A wins because readerVerdict held literal backspace characters (code 8) where the word boundaries belong, so no pattern ever matched; rewritten from character codes, test added (including a no-control-character check), BLUEPRINT_MODEL_VERSION 2 to 3 so the four cached rows rebuild
-- BP-T083 completed: Share image fix: Footer is now the wordmark row (OG_WORDMARK already reads FFBeacon.com, so the separate ffbeacon.com text that doubled it and got pushed off the edge is gone) with the source line and the defender line under it; priorities clip at 140 characters and strategy at 120; share-layout priorities 180 to 300, strategy 260 to 310, footer 100 to 110 so the longer text grows the card instead of clipping (plan 11.3 rule); preview footer band 90 to 100
-- BP-T084 completed: Share image recheck after BP-T082/083 (four portraits and the 1200x630 preview, opened directly): verdicts read You win / They win, one wordmark row, full priorities and strategy text. Follow-up fixes: the superflex slot read SU... in the 70px slot column, now SF (shareSlotLabel); priorities and strategy heights are now measured from the text with fitText line counts (prioritiesHeight, strategyHeight, capped at the fixed heights) so short text no longer leaves a blank band; preview right column 400 to 360 and rings 56/10 to 52/8 so the ring row stays inside the 40px padding
-- BP-T085 completed: Visual pass in Claude in Chrome on the local production server (BP-T078 widened): Blueprint page for both leagues and both rosters, overview CTA (no-team and own-team), homepage strip, player profile badge and band, both share images, Copy image and Copy page link, at 1440, 1280, 1024, 768, and 390 and 360 through the 500px window with a narrowed body. Fixes: (1) the sticky controls bar sat in a wrapper of its own height and never stuck; it now shares the body wrapper, as Lineups does; (2) Buy, sell, hold left a large empty block beside a 25-row Hold list: Sell and Build around now stack in one column and Hold spans two, flowing into two columns from sm when over 8 rows; (3) the lineup table scrolled sideways at 360 (398 in 326): below sm it is three columns (SF for superflex, player with the call note under the name, one cell stacking value, position rank and the call tag), the separate columns return from sm; (4) the age chart shrank its labels under 5px on a phone: a 280-wide copy draws below sm and the 480 copy from sm; (5) components/trend-chip.tsx hid its visible figures with aria-hidden and named a p element with aria-label: the figure is now the real text with sr-only words inside the same element
-- BP-T077 completed: One review sub-agent (security, implementation, accessibility, performance; no high findings, 2 medium, 6 low) and every finding fixed: (1) a stale signal row read as current: isSignalCurrent in lib/market-signals/read.ts, and loadPlayerSignal and loadSignalsFor take staleDays and return no signal for a row older than it; (2) badge, page and chart copy said 30 days whatever the setting: the stored windowDays and minPoints now reach the badge, the calls helper, the page notes and the chart labels, the profile band uses the stored settings, and the two stored call notes say his own market band (model version 3 to 4); (3) a failed blueprint prune stopped the not-found recheck: it is now a failed step; (4) the runs prune filters on the indexed ran_at; (5) the overview CTA selects view->standing only; (6) the warm path resolved the context and read the row twice: the page passes both into loadBlueprint; (7) the intro could show an older as-of time than the body: the intro carries no time; (8) the depth starter mark was a hidden ST with a spoken twin: it is now the visible word Starter
-- BP-T079 completed: CLAUDE.md gains Team Blueprint (League Pulse) and Market Signals sections after Trade Ideas, in the style of the League Pulse sections: the rules (one view model, cache-only images, viewer independence, no engine on the warm path, rate limit after validation, on demand only, latest-only and change-only storage, partition-only cron with the deadline loop), format and source, design rules, the two CTAs, settings and module maps
-- BP-T080 completed: Plan moved to docs/completed/team-blueprint/team-blueprint-plan.md (status line BUILT, contents entry and section 21 What shipped differently); docs/README.md row moved from Active to Completed with what is left over, cited as the old path like every other moved plan
+- CM-T082: first live order watched end to end; a real Stripe event has never reached the route.
+- Confirm STRIPE_ORDERS_WEBHOOK_SECRET in Vercel. Blueprint carry-overs: deploy, CRON_SECRET, 10:30 and 10:50 UTC market-signals runs, first-week size check (BP-T020).

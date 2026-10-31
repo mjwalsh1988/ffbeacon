@@ -111,6 +111,7 @@ export type CronJobName =
   | "community-rankings"
   | "market-signals"
   | "league-maintenance"
+  | "order-maintenance"
   | "cron-health";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
@@ -397,6 +398,12 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     schedule: "*/30 * * * *",
     description:
       "League Pulse housekeeping, every 30 minutes, at /api/cron/league-maintenance.",
+  },
+  {
+    name: "order-maintenance",
+    label: "Order maintenance",
+    schedule: "40 * * * *",
+    description: "Expires unpaid orders and sends the one PayPal and Venmo reminder.",
   },
   {
     name: "cron-health",

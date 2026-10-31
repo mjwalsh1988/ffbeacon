@@ -85,6 +85,24 @@ export type AnalyticsEvent =
     }
   /** Stripe confirmed the payment on the thank-you page. */
   | { name: "donation_complete"; params: { value: number; currency: "USD" } }
+  | { name: "review_offer_view"; params: { placement: "blueprint" | "league-overview" | "my-beacon" } }
+  | {
+      name: "review_checkout_start";
+      params: { tier: string; method: "stripe" | "paypal" | "venmo"; value: number; currency: "USD" };
+    }
+  | {
+      name: "review_order_paid";
+      params: {
+        tier: string;
+        method: "stripe" | "paypal" | "venmo" | "complimentary";
+        value: number;
+        currency: "USD";
+      };
+    }
+  | {
+      name: "review_external_click";
+      params: { method: "paypal" | "venmo"; value: number; currency: "USD" };
+    }
   /** A link to /join, the Discord invite, was followed. */
   | { name: "join_discord_click"; params: { cta_location: string } }
   /**

@@ -106,6 +106,31 @@ export async function loadSavedSleeperHandle(
 }
 
 /**
+ * Another account's saved handle, for the admin order pages. Pass the service
+ * role client. Lives here because this file is the one reader of these keys.
+ */
+export async function loadSleeperHandleForUser(
+  admin: Client,
+  userId: string,
+): Promise<SavedSleeperHandle | null> {
+  const { data } = await admin
+    .from("user_preferences")
+    .select("sleeper_league_settings")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const settings = parseSleeperLeagueSettings(data?.sleeper_league_settings);
+  const username = settings?.username?.trim();
+  if (!username) return null;
+  return {
+    username,
+    sleeperUserId: settings?.sleeper_user_id ?? null,
+    displayName: settings?.sleeper_display_name ?? null,
+    avatar: settings?.sleeper_avatar ?? null,
+    verifiedAt: settings?.handle_verified_at ?? null,
+  };
+}
+
+/**
  * True when the reader is signed in, whatever they have saved.
  *
  * Goes through the same memoized read as the handle, so asking both questions

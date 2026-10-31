@@ -18,6 +18,8 @@ import { loadTransactionVolume } from "@/lib/league-transaction-volume";
 import { loadViewerCandidates } from "@/lib/league-positional-war-data";
 import { matchViewerRoster } from "@/lib/league-viewer";
 import { loadRosters } from "@/lib/power-pulse/load";
+import { loadOfferState } from "@/lib/commerce/offer";
+import { ReviewStrip } from "@/components/commerce/review-strip";
 import { loadBlueprintCtaFigure } from "@/lib/league-blueprint/cta-data";
 import { BlueprintCta } from "@/components/league-blueprint/blueprint-cta";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
@@ -451,6 +453,17 @@ export default async function LeagueDeepViewPage({
                 sleeperLeagueId={sleeperLeagueId}
                 season={league.season != null ? String(league.season) : null}
                 sourceSlug={context.sourceSlug}
+                linkUsername={linkUsername}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+                viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+              />
+            </Suspense>
+
+            <Suspense fallback={null}>
+              <ReviewStripSection
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
                 linkUsername={linkUsername}
                 searchedUsername={searchedUsername}
                 focusedRosterId={focusedRosterId}
@@ -1634,6 +1647,35 @@ function formatRelative(date: Date): string {
  * The Team Blueprint call to action on the overview (plan 20.1). Reads one
  * stored blueprint row for the viewer's roster; never builds one.
  */
+/** The Personal Team Review strip, under the Blueprint call to action. */
+async function ReviewStripSection({
+  leagueRowId,
+  sleeperLeagueId,
+  linkUsername,
+  searchedUsername,
+  focusedRosterId,
+  viewerSleeperUserId,
+}: {
+  leagueRowId: string;
+  sleeperLeagueId: string;
+  linkUsername: string | null;
+  searchedUsername: string | null;
+  focusedRosterId: number | null;
+  viewerSleeperUserId: string | null;
+}) {
+  const offer = await loadOfferState(createAdminClient());
+  if (!offer.settings.placements.overviewStrip) return null;
+  const candidates = await loadViewerCandidates(await createClient(), leagueRowId);
+  return (
+    <ReviewStrip
+      offer={offer}
+      sleeperLeagueId={sleeperLeagueId}
+      rosterId={matchViewerRoster(candidates, searchedUsername, focusedRosterId, viewerSleeperUserId)}
+      linkUsername={linkUsername}
+    />
+  );
+}
+
 async function BlueprintCtaSection({
   leagueRowId,
   sleeperLeagueId,

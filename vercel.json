@@ -156,6 +156,10 @@
     {
       "path": "/api/cron/league-maintenance",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/order-maintenance",
+      "schedule": "40 * * * *"
     }
   ]
 }

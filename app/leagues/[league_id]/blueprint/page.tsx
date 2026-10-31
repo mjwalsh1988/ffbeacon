@@ -41,6 +41,9 @@ import { loadMarketSignalSettings } from "@/lib/market-signals/settings";
 import { CapitalPanel } from "@/components/league-blueprint/capital-panel";
 import { PrioritiesPanel } from "@/components/league-blueprint/priorities-panel";
 import { StrategyPanel } from "@/components/league-blueprint/strategy-panel";
+import { SheetSection } from "@/components/league-blueprint/sheet";
+import { ProductOffer } from "@/components/commerce/product-offer";
+import { loadOfferState } from "@/lib/commerce/offer";
 
 export const dynamic = "force-dynamic";
 
@@ -219,6 +222,7 @@ export default async function LeagueBlueprintPage({
             leagueId={sleeperLeagueId}
             league={league}
             rosterId={rosterId}
+            chosenByDefault={chosenByDefault}
             sourceSlug={resolvedSource.slug}
             resynced={!pulseCached}
             linkUsername={linkUsername}
@@ -263,6 +267,7 @@ async function BlueprintBody({
   leagueId,
   league,
   rosterId,
+  chosenByDefault,
   sourceSlug,
   resynced,
   linkUsername,
@@ -272,6 +277,7 @@ async function BlueprintBody({
   leagueId: string;
   league: NonNullable<Awaited<ReturnType<typeof getSyncedLeague>>>["league"];
   rosterId: number;
+  chosenByDefault: boolean;
   sourceSlug: string | null;
   resynced: boolean;
   linkUsername: string | null;
@@ -279,10 +285,11 @@ async function BlueprintBody({
   prefetched: LoadBlueprintArgs["prefetched"];
 }) {
   const admin = createAdminClient();
-  const [result, settings, marketSettings] = await Promise.all([
+  const [result, settings, marketSettings, offer] = await Promise.all([
     loadBlueprint({ admin, league, rosterId, sourceSlug, resynced, prefetched }),
     loadLeagueBlueprintSettings(admin),
     loadMarketSignalSettings(admin),
+    loadOfferState(admin),
   ]);
 
   if (result.kind === "no-coverage") {
@@ -348,6 +355,22 @@ async function BlueprintBody({
         <CallsPanel view={view} bands={bands} linkUsername={linkUsername} signalWindowDays={marketSettings.windowDays} number="10" />
         <CapitalPanel view={view} number="11" />
         <StrategyPanel view={view} linkUsername={linkUsername} number="12" />
+        {/* Outside the stored view on purpose: the cache, the fingerprint and
+            the share images know nothing about it. */}
+        {offer.settings.placements.blueprintSection && offer.availability.reason !== "closed" && (
+          <SheetSection id="review" number="13" title="Personal review" helper="Michael reads this team and writes to you.">
+            <ProductOffer
+              family="team-review"
+              placement="blueprint"
+              sleeperLeagueId={leagueId}
+              rosterId={chosenByDefault ? null : rosterId}
+              linkUsername={linkUsername}
+              products={offer.products}
+              availability={offer.availability}
+              settings={offer.settings}
+            />
+          </SheetSection>
+        )}
         <footer
           aria-labelledby="bp-notes"
           className="grid gap-4 border-t border-line bg-base/30 px-5 py-6 sm:px-8 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8"

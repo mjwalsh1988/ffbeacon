@@ -282,6 +282,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "layers",
       },
       {
+        id: "/my-beacon/orders",
+        label: "Orders",
+        href: "/my-beacon/orders",
+        hint: "Your reviews and receipts",
+        icon: "receipt",
+      },
+      {
         id: "/my-beacon/draft-tracker",
         label: "Draft Tracker",
         href: "/my-beacon/draft-tracker",
@@ -374,6 +381,19 @@ const ALL_SECTIONS: SiteNavNode[] = [
         href: "/admin/league-blueprint",
         hint: "Grade weights, sell ages, calls, and trade partner scoring",
         icon: "listChecks",
+      },
+      {
+        id: "/admin/orders",
+        label: "Orders",
+        href: "/admin/orders",
+        hint: "Purchases, delivery and products",
+        icon: "coins",
+        alsoActiveUnder: [
+          "/admin/orders/products",
+          "/admin/orders/coupons",
+          "/admin/orders/settings",
+          "/admin/orders/new",
+        ],
       },
       {
         id: "/admin/market-signals",

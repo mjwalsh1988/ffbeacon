@@ -217,6 +217,19 @@ export default function PrivacyPage() {
               including your details, under its own policy, and the same is true of
               PayPal and Venmo if you use those instead.
             </p>
+            <p className="mt-2">
+              If you buy a Personal Team Review, the same applies to the card payment, and
+              we also keep the order itself: what you bought, the price, when it was paid
+              and delivered, the team and league it is about, the answers you typed when
+              ordering, every email we sent you about it, and the review we wrote. That
+              record is tied to your account so you can read it back, and it is kept as a
+              financial record for as long as we are required to keep one.
+            </p>
+            <p className="mt-2">
+              If a card payment is refunded or disputed, Stripe tells us, and we record the
+              amount and the outcome on the order. A code you use at checkout is recorded
+              on the order.
+            </p>
 
             <h3 className="mt-4 text-base font-semibold text-ink">
               Cookies and similar storage
@@ -439,7 +452,9 @@ export default function PrivacyPage() {
                 <strong className="text-ink">PayPal</strong> and{" "}
                 <strong className="text-ink">Venmo</strong>, only if you choose one of
                 those donation buttons. You leave our site to complete the payment on
-                theirs, and they receive whatever their own flow collects.
+                theirs, and they receive whatever their own flow collects. For a purchase
+                paid that way, we store the reference you give us (a transaction id or the
+                name on your account) so we can match the payment to the order.
               </li>
               <li>
                 <strong className="text-ink">Resend</strong>, transactional and digest
@@ -543,6 +558,11 @@ export default function PrivacyPage() {
                 identify nobody. A row holds an amount, Stripe&apos;s identifiers, and
                 whether we managed to email a receipt. It contains no name, no email
                 address, and no payment details.
+              </li>
+              <li>
+                Orders: kept indefinitely as a financial record. On an account deletion
+                request we delete the review we wrote, and keep the amount, the date and
+                the order number.
               </li>
               <li>
                 The payment itself, including your name, email address, and billing

@@ -85,7 +85,7 @@ export function Leader({ label, children }: { label: string; children: ReactNode
       <dt className="flex min-w-0 flex-1 items-baseline text-[11px] font-semibold uppercase tracking-wide text-ink-subtle after:ml-2 after:min-w-6 after:flex-1 after:border-b after:border-dotted after:border-line-accent after:content-['']">
         {label}
       </dt>
-      <dd className="shrink-0 text-right text-sm font-medium text-ink">{children}</dd>
+      <dd className="max-w-[70%] break-words text-right text-sm font-medium text-ink">{children}</dd>
     </div>
   );
 }

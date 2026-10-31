@@ -7,6 +7,7 @@ import {
   Newspaper,
   Radar,
   Radio,
+  Receipt,
   Scale,
   Timer,
   Trophy,
@@ -14,6 +15,9 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
 import { LinkTile } from "@/components/link-tile";
+import { OfferView } from "@/components/commerce/offer-view";
+import { loadCommerceSettings } from "@/lib/commerce/settings";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -67,6 +71,14 @@ const YOURS: Destination[] = [
     icon: Radio,
   },
 ];
+
+const ORDERS_TILE: Destination = {
+  href: "/my-beacon/orders",
+  title: "Orders",
+  body: "Every review you have bought, its receipt, and where it is right now.",
+  icon: Receipt,
+  accent: "purple",
+};
 
 /** The rest of the system, from the page you land on after signing in. */
 const TOOLS: Destination[] = [
@@ -127,18 +139,22 @@ const COMING_SOON = [
 ];
 
 export default async function MyBeaconDashboardPage() {
+  const settings = await loadCommerceSettings(createAdminClient());
+  const showOrders = settings.placements.myBeaconTile;
+  const yours = showOrders ? [...YOURS, ORDERS_TILE] : YOURS;
   return (
     <div className="space-y-6">
       <Panel
         eyebrow="Yours"
         title="What you have here"
-        helper="The three surfaces that hold something of yours."
+        helper="The surfaces that hold something of yours."
       >
         <div className="grid gap-2 lg:grid-cols-3">
-          {YOURS.map((item) => (
+          {yours.map((item) => (
             <LinkTile key={item.href} {...item} />
           ))}
         </div>
+        {showOrders && <OfferView placement="my-beacon" />}
       </Panel>
 
       <Panel

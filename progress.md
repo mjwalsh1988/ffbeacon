@@ -17280,3 +17280,335 @@ BP-T088 | completed | Share images redrawn as the report card: an FF Beacon bran
      | files: app/api/og/blueprint/[league_id]/[roster_id]/card.tsx, lib/league-blueprint/share.ts, lib/league-blueprint/share-layout.ts, CLAUDE.md
      | depends on: BP-T087
      | verified: yes (route tests and brand check pass; both images fetched from the dev server and opened)
+
+## Beacon Store and Personal Team Review
+
+Plan of record: docs/commerce/commerce-and-team-review-plan.md, task prefix CM-T.
+CM-T001 | completed | docs/README.md Active row for the commerce plan, status Approved, building
+     | files: docs/README.md
+     | depends on: none
+     | verified: yes (row added, ASCII only)
+CM-T002 | completed | Migration 0343 commerce_settings, service role only, applied to prod, types regenerated
+     | files: supabase/migrations/0343_commerce_settings.sql, lib/database.types.ts
+     | depends on: CM-T001
+     | verified: yes (pg_policies shows the one service_role policy; begin/rollback probe: anon sees 0 rows, authenticated insert refused by RLS)
+CM-T003 | completed | Migration 0344 products with the two Team Review seed rows, applied to prod, types regenerated
+     | files: supabase/migrations/0344_products.sql, lib/database.types.ts
+     | depends on: CM-T002
+     | verified: yes (begin/rollback probe with an inactive row: anon and authenticated see only the two active rows; anon insert refused; authenticated update touches 0 rows)
+CM-T004 | completed | Migration 0345 orders, order number sequence, set_updated_at, try_mark_order_paid; applied to prod, types regenerated
+     | files: supabase/migrations/0345_orders.sql, lib/database.types.ts
+     | depends on: CM-T003
+     | verified: yes (begin/rollback: first RPC call true, second false, paid/queued/pending with due +3 days; anon 0 rows; authenticated sees own row only; insert refused; update touches 0 rows; RPC permission denied for authenticated)
+CM-T005 | completed | Migration 0346 order_events, applied to prod, owner join policy verified
+     | files: supabase/migrations/0346_order_events.sql, lib/database.types.ts
+     | depends on: CM-T004
+     | verified: yes (begin/rollback: authenticated sees only own visible row, not own internal note and not another user's; insert refused; anon 0)
+CM-T006 | completed | Migration 0347 order_messages, applied to prod
+     | files: supabase/migrations/0347_order_messages.sql, lib/database.types.ts
+     | depends on: CM-T004
+     | verified: yes (begin/rollback: authenticated sees own message only; anon 0)
+CM-T007 | completed | Migration 0348 order_deliverables, applied to prod
+     | files: supabase/migrations/0348_order_deliverables.sql, lib/database.types.ts
+     | depends on: CM-T004
+     | verified: yes (begin/rollback: authenticated sees own published ready row only, not a draft, a pending attachment or another user's; anon 0)
+CM-T008 | completed | Migration 0349 order-files private bucket, applied to prod
+     | files: supabase/migrations/0349_order_files_bucket.sql
+     | depends on: CM-T004
+     | verified: yes (bucket private, 10 MB, 6 types; zero storage.objects policies name it and no broad policy exists on storage.objects)
+CM-T009 | completed | Migration 0350 coupons plus the orders coupon columns, applied to prod
+     | files: supabase/migrations/0350_coupons.sql, lib/database.types.ts
+     | depends on: CM-T004
+     | verified: yes (begin/rollback: anon and authenticated read 0, authenticated insert refused)
+CM-T010 | completed | Migration 0351 payment_webhook_events, applied to prod
+     | files: supabase/migrations/0351_payment_webhook_events.sql, lib/database.types.ts
+     | depends on: CM-T004
+     | verified: yes (begin/rollback: anon and authenticated read 0)
+CM-T011 | completed | Migration 0352 order_customer_identities and search_order_customers, applied to prod
+     | files: supabase/migrations/0352_order_customer_lookup.sql, lib/database.types.ts
+     | depends on: CM-T004
+     | verified: yes (has_function_privilege false for anon and authenticated, true for service_role; as a real authenticated user both calls refused with permission denied)
+CM-T012 | completed | Security pass on Phase A in prod, by the main agent: RLS on all eight tables, two lookup RPCs, the paid RPC, the bucket, with begin/rollback probes
+     | files: none
+     | depends on: CM-T002 to CM-T011
+     | verified: yes (RLS on for all eight; policies match the plan by name and role; no select policy on service-only tables. The only note-like orders column is refund_note, which is the admin's words on a refund and readable by the owner; the refund form says so)
+CM-T013 | completed | lib/stripe/client.ts extracted from lib/donate/stripe.ts (request, encodeForm, key shape, retrieve) plus expireCheckoutSession; donation module keeps createDonationCheckout and re-exports the rest
+     | files: lib/stripe/client.ts, lib/stripe/client.test.ts, lib/donate/stripe.ts, lib/donate/stripe.test.ts
+     | depends on: none
+     | verified: yes (vitest lib/donate, lib/stripe, app/api/donate: 61 pass)
+CM-T014 | completed | lib/stripe/outcome.ts checkoutOutcome and its test moved; lib/donate/outcome.ts re-exports it as donationOutcome
+     | files: lib/stripe/outcome.ts, lib/stripe/outcome.test.ts, lib/donate/outcome.ts, lib/donate/outcome.test.ts (deleted)
+     | depends on: CM-T013
+     | verified: yes (moved cases pass, plus a test that donationOutcome is the same function)
+CM-T015 | completed | lib/commerce/types.ts (shapes and the section 3 rules header) and constants.ts (seller, refund sentence, order number shape, attachment limits, formatMoney)
+     | files: lib/commerce/types.ts, lib/commerce/constants.ts
+     | depends on: CM-T004
+     | verified: yes (compiles under the transitions and settings tests)
+CM-T016 | completed | lib/commerce/default-settings.ts, settings.ts and test: section 14 defaults, bounds, reminder before expiry, memoized load, save
+     | files: lib/commerce/default-settings.ts, lib/commerce/settings.ts, lib/commerce/settings.test.ts
+     | depends on: CM-T015
+     | verified: yes (6 tests pass)
+CM-T017 | completed | lib/commerce/transitions.ts and test: both machines, the four-step tracker, chip words and tones
+     | files: lib/commerce/transitions.ts, lib/commerce/transitions.test.ts
+     | depends on: CM-T015
+     | verified: yes (every allowed and forbidden move pinned)
+CM-T018 | completed | lib/commerce/pay-links.ts and test: the order note, PayPal and Venmo links
+     | files: lib/commerce/pay-links.ts, lib/commerce/pay-links.test.ts
+     | depends on: CM-T015
+     | verified: yes (tests pass)
+CM-T019 | completed | lib/commerce/rich-text.ts and test: parseRichText into blocks, blocksToText
+     | files: lib/commerce/rich-text.ts, lib/commerce/rich-text.test.ts
+     | depends on: none
+     | verified: yes (each block kind, mixed document, script stays text, empty body, 20000 characters)
+CM-T020 | completed | lib/commerce/availability.ts and test: offerAvailability
+     | files: lib/commerce/availability.ts, lib/commerce/availability.test.ts
+     | depends on: CM-T016
+     | verified: yes (closed, booked by count and by switch, Stripe unconfigured, method off)
+CM-T021 | completed | lib/commerce/products.ts and test: reads, input schema, save, snapshot, features lines, the admin price parser
+     | files: lib/commerce/products.ts, lib/commerce/products.test.ts
+     | depends on: CM-T015
+     | verified: yes (vitest lib/commerce 115 pass)
+CM-T022 | completed | lib/commerce/coupons.ts and test: normalizeCode, discountFor, evaluateCoupon (the pure rule), resolveCoupon, redemption counts, input schema, saveCoupon, loadAllCoupons with one paged count read
+     | files: lib/commerce/coupons.ts, lib/commerce/coupons.test.ts
+     | depends on: CM-T021
+     | verified: yes (each refusal in plan order, rounding, caps, scope, schema)
+CM-T023 | completed | lib/commerce/intake.ts and test: createOrderInputSchema, intakeSchema, TEAM_REVIEW_QUESTIONS
+     | files: lib/commerce/intake.ts, lib/commerce/intake.test.ts
+     | depends on: CM-T015
+     | verified: yes (lengths, enums, trimming, 1501 refused)
+CM-T024 | completed | lib/commerce/figures.ts and test: attentionReasons and needsAttention with the attentionFilter twin, the reason hint, revenue, Eastern week buckets, turnaround
+     | files: lib/commerce/figures.ts, lib/commerce/figures.test.ts
+     | depends on: CM-T015
+     | verified: yes (the test parses the PostgREST filter and asserts agreement over 16 orders; week buckets across the 2026 DST change)
+CM-T025 | completed | lib/commerce/deliverables.ts and test: sanitizeFileName, begin and finalize decisions, retry, publishAll, clearAbandonedUploads
+     | files: lib/commerce/deliverables.ts, lib/commerce/deliverables.test.ts
+     | depends on: CM-T015
+     | verified: yes (row written before the token, for the same path; finalize leaves pending when the object is missing)
+CM-T026 | completed | lib/commerce/customers.ts and test: lookupCustomers and searchCustomers over the two RPCs
+     | files: lib/commerce/customers.ts, lib/commerce/customers.test.ts
+     | depends on: CM-T011
+     | verified: yes (hierarchy order, one RPC and one preferences read for N ids, no call for no ids)
+CM-T027 | completed | lib/commerce/orders.ts and orders.test.ts, receipt.test.ts: checkPrice, insertEvent, createOrder, owner and admin reads, lists without context, searchOrders, admin and owner figures, countOpenOrders, findOpenDuplicate, findReviewsInProgress, emailCustomer, sendReceipt, markPaidIfWon, refundDecision, recordRefund, customerEmailFor
+     | files: lib/commerce/orders.ts, lib/commerce/orders.test.ts, lib/commerce/receipt.test.ts
+     | depends on: CM-T015 to CM-T026
+     | verified: yes (refund arithmetic, price comparison, receipt status writes, one winner; typecheck clean)
+CM-T028 | completed | lib/commerce/stripe.ts and test: closeOpenSession, startStripeCheckout, session body, host check, dashboard and dispute urls
+     | files: lib/commerce/stripe.ts, lib/commerce/stripe.test.ts
+     | depends on: CM-T013, CM-T027
+     | verified: yes (every closeOpenSession decision; expire before create; idempotency key attempts plus one; no payment_method_types)
+CM-T029 | completed | lib/commerce/reconcile.ts: reconcileStripeOrder, the amount check, recordMismatch, expireStripeOrder
+     | files: lib/commerce/reconcile.ts
+     | depends on: CM-T027, CM-T028
+     | verified: yes (typecheck; exercised through the webhook tests in CM-T035)
+CM-T030 | completed | lib/commerce/disputes.ts and test: disputeOutcome (pure) and applyDisputeEvent
+     | files: lib/commerce/disputes.ts, lib/commerce/disputes.test.ts
+     | depends on: CM-T027
+     | verified: yes (created, funds events, won and warning, lost through recordRefund, duplicate intent)
+CM-T031 | completed | lib/commerce/notify.ts: admin address resolution and A1 to A7 plus the questions-added note
+     | files: lib/commerce/notify.ts
+     | depends on: CM-T027
+     | verified: yes (reply-to guard passes; subjects tested in CM-T032)
+CM-T032 | completed | lib/email/order-emails.ts and test: E1 to E13 through renderOrderEmail, A1 to A7 builders, blocksToEmailHtml
+     | files: lib/email/order-emails.ts, lib/email/order-emails.test.ts
+     | depends on: CM-T019, CM-T018
+     | verified: yes (subjects, order number, Eastern timestamps, 1200 clip, seller and refund sentence, coupon lines, escaping)
+CM-T033 | completed | lib/email/reply-to-guard.test.ts: scans lib/email, lib/commerce and app/actions/commerce.ts
+     | files: lib/email/reply-to-guard.test.ts
+     | depends on: CM-T031, CM-T032
+     | verified: yes (passes; checked the regex holds a real word boundary, not a control character)
+CM-T034 | completed | Gate after Phase B
+     | files: none
+     | depends on: CM-T013 to CM-T033
+     | verified: yes (typecheck clean, lint 0 and 0, npm test 554 files 7,536 tests pass, build result on the handoff Gate line)
+CM-T035 | completed | app/api/orders/webhook/route.ts and test: signature, event ledger, amount check, paid path, second payment, delayed method, async failure, expiry, refunds, chargebacks; middleware.ts excludes the route
+     | files: app/api/orders/webhook/route.ts, app/api/orders/webhook/route.test.ts, middleware.ts, lib/supabase/middleware.test.ts
+     | depends on: CM-T027 to CM-T032
+     | verified: yes (every case in plan 17 passes through the route against an in-memory table double)
+CM-T036 | completed | app/api/donate/webhook/route.ts product tag guard and a new route test
+     | files: app/api/donate/webhook/route.ts, app/api/donate/webhook/route.test.ts
+     | depends on: none
+     | verified: yes (an order session writes no row and sends nothing; a donation and an untagged session still handled)
+CM-T037 | completed | app/actions/commerce.ts: createOrderAction in plan order, previewCouponAction, startStripeCheckoutAction, switchPaymentMethodAction, cancelOwnOrderAction, reportManualPaymentAction, updateIntakeAction; lib/commerce/context.ts holds the shared context builder
+     | files: app/actions/commerce.ts, lib/commerce/context.ts
+     | depends on: CM-T035
+     | verified: yes (typecheck clean; the flows run in CM-T076 and CM-T077)
+CM-T038 | completed | .env.local.example gains STRIPE_ORDERS_WEBHOOK_SECRET with the plan's comment
+     | files: .env.local.example
+     | depends on: none
+     | verified: yes
+CM-T039 | completed | Gate after Phase C
+     | files: none
+     | depends on: CM-T035 to CM-T038
+     | verified: yes (typecheck clean, lint 0 and 0, 556 files 7,567 tests pass, build pass)
+CM-T040 | completed | components/commerce/status-chip.tsx, figure-tile.tsx, order-progress.tsx (OrderProgress and CompactProgress)
+     | files: components/commerce/status-chip.tsx, components/commerce/figure-tile.tsx, components/commerce/order-progress.tsx
+     | depends on: CM-T017
+     | verified: yes (typecheck, lint; visual in CM-T078)
+CM-T041 | completed | components/commerce/tier-card.tsx (choice, static, offer) and product-offer.tsx; lib/commerce/offer.ts memoizes the offer for a minute; offer-view.tsx counts the view
+     | files: components/commerce/tier-card.tsx, components/commerce/product-offer.tsx, components/commerce/offer-view.tsx, lib/commerce/offer.ts
+     | depends on: CM-T040
+     | verified: yes (typecheck, lint; visual in CM-T078)
+CM-T042 | completed | components/commerce/coupon-field.tsx and review-in-progress-notice.tsx
+     | files: components/commerce/coupon-field.tsx, components/commerce/review-in-progress-notice.tsx
+     | depends on: CM-T037
+     | verified: yes (typecheck, lint; flows in CM-T076)
+CM-T043 | completed | components/commerce/checkout-form.tsx: four fieldsets with an h2 in each legend, the code disclosure between 03 and 04, summary, error alert, submit
+     | files: components/commerce/checkout-form.tsx
+     | depends on: CM-T042
+     | verified: yes (typecheck, lint; flows in CM-T076)
+CM-T044 | completed | app/leagues/[league_id]/review/page.tsx and loading.tsx; LeagueMasthead gains optional pageTitle and pageDescription; Leader dd wraps long values
+     | files: app/leagues/[league_id]/review/page.tsx, app/leagues/[league_id]/review/loading.tsx, components/league-shell/league-masthead.tsx, components/league-blueprint/sheet.tsx, components/commerce/order-skeleton.tsx
+     | depends on: CM-T043
+     | verified: yes (typecheck, lint, build)
+CM-T045 | completed | components/commerce/rich-text-view.tsx, order-timeline.tsx, pay-panel.tsx, cancel-order-button.tsx, order-sheet.tsx, plus intake-update-form.tsx and order-paid-tracker.tsx
+     | files: components/commerce/rich-text-view.tsx, components/commerce/order-timeline.tsx, components/commerce/pay-panel.tsx, components/commerce/cancel-order-button.tsx, components/commerce/order-sheet.tsx, components/commerce/intake-update-form.tsx, components/commerce/order-paid-tracker.tsx
+     | depends on: CM-T040
+     | verified: yes (typecheck, lint; visual in CM-T078)
+CM-T046 | completed | app/my-beacon/orders/[order_id]/page.tsx and loading.tsx: session read, reconcile on view, pay notices
+     | files: app/my-beacon/orders/[order_id]/page.tsx, app/my-beacon/orders/[order_id]/loading.tsx
+     | depends on: CM-T045, CM-T029
+     | verified: yes (typecheck, lint, build; flows in CM-T076)
+CM-T047 | completed | components/commerce/order-list.tsx and app/my-beacon/orders/page.tsx and loading.tsx
+     | files: components/commerce/order-list.tsx, app/my-beacon/orders/page.tsx, app/my-beacon/orders/loading.tsx
+     | depends on: CM-T040
+     | verified: yes (typecheck, lint, build)
+CM-T048 | completed | app/api/orders/[order_id]/files/[deliverable_id]/route.ts: owner or admin, 60-second signed URL
+     | files: app/api/orders/[order_id]/files/[deliverable_id]/route.ts
+     | depends on: CM-T025
+     | verified: yes (typecheck, lint; exercised in CM-T076)
+CM-T049 | completed | Blueprint page section 13, outside the stored view
+     | files: app/leagues/[league_id]/blueprint/page.tsx
+     | depends on: CM-T041
+     | verified: yes (typecheck, build; the cache, fingerprint and share images are untouched)
+CM-T050 | completed | components/commerce/review-strip.tsx and the overview mount in its own Suspense
+     | files: components/commerce/review-strip.tsx, app/leagues/[league_id]/page.tsx
+     | depends on: CM-T041
+     | verified: yes (typecheck, build)
+CM-T051 | completed | My Beacon tile and helper sentence, both nav-tree entries, the receipt icon
+     | files: app/my-beacon/page.tsx, lib/nav-tree.ts, components/app-shell/nav-icons.ts
+     | depends on: CM-T047
+     | verified: yes (typecheck, build, tests pass)
+CM-T052 | completed | lib/analytics.ts gains the four review events, fired from the offers, the checkout, the order page and the pay link
+     | files: lib/analytics.ts, components/commerce/offer-view.tsx, components/commerce/order-paid-tracker.tsx
+     | depends on: CM-T041, CM-T045
+     | verified: yes (typecheck)
+CM-T053 | completed | Gate after Phase D. The accessibility pass on customer surfaces is folded into CM-T078 and the one reviewer, per the owner's one-reviewer instruction
+     | files: none
+     | depends on: CM-T040 to CM-T052
+     | verified: yes (typecheck clean, lint 0 and 0, 7,567 tests pass, build pass)
+CM-T054 | completed | components/admin/orders-subnav.tsx and order-search.tsx
+     | files: components/admin/orders-subnav.tsx, components/admin/order-search.tsx
+     | depends on: none
+     | verified: yes (typecheck)
+CM-T055 | completed | app/admin/orders/actions.ts: every action in plan 16, each behind requireAdmin, plus moveDeliverableAction and retryAttachmentUploadAction; lib/commerce/eastern-input.ts and test; loadSleeperHandleForUser in lib/sleeper-handle/resolve.ts
+     | files: app/admin/orders/actions.ts, lib/commerce/eastern-input.ts, lib/commerce/eastern-input.test.ts, lib/sleeper-handle/resolve.ts
+     | depends on: CM-T027 to CM-T032
+     | verified: yes (typecheck clean)
+CM-T056 | completed | components/commerce/revenue-bars.tsx
+     | files: components/commerce/revenue-bars.tsx
+     | depends on: CM-T024
+     | verified: yes (typecheck; visual in CM-T078)
+CM-T057 | completed | app/admin/orders/page.tsx and loading.tsx: figures, tabs, search, list, identities through lookupCustomers
+     | files: app/admin/orders/page.tsx, app/admin/orders/loading.tsx
+     | depends on: CM-T055, CM-T056
+     | verified: yes (typecheck; visual in CM-T078)
+CM-T058 | completed | components/admin/order-banners.tsx, order-workflow-panel.tsx, order-payment-panel.tsx, plus the shared order-action.tsx
+     | files: components/admin/order-banners.tsx, components/admin/order-workflow-panel.tsx, components/admin/order-payment-panel.tsx, components/admin/order-action.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck; visual in CM-T078)
+CM-T059 | completed | components/admin/internal-notes-panel.tsx
+     | files: components/admin/internal-notes-panel.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck)
+CM-T060 | completed | components/admin/attachment-uploader.tsx: token, direct upload, finalize, Retry and Remove
+     | files: components/admin/attachment-uploader.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck; exercised in CM-T076)
+CM-T061 | completed | components/admin/deliverable-editor.tsx
+     | files: components/admin/deliverable-editor.tsx
+     | depends on: CM-T060
+     | verified: yes (typecheck; visual in CM-T078)
+CM-T062 | completed | components/admin/order-email-composer.tsx
+     | files: components/admin/order-email-composer.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck)
+CM-T063 | completed | app/admin/orders/[order_id]/page.tsx and components/admin/order-timeline-admin.tsx
+     | files: app/admin/orders/[order_id]/page.tsx, components/admin/order-timeline-admin.tsx
+     | depends on: CM-T058 to CM-T062
+     | verified: yes (typecheck; visual in CM-T078)
+CM-T064 | completed | components/admin/products-manager.tsx and app/admin/orders/products/page.tsx; lib/commerce/product-fields.ts holds the client-safe helpers
+     | files: components/admin/products-manager.tsx, app/admin/orders/products/page.tsx, lib/commerce/product-fields.ts, lib/commerce/products.ts
+     | depends on: CM-T055
+     | verified: yes (typecheck)
+CM-T065 | completed | components/admin/coupons-manager.tsx and app/admin/orders/coupons/page.tsx
+     | files: components/admin/coupons-manager.tsx, app/admin/orders/coupons/page.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck)
+CM-T066 | completed | components/admin/new-order-form.tsx and app/admin/orders/new/page.tsx
+     | files: components/admin/new-order-form.tsx, app/admin/orders/new/page.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck)
+CM-T067 | completed | components/admin/commerce-settings-manager.tsx and app/admin/orders/settings/page.tsx
+     | files: components/admin/commerce-settings-manager.tsx, app/admin/orders/settings/page.tsx
+     | depends on: CM-T055
+     | verified: yes (typecheck)
+CM-T068 | completed | lib/nav-tree.ts admin entry, done with CM-T051
+     | files: lib/nav-tree.ts
+     | depends on: CM-T051
+     | verified: yes
+CM-T069 | completed | Gate after Phase E. The implementation and security pass is folded into the one reviewer, per the owner's instruction
+     | files: none
+     | depends on: CM-T054 to CM-T068
+     | verified: yes (typecheck clean, lint 0 and 0, 7,574 tests pass, build pass; lib/security/order-pages-auth.test.ts now pins requireAdmin on every action and no listUsers)
+CM-T070 | completed | lib/commerce/maintenance.ts and test: reminders, manual expiry, Stripe expiry, receipt retry, abandoned uploads, ledger prune
+     | files: lib/commerce/maintenance.ts, lib/commerce/maintenance.test.ts
+     | depends on: CM-T025, CM-T027, CM-T029
+     | verified: yes (a reported order is never expired, one reminder, retry respects cap and delay and retries skipped, limits, a failed step does not stop the rest)
+CM-T071 | completed | app/api/cron/order-maintenance/route.ts, CRON_JOBS entry, vercel.json 40 * * * *
+     | files: app/api/cron/order-maintenance/route.ts, lib/cron-runs.ts, vercel.json
+     | depends on: CM-T070
+     | verified: yes (cron registry tests pass, typecheck)
+CM-T072 | completed | app/terms/page.tsx section 9 renamed, Purchases subsection, the receipt sentence
+     | files: app/terms/page.tsx
+     | depends on: none
+     | verified: yes (plan 20.1 wording, id unchanged so anchors hold)
+CM-T073 | completed | app/privacy/page.tsx: orders, refunds, disputes, codes, the manual reference, the retention line
+     | files: app/privacy/page.tsx
+     | depends on: none
+     | verified: yes (plan 20.2 wording)
+CM-T074 | completed | lib/security/order-pages-auth.test.ts: requireAdmin on every admin page and action, session reads on customer pages, no listUsers, no email in a log line, the files route checks
+     | files: lib/security/order-pages-auth.test.ts
+     | depends on: CM-T063
+     | verified: yes (passes; no control characters in its regexes)
+CM-T075 | completed | Gate after Phase F
+     | files: none
+     | depends on: CM-T070 to CM-T074
+     | verified: yes (typecheck clean, lint 0 and 0, 559 files 7,739 tests pass, build pass)
+CM-T076 | completed | Stripe end to end on the test key without the CLI: a real sandbox card payment (paid by reconcile, receipt sent), a 100% code, a complimentary admin order (E13), session replacement (first session read expired at Stripe, attempts 2), a 6 MB upload, then hand-signed events to localhost: unsigned 400, redelivery duplicate-event, second payment, partial refund, chargeback opened, donation webhook not-a-donation with no row
+     | files: none
+     | depends on: CM-T075
+     | verified: partly (everything named passed. NOT run: a real Stripe webhook delivery, because the CLI is not installed and the endpoint points at production; a Dashboard refund; the 4000 0000 0000 0259 dispute card. Those paths ran on signed events instead)
+CM-T077 | completed | Manual path end to end: a Venmo order, I sent the payment, admin confirm, receipt sent; customer cancel of an unpaid order through the confirm dialog
+     | files: none
+     | depends on: CM-T076
+     | verified: yes (FFB-100008 paid via manual with the reference, receipt sent; FFB-100010 cancelled with its Stripe session expired)
+CM-T078 | completed | Visual pass on the local production build: an in-page audit (one h1, heading skips, unnamed role=img, tap targets, viewport overflow) plus screenshots. 360: all fifteen views. 1440: checkout, overview, Blueprint, admin list, admin order. 1024 and 768: checkout, delivered order, admin list, and admin order at 1024 failed to run. 390: Venmo order, checkout, settings
+     | files: components/commerce/rich-text-view.tsx, components/commerce/pay-panel.tsx, components/commerce/order-sheet.tsx, components/commerce/checkout-form.tsx
+     | depends on: CM-T077
+     | verified: partly (no skipped heading, no unnamed image, one h1, nothing past the viewport, tracker vertical on a phone, on every view run. Fixed: bare URL link and mailto and Terms links under 44px; the PayPal note sentence no longer shows on a Venmo order. NOT every view at every width: the Chrome extension dropped and blocked the admin order page at 768 and 390, so that page was audited at 1440 and 360 only, and the products, new order and settings pages at 360 plus some of the others. The league shell crumbs and overview rows under 44px are pre-existing)
+CM-T080 | completed | CLAUDE.md section Beacon Store and the Personal Team Review after Market Signals: the rules, settings, admin paths, module map (written ahead of CM-T079 while the reviewer runs; plan numbering CM-T079 is the review)
+     | files: CLAUDE.md
+     | depends on: CM-T078
+     | verified: yes (ASCII only, inserted once)
+CM-T079 | completed | One reviewer sub-agent over the feature (2 high, 9 medium, 4 low, not reaching every file); every finding fixed, migration 0353 added
+     | files: supabase/migrations/0353_orders_owner_columns.sql, lib/commerce/stripe.ts, lib/commerce/stripe.test.ts, lib/commerce/maintenance.ts, lib/commerce/orders.ts, lib/commerce/disputes.ts, lib/commerce/intake.ts, app/api/orders/webhook/route.ts, app/actions/commerce.ts, app/admin/orders/actions.ts, components/commerce/order-list.tsx, components/commerce/checkout-form.tsx, components/commerce/pay-panel.tsx, components/admin/order-workflow-panel.tsx, components/admin/order-payment-panel.tsx, app/leagues/[league_id]/review/page.tsx
+     | depends on: CM-T078
+     | verified: yes (typecheck clean, lint 0 and 0, 7,740 tests, build pass; 0353 probed live; the fixes were not re-run in a browser)
+CM-T081 | completed | Plan moved to docs/completed/commerce/ with section 22 What shipped differently; docs/README.md row moved from Active to Completed; handoff.md final
+     | files: docs/completed/commerce/commerce-and-team-review-plan.md, docs/commerce/commerce-and-team-review-plan.md (deleted, moved), docs/README.md, handoff.md
+     | depends on: CM-T080
+     | verified: yes
+CM-T083 | completed | Second review of the whole build (five reviewers, every file read) and every finding resolved: reconcile window from the current session, no customer cancel after a reported payment, Publish and Not received and refund and section writes conditional on the read state, receipt resend refused on an unpaid order, cron deadline and window-keyed reminder, offer count error guard, E2 hold date from the order, A6 subject without a missing due date, American English, analytics once per paid_at, customer and admin accessibility fixes; migrations 0354 (initplan policies, FK indexes) and 0355 (receipt retry index with skipped, paid_at and delivered_at indexes) applied and verified live; section 22 of the plan lists everything and what was left
+     | files: lib/commerce/reconcile.ts, lib/commerce/reconcile.test.ts, lib/commerce/orders.ts, lib/commerce/maintenance.ts, lib/commerce/maintenance.test.ts, lib/commerce/offer.ts, lib/commerce/deliverables.ts, lib/commerce/transitions.ts, lib/commerce/notify.test.ts, lib/email/order-emails.ts, lib/email/order-emails.test.ts, lib/email/reply-to-guard.test.ts, lib/analytics.ts, app/actions/commerce.ts, app/admin/orders/actions.ts, app/admin/orders/page.tsx, app/admin/orders/[order_id]/page.tsx, app/my-beacon/orders/page.tsx, app/my-beacon/orders/[order_id]/page.tsx, app/leagues/[league_id]/review/page.tsx, components/commerce/pay-panel.tsx, checkout-form.tsx, coupon-field.tsx, intake-update-form.tsx, tier-card.tsx, figure-tile.tsx, order-list.tsx, order-paid-tracker.tsx, order-sheet.tsx, cancel-order-button.tsx, components/admin/order-action.tsx, order-banners.tsx, order-workflow-panel.tsx, order-payment-panel.tsx, deliverable-editor.tsx, order-timeline-admin.tsx, supabase/migrations/0354_commerce_rls_initplan_and_fk_indexes.sql, supabase/migrations/0355_orders_maintenance_indexes.sql, docs/completed/commerce/commerce-and-team-review-plan.md, handoff.md
+     | depends on: CM-T081
+     | verified: yes (typecheck clean, lint 0 and 0, 7,754 tests in 561 files, build pass; 0354 and 0355 verified live through pg_policies and pg_indexes; not re-run in a browser)

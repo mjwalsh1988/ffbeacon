@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createDonationCheckout,
-  isCheckoutSessionId,
-  retrieveCheckoutSession,
-  stripeConfigured,
-} from "./stripe";
+import { createDonationCheckout } from "./stripe";
 
 /**
  * What Stripe would actually receive.
@@ -160,16 +155,6 @@ describe("stripe donation client", () => {
     expect(sentHeaders(fetchMock)["Stripe-Version"]).toBe("2025-03-31.basil");
   });
 
-  it("reads a session back without a body", async () => {
-    await retrieveCheckoutSession("cs_test_a1b2c3d4e5f6g7h8");
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(
-      "https://api.stripe.com/v1/checkout/sessions/cs_test_a1b2c3d4e5f6g7h8",
-    );
-    expect(init.method).toBe("GET");
-    expect(init.body).toBeUndefined();
-  });
-
   it("turns a Stripe error into a result rather than a throw", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { message: "No such customer" } }), {
@@ -194,64 +179,5 @@ describe("stripe donation client", () => {
       origin: "donate_page",
     });
     expect(result).toEqual({ ok: false, reason: "error", detail: "request failed" });
-  });
-});
-
-describe("key configuration", () => {
-  const realKey = process.env.STRIPE_SECRET_KEY;
-  afterEach(() => {
-    process.env.STRIPE_SECRET_KEY = realKey;
-    vi.restoreAllMocks();
-  });
-
-  it("accepts real secret and restricted keys, in both modes", () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    for (const key of ["sk_test_abc123", "sk_live_abc123", "rk_test_abc", "rk_live_abc"]) {
-      process.env.STRIPE_SECRET_KEY = key;
-      expect(stripeConfigured(), key).toBe(true);
-    }
-  });
-
-  /**
-   * The literal value found in a real .env.local: a brand hex color pasted
-   * onto the wrong line. Without the shape check this "configures" Stripe and
-   * every donation dies on a 401 that looks like an outage.
-   */
-  it("refuses a value that is not a Stripe key at all", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (const junk of ["#22D3EE", "pk_test_abc123", "changeme", "sk_", " "]) {
-      process.env.STRIPE_SECRET_KEY = junk;
-      expect(stripeConfigured(), junk).toBe(false);
-    }
-    expect(errorSpy).toHaveBeenCalled();
-  });
-
-  it("is unconfigured when the variable is absent", () => {
-    delete process.env.STRIPE_SECRET_KEY;
-    expect(stripeConfigured()).toBe(false);
-  });
-});
-
-describe("isCheckoutSessionId", () => {
-  it("accepts Stripe's own id shape", () => {
-    expect(isCheckoutSessionId("cs_test_a1b2c3d4e5f6g7h8")).toBe(true);
-    expect(isCheckoutSessionId("cs_live_a1b2c3d4e5f6g7h8")).toBe(true);
-  });
-
-  it("refuses anything else before it can reach a URL", () => {
-    for (const bad of [
-      "",
-      "cs_",
-      "pi_1234567890",
-      "cs_test_a1b2/../../secrets",
-      "cs_test_<script>",
-      `cs_test_${"a".repeat(300)}`,
-      null,
-      undefined,
-      42,
-    ]) {
-      expect(isCheckoutSessionId(bad), String(bad)).toBe(false);
-    }
   });
 });

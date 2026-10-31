@@ -1100,6 +1100,104 @@ hysteresis, change rules, `rollingBands`), `partitions.ts`,
 `run-partition.ts`, `engine.ts` (the deadline loop and the prunes),
 `settings.ts`, `read.ts`.
 
+## Beacon Store and the Personal Team Review
+
+One-time purchases. Products are rows in `products`, an order is a row in
+`orders`, and the first family is the Personal Team Review (Basic and Premium),
+written by Michael by hand and delivered into `/my-beacon/orders/[order_id]`.
+Offered in exactly three places, named by `products.placements`: Team Blueprint
+section 13, a strip on the league overview, a My Beacon tile. A customer sees
+"Personal Team Review" and "your order"; the system is never named to them. The
+words "chargeback" (never "dispute") and "fully booked" (never "sold out") are the
+on-screen words. Plan of record:
+`docs/completed/commerce/commerce-and-team-review-plan.md`.
+
+ABSOLUTE RULE: the price never comes from the browser. The form posts the price it
+DISPLAYED as `expectedCents`, and `createOrderAction` refuses when its own total
+differs. `amount_cents` and `product_snapshot` freeze what was sold, so a price
+change never rewrites a receipt.
+
+ABSOLUTE RULE: ONE PATH TO PAID. Webhook, reconcile, manual confirm and both
+complimentary paths go through `markPaidIfWon`, which is the `try_mark_order_paid`
+RPC plus the `paid` event. The RPC is true for exactly one caller, and only that
+caller sends the receipt. The receipt has a status (`receipt_email_status`),
+`sendReceipt` owns it, the cron retries it and the admin page has a button.
+
+ABSOLUTE RULE: PayPal and Venmo are confirmed by a person. A customer pressing "I
+sent the payment" is never a payment, and the cron never expires a reported order.
+
+ABSOLUTE RULE: exactly one Stripe session is payable for an order.
+`closeOpenSession` expires the open one before a replacement, a method switch or a
+cancel, and a `complete` answer there means the customer has paid: reconcile, never
+ignore it.
+
+ABSOLUTE RULE: the webhook (`/api/orders/webhook`, its own endpoint and secret)
+checks the signature on the raw body first, records the event in
+`payment_webhook_events` before any other read, and checks amount and currency
+before any paid transition. A mismatch is recorded and reported, never marked paid.
+A second payment is recorded and reported, never dropped. The route is excluded from
+`middleware.ts`, like the donation webhook. The donation webhook ignores any session
+tagged as something other than `ffbeacon_donation`; Stripe fans every
+checkout.session event out to both endpoints.
+
+ABSOLUTE RULE: `refundDecision` is the one refund arithmetic, shared by the Stripe
+event, the admin's button and a lost chargeback. `refunded_cents` only grows and
+never passes `amount_cents`; an order is `refunded` only when it reaches that. The
+system never moves money out: it records what happened at the processor.
+
+ABSOLUTE RULE: a chargeback never emails the customer and never changes fulfillment.
+Every chargeback, duplicate and mismatch event is `visible_to_customer = false`.
+
+ABSOLUTE RULE: all sales are final, and the refund sentence is one constant,
+`REFUND_POLICY_SENTENCE`. Nothing promises a refund and no button requests one. A
+customer can cancel an order they have not paid for.
+
+ABSOLUTE RULE: RLS is row level, not column level. The owner can read every column
+of their order row, so no customer-readable table carries a column for the admin
+alone. Internal notes are `order_events` rows with `visible_to_customer = false`.
+Anything new for the admin alone goes on a service-role table.
+
+ABSOLUTE RULE: Reply-To on a customer email is the default, michael@ffbeacon.com, so
+nothing passes `replyTo`. `lib/commerce/notify.ts` alone sets it, on admin notices,
+to the customer. `lib/email/reply-to-guard.test.ts` holds that line.
+
+ABSOLUTE RULE: attachments never travel through a server action. The row is written
+`pending`, a signed upload token is minted for exactly that path, the browser PUTs
+to Storage, and `finalizeAttachment` confirms the object exists. The bucket is
+private with no client policies; reads go through the 60-second signed redirect at
+`/api/orders/[order_id]/files/[deliverable_id]`.
+
+ABSOLUTE RULE: never `auth.admin.listUsers`, and never `getUserById` in a loop.
+`lookupCustomers` and `searchCustomers` use the two service-role RPCs in migration
+0352. List queries select named columns and never `context`, which can hold a whole
+Blueprint view.
+
+ABSOLUTE RULE: nothing here is a model. An order stores what the Blueprint already
+computed, read from the cache, and never builds one. Section 13 is rendered by the
+page and is outside the stored view, so the Blueprint's cache and images do not know
+about it.
+
+The deliverable lives in the portal, so a correction after delivery is what the
+customer sees. Editing a published section is live at once.
+
+Settings: `commerce_settings` (service role only), edited at
+`/admin/orders/settings`, code fallbacks in `lib/commerce/default-settings.ts`. Date
+inputs read and write Eastern through `lib/commerce/eastern-input.ts`.
+
+Admin paths: `/admin/orders`, `/admin/orders/[order_id]`, `/admin/orders/new`
+(complimentary), `/admin/orders/products`, `/admin/orders/coupons`,
+`/admin/orders/settings`. Cron: `/api/cron/order-maintenance`, hourly at minute 40,
+bounded, orders only.
+
+Module map (lib/commerce/): `types.ts`, `constants.ts`, `settings.ts`,
+`transitions.ts` (both state machines; every transition goes through it),
+`pay-links.ts`, `rich-text.ts`, `availability.ts`, `offer.ts` (the memoized offer),
+`products.ts`, `product-fields.ts`, `coupons.ts`, `intake.ts`, `figures.ts`,
+`deliverables.ts`, `customers.ts`, `context.ts`, `orders.ts`, `stripe.ts`,
+`reconcile.ts`, `disputes.ts`, `notify.ts`, `maintenance.ts`, `eastern-input.ts`.
+Emails: `lib/email/order-emails.ts`. Generic Stripe: `lib/stripe/client.ts` and
+`outcome.ts`.
+
 ## League Pulse Format Resolution
 
 ABSOLUTE RULE: Inside league views (`/leagues/[id]` and all descendants, plus `/api/og/*` routes that render values from those views), the format used for value calculations is derived from the league's actual Sleeper scoring settings, NOT the user's global format toggle. Source remains user-controlled. Pick values always fall back to KTC. The global header format toggle has no effect inside a league view. This will change when FF Beacon native rankings with custom scoring exist (see plan.md "Future: User Custom Scoring Formats").

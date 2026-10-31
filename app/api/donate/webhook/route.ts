@@ -146,6 +146,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true, handled: false });
   }
 
+  // An order's session arrives here too, because Stripe fans every
+  // checkout.session event out to every endpoint subscribed to it. One is
+  // a donation only when our own checkout route said so.
+  const product = session?.metadata?.product;
+  if (product && product !== "ffbeacon_donation") {
+    return NextResponse.json({ received: true, handled: false, reason: "not-a-donation" });
+  }
+
   // 4. PAID, or nothing. `checkout.session.completed` fires for a
   //    delayed-notification method before the money exists; that session comes
   //    back later as async_payment_succeeded.

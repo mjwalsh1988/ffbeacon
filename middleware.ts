@@ -60,6 +60,6 @@ export const config = {
     // path. Without that, `/llms.txt.php` and `/sitemap.xml.bak` are excluded
     // too, which is inert today only because nothing is routed under those
     // prefixes.
-    "/((?!api/donate/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms(?:-full)?\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/donate/webhook$|api/orders/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms(?:-full)?\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

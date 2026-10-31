@@ -37,7 +37,7 @@ const SECTIONS: Array<{ id: string; label: string }> = [
   { id: "copyright", label: "Copyright complaints" },
   { id: "third-party", label: "Third-party data, and who we are not affiliated with" },
   { id: "community", label: "The Discord community" },
-  { id: "donations", label: "Donations" },
+  { id: "donations", label: "Donations and purchases" },
   { id: "availability", label: "Availability, changes, and experimental features" },
   { id: "ip", label: "Intellectual property" },
   { id: "termination", label: "Termination" },
@@ -371,7 +371,7 @@ export default function TermsPage() {
 
           <section aria-labelledby="donations">
             <h2 id="donations" className="text-2xl font-semibold tracking-tight text-ink">
-              9. Donations
+              9. Donations and purchases
             </h2>
             <p className="mt-3">
               {SITE.name} is free to use and is funded personally. You may make a
@@ -417,11 +417,63 @@ export default function TermsPage() {
                 Donations are one-time. We do not set up recurring charges and we do not
                 store a payment method to reuse. We email you a receipt for a donation
                 made by card or wallet; a donation sent through PayPal or Venmo is
-                receipted by that service instead.
+                receipted by that service instead. For a purchase we email a receipt
+                whichever way you paid.
               </li>
               <li>
                 We may decline or return a donation at our discretion, for example where
                 a payment appears fraudulent.
+              </li>
+            </ul>
+            <h3 className="mt-6 text-lg font-semibold tracking-tight text-ink">Purchases</h3>
+            <ul className="mt-3 list-disc space-y-2 pl-6">
+              <li>
+                <strong className="text-ink">What you are buying.</strong> A Personal Team
+                Review is a written opinion about one fantasy football roster, prepared by
+                the person who runs FF Beacon from publicly available league data and the
+                tools on this site. It is analysis for entertainment and information. It
+                is not financial, legal or betting advice, and it does not promise any
+                result in your league.
+              </li>
+              <li>
+                <strong className="text-ink">Price and payment.</strong> The price shown at
+                the time you order is the price you pay, in US dollars, one time. A code
+                you enter at checkout is applied before you pay and is shown on your
+                receipt. Card and wallet payments are processed by Stripe on
+                Stripe&apos;s own pages. PayPal and Venmo payments are sent by you to our
+                account and are confirmed by hand; an order paid that way is not started
+                until we confirm the payment, and it closes on its own if no payment
+                arrives within seven days. You may cancel an order you have not paid for
+                at any time from the order page.
+              </li>
+              <li>
+                <strong className="text-ink">Delivery.</strong> The review is delivered
+                into your My Beacon account and we email you when it is ready. Each review
+                states a delivery window on the order page. If we cannot deliver within it
+                we will tell you and talk through what you would like to do.
+              </li>
+              <li>
+                <strong className="text-ink">Refunds.</strong> All sales are final. We
+                consider refund requests case by case, and we will usually refund an order
+                that has not been started on yet. Write to {CONTACT} and quote your order
+                number. A refund, when we make one, goes back to the way you paid. That is
+                a goodwill practice rather than a right you have under these Terms, and
+                nothing here limits any refund or chargeback right you may have under your
+                local consumer law or your card network&apos;s rules.
+              </li>
+              <li>
+                <strong className="text-ink">Disputed payments.</strong> If you dispute a
+                card payment with your bank while a review is in progress, we may pause
+                the work until the dispute is resolved.
+              </li>
+              <li>
+                <strong className="text-ink">Your part.</strong> A review is written for
+                the account that bought it. You may share it with your league, but you may
+                not resell it or present it as your own published work.
+              </li>
+              <li>
+                <strong className="text-ink">Account.</strong> A purchase requires an FF
+                Beacon account, because the review and your receipt live there.
               </li>
             </ul>
           </section>
