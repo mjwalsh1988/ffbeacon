@@ -26,7 +26,7 @@ export const TEAM_REVIEW_QUESTIONS = {
   },
   offLimits: {
     label: "Anything off the table?",
-    hint: "Players you will not trade, picks you are keeping, league rules Michael should know",
+    hint: "Players you will not trade, picks you are keeping, league rules we should know about",
     max: OFF_LIMITS_MAX,
   },
 } as const;

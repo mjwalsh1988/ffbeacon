@@ -129,7 +129,7 @@ export async function setFulfillmentStatusAction(
     actorUserId: userId,
     title:
       target === "in_progress"
-        ? "Michael started your review"
+        ? "We started on your review"
         : `Status changed to ${FULFILLMENT_LABEL[target].word}`,
     body: text || null,
     data: { from: order.fulfillment_status, to: target },
@@ -648,7 +648,7 @@ export async function publishDeliveryAction(
     kind: "delivery_updated",
     actor: "admin",
     actorUserId: userId,
-    title: "Michael updated your review",
+    title: "We updated your review",
   });
   if (notify === true) {
     after(async () => {
@@ -934,7 +934,7 @@ export async function createComplimentaryOrderAction(
     intake: { direction: "unsure", questions: "", offLimits: "", contact: "email", providedBy: "admin" },
     createdActor: "admin",
     createdActorUserId: adminId,
-    createdTitle: "Michael created this order for you",
+    createdTitle: "We set up this order for you",
   });
   if (!order) return { ok: false, error: "The order could not be created." };
 

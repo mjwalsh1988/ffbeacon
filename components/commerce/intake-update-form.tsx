@@ -3,7 +3,7 @@
 /**
  * The questions on a complimentary order. The admin created it, so the customer has
  * not been asked anything yet; this is fieldset 3 of the checkout on its own, and it
- * goes away once Michael starts. The textareas are the checkout's own, counter and
+ * goes away once the review is started. The textareas are the checkout's own, counter and
  * all, so the two forms cannot drift apart.
  */
 
@@ -81,7 +81,7 @@ export function IntakeUpdateForm({ orderId }: { orderId: string }) {
         disabled={pending}
         className="inline-flex min-h-11 w-full items-center justify-center rounded-card bg-beacon px-5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60 sm:w-auto"
       >
-        {pending ? "Sending..." : "Send these to Michael"}
+        {pending ? "Sending..." : "Send us your answers"}
       </button>
     </form>
   );

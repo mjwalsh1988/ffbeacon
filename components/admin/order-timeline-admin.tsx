@@ -15,7 +15,7 @@ import { ActionStatus, ADMIN_BUTTON, useOrderAction } from "./order-action";
 /** The raw tokens as words, so a reader hears "by the system" rather than "system". */
 const ACTOR_WORDS: Record<string, string> = {
   system: "by the system",
-  admin: "by Michael",
+  admin: "by you",
   customer: "by the customer",
 };
 

@@ -16,7 +16,7 @@ export const DEFAULT_COMMERCE_SETTINGS = {
     fullyBooked: false,
     maxOpenOrders: 10,
     countPendingPayment: true,
-    fullyBookedMessage: "Michael is fully booked right now. Check back in a few days.",
+    fullyBookedMessage: "We are fully booked right now. Check back in a few days and we will have room again.",
   },
   payments: {
     stripe: true,

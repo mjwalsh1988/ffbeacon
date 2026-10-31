@@ -187,7 +187,7 @@ export function PayPanel({
             <CopyNumber value={orderNumber} />
           </div>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            Put {orderNumber} in the payment note so Michael can match it to this order.
+            Put {orderNumber} in the payment note so we can match it to this order.
             {paymentMethod === "paypal" && " PayPal does not carry the note across, so type it there yourself."}
           </p>
           {payUrl && (
@@ -212,8 +212,8 @@ export function PayPanel({
 
           {reportedAt ? (
             <p role="status" className="mt-5 rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-3 text-sm leading-relaxed text-ink">
-              Thanks. Michael confirms PayPal and Venmo payments by hand, usually within a day. This page updates when
-              he does.
+              Thanks. We confirm PayPal and Venmo payments by hand, usually within a day. This page updates as soon
+              as we do.
             </p>
           ) : (
             <form onSubmit={report} className="mt-5 max-w-lg">
@@ -221,7 +221,7 @@ export function PayPanel({
                 Transaction id or the name on your PayPal or Venmo account
               </label>
               <p id="payment-reference-hint" className="mt-0.5 text-xs text-ink-muted">
-                Optional, and it helps Michael find the payment.
+                Optional, and it helps us find the payment faster.
               </p>
               <input
                 id="payment-reference"
@@ -246,7 +246,7 @@ export function PayPanel({
         </p>
       )}
 
-      {/* A reported payment may already be on its way, so the cancel waits for Michael. */}
+      {/* A reported payment may already be on its way, so the cancel waits for the admin. */}
       {!(manual && reportedAt) && (
         <div className="mt-5 border-t border-line/70 pt-2">
           <CancelOrderButton orderId={orderId} orderNumber={orderNumber} />

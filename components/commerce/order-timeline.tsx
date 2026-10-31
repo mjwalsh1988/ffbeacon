@@ -1,6 +1,6 @@
 /**
  * The customer's timeline: every visible event, oldest first, then the messages
- * from Michael. The rows reach here through RLS, so an internal note cannot appear.
+ * we sent. The rows reach here through RLS, so an internal note cannot appear.
  */
 
 import { formatEastern } from "@/lib/datetime";
@@ -9,7 +9,7 @@ import { RULED } from "@/components/league-blueprint/sheet";
 import { RichTextView } from "./rich-text-view";
 
 function eventTitle(event: OrderEvent): string {
-  return event.kind === "note" && event.actor === "admin" ? "Michael added a note" : event.title;
+  return event.kind === "note" && event.actor === "admin" ? "A note from FF Beacon" : event.title;
 }
 
 export function OrderTimeline({
@@ -36,7 +36,7 @@ export function OrderTimeline({
       </ol>
       {messages.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-sm font-bold text-ink">Messages from Michael</h3>
+          <h3 className="text-sm font-bold text-ink">Messages from FF Beacon</h3>
           <ul role="list" className={`mt-2 ${RULED}`}>
             {messages.map((message) => (
               <li key={message.id}>

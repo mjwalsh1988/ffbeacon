@@ -443,7 +443,7 @@ export async function cancelOwnOrderAction(orderId: unknown): Promise<ActionResu
     return {
       ok: false,
       message:
-        "You said the payment was sent, so this order waits for Michael to check. Write to michael@ffbeacon.com if you want it canceled.",
+        "You said the payment was sent, so this order waits for us to check. Write to michael@ffbeacon.com if you want it canceled.",
     };
   }
   if (!(await claimStripeRetry())) {
@@ -550,7 +550,7 @@ export async function updateIntakeAction(orderId: unknown, raw: unknown): Promis
     return { ok: false, message: "The questions on this order are already set." };
   }
   if (order.fulfillment_status !== "queued") {
-    return { ok: false, message: "Michael has started, so the questions are fixed." };
+    return { ok: false, message: "We have started on the review, so the questions are set." };
   }
 
   const admin = createAdminClient();
@@ -564,7 +564,7 @@ export async function updateIntakeAction(orderId: unknown, raw: unknown): Promis
     .select("*")
     .maybeSingle();
   if (error) return { ok: false, message: "We could not save that. Try again." };
-  if (!data) return { ok: false, message: "Michael has started, so the questions are fixed." };
+  if (!data) return { ok: false, message: "We have started on the review, so the questions are set." };
 
   await insertEvent(admin, {
     orderId: order.id,

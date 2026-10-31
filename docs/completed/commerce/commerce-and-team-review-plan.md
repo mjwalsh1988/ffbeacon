@@ -1,7 +1,7 @@
 # Beacon Store: one-time purchases, and the Personal Team Review as its first product
 
 Status: BUILT 2026-10-30, revision 2 of the plan, and reviewed a second time the
-same day; see section 22. Migrations 0343 to 0356. Task prefix in progress.md: CM-T###.
+same day; see section 22. Migrations 0343 to 0357. Task prefix in progress.md: CM-T###.
 Price change after the build: the Basic Review is $4.95 (migration 0356, the
 owner's call on 2026-10-30), not the $9.95 this document was written with. The
 Premium Review stays $19.95. Prices live in the products row, so no copy changed.
@@ -3321,3 +3321,34 @@ Accessibility
   picker keeps its retry state if the dialog is dismissed; Enter in the customer
   search field does not run Find; the refund cap is server-side only; the section
   title suggestions stay a datalist. None blocks a sale.
+
+Owner's changes after launch, 2026-10-31
+
+Where the review is sold on the Blueprint (9.1 said section 13 only)
+- Three places by width, one view event. Section 13 stays at the foot of the
+  sheet at every width and is now a pitch rather than a thirteenth report
+  section: the offer's tinted ground, a gradient rule, a display-size headline
+  naming the team, the two cards with the badged one lit, and three proof
+  points (components/commerce/review-offer-section.tsx). From xl a sticky rail
+  beside the sheet carries the headline, a row per review with price and
+  turnaround, and a link down to section 13 (review-rail.tsx). Below xl the
+  overview's strip sits under the team control instead (review-strip.tsx with
+  placement="blueprint"). The offer is loaded by the page, outside the sheet's
+  Suspense, so the strip and the rail paint before the report does.
+- Only section 13 counts review_offer_view on the Blueprint; the strip and the
+  rail pass countView false. The overview strip still counts its own placement.
+- components/commerce/product-offer.tsx is gone; reviewHref and the shared words
+  live in components/commerce/review-href.ts.
+
+Voice
+- The customer never reads "Michael" in the third person any more. Every
+  customer surface, event title and email says "we" or "FF Beacon": the
+  checkout, the order sheet, the pay panel, the timeline ("A note from FF
+  Beacon", "Messages from FF Beacon"), E1 to E13, REFUND_POLICY_SENTENCE, the
+  fully booked default, the intake hint, and the three admin-written event
+  titles. The admin timeline says "by you". Migration 0357 moves the Basic
+  Review's seeded description into the same voice. The seller email stays
+  michael@ffbeacon.com.
+- The strip's copy sells rather than describes: "Get a game plan written for
+  your team", what the review is, the price it starts at, and "See what is
+  included", which goes to the Blueprint's section 13.

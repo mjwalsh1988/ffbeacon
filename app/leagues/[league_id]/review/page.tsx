@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Personal Team Review",
-  description: "Michael reads one team in your league and writes to you.",
+  description: "We read one team in your league and write you the plan.",
   robots: { index: false, follow: true },
 };
 
@@ -186,7 +186,7 @@ export default async function LeagueReviewPage({
         ...leagueMastheadProps(league, context, pulseCached),
         pageTitle: "Personal Team Review",
         pageDescription:
-          "Michael reads one team in this league and writes to you. Pick the review, confirm the team, tell him what you want answered, and pay the way you like.",
+          "We read one team in this league and write you the plan. Pick the review, confirm the team, tell us what you want answered, and pay the way you like.",
       }}
     >
       {products.length === 0 || availability.reason === "closed" ? (
@@ -225,7 +225,7 @@ export default async function LeagueReviewPage({
         </div>
       ) : (
         <Sheet labelledBy={TITLE_ID}>
-          <SheetHead blurb={`Written by Michael, by hand, for one team in ${league.name}. The Blueprint stays free; the review is the paid read on top of it.`} />
+          <SheetHead blurb={`Written by hand, for one team in ${league.name}. The Blueprint stays free; the review is the paid read on top of it, from us to you.`} />
           <CheckoutForm
             sleeperLeagueId={sleeperLeagueId}
             leagueName={league.name}

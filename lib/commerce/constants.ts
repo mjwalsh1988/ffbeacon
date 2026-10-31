@@ -10,7 +10,7 @@ export const SELLER_NAME = "FF Beacon";
 export const SELLER_EMAIL = "michael@ffbeacon.com";
 
 export const REFUND_POLICY_SENTENCE =
-  "All sales are final. Michael considers refund requests case by case and will usually refund an order he has not started on yet.";
+  "All sales are final. We consider refund requests case by case and will usually refund an order we have not started on yet.";
 
 export const ORDER_NUMBER_RE = /^FFB-\d{6,}$/;
 

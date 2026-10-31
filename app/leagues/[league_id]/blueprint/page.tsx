@@ -41,9 +41,11 @@ import { loadMarketSignalSettings } from "@/lib/market-signals/settings";
 import { CapitalPanel } from "@/components/league-blueprint/capital-panel";
 import { PrioritiesPanel } from "@/components/league-blueprint/priorities-panel";
 import { StrategyPanel } from "@/components/league-blueprint/strategy-panel";
-import { SheetSection } from "@/components/league-blueprint/sheet";
-import { ProductOffer } from "@/components/commerce/product-offer";
-import { loadOfferState } from "@/lib/commerce/offer";
+import { ReviewOfferSection } from "@/components/commerce/review-offer-section";
+import { ReviewRail } from "@/components/commerce/review-rail";
+import { ReviewStrip } from "@/components/commerce/review-strip";
+import { reviewSectionHref } from "@/components/commerce/review-href";
+import { loadOfferState, type OfferState } from "@/lib/commerce/offer";
 
 export const dynamic = "force-dynamic";
 
@@ -143,7 +145,7 @@ export default async function LeagueBlueprintPage({
   const viewer = await resolveSleeperViewer(supabase, sp.username);
   const linkUsername = viewerLinkUsername(viewer);
 
-  const [{ otherLeagues }, resolvedSource, teams, candidates] = await Promise.all([
+  const [{ otherLeagues }, resolvedSource, teams, candidates, offer] = await Promise.all([
     loadLeagueHeaderActions(
       supabase,
       league.id,
@@ -154,6 +156,7 @@ export default async function LeagueBlueprintPage({
     resolveSourceSlug(supabase, sp.source),
     loadTeams(league.id),
     loadViewerCandidates(supabase, league.id),
+    loadOfferState(admin),
   ]);
   if (teams.length === 0) notFound();
 
@@ -192,6 +195,16 @@ export default async function LeagueBlueprintPage({
   const leagueHref = withUsername(`/leagues/${sleeperLeagueId}`, linkUsername);
   const canonical = `/leagues/${sleeperLeagueId}/blueprint?roster=${rosterId}`;
 
+  // The review is sold in three places on this page, by width: a strip under the
+  // controls below xl, a sticky rail beside the sheet from xl, and section 13 at
+  // the foot of the sheet at every width. Outside the stored view on purpose: the
+  // cache, the fingerprint and the share images know nothing about it.
+  const showOffer =
+    offer.settings.placements.blueprintSection &&
+    offer.availability.reason !== "closed" &&
+    offer.products.some((p) => p.family === "team-review" && p.placements.includes("blueprint"));
+  const offerRosterId = chosenByDefault ? null : rosterId;
+
   return (
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
@@ -214,22 +227,58 @@ export default async function LeagueBlueprintPage({
           </p>
         )}
 
-        <Suspense
-          key={`${rosterId}-${context.sourceSlug}`}
-          fallback={<SheetSkeleton teamName={team.teamName} leagueName={league.name} season={season} />}
-        >
-          <BlueprintBody
-            leagueId={sleeperLeagueId}
-            league={league}
-            rosterId={rosterId}
-            chosenByDefault={chosenByDefault}
-            sourceSlug={resolvedSource.slug}
-            resynced={!pulseCached}
+        {showOffer && (
+          <ReviewStrip
+            offer={offer}
+            placement="blueprint"
+            sleeperLeagueId={sleeperLeagueId}
+            rosterId={offerRosterId}
             linkUsername={linkUsername}
-            canonical={canonical}
-            prefetched={{ context, cached: cachedNow }}
+            teamName={chosenByDefault ? null : team.teamName}
+            detailHref={reviewSectionHref({ sleeperLeagueId, rosterId, linkUsername })}
+            countView={false}
+            className="mt-6 xl:hidden"
           />
-        </Suspense>
+        )}
+
+        <div className={showOffer ? "grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]" : ""}>
+          <div className="min-w-0">
+            <Suspense
+              key={`${rosterId}-${context.sourceSlug}`}
+              fallback={<SheetSkeleton teamName={team.teamName} leagueName={league.name} season={season} />}
+            >
+              <BlueprintBody
+                leagueId={sleeperLeagueId}
+                league={league}
+                rosterId={rosterId}
+                chosenByDefault={chosenByDefault}
+                teamName={team.teamName}
+                sourceSlug={resolvedSource.slug}
+                resynced={!pulseCached}
+                linkUsername={linkUsername}
+                canonical={canonical}
+                prefetched={{ context, cached: cachedNow }}
+                offer={showOffer ? offer : null}
+              />
+            </Suspense>
+          </div>
+          {showOffer && (
+            <aside
+              aria-label="Personal Team Review"
+              className="hidden xl:sticky xl:top-[9.5rem] xl:mt-6 xl:block xl:self-start"
+            >
+              <ReviewRail
+                teamName={team.teamName}
+                sleeperLeagueId={sleeperLeagueId}
+                rosterId={offerRosterId}
+                linkUsername={linkUsername}
+                products={offer.products}
+                availability={offer.availability}
+                settings={offer.settings}
+              />
+            </aside>
+          )}
+        </div>
       </div>
     </LeagueShell>
   );
@@ -268,28 +317,32 @@ async function BlueprintBody({
   league,
   rosterId,
   chosenByDefault,
+  teamName,
   sourceSlug,
   resynced,
   linkUsername,
   canonical,
   prefetched,
+  offer,
 }: {
   leagueId: string;
   league: NonNullable<Awaited<ReturnType<typeof getSyncedLeague>>>["league"];
   rosterId: number;
   chosenByDefault: boolean;
+  teamName: string;
   sourceSlug: string | null;
   resynced: boolean;
   linkUsername: string | null;
   canonical: string;
   prefetched: LoadBlueprintArgs["prefetched"];
+  /** The offer to sell in section 13, or null when the placement is off. */
+  offer: OfferState | null;
 }) {
   const admin = createAdminClient();
-  const [result, settings, marketSettings, offer] = await Promise.all([
+  const [result, settings, marketSettings] = await Promise.all([
     loadBlueprint({ admin, league, rosterId, sourceSlug, resynced, prefetched }),
     loadLeagueBlueprintSettings(admin),
     loadMarketSignalSettings(admin),
-    loadOfferState(admin),
   ]);
 
   if (result.kind === "no-coverage") {
@@ -355,21 +408,17 @@ async function BlueprintBody({
         <CallsPanel view={view} bands={bands} linkUsername={linkUsername} signalWindowDays={marketSettings.windowDays} number="10" />
         <CapitalPanel view={view} number="11" />
         <StrategyPanel view={view} linkUsername={linkUsername} number="12" />
-        {/* Outside the stored view on purpose: the cache, the fingerprint and
-            the share images know nothing about it. */}
-        {offer.settings.placements.blueprintSection && offer.availability.reason !== "closed" && (
-          <SheetSection id="review" number="13" title="Personal review" helper="Michael reads this team and writes to you.">
-            <ProductOffer
-              family="team-review"
-              placement="blueprint"
-              sleeperLeagueId={leagueId}
-              rosterId={chosenByDefault ? null : rosterId}
-              linkUsername={linkUsername}
-              products={offer.products}
-              availability={offer.availability}
-              settings={offer.settings}
-            />
-          </SheetSection>
+        {offer && (
+          <ReviewOfferSection
+            number="13"
+            teamName={teamName}
+            sleeperLeagueId={leagueId}
+            rosterId={chosenByDefault ? null : rosterId}
+            linkUsername={linkUsername}
+            products={offer.products}
+            availability={offer.availability}
+            settings={offer.settings}
+          />
         )}
         <footer
           aria-labelledby="bp-notes"

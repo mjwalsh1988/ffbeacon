@@ -44,7 +44,7 @@ function statusSentence(order: Order): string {
       return "Waiting for your card payment.";
     case "awaiting_confirmation":
       return order.customer_reported_paid_at
-        ? `Michael confirms ${word} payments by hand, usually within a day. This page updates when he does.`
+        ? `We confirm ${word} payments by hand, usually within a day. This page updates as soon as we do.`
         : `Waiting for your ${word} payment.`;
     case "expired":
       return "The payment did not arrive in time. Nothing was charged.";
@@ -57,9 +57,9 @@ function statusSentence(order: Order): string {
   }
   switch (order.fulfillment_status) {
     case "queued":
-      return `Michael has it in his queue. Expect it by ${formatEastern(order.due_at)}.`;
+      return `It is in our queue. Expect it by ${formatEastern(order.due_at)}.`;
     case "in_progress":
-      return `Michael is working on it. Expect it by ${formatEastern(order.due_at)}.`;
+      return `We are working on it now. Expect it by ${formatEastern(order.due_at)}.`;
     case "delivered":
       return `Delivered ${formatEastern(order.delivered_at)}.`;
     default:
@@ -137,7 +137,7 @@ function ReviewSection({ order, sections, attachments }: { order: Order; section
             >
               {SELLER_EMAIL}
             </a>
-            , and Michael will answer it.
+            , and we will answer it.
           </p>
         )}
       </div>
@@ -153,12 +153,12 @@ function IntakeSection({ order }: { order: Order }) {
     TEAM_REVIEW_QUESTIONS.direction.options.find((o) => o.value === intake.direction)?.label ?? "Not sure";
   const fixed = order.fulfillment_status !== "queued" && intake.providedBy === "admin" && !intake.questions;
   return (
-    <SheetSection id="what-you-told" number="04" title="What you told Michael">
+    <SheetSection id="what-you-told" number="04" title="What you told us">
       {awaitingAnswers ? (
         <IntakeUpdateForm orderId={order.id} />
       ) : fixed ? (
         <p className="text-sm leading-relaxed text-ink-muted">
-          Michael has started, so the questions are fixed. Reply to any email about this order to add something.
+          We have started on the review, so the questions are set. Reply to any email about this order to add something.
         </p>
       ) : (
         <dl className="space-y-3 text-sm">

@@ -1,19 +1,20 @@
 # Handoff: Beacon Store and Personal Team Review build
 
-Build complete through CM-T083 (the second, whole-build review). CM-T082 is the owner's. Nothing is committed. Plan: docs/completed/commerce/commerce-and-team-review-plan.md, section 22 lists what shipped differently, including the second review's changes and what it left. Task lines: progress.md, heading "Beacon Store and Personal Team Review".
+Build complete through CM-T084 (the Blueprint offer in three places by width, and the store's copy in the site's own voice). CM-T082 is the owner's. Committed and pushed through CM-T083 as 1e3d033; CM-T084 follows it. Plan: docs/completed/commerce/commerce-and-team-review-plan.md, section 22 lists what shipped differently, including both reviews and the 2026-10-31 owner changes. Task lines: progress.md, heading "Beacon Store and Personal Team Review".
 
 ## State
 
-- Last task completed: CM-T083: second review by five reviewers over every file, every finding resolved or recorded in plan section 22
-- Next task to start: Owner commit and deploy, then CM-T082
+- Last task completed: CM-T084: review strip under the Blueprint controls below xl, sticky rail from xl, standout section 13, first-person copy everywhere a customer reads, migration 0357
+- Next task to start: CM-T082 (the owner watches the first live order)
 - Half-finished: none. No server running
-- Gate after the second review: typecheck clean, lint 0 and 0, 7,754 tests in 561 files, build pass; neither review's fixes were re-run in a browser
+- Gate after CM-T084: typecheck clean, lint 0 and 0, tests and build pass; Blueprint and overview checked in Chrome at desktop, laptop, tablet and phone widths
 
 ## Migrations applied and verified
 
 - 0343 to 0352 as planned, 0353_orders_owner_columns from the first review. All probed live with begin/rollback. Types regenerated after 0352; 0353 changes grants only, so types are unchanged.
 - 0354 (initplan form for the four owner-read policies, indexes on orders.product_id and payment_webhook_events.order_id) and 0355 (receipt retry index covering skipped, partial indexes on paid_at and delivered_at) from the second review. Applied via MCP and read back from pg_policies and pg_indexes. Indexes and policy expressions only, so types are unchanged.
 - 0356: the Basic Review priced at $4.95 (the owner's call, 2026-10-30). One data update on products, read back as 495.
+- 0357: the Basic Review's description in the first person (2026-10-31). One data update on products; the Premium description already read that way.
 
 ## Reviewer findings (one reviewer, all resolved in code)
 

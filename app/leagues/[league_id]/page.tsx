@@ -20,6 +20,7 @@ import { matchViewerRoster } from "@/lib/league-viewer";
 import { loadRosters } from "@/lib/power-pulse/load";
 import { loadOfferState } from "@/lib/commerce/offer";
 import { ReviewStrip } from "@/components/commerce/review-strip";
+import { reviewSectionHref } from "@/components/commerce/review-href";
 import { loadBlueprintCtaFigure } from "@/lib/league-blueprint/cta-data";
 import { BlueprintCta } from "@/components/league-blueprint/blueprint-cta";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
@@ -1666,12 +1667,15 @@ async function ReviewStripSection({
   const offer = await loadOfferState(createAdminClient());
   if (!offer.settings.placements.overviewStrip) return null;
   const candidates = await loadViewerCandidates(await createClient(), leagueRowId);
+  const rosterId = matchViewerRoster(candidates, searchedUsername, focusedRosterId, viewerSleeperUserId);
   return (
     <ReviewStrip
       offer={offer}
+      placement="league-overview"
       sleeperLeagueId={sleeperLeagueId}
-      rosterId={matchViewerRoster(candidates, searchedUsername, focusedRosterId, viewerSleeperUserId)}
+      rosterId={rosterId}
       linkUsername={linkUsername}
+      detailHref={reviewSectionHref({ sleeperLeagueId, rosterId, linkUsername })}
     />
   );
 }

@@ -101,25 +101,41 @@ export function TierChoiceCard({
   );
 }
 
+/** The lit border for the review we point at (the one carrying a badge). */
+const HIGHLIGHT =
+  "border-brand-cyan/60 ring-1 ring-brand-cyan/40 shadow-[0_0_48px_-16px_rgba(34,211,238,0.55)]";
+
 export function TierCardStatic({
   product,
   footer,
+  highlight = false,
 }: {
   product: TierCardProduct;
   footer?: ReactNode;
+  /** Lights the border and casts a glow, for the review the offer leads with. */
+  highlight?: boolean;
 }) {
   return (
-    <div className={`${SHELL} flex flex-col border-line`}>
+    <div className={`${SHELL} flex flex-col ${highlight ? HIGHLIGHT : "border-line"}`}>
       <CardBody product={product} />
       {footer && <div className="mt-auto pt-5">{footer}</div>}
     </div>
   );
 }
 
-export function TierOfferCard({ product, href }: { product: TierCardProduct; href: string }) {
+export function TierOfferCard({
+  product,
+  href,
+  highlight = false,
+}: {
+  product: TierCardProduct;
+  href: string;
+  highlight?: boolean;
+}) {
   return (
     <TierCardStatic
       product={product}
+      highlight={highlight}
       footer={
         <Link
           href={href as Route}

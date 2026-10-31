@@ -169,14 +169,14 @@ function buildReceipt(order: Order, kind: "E1" | "E3"): BuiltEmail {
     { label: "Sold by", value: `${SELLER_NAME}, ${SELLER_EMAIL}` },
   ];
   const days = order.product_snapshot.turnaround_days;
-  const promise = `Michael writes every review himself, against your Team Blueprint and your league's own numbers. Expect it in your My Beacon portal within ${days} ${days === 1 ? "day" : "days"}, and an email the moment it lands.`;
+  const promise = `We write every review by hand, against your Team Blueprint and your league's own numbers. Expect it in your My Beacon portal within ${days} ${days === 1 ? "day" : "days"}, and an email the moment it lands.`;
   const refund = free
     ? null
     : `${REFUND_POLICY_SENTENCE} Reply to this email and quote the order number.`;
   const cta = button(order);
 
   const innerHtml = [
-    emailHeading("Thank you. Michael has your order."),
+    emailHeading("Thank you. We have your order."),
     emailQuoteCard(rows),
     emailParagraph(esc(promise)),
     emailParagraph("Keep this email as your receipt."),
@@ -185,7 +185,7 @@ function buildReceipt(order: Order, kind: "E1" | "E3"): BuiltEmail {
   ].join("");
 
   const text = [
-    "Thank you. Michael has your order.",
+    "Thank you. We have your order.",
     "",
     ...rows.map((r) => `${r.label}: ${r.value}`),
     "",
@@ -250,7 +250,7 @@ function buildAwaitingManual(order: Order): BuiltEmail {
   const held = order.expires_at
     ? `The order is held until ${formatEasternDate(order.expires_at)}.`
     : "The order is held for a limited time.";
-  const closing = `Michael confirms these by hand, usually within a day. ${held}`;
+  const closing = `We confirm these by hand, usually within a day. ${held}`;
   const cta = button(order);
   const innerHtml = [
     emailHeading("One step left."),
@@ -276,13 +276,13 @@ function buildAwaitingManual(order: Order): BuiltEmail {
 function buildStatusUpdate(order: Order, extra: OrderEmailExtra): BuiltEmail {
   const subject =
     extra.toStatus === "in_progress"
-      ? `Order ${order.order_number}: Michael has started your review`
+      ? `Order ${order.order_number}: we have started on your review`
       : `Order ${order.order_number}: an update on your review`;
   const note = extra.note ?? "";
   const cta = button(order);
   const innerHtml = [
     emailHeading("An update on your review."),
-    emailQuoteCard([{ label: "From Michael", value: note }]),
+    emailQuoteCard([{ label: "From FF Beacon", value: note }]),
     cta.html,
   ].join("");
   return wrap(subject, note.slice(0, 120), innerHtml, [note, "", cta.text].join("\n"));
@@ -291,7 +291,7 @@ function buildStatusUpdate(order: Order, extra: OrderEmailExtra): BuiltEmail {
 function buildDelivered(order: Order, extra: OrderEmailExtra): BuiltEmail {
   const name = order.product_snapshot.name;
   const subject = `Your ${name} is ready, ${order.order_number}`;
-  const intro = `Michael has finished your ${name} for ${teamLine(order)}. Here is how it opens:`;
+  const intro = `Your ${name} for ${teamLine(order)} is finished and waiting for you. Here is how it opens:`;
   const raw = extra.firstSection ?? "";
   const clipped = raw.length > DELIVERY_CLIP;
   const blocks = parseRichText(clipped ? raw.slice(0, DELIVERY_CLIP) : raw);
@@ -352,7 +352,7 @@ function buildPaymentProblem(order: Order, extra: OrderEmailExtra): BuiltEmail {
 
   const innerHtml = [
     emailHeading(heading),
-    extra.note ? emailQuoteCard([{ label: "From Michael", value: extra.note }]) : "",
+    extra.note ? emailQuoteCard([{ label: "From FF Beacon", value: extra.note }]) : "",
     steps?.html ?? "",
     again ? emailParagraph(esc(again)) : "",
     cta.html,
@@ -408,7 +408,7 @@ function buildCancelled(order: Order, extra: OrderEmailExtra): BuiltEmail {
   const cta = button(order);
   const innerHtml = [
     emailHeading("Your order was canceled."),
-    note ? emailQuoteCard([{ label: "From Michael", value: note }]) : "",
+    note ? emailQuoteCard([{ label: "From FF Beacon", value: note }]) : "",
     cta.html,
   ].join("");
   return wrap(subject, "Nothing further will happen on this order.", innerHtml, [note, "", cta.text].join("\n"));
@@ -432,13 +432,13 @@ function buildFreeForm(order: Order, extra: OrderEmailExtra): BuiltEmail {
 }
 
 function buildDeliveryUpdated(order: Order, extra: OrderEmailExtra): BuiltEmail {
-  const subject = `Order ${order.order_number}: Michael updated your review`;
+  const subject = `Order ${order.order_number}: we updated your review`;
   const cta = button(order, "Read the full review");
-  const line = "Michael has made a change to your review. The latest version is in your portal.";
+  const line = "We made a change to your review. The latest version is in your portal.";
   const innerHtml = [
     emailHeading("Your review has been updated."),
     emailParagraph(esc(line)),
-    extra.note ? emailQuoteCard([{ label: "From Michael", value: extra.note }]) : "",
+    extra.note ? emailQuoteCard([{ label: "From FF Beacon", value: extra.note }]) : "",
     cta.html,
   ].join("");
   return wrap(subject, line, innerHtml, [line, ...(extra.note ? ["", extra.note] : []), "", cta.text].join("\n"));
@@ -446,7 +446,7 @@ function buildDeliveryUpdated(order: Order, extra: OrderEmailExtra): BuiltEmail 
 
 function buildComplimentary(order: Order, extra: OrderEmailExtra): BuiltEmail {
   const name = order.product_snapshot.name;
-  const subject = `Order ${order.order_number}: Michael has set up a ${name} for you`;
+  const subject = `Order ${order.order_number}: we set up a ${name} for you`;
   const rows = [
     { label: "Order", value: order.order_number },
     { label: "Review", value: name },
@@ -454,7 +454,7 @@ function buildComplimentary(order: Order, extra: OrderEmailExtra): BuiltEmail {
     { label: "Amount", value: "$0.00, complimentary" },
     { label: "Due by", value: formatEasternDate(order.due_at) },
   ];
-  const closing = "If there is anything you want answered, add it on the order page before Michael starts.";
+  const closing = "If there is anything you want answered, add it on the order page before we start.";
   const cta = button(order);
   const innerHtml = [
     emailHeading("A review, on the house."),

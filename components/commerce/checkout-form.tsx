@@ -42,11 +42,11 @@ const METHOD_COPY: Record<Method, { label: string; body: string }> = {
   },
   paypal: {
     label: "PayPal",
-    body: "You send the amount to @mjwalsh1988 with your order number in the note. Michael confirms it by hand, usually within a day.",
+    body: "You send the amount to @mjwalsh1988 with your order number in the note. We confirm it by hand, usually within a day.",
   },
   venmo: {
     label: "Venmo",
-    body: "You send the amount to @mjwalsh1988 with your order number in the note. Michael confirms it by hand, usually within a day.",
+    body: "You send the amount to @mjwalsh1988 with your order number in the note. We confirm it by hand, usually within a day.",
   },
 };
 
@@ -286,7 +286,7 @@ export function CheckoutForm({
           />
         </div>
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-          Michael reviews the team as it stands when he starts, and reads the Blueprint you see now.
+          We review the team as it stands when we start, and we read the Blueprint you see now.
         </p>
         <Link
           href={blueprintHref as Route}
@@ -296,7 +296,7 @@ export function CheckoutForm({
         </Link>
       </Fieldset>
 
-      <Fieldset number="03" title="Tell Michael about your situation">
+      <Fieldset number="03" title="Tell us about your situation">
         <div className="max-w-2xl space-y-5">
           <fieldset className="min-w-0">
             <legend className="text-sm font-semibold text-ink">

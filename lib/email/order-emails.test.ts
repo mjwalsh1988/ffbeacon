@@ -56,7 +56,7 @@ describe("customer emails", () => {
       ["E2", manual("paypal"), {}, "Order FFB-100001: how to finish paying with PayPal"],
       ["E2", manual("venmo"), {}, "Order FFB-100001: how to finish paying with Venmo"],
       ["E3", manual("venmo"), {}, "Order FFB-100001: payment confirmed"],
-      ["E4", ORDER, { toStatus: "in_progress", note: "n" }, "Order FFB-100001: Michael has started your review"],
+      ["E4", ORDER, { toStatus: "in_progress", note: "n" }, "Order FFB-100001: we have started on your review"],
       ["E4", ORDER, { toStatus: "queued", note: "n" }, "Order FFB-100001: an update on your review"],
       ["E5", ORDER, {}, "Your Premium Review is ready, FFB-100001"],
       ["E6", manual("paypal"), {}, "Order FFB-100001 is waiting for your PayPal payment"],
@@ -66,8 +66,8 @@ describe("customer emails", () => {
       ["E8", ORDER, { refundDeltaCents: 500, refundTotalCents: 500 }, "Order FFB-100001: a partial refund"],
       ["E9", ORDER, {}, "Order FFB-100001 was canceled"],
       ["E10", ORDER, {}, "Order FFB-100001 has closed"],
-      ["E12", ORDER, {}, "Order FFB-100001: Michael updated your review"],
-      ["E13", ORDER, {}, "Order FFB-100001: Michael has set up a Premium Review for you"],
+      ["E12", ORDER, {}, "Order FFB-100001: we updated your review"],
+      ["E13", ORDER, {}, "Order FFB-100001: we set up a Premium Review for you"],
     ];
     for (const [template, order, extra, subject] of cases) {
       expect(renderOrderEmail(template, order, extra).subject).toBe(subject);
