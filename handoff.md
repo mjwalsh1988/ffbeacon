@@ -1,13 +1,13 @@
 # Handoff: Beacon Store and Personal Team Review build
 
-Build complete through CM-T084 (the Blueprint offer in three places by width, and the store's copy in the site's own voice). CM-T082 is the owner's. Committed and pushed through CM-T083 as 1e3d033; CM-T084 follows it. Plan: docs/completed/commerce/commerce-and-team-review-plan.md, section 22 lists what shipped differently, including both reviews and the 2026-10-31 owner changes. Task lines: progress.md, heading "Beacon Store and Personal Team Review".
+Build complete through CM-T086 (the Trade Review as a second product family, and the team review offered after a draft). CM-T082 is the owner's. Committed and pushed through CM-T084 as ef284e4; CM-T085 and CM-T086 follow it. Plan: docs/completed/commerce/commerce-and-team-review-plan.md, section 22 lists what shipped differently, including both reviews, the 2026-10-31 owner changes, and the Trade Review. Task lines: progress.md, heading "Beacon Store and Personal Team Review".
 
 ## State
 
-- Last task completed: CM-T084: review strip under the Blueprint controls below xl, sticky rail from xl, standout section 13, first-person copy everywhere a customer reads, migration 0357
-- Next task to start: CM-T082 (the owner watches the first live order)
+- Last task completed: CM-T086: the Trade Review ($3.95) sold above a Signal Check result, checkout at /tools/trade-calculator/review, one createOrderAction for both kinds; CM-T085 put the team reviews on the On The Clock post-draft screen; migration 0358
+- Next task to start: CM-T082 (the owner watches the first live order; a Trade Review order has only been placed in test mode)
 - Half-finished: none. No server running
-- Gate after CM-T084: typecheck clean, lint 0 and 0, tests and build pass; Blueprint and overview checked in Chrome at desktop, laptop, tablet and phone widths
+- Gate after CM-T086: typecheck clean, lint 0 and 0, tests and build pass; the post-draft screen, the trade offer, the checkout and an order page checked in Chrome
 
 ## Migrations applied and verified
 
@@ -15,6 +15,7 @@ Build complete through CM-T084 (the Blueprint offer in three places by width, an
 - 0354 (initplan form for the four owner-read policies, indexes on orders.product_id and payment_webhook_events.order_id) and 0355 (receipt retry index covering skipped, partial indexes on paid_at and delivered_at) from the second review. Applied via MCP and read back from pg_policies and pg_indexes. Indexes and policy expressions only, so types are unchanged.
 - 0356: the Basic Review priced at $4.95 (the owner's call, 2026-10-30). One data update on products, read back as 495.
 - 0357: the Basic Review's description in the first person (2026-10-31). One data update on products; the Premium description already read that way.
+- 0358: the Trade Review row, intake_form check widened to 'trade-review', placements check widened to 'on-the-clock' and 'trade-calculator', the team reviews given 'on-the-clock' (2026-10-31). Read back live; types unchanged (checks and data only).
 
 ## Reviewer findings (one reviewer, all resolved in code)
 
@@ -30,6 +31,14 @@ Build complete through CM-T084 (the Blueprint offer in three places by width, an
 - MEDIUM Not received could expire within the hour: fresh expiry and reminder.
 - LOW session write status guard, Open tile counting expired, E13 note lost on retry, focus and pending announcements: all fixed.
 - Deliberately not acted on: none. Not reached by the reviewer: see plan section 22.
+
+## Reviewer findings on the Trade Review and post-draft offer (one reviewer, 2026-10-31, all resolved in code)
+
+- HIGH import panel kept a share link made for one trade after another was picked, so the order could have gone to the wrong trade: a fresh run now clears the link and the saved id is held with the trade it belongs to.
+- MEDIUM ordering from the import panel published a public share of a league trade with real team names: importAndAnalyze gained savePrivate and the order path uses it.
+- MEDIUM with share links switched off the offer dead-ended: the trade calculator page withholds the offer when shareLinksEnabled is false, and both save paths say so if a save returns nothing.
+- LOW ownership guard let a private row with no owner through; Stripe line read "Trade Review (Trade Review)"; the offer was not keyed per result; no announcement while saving; a dead re-export; the admin product form could not set intake_form (now derived from the family); "Michael will answer it" in E5. All fixed.
+- Tests added from the review: lib/commerce/context.test.ts (ownership and what the stored context holds), findOpenDuplicate and listSubjectLine in orders.test.ts, components/commerce/review-href.test.ts, stripeLineName, intakeFormFor.
 
 ## Assumptions made
 

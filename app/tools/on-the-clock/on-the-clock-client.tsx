@@ -105,6 +105,7 @@ import { SleeperHandleGate } from "@/components/sleeper-handle/handle-gate";
 import type { IdentityCardStatus } from "@/components/sleeper-handle/identity-card";
 import { gateViewer, type SleeperViewer } from "@/lib/sleeper-handle/types";
 import type { HandleGateState } from "@/lib/sleeper-handle/types";
+import type { PublicOffer } from "@/lib/commerce/public-offer";
 import type { PulsePlayerSummary } from "@/lib/on-the-clock/pulse-types";
 import type {
   HistoryTransaction,
@@ -512,6 +513,7 @@ export function OnTheClockClient({
   autoRefreshEnabled = true,
   autoRefreshSeconds = 60,
   settings,
+  reviewOffer = null,
 }: {
   /**
    * The page hero, rendered on the server and handed in so this component can
@@ -535,6 +537,8 @@ export function OnTheClockClient({
   autoRefreshSeconds?: number;
   /** Admin On The Clock settings (drives the Team Need engine). */
   settings: OnTheClockSettings;
+  /** The Personal Team Review, for the screen after the draft; null when not for sale there. */
+  reviewOffer?: PublicOffer | null;
 }) {
   // ----- identity -----
   //
@@ -2979,6 +2983,9 @@ export function OnTheClockClient({
                   // paint), and the roster count does not need that engine.
                   teamCount={draftCache.rosters.length}
                   onGoToView={selectView}
+                  reviewOffer={reviewOffer}
+                  myRosterId={derived.myRosterId}
+                  linkUsername={actingUsername || null}
                   changedSinceDraft={countChangedForRoster(
                     snapshot?.cache.picks ?? [],
                     derived.myRosterId,

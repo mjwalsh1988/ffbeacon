@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { updateIntakeAction } from "@/app/actions/commerce";
 import { TEAM_REVIEW_QUESTIONS } from "@/lib/commerce/intake";
 import type { TeamReviewDirection } from "@/lib/commerce/types";
-import { TextArea } from "./checkout-form";
+import { TextArea } from "./checkout-parts";
 
 export function IntakeUpdateForm({ orderId }: { orderId: string }) {
   const router = useRouter();

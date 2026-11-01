@@ -32,6 +32,11 @@ export function reviewSectionHref(args: {
   return `${withUsername(path, args.linkUsername)}#review`;
 }
 
+/** The Trade Review's checkout, for one saved Signal Check result. */
+export function tradeReviewHref(shareId: string): string {
+  return `/tools/trade-calculator/review?trade=${encodeURIComponent(shareId)}`;
+}
+
 /** "card, Apple Pay, Google Pay, PayPal or Venmo", from what is switched on. */
 export function payWays(methods: readonly PaymentMethod[]): string | null {
   const words: string[] = [];

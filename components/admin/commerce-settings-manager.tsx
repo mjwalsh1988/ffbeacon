@@ -216,6 +216,16 @@ export function CommerceSettingsManager({ initialSettings }: { initialSettings: 
           checked={s.placements.myBeaconTile}
           onChange={(myBeaconTile) => patch("placements", { myBeaconTile })}
         />
+        <CheckboxField
+          label="On The Clock, after the draft"
+          checked={s.placements.onTheClock}
+          onChange={(onTheClock) => patch("placements", { onTheClock })}
+        />
+        <CheckboxField
+          label="Trade calculator, under a result"
+          checked={s.placements.tradeCalculator}
+          onChange={(tradeCalculator) => patch("placements", { tradeCalculator })}
+        />
       </SettingsSection>
 
       <SettingsSaveBar

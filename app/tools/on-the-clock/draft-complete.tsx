@@ -16,11 +16,13 @@
  * Pulse is where that team lives all season. A drafter who closes this tab and
  * never comes back was ours to keep.
  *
- * LAYOUT: FOUR BANDS, IN THE ORDER A DRAFTER READS THEM.
+ * LAYOUT: FIVE BANDS, IN THE ORDER A DRAFTER READS THEM.
  * A hero carrying the one figure they came back for (the grade, set at display
  * size in the beacon gradient), the supporting numbers as icon tiles, the ways
- * back into the draft, and then the League Pulse handoff, which is deliberately
- * the largest and loudest thing on the screen. Bands two and three use the
+ * back into the draft, the Personal Team Review offer (the one paid thing on
+ * the screen, components/commerce/post-draft-offer.tsx), and then the League
+ * Pulse handoff, which is deliberately the largest and loudest thing on the
+ * screen. Bands two and three use the
  * cockpit's own `Panel` rather than a local imitation of it, so the completion
  * screen inherits the beacon hairline, the eyebrow, and the tinted header band
  * every other section of the room already wears, and can never drift from them.
@@ -58,6 +60,8 @@ import {
 } from "lucide-react";
 import type { DraftGrade } from "@/lib/on-the-clock/draft-grade";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
+import type { PublicOffer } from "@/lib/commerce/public-offer";
+import { PostDraftOffer } from "@/components/commerce/post-draft-offer";
 import { Panel } from "./panel";
 
 /** The views this screen links out to. Must exist in the cockpit's VIEWS list. */
@@ -103,6 +107,16 @@ export interface DraftCompleteProps {
    * before the flag existed.
    */
   enginesLoading?: boolean;
+  /**
+   * The Personal Team Review, offered between the look-back and the League
+   * Pulse handoff. Null when the store is closed or the placement is off, and
+   * the band is simply absent.
+   */
+  reviewOffer?: PublicOffer | null;
+  /** The reader's roster, so the checkout opens on their team. */
+  myRosterId?: number | null;
+  /** The Sleeper handle the room is open under, carried on the checkout links. */
+  linkUsername?: string | null;
 }
 
 function ordinal(n: number): string {
@@ -283,6 +297,9 @@ export function DraftComplete({
   onGoToView,
   changedSinceDraft,
   enginesLoading = false,
+  reviewOffer = null,
+  myRosterId = null,
+  linkUsername = null,
 }: DraftCompleteProps) {
   const leagueHref = sleeperLeagueId ? `/leagues/${sleeperLeagueId}` : null;
 
@@ -528,7 +545,17 @@ export function DraftComplete({
         </div>
       </Panel>
 
-      {/* ---- 4. THE HANDOFF. The reason this screen exists, and by some
+      {/* ---- 4. THE OFFER. A person reads the roster the drafter just built.
+              The one paid thing on the screen, so it wears the store's tinted
+              ground and nothing else here does. ---- */}
+      <PostDraftOffer
+        offer={reviewOffer}
+        sleeperLeagueId={sleeperLeagueId}
+        rosterId={myRosterId}
+        linkUsername={linkUsername}
+      />
+
+      {/* ---- 5. THE HANDOFF. The reason this screen exists, and by some
               distance the biggest thing on it. ---- */}
       <section
         aria-labelledby="otc-draft-complete-pulse-title"

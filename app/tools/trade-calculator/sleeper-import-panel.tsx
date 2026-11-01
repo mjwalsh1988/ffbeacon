@@ -11,7 +11,12 @@ import {
   UserPlus,
 } from "lucide-react";
 import Link from "next/link";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { useStepScroll } from "@/lib/use-step-scroll";
+import type { PublicOffer } from "@/lib/commerce/public-offer";
+import { TradeReviewOffer } from "@/components/commerce/trade-review-offer";
+import { tradeReviewHref } from "@/components/commerce/review-href";
 import { SleeperIdentityCard } from "@/components/sleeper-handle/identity-card";
 import { SaveHandleForm } from "@/components/sleeper-handle/save-handle-form";
 import { SaveHandleNotice } from "@/components/sleeper-handle/save-handle-notice";
@@ -64,10 +69,13 @@ export function SleeperImportPanel({
   signedIn,
   initialUsername,
   onBack,
+  reviewOffer = null,
 }: {
   signedIn: boolean;
   initialUsername: string | null;
   onBack: () => void;
+  /** The Trade Review, offered above an imported result; null when not for sale here. */
+  reviewOffer?: PublicOffer | null;
 }) {
   // The server render knows the handle; the panel starts with the name alone
   // and takes the rest (display name, avatar, Sleeper user id) off the first
@@ -113,11 +121,37 @@ export function SleeperImportPanel({
   const [evidence, setEvidence] = useState<string[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  /** Counts fresh runs, so the offer above the result remounts per trade. */
+  const [runCount, setRunCount] = useState(0);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [analyzing, startAnalyze] = useTransition();
 
   const resultRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  // The saved row behind the result on screen, and WHICH trade it belongs to. A
+  // share link made for trade 1 must not send trade 2 to the checkout, so the id
+  // is honored only while the same trade is selected.
+  const [saved, setSaved] = useState<{ tradeId: string; shareId: string } | null>(null);
+  const [ordering, setOrdering] = useState(false);
+
+  /**
+   * The Trade Review orders on a saved result. A reader who already made a share
+   * link for this trade goes straight to the checkout; otherwise the trade is
+   * saved as a PRIVATE copy first (an imported trade carries the league's real
+   * team names, so ordering must not publish them) and the checkout opens when
+   * the save lands.
+   */
+  function orderReview() {
+    if (saved && saved.tradeId === selectedTradeId) {
+      router.push(tradeReviewHref(saved.shareId) as Route);
+      return;
+    }
+    if (analyzing || !selectedTradeId) return;
+    setOrdering(true);
+    pickTrade(selectedTradeId, "order");
+  }
 
   // Choosing a league is a question being answered, so land on the trades it
   // found rather than leaving the reader on the select they have finished
@@ -218,25 +252,42 @@ export function SleeperImportPanel({
     });
   }
 
-  function pickTrade(tradeId: string, makePublic = false) {
+  /**
+   * "run" analyzes a trade; "share" re-runs it and publishes a share link;
+   * "order" re-runs it, saves a private copy and opens the Trade Review checkout.
+   * A fresh run drops the previous trade's link and saved id, so neither can be
+   * shown or ordered against a different trade.
+   */
+  function pickTrade(tradeId: string, mode: "run" | "share" | "order" = "run") {
     setSelectedTradeId(tradeId);
     setAnalyzeError(null);
+    if (mode === "run") {
+      setShareUrl(null);
+      setSaved(null);
+      setRunCount((n) => n + 1);
+    }
     startAnalyze(async () => {
       const res = await importAndAnalyze({
         sleeperLeagueId: leagueId,
         sleeperTransactionId: tradeId,
-        makePublic,
+        makePublic: mode === "share",
+        savePrivate: mode === "order",
       });
+      setOrdering(false);
       if (res.ok) {
-        // The share-link request re-runs the same trade; count the first run only.
-        if (!makePublic) trackEvent("tool_use", { tool: "signal_check" });
+        // The share-link and order requests re-run the same trade; count the first run only.
+        if (mode === "run") trackEvent("tool_use", { tool: "signal_check" });
         setView(res.view);
         setAssetMeta(res.assetMeta);
         setEvidence(res.evidence);
         setNotices(res.notices);
-        if (makePublic) {
+        if (res.shareId) setSaved({ tradeId, shareId: res.shareId });
+        if (mode === "share") {
           setShareUrl(res.shareUrl);
           // TradeResult moves focus to the share input when the link appears.
+        } else if (mode === "order") {
+          if (res.shareId) router.push(tradeReviewHref(res.shareId) as Route);
+          else setAnalyzeError("We could not save this trade for review right now.");
         } else {
           requestAnimationFrame(() => resultRef.current?.focus());
         }
@@ -547,6 +598,15 @@ export function SleeperImportPanel({
         >
           {view && (
             <div className="space-y-4">
+              {/* Keyed on the run, so a second trade in the same panel counts its own view. */}
+              {reviewOffer && (
+                <TradeReviewOffer
+                  key={runCount}
+                  offer={reviewOffer}
+                  onOrder={orderReview}
+                  pending={ordering}
+                />
+              )}
               <TradeResult
                 view={view}
                 shareUrl={shareUrl}
@@ -558,7 +618,7 @@ export function SleeperImportPanel({
               {!shareUrl && (
                 <button
                   type="button"
-                  onClick={() => pickTrade(selectedTradeId, true)}
+                  onClick={() => pickTrade(selectedTradeId, "share")}
                   disabled={analyzing}
                   className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >

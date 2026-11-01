@@ -41,7 +41,13 @@ export const DEFAULT_COMMERCE_SETTINGS = {
     reportPaymentPerMinute: 6,
     couponPreviewPerMinute: 20,
   },
-  placements: { blueprintSection: true, overviewStrip: true, myBeaconTile: true },
+  placements: {
+    blueprintSection: true,
+    overviewStrip: true,
+    myBeaconTile: true,
+    onTheClock: true,
+    tradeCalculator: true,
+  },
 };
 
 export type CommerceSettings = typeof DEFAULT_COMMERCE_SETTINGS;

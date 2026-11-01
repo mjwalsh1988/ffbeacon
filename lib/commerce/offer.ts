@@ -54,9 +54,4 @@ export async function loadOfferState(admin: Client): Promise<OfferState> {
   });
 }
 
-/** The tier word in a checkout link: `team-review-premium` is `premium`. */
-export function tierOf(product: Pick<Product, "slug" | "family">): string {
-  return product.slug.startsWith(`${product.family}-`)
-    ? product.slug.slice(product.family.length + 1)
-    : product.slug;
-}
+export { publicOffer, tierOf, type OfferProduct, type PublicOffer } from "./public-offer";

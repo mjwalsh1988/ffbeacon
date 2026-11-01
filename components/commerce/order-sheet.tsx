@@ -11,7 +11,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { formatEastern, formatEasternDate, formatEasternShortDate } from "@/lib/datetime";
 import { REFUND_POLICY_SENTENCE, SELLER_EMAIL, formatMoney } from "@/lib/commerce/constants";
-import { TEAM_REVIEW_QUESTIONS } from "@/lib/commerce/intake";
+import { TEAM_REVIEW_QUESTIONS, TRADE_REVIEW_QUESTIONS } from "@/lib/commerce/intake";
 import type { OrderDetail } from "@/lib/commerce/orders";
 import {
   FULFILLMENT_LABEL,
@@ -19,7 +19,13 @@ import {
   paymentChip,
   progressStep,
 } from "@/lib/commerce/transitions";
-import type { Order, OrderDeliverable, PaymentMethod } from "@/lib/commerce/types";
+import {
+  isTradeReviewContext,
+  isTradeReviewIntake,
+  type Order,
+  type OrderDeliverable,
+  type PaymentMethod,
+} from "@/lib/commerce/types";
 import { Leader, RULED, Sheet, SheetSection } from "@/components/league-blueprint/sheet";
 import { IntakeUpdateForm } from "./intake-update-form";
 import { OrderProgress } from "./order-progress";
@@ -27,6 +33,10 @@ import { OrderTimeline } from "./order-timeline";
 import { PayPanel } from "./pay-panel";
 import { RichTextView } from "./rich-text-view";
 import { StatusChip } from "./status-chip";
+import { TradeSummary } from "./trade-summary";
+
+const LINK =
+  "inline-flex min-h-11 items-center font-semibold text-brand-cyan underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
 const TITLE_ID = "order-title";
 
@@ -89,9 +99,9 @@ function AmountBox({ order }: { order: Order }) {
 }
 
 function ReviewSection({ order, sections, attachments }: { order: Order; sections: OrderDeliverable[]; attachments: OrderDeliverable[] }) {
-  const premium = order.product_snapshot.tier_rank >= 2;
+  const premium = order.product_snapshot.family === "team-review" && order.product_snapshot.tier_rank >= 2;
   return (
-    <SheetSection id="your-review" number="03" title="Your review">
+    <SheetSection id="your-review" number={isTradeReviewContext(order.context) ? "02" : "03"} title="Your review">
       <div className="space-y-8">
         {sections.map((section) => {
           const updated =
@@ -147,6 +157,22 @@ function ReviewSection({ order, sections, attachments }: { order: Order; section
 
 function IntakeSection({ order }: { order: Order }) {
   const { intake } = order;
+  if (isTradeReviewIntake(intake)) {
+    return (
+      <SheetSection id="what-you-told" number="04" title="What you told us">
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+              {TRADE_REVIEW_QUESTIONS.notes.label}
+            </dt>
+            <dd className="mt-0.5 whitespace-pre-line break-words text-ink">
+              {intake.notes || "Nothing added, so we review the trade on its own."}
+            </dd>
+          </div>
+        </dl>
+      </SheetSection>
+    );
+  }
   const awaitingAnswers =
     intake.providedBy === "admin" && order.fulfillment_status === "queued" && !intake.questions;
   const directionLabel =
@@ -226,11 +252,22 @@ export function OrderSheet({
             </h2>
             <p className="mt-1 text-lg font-bold tracking-tight text-ink">{product.name}</p>
             <dl className="mt-4 grid gap-x-8 lg:grid-cols-2">
-              <Leader label="Team">{context.teamName}</Leader>
-              <Leader label="League">{context.leagueName}</Leader>
-              <Leader label="Season">{context.season}</Leader>
-              <Leader label="Format">{context.formatDisplay}</Leader>
-              <Leader label="Values">{context.sourceDisplay}</Leader>
+              {isTradeReviewContext(context) ? (
+                <>
+                  <Leader label="Trade">{context.summary}</Leader>
+                  <Leader label="Verdict">{context.trade.verdictLabel}</Leader>
+                  <Leader label="Format">{context.trade.formatDisplay}</Leader>
+                  <Leader label="Values">FF Beacon Values</Leader>
+                </>
+              ) : (
+                <>
+                  <Leader label="Team">{context.teamName}</Leader>
+                  <Leader label="League">{context.leagueName}</Leader>
+                  <Leader label="Season">{context.season}</Leader>
+                  <Leader label="Format">{context.formatDisplay}</Leader>
+                  <Leader label="Values">{context.sourceDisplay}</Leader>
+                </>
+              )}
               <Leader label="Ordered">{formatEastern(order.created_at)}</Leader>
               {order.paid_at && <Leader label="Paid">{formatEastern(order.paid_at)}</Leader>}
               {order.delivered_at ? (
@@ -290,6 +327,24 @@ export function OrderSheet({
       )}
 
       {showReview && <ReviewSection order={order} sections={sections} attachments={attachments} />}
+
+      {isTradeReviewContext(context) && (
+        <SheetSection
+          id="the-trade"
+          number="03"
+          title="The trade"
+          helper="As Signal Check priced it when you ran it. The review is written about this exact deal."
+        >
+          <div className="max-w-2xl">
+            <TradeSummary trade={context.trade} />
+            {context.links.share && (
+              <Link href={context.links.share as Route} className={`mt-3 ${LINK}`}>
+                Open this verdict in Signal Check
+              </Link>
+            )}
+          </div>
+        </SheetSection>
+      )}
 
       <IntakeSection order={order} />
 

@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   featuresFromLines,
+  intakeFormFor,
   linesFromFeatures,
   priceCentsFromText,
   productInputSchema,
   snapshotProduct,
 } from "./products";
+
+describe("intakeFormFor", () => {
+  it("gives the trade family its own form and every other family the team form", () => {
+    expect(intakeFormFor("trade-review")).toBe("trade-review");
+    expect(intakeFormFor("team-review")).toBe("team-review");
+    expect(intakeFormFor("something-new")).toBe("team-review");
+  });
+});
 import type { Product } from "./types";
 
 const VALID = {
@@ -52,6 +61,15 @@ describe("productInputSchema", () => {
     expect(
       productInputSchema.safeParse({ ...VALID, placements: ["homepage"] }).success,
     ).toBe(false);
+  });
+
+  it("accepts the five placements the column allows", () => {
+    expect(
+      productInputSchema.safeParse({
+        ...VALID,
+        placements: ["blueprint", "league-overview", "my-beacon", "on-the-clock", "trade-calculator"],
+      }).success,
+    ).toBe(true);
   });
 });
 

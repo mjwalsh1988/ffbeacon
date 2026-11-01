@@ -31,7 +31,8 @@ export default async function OrdersPage({
     <Panel eyebrow="Yours" title="Orders" helper="Every review you have bought, and where it is.">
       {list.total === 0 ? (
         <p className="text-sm leading-relaxed text-ink-muted">
-          No orders yet. A Personal Team Review starts from any team&apos;s Blueprint in League Pulse.{" "}
+          No orders yet. A Personal Team Review starts from any team&apos;s Blueprint in League Pulse, and a Trade
+          Review from any result in the trade calculator.{" "}
           <Link
             href="/tools/league-pulse"
             className="inline-flex min-h-11 items-center font-semibold text-brand-cyan underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

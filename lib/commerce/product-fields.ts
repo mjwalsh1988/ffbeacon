@@ -9,6 +9,8 @@ export const PRODUCT_PLACEMENTS: ProductPlacement[] = [
   "blueprint",
   "league-overview",
   "my-beacon",
+  "on-the-clock",
+  "trade-calculator",
 ];
 
 /**

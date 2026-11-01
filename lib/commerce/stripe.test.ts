@@ -6,9 +6,27 @@ import {
   sessionExpiresAt,
   startStripeCheckout,
   stripeDashboardUrl,
+  stripeLineName,
 } from "./stripe";
 import { DEFAULT_COMMERCE_SETTINGS } from "./default-settings";
 import type { Order } from "./types";
+
+describe("stripeLineName", () => {
+  it("adds the family to a team review and leaves a Trade Review as it is", () => {
+    expect(
+      stripeLineName({
+        product_snapshot: { name: "Premium Review" },
+        context: { teamName: "Night Owls" },
+      } as unknown as Order),
+    ).toBe("Premium Review (Personal Team Review)");
+    expect(
+      stripeLineName({
+        product_snapshot: { name: "Trade Review" },
+        context: { kind: "trade-review", summary: "A for B", trade: { formatDisplay: "Dynasty" } },
+      } as unknown as Order),
+    ).toBe("Trade Review");
+  });
+});
 
 const SESSION_ID = "cs_test_a1b2c3d4e5f6g7h8";
 

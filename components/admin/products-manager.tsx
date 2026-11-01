@@ -18,6 +18,8 @@ const PLACEMENT_LABEL: Record<ProductPlacement, string> = {
   blueprint: "Blueprint section",
   "league-overview": "League overview strip",
   "my-beacon": "My Beacon tile",
+  "on-the-clock": "On The Clock, after the draft",
+  "trade-calculator": "Trade calculator, under a result",
 };
 
 type Draft = {

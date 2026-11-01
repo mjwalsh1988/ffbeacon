@@ -24,6 +24,7 @@ import {
   type CheckoutSession,
 } from "@/lib/stripe/client";
 import type { CommerceSettings } from "./default-settings";
+import { orderSubjectDetail, productKindName } from "./describe";
 import { insertEvent } from "./orders";
 import type { Order } from "./types";
 
@@ -85,6 +86,13 @@ export function isStripeHost(url: string): boolean {
   return host === "checkout.stripe.com" || host.endsWith(".stripe.com");
 }
 
+/** "Basic Review (Personal Team Review)", or just "Trade Review" when the family adds nothing. */
+export function stripeLineName(order: Pick<Order, "product_snapshot" | "context">): string {
+  const name = order.product_snapshot.name;
+  const kind = productKindName(order);
+  return kind === name ? name : `${name} (${kind})`;
+}
+
 export function buildSessionBody(
   order: Pick<Order, "id" | "order_number" | "amount_cents" | "product_snapshot" | "context">,
   email: string | null,
@@ -110,8 +118,8 @@ export function buildSessionBody(
           currency: "usd",
           unit_amount: order.amount_cents,
           product_data: {
-            name: `${order.product_snapshot.name} (Personal Team Review)`,
-            description: `${order.context.teamName} in ${order.context.leagueName}, ${order.context.season}`,
+            name: stripeLineName(order),
+            description: orderSubjectDetail(order.context),
           },
         },
       },

@@ -91,6 +91,8 @@ export const commerceSettingsSchema = z.object({
       blueprintSection: z.boolean().default(d.placements.blueprintSection),
       overviewStrip: z.boolean().default(d.placements.overviewStrip),
       myBeaconTile: z.boolean().default(d.placements.myBeaconTile),
+      onTheClock: z.boolean().default(d.placements.onTheClock),
+      tradeCalculator: z.boolean().default(d.placements.tradeCalculator),
     })
     .default(d.placements),
 });

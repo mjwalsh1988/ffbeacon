@@ -13,7 +13,7 @@ import type { Route } from "next";
 import { formatEastern, formatEasternDate, formatEasternShortDate, formatRelative } from "@/lib/datetime";
 import { formatMoney } from "@/lib/commerce/constants";
 import type { Customer } from "@/lib/commerce/customers";
-import type { OrderListRow } from "@/lib/commerce/orders";
+import { listSubjectLine, type OrderListRow } from "@/lib/commerce/orders";
 import {
   disputeChip,
   FREE_CHIP,
@@ -66,9 +66,7 @@ function CustomerRow({ row }: { row: OrderListRow }) {
           <span className="font-mono text-[11px] text-ink-muted">{formatEasternDate(row.created_at)}</span>
         </span>
         <span className="mt-1 block text-sm font-semibold text-ink">{row.product_name}</span>
-        <span className="block break-words text-sm text-ink-muted">
-          {row.team_name} in {row.league_name}
-        </span>
+        <span className="block break-words text-sm text-ink-muted">{listSubjectLine(row)}</span>
         <span className="mt-2 flex flex-wrap items-center gap-1.5">
           <StatusChip chip={chip} />
           <StatusChip chip={fulfillment} />
@@ -107,9 +105,7 @@ function AdminRow({ row, customer, now }: { row: OrderListRow; customer: Custome
 
         <span className="min-w-0">
           <span className="block text-sm text-ink">{row.product_name}</span>
-          <span className="block break-words text-xs text-ink-muted">
-            {row.team_name} in {row.league_name}
-          </span>
+          <span className="block break-words text-xs text-ink-muted">{listSubjectLine(row)}</span>
         </span>
 
         <span>

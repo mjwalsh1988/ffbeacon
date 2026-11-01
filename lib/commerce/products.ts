@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { parseDonationAmount } from "@/lib/donate/amounts";
-import type { Product, ProductPlacement, ProductSnapshot } from "./types";
+import type { IntakeForm, Product, ProductPlacement, ProductSnapshot } from "./types";
 
 type Client = SupabaseClient<Database>;
 
@@ -66,7 +66,9 @@ export const productInputSchema = z.object({
   features: z.array(z.string().min(1).max(120)).max(12),
   priceCents: z.number().int().min(100).max(100_000),
   turnaroundDays: z.number().int().min(1).max(30),
-  placements: z.array(z.enum(["blueprint", "league-overview", "my-beacon"])),
+  placements: z.array(
+    z.enum(["blueprint", "league-overview", "my-beacon", "on-the-clock", "trade-calculator"]),
+  ),
   isActive: z.boolean(),
   displayOrder: z.number().int().min(0).max(10_000),
 });
@@ -86,6 +88,11 @@ export function priceCentsFromText(
   return { ok: true, cents: parsed.cents };
 }
 
+/** Which checkout form a family takes. Only the trade family has its own. */
+export function intakeFormFor(family: string): IntakeForm {
+  return family === "trade-review" ? "trade-review" : "team-review";
+}
+
 /** Create or update one row, keyed on the slug, which never changes after creation. */
 export async function saveProduct(
   admin: Client,
@@ -103,6 +110,10 @@ export async function saveProduct(
       features: input.features as unknown as Json,
       price_cents: input.priceCents,
       turnaround_days: input.turnaroundDays,
+      // The form a product takes follows its family, so an admin-made second
+      // trade product is orderable rather than refused at checkout.
+      intake_form: intakeFormFor(input.family),
+      requires_league_context: input.family !== "trade-review",
       placements: input.placements,
       is_active: input.isActive,
       display_order: input.displayOrder,

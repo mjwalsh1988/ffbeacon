@@ -33,9 +33,19 @@ import {
   SELLER_NAME,
   formatMoney,
 } from "@/lib/commerce/constants";
+import {
+  orderSubjectLabel,
+  orderSubjectLine,
+  reorderPlace,
+} from "@/lib/commerce/describe";
 import { PAY_HANDLE_DISPLAY, manualPayUrl } from "@/lib/commerce/pay-links";
 import { blocksToText, parseRichText, type Block } from "@/lib/commerce/rich-text";
-import type { Order, PaymentMethod } from "@/lib/commerce/types";
+import {
+  isTradeReviewContext,
+  isTradeReviewIntake,
+  type Order,
+  type PaymentMethod,
+} from "@/lib/commerce/types";
 
 export type BuiltEmail = { subject: string; html: string; text: string };
 
@@ -90,8 +100,21 @@ function manualWord(method: PaymentMethod): "PayPal" | "Venmo" {
   return method === "venmo" ? "Venmo" : "PayPal";
 }
 
+/** "Night Owls in The League", or the trade. */
 function teamLine(order: Order): string {
-  return `${order.context.teamName} in ${order.context.leagueName}`;
+  return orderSubjectLine(order.context);
+}
+
+/** "Your Premium Review for Night Owls in The League", or "Your Trade Review of A for B". */
+function reviewOf(order: Order): string {
+  const joiner = isTradeReviewContext(order.context) ? "of" : "for";
+  return `${order.product_snapshot.name} ${joiner} ${teamLine(order)}`;
+}
+
+/** What the customer told us, in one line for an admin notice. */
+function intakeLine(order: Order): string {
+  if (isTradeReviewIntake(order.intake)) return `Notes: ${order.intake.notes || "None given."}`;
+  return `Questions: ${order.intake.questions || "None given."}`;
 }
 
 /** Blocks to table-safe HTML. Every string goes through `esc`; nothing passes through. */
@@ -162,14 +185,17 @@ function buildReceipt(order: Order, kind: "E1" | "E3"): BuiltEmail {
   const rows = [
     { label: "Order", value: order.order_number },
     { label: "Review", value: name },
-    { label: "Team", value: teamLine(order) },
+    { label: orderSubjectLabel(order.context), value: teamLine(order) },
     ...amountRows(order),
     { label: "Paid", value: formatEastern(order.paid_at) },
     { label: "Payment", value: methodWord(order.payment_method) },
     { label: "Sold by", value: `${SELLER_NAME}, ${SELLER_EMAIL}` },
   ];
   const days = order.product_snapshot.turnaround_days;
-  const promise = `We write every review by hand, against your Team Blueprint and your league's own numbers. Expect it in your My Beacon portal within ${days} ${days === 1 ? "day" : "days"}, and an email the moment it lands.`;
+  const within = `Expect it in your My Beacon portal within ${days} ${days === 1 ? "day" : "days"}, and an email the moment it lands.`;
+  const promise = isTradeReviewContext(order.context)
+    ? `We write every review by hand, against the trade exactly as Signal Check priced it and whatever you told us about your league. ${within}`
+    : `We write every review by hand, against your Team Blueprint and your league's own numbers. ${within}`;
   const refund = free
     ? null
     : `${REFUND_POLICY_SENTENCE} Reply to this email and quote the order number.`;
@@ -291,13 +317,14 @@ function buildStatusUpdate(order: Order, extra: OrderEmailExtra): BuiltEmail {
 function buildDelivered(order: Order, extra: OrderEmailExtra): BuiltEmail {
   const name = order.product_snapshot.name;
   const subject = `Your ${name} is ready, ${order.order_number}`;
-  const intro = `Your ${name} for ${teamLine(order)} is finished and waiting for you. Here is how it opens:`;
+  const intro = `Your ${reviewOf(order)} is finished and waiting for you. Here is how it opens:`;
   const raw = extra.firstSection ?? "";
   const clipped = raw.length > DELIVERY_CLIP;
   const blocks = parseRichText(clipped ? raw.slice(0, DELIVERY_CLIP) : raw);
-  const premium = order.product_snapshot.tier_rank >= 2;
+  // The follow-up question is the Premium team review's; no trade review has one.
+  const premium = order.product_snapshot.family !== "trade-review" && order.product_snapshot.tier_rank >= 2;
   const followUp =
-    "You have one follow-up question included. Reply to this email within 7 days and Michael will answer it.";
+    "You have one follow-up question included. Reply to this email within 7 days and we will answer it.";
   const cta = button(order, "Read the full review");
 
   const innerHtml = [
@@ -416,8 +443,7 @@ function buildCancelled(order: Order, extra: OrderEmailExtra): BuiltEmail {
 
 function buildExpired(order: Order): BuiltEmail {
   const subject = `Order ${order.order_number} has closed`;
-  const body =
-    "We did not see a payment, so this order closed on its own. Nothing was charged. If you still want the review, start a new order from your Blueprint any time.";
+  const body = `We did not see a payment, so this order closed on its own. Nothing was charged. If you still want the review, start a new order from ${reorderPlace(order.context)} any time.`;
   const cta = button(order);
   const innerHtml = [emailHeading("This order has closed."), emailParagraph(esc(body)), cta.html].join("");
   return wrap(subject, "Nothing was charged.", innerHtml, [body, "", cta.text].join("\n"));
@@ -450,7 +476,7 @@ function buildComplimentary(order: Order, extra: OrderEmailExtra): BuiltEmail {
   const rows = [
     { label: "Order", value: order.order_number },
     { label: "Review", value: name },
-    { label: "Team", value: teamLine(order) },
+    { label: orderSubjectLabel(order.context), value: teamLine(order) },
     { label: "Amount", value: "$0.00, complimentary" },
     { label: "Due by", value: formatEasternDate(order.due_at) },
   ];
@@ -473,7 +499,7 @@ function buildComplimentary(order: Order, extra: OrderEmailExtra): BuiltEmail {
     "",
     cta.text,
   ].join("\n");
-  return wrap(subject, `A ${name} for ${order.context.teamName}, with no payment needed.`, innerHtml, text);
+  return wrap(subject, `A ${reviewOf(order)}, with no payment needed.`, innerHtml, text);
 }
 
 /** The dispatcher. An order and a template name in, a finished email out. */
@@ -558,7 +584,7 @@ export function buildAdminOrderPaid(
       `Customer: ${customer.displayName}, ${customer.email ?? "no address on the account"}.`,
       `Amount: ${formatMoney(order.amount_cents)}.${coupon}`,
       `Due by ${formatEastern(order.due_at)}.`,
-      `Questions: ${order.intake.questions || "None given."}`,
+      intakeLine(order),
       ...(openChargebacksElsewhere > 0
         ? [
             `${openChargebacksElsewhere} open chargeback${openChargebacksElsewhere === 1 ? "" : "s"} on another order.`,
@@ -583,12 +609,12 @@ export function buildAdminPaymentReported(order: Order): BuiltEmail {
 
 /** The short note when a customer adds questions to a complimentary order. */
 export function buildAdminQuestionsAdded(order: Order): BuiltEmail {
+  const lines = isTradeReviewIntake(order.intake)
+    ? [intakeLine(order)]
+    : [intakeLine(order), `Off the table: ${order.intake.offLimits || "None given."}`];
   return adminNotice(
     `[Orders] ${order.order_number}: the customer added their questions`,
-    [
-      `Questions: ${order.intake.questions || "None given."}`,
-      `Off the table: ${order.intake.offLimits || "None given."}`,
-    ],
+    lines,
     order.id,
   );
 }

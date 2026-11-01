@@ -46,16 +46,16 @@ import type {
   EventKind,
   FulfillmentStatus,
   Order,
+  OrderContext,
   OrderDeliverable,
   OrderEvent,
+  OrderIntake,
   OrderMessage,
   PaidVia,
   PaymentMethod,
   PaymentStatus,
   Product,
   ProductSnapshot,
-  TeamReviewContext,
-  TeamReviewIntake,
 } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -65,12 +65,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const ORDER_PAGE_SIZE = 25;
 export const CUSTOMER_ORDER_PAGE_SIZE = 20;
 
-/** The columns a list row draws. `context` stays out; see the header. */
+/**
+ * The columns a list row draws. `context` stays out; see the header. A team review
+ * fills `team_name` and `league_name`; a trade review fills `summary` instead.
+ */
 const OWNER_LIST_COLUMNS =
-  "id, order_number, user_id, amount_cents, refunded_cents, payment_method, payment_status, fulfillment_status, livemode, due_at, delivered_at, created_at, product_name:product_snapshot->>name, team_name:context->>teamName, league_name:context->>leagueName";
+  "id, order_number, user_id, amount_cents, refunded_cents, payment_method, payment_status, fulfillment_status, livemode, due_at, delivered_at, created_at, product_name:product_snapshot->>name, team_name:context->>teamName, league_name:context->>leagueName, summary:context->>summary";
 
 const LIST_COLUMNS =
-  "id, order_number, user_id, amount_cents, refunded_cents, payment_method, payment_status, fulfillment_status, dispute_status, livemode, due_at, delivered_at, created_at, product_name:product_snapshot->>name, team_name:context->>teamName, league_name:context->>leagueName";
+  "id, order_number, user_id, amount_cents, refunded_cents, payment_method, payment_status, fulfillment_status, dispute_status, livemode, due_at, delivered_at, created_at, product_name:product_snapshot->>name, team_name:context->>teamName, league_name:context->>leagueName, summary:context->>summary";
 
 export type OrderListRow = {
   id: string;
@@ -89,7 +92,15 @@ export type OrderListRow = {
   product_name: string | null;
   team_name: string | null;
   league_name: string | null;
+  summary?: string | null;
 };
+
+/** The line under the product name in a list: the team and league, or the trade. */
+export function listSubjectLine(row: Pick<OrderListRow, "team_name" | "league_name" | "summary">): string {
+  if (row.summary) return row.summary;
+  if (row.team_name && row.league_name) return `${row.team_name} in ${row.league_name}`;
+  return row.team_name ?? row.league_name ?? "";
+}
 
 export type OrderPage = { rows: OrderListRow[]; total: number; pageSize: number };
 
@@ -171,8 +182,8 @@ export type CreateOrderArgs = {
   expiresAt: string | null;
   couponId: string | null;
   couponCode: string | null;
-  context: TeamReviewContext;
-  intake: TeamReviewIntake;
+  context: OrderContext;
+  intake: OrderIntake;
   /** Who the `created` event names, and how. */
   createdActor: EventActor;
   createdActorUserId?: string | null;
@@ -560,18 +571,24 @@ export async function countOpenOrders(
   return (working.count ?? 0) + (pending.count ?? 0);
 }
 
-/** An UNPAID order for the same thing. A paid one is never a duplicate. */
+/**
+ * An UNPAID order for the same thing. A paid one is never a duplicate. "The same
+ * thing" is the product plus the context keys that name its subject: league and
+ * roster for a team review, the share id for a trade review.
+ */
 export async function findOpenDuplicate(
   admin: Client,
-  args: { userId: string; productId: string; sleeperLeagueId: string; rosterId: number },
+  args: { userId: string; productId: string; contextKeys: Record<string, string> },
 ): Promise<string | null> {
-  const { data, error } = await admin
+  let query = admin
     .from("orders")
     .select("id")
     .eq("user_id", args.userId)
-    .eq("product_id", args.productId)
-    .eq("context->>sleeperLeagueId", args.sleeperLeagueId)
-    .eq("context->>rosterId", String(args.rosterId))
+    .eq("product_id", args.productId);
+  for (const [key, value] of Object.entries(args.contextKeys)) {
+    query = query.eq(`context->>${key}`, value);
+  }
+  const { data, error } = await query
     .in("payment_status", ["unpaid", "awaiting_confirmation"])
     .order("created_at", { ascending: false })
     .limit(1)

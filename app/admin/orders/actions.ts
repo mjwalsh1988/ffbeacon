@@ -910,6 +910,10 @@ export async function createComplimentaryOrderAction(
 
   const product = (await loadActiveProducts(admin)).find((p) => p.slug === input.productSlug);
   if (!product) return { ok: false, error: "That product is not active." };
+  // The context built below is a team's; a trade product would store the wrong shape.
+  if (product.intake_form !== "team-review") {
+    return { ok: false, error: "Only a team review can be set up here." };
+  }
 
   const league = await readLeagueRow(admin, input.sleeperLeagueId);
   if (!league) return { ok: false, error: "That league has not been opened in League Pulse yet." };

@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { Scale, Trash2, RotateCcw, Loader2 } from "lucide-react";
+import { TradeReviewOffer } from "@/components/commerce/trade-review-offer";
+import { tradeReviewHref } from "@/components/commerce/review-href";
+import type { PublicOffer } from "@/lib/commerce/public-offer";
 import { AssetAutocomplete, type SearchResult } from "./asset-autocomplete";
 import { AssetAvatar } from "./asset-avatar";
 import { LeagueFormatSelector } from "./league-format-selector";
@@ -115,9 +120,15 @@ export function SignalCheckBuilder({
   initialFormatSlug = "",
   initialFormatFromHeader = false,
   toolbarLeading,
+  signedIn = false,
+  reviewOffer = null,
 }: {
   formats: FormatOption[];
   minLength: number;
+  /** Decides whether the Trade Review's save is private (a member's) or public (a guest's). */
+  signedIn?: boolean;
+  /** The Trade Review, offered above a result; null when not for sale here. */
+  reviewOffer?: PublicOffer | null;
   /** Format the builder opens on, resolved by the page from the reader's own
    * header preference (falling back to the first format Signal Check can
    * price). Empty string means no preselection. */
@@ -144,9 +155,16 @@ export function SignalCheckBuilder({
   const [resultMeta, setResultMeta] = useState<ResultAssetMetaBySide | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  // The saved row behind the result, public or private. The Trade Review orders
+  // on it, so a reader who already made a share link is not charged a second save.
+  const [shareId, setShareId] = useState<string | null>(null);
+  /** Counts fresh runs, so the offer above the result remounts per result. */
+  const [runCount, setRunCount] = useState(0);
   const [notice, setNotice] = useState<string>("");
   const [isPending, startTransition] = useTransition();
+  const [orderPending, startOrder] = useTransition();
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
   const resultRef = useRef<HTMLDivElement>(null);
   // Monotonic counter for unique per-instance asset ids (React keys + removal).
   const instanceCounter = useRef(0);
@@ -164,6 +182,7 @@ export function SignalCheckBuilder({
     setResult(null);
     setResultMeta(null);
     setShareUrl(null);
+    setShareId(null);
   }
 
   function changeFormat(next: string) {
@@ -241,11 +260,15 @@ export function SignalCheckBuilder({
       if (res.ok) {
         // A share-link request re-runs the check the reader already ran, so
         // only the first run counts as a use.
-        if (!save) trackEvent("tool_use", { tool: "signal_check" });
+        if (!save) {
+          trackEvent("tool_use", { tool: "signal_check" });
+          setRunCount((n) => n + 1);
+        }
         setResult(res.view);
         setResultMeta(snapshot);
         if (save) {
           setShareUrl(res.shareUrl);
+          setShareId(res.shareId);
           // Focus is handled inside TradeResult: it moves to the share input
           // when the link appears, so don't yank it back to the result top.
         } else {
@@ -256,6 +279,36 @@ export function SignalCheckBuilder({
         setError(res.error);
         resetResult();
       }
+    });
+  }
+
+  /**
+   * The Trade Review orders on a SAVED result, so the checkout reads the trade
+   * from the row and never from the browser. A reader who already made a share
+   * link goes straight there. Otherwise the trade is saved now: privately for a
+   * member, publicly for a guest (a private row with no owner is a row nobody
+   * can ever open), and the public link is shown as well, since it is one.
+   */
+  function orderReview() {
+    if (orderPending) return;
+    if (shareId) {
+      router.push(tradeReviewHref(shareId) as Route);
+      return;
+    }
+    setError(null);
+    startOrder(async () => {
+      const res = await runSignalCheck(buildInput(), { save: true, makePublic: !signedIn });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      if (!res.shareId) {
+        setError("We could not save this trade for review right now.");
+        return;
+      }
+      setShareId(res.shareId);
+      if (!signedIn) setShareUrl(res.shareUrl);
+      router.push(tradeReviewHref(res.shareId) as Route);
     });
   }
 
@@ -466,13 +519,25 @@ export function SignalCheckBuilder({
         {isPending ? (
           <ResultLoading />
         ) : result ? (
-          <TradeResult
-            view={result}
-            shareUrl={shareUrl}
-            copied={copied}
-            onCopy={copyShare}
-            assetMeta={resultMeta ?? undefined}
-          />
+          <div className="space-y-5">
+            {/* The one paid thing on the page, above the verdict it offers to
+                second-guess. Keyed on the run, so a fresh result counts a fresh view. */}
+            {reviewOffer && (
+              <TradeReviewOffer
+                key={runCount}
+                offer={reviewOffer}
+                onOrder={orderReview}
+                pending={orderPending}
+              />
+            )}
+            <TradeResult
+              view={result}
+              shareUrl={shareUrl}
+              copied={copied}
+              onCopy={copyShare}
+              assetMeta={resultMeta ?? undefined}
+            />
+          </div>
         ) : !error ? (
           <ResultEmpty canRun={canRun} />
         ) : null}

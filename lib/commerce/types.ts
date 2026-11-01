@@ -32,6 +32,7 @@
 
 import type { Database } from "@/lib/database.types";
 import type { BlueprintView } from "@/lib/league-blueprint/types";
+import type { PublicSharePayload } from "@/lib/signal-check/types";
 
 type Tables = Database["public"]["Tables"];
 
@@ -55,7 +56,15 @@ export type ReceiptEmailStatus = "pending" | "sent" | "failed" | "skipped";
 export type PaidVia = "stripe-webhook" | "stripe-reconcile" | "manual" | "coupon" | "complimentary";
 export type OrderOrigin = "customer" | "admin";
 
-export type ProductPlacement = "blueprint" | "league-overview" | "my-beacon";
+export type ProductPlacement =
+  | "blueprint"
+  | "league-overview"
+  | "my-beacon"
+  | "on-the-clock"
+  | "trade-calculator";
+
+/** The two intake forms, which are also the two context shapes an order can store. */
+export type IntakeForm = "team-review" | "trade-review";
 
 export type EventKind =
   | "created"
@@ -103,6 +112,8 @@ export type TeamReviewBlueprintSnapshot = {
 };
 
 export type TeamReviewContext = {
+  /** Absent on rows written before the Trade Review existed; absent means team. */
+  kind?: "team-review";
   sleeperLeagueId: string;
   leagueRowId: string;
   leagueName: string;
@@ -119,9 +130,30 @@ export type TeamReviewContext = {
   links: { blueprint: string; overview: string; lineups: string; tradeIdeas: string };
 };
 
+/**
+ * What a Trade Review order remembers: the Signal Check result the customer ran,
+ * frozen as the share payload they saw, and the row it came from. `summary` is
+ * the one-line "A for B" the lists draw, stored so a list query never opens the
+ * payload. No league is required: the notes may name one.
+ */
+export type TradeReviewContext = {
+  kind: "trade-review";
+  shareId: string;
+  analysisId: string;
+  formatSlug: string;
+  /** False for a private save; the share link only works when true. */
+  isPublic: boolean;
+  summary: string;
+  trade: PublicSharePayload;
+  links: { share: string | null; calculator: string };
+};
+
+export type OrderContext = TeamReviewContext | TradeReviewContext;
+
 export type TeamReviewDirection = "contend" | "rebuild" | "unsure";
 
 export type TeamReviewIntake = {
+  kind?: "team-review";
   direction: TeamReviewDirection;
   questions: string;
   offLimits: string;
@@ -129,6 +161,24 @@ export type TeamReviewIntake = {
   /** Set when the admin created the order and the customer has yet to answer. */
   providedBy?: "admin";
 };
+
+export type TradeReviewIntake = {
+  kind: "trade-review";
+  /** Sleeper username, league name, anything else; may be empty. */
+  notes: string;
+  contact: "email";
+  providedBy?: "admin";
+};
+
+export type OrderIntake = TeamReviewIntake | TradeReviewIntake;
+
+export function isTradeReviewContext(context: OrderContext): context is TradeReviewContext {
+  return context.kind === "trade-review";
+}
+
+export function isTradeReviewIntake(intake: OrderIntake): intake is TradeReviewIntake {
+  return intake.kind === "trade-review";
+}
 
 type OrderRow = Tables["orders"]["Row"];
 
@@ -154,8 +204,8 @@ export type Order = Omit<
   paid_via: PaidVia | null;
   origin: OrderOrigin;
   product_snapshot: ProductSnapshot;
-  context: TeamReviewContext;
-  intake: TeamReviewIntake;
+  context: OrderContext;
+  intake: OrderIntake;
 };
 
 export type OrderEvent = Omit<Tables["order_events"]["Row"], "kind" | "actor"> & {

@@ -15,18 +15,17 @@
 import { Check } from "lucide-react";
 import type { OfferAvailability } from "@/lib/commerce/availability";
 import { formatMoney } from "@/lib/commerce/constants";
-import { tierOf } from "@/lib/commerce/offer";
+import { tierOf } from "@/lib/commerce/public-offer";
 import type { CommerceSettings } from "@/lib/commerce/settings";
 import type { Product } from "@/lib/commerce/types";
+import { OFFER_SURFACE } from "./offer-surface";
 import { OfferView } from "./offer-view";
 import { payWays, reviewHref } from "./review-href";
 import { TierOfferCard } from "./tier-card";
 
-export const REVIEW_SECTION_ID = "review";
+export { OFFER_SURFACE } from "./offer-surface";
 
-/** The tinted ground the sales surfaces share: purple at one corner, cyan at the other. */
-export const OFFER_SURFACE =
-  "bg-[linear-gradient(135deg,rgba(168,85,247,0.16)_0%,rgba(15,15,26,0.35)_42%,rgba(34,211,238,0.14)_100%)]";
+export const REVIEW_SECTION_ID = "review";
 
 export function ReviewOfferSection({
   number,

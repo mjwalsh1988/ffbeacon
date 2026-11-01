@@ -1,7 +1,9 @@
 # Beacon Store: one-time purchases, and the Personal Team Review as its first product
 
 Status: BUILT 2026-10-30, revision 2 of the plan, and reviewed a second time the
-same day; see section 22. Migrations 0343 to 0357. Task prefix in progress.md: CM-T###.
+same day; see section 22. Migrations 0343 to 0358. Task prefix in progress.md: CM-T###.
+Second product family after launch: the Trade Review, $3.95, sold under a Signal
+Check result (migration 0358, 2026-10-31); see the end of section 22.
 Price change after the build: the Basic Review is $4.95 (migration 0356, the
 owner's call on 2026-10-30), not the $9.95 this document was written with. The
 Premium Review stays $19.95. Prices live in the products row, so no copy changed.
@@ -3352,3 +3354,61 @@ Voice
 - The strip's copy sells rather than describes: "Get a game plan written for
   your team", what the review is, the price it starts at, and "See what is
   included", which goes to the Blueprint's section 13.
+
+Two more places to sell, and a second product, 2026-10-31
+
+Placements (3.2 named three)
+- Five now: 'on-the-clock' and 'trade-calculator' join the column's check,
+  PRODUCT_PLACEMENTS, the admin's checkboxes and the settings switches
+  (placements.onTheClock, placements.tradeCalculator, both on by default).
+  lib/commerce/public-offer.ts publicOffer() narrows the memoized offer to one
+  placement and to the fields a client component may hold, because both new
+  surfaces render on the client; it is null when the placement is off or the
+  store is closed, and the surface renders nothing.
+- On The Clock: the screen after the draft (app/tools/on-the-clock/draft-
+  complete.tsx) gets a fifth band between the look-back and the League Pulse
+  handoff, components/commerce/post-draft-offer.tsx: "Just drafted? Have a
+  person read this roster.", both team reviews with the price at display size
+  and the badged one lit, three proof points, and checkout links that carry
+  the league, the reader's roster when the room knows it, and the handle. The
+  team reviews gained the placement in 0358. Counted as review_offer_view with
+  placement on-the-clock.
+
+The Trade Review (a second family, not in the plan)
+- One row: slug trade-review, family trade-review, $3.95, 2 days, intake_form
+  'trade-review', requires_league_context false, placement trade-calculator.
+  Everything downstream is the store as built: createOrderAction (one action,
+  the product's intake_form must match the posted kind), the same order page,
+  Stripe session, PayPal and Venmo, coupons, capacity, duplicate guard (keyed
+  on the share id), emails, the admin page and the deliverable editor.
+- The context is the saved Signal Check result. Pressing the offer saves the
+  trade through the existing share-link path (privately for a member, publicly
+  for a guest, because a private row with no owner is a row nobody can open)
+  and goes to /tools/trade-calculator/review?trade=<shareId>; the checkout and
+  the action read the row by its share id, so nothing about the trade comes
+  from the browser. TradeReviewContext stores the public payload the customer
+  saw, the row id, the format, whether it is public, a one-line summary for
+  the lists, and the share link when there is one. A private save belongs to
+  the reader who made it; a public one may be ordered on by anyone holding the
+  link, which is what a share link is for.
+- Intake is one note (Sleeper username and league name if they want the trade
+  read against their roster), TradeReviewIntake. Order.context and Order.intake
+  are unions now, discriminated on kind; rows written before this have no kind
+  and read as team reviews. lib/commerce/describe.ts spells the subject line
+  for both kinds ("Night Owls in The League" or "Josh Allen for Bijan Robinson")
+  for the lists, the receipt, the Stripe line and the admin notices.
+- Saving for an order is always PRIVATE for a signed-in reader, in the builder
+  and in the Sleeper import (importAndAnalyze gained savePrivate): an imported
+  trade carries the league's real team names, so ordering a review must not
+  publish them. Only a signed-out guest in the builder saves publicly, because
+  a private row with no owner is one nobody can open. The import panel holds
+  the saved id with the trade it belongs to, so a link made for one trade is
+  never ordered against another. The offer is withheld when share links are
+  switched off, since a save is a share link's row.
+- Surfaces: the offer sits above the result in the builder and in the Sleeper
+  import panel (components/commerce/trade-review-offer.tsx); the checkout
+  (app/tools/trade-calculator/review/page.tsx) reuses checkout-parts.tsx, the
+  pieces the team checkout was refactored onto: the fieldset, the text area,
+  the payment choices, the footer and the submit hook. The order sheet shows the
+  trade as its own section and the admin page a Trade panel with the sides, the
+  verdict and the links. A complimentary order stays team-only.

@@ -104,6 +104,9 @@ export type ImportAnalyzeResult =
       assetMeta: Record<SideKey, ImportAssetMeta[]>;
       evidence: string[];
       notices: string[];
+      /** The saved row's share id, public or private. Null when nothing was saved. */
+      shareId: string | null;
+      /** The public share link. Null for a private save or when nothing was saved. */
       shareUrl: string | null;
     }
   | { ok: false; error: string };
@@ -414,10 +417,17 @@ async function mapSleeperPlayers(
   return map;
 }
 
+/**
+ * `makePublic` saves the analysis and publishes a share page. `savePrivate` saves
+ * it as the reader's own private copy, which the Trade Review orders on: an
+ * imported trade carries the league's real team names, so ordering a review
+ * must not publish them. Neither, and nothing is written.
+ */
 export async function importAndAnalyze(args: {
   sleeperLeagueId: string;
   sleeperTransactionId: string;
   makePublic?: boolean;
+  savePrivate?: boolean;
 }): Promise<ImportAnalyzeResult> {
   const { sleeperLeagueId, sleeperTransactionId } = args;
   if (
@@ -638,7 +648,9 @@ export async function importAndAnalyze(args: {
     }
 
     let shareUrl: string | null = null;
-    if (args.makePublic && settings.shareLinksEnabled) {
+    let savedId: string | null = null;
+    const isPublic = args.makePublic === true;
+    if ((isPublic || args.savePrivate) && settings.shareLinksEnabled) {
       const shareId = crypto.randomUUID();
       const row = freezeAnalysis({
         analysis,
@@ -646,7 +658,7 @@ export async function importAndAnalyze(args: {
         settings,
         shareId,
         userId: id.userId,
-        isPublic: true,
+        isPublic,
         createdAtIso: new Date().toISOString(),
         teamLabels,
         // Private import context: never copied into public_payload.
@@ -661,10 +673,13 @@ export async function importAndAnalyze(args: {
         .from("signal_check_analyses")
         .insert(row as unknown as AnalysisInsert);
       if (error) console.error("[signal-check import] save failed", error);
-      else shareUrl = `${SITE.url}/tools/trade-calculator/v/${shareId}`;
+      else {
+        savedId = shareId;
+        if (isPublic) shareUrl = `${SITE.url}/tools/trade-calculator/v/${shareId}`;
+      }
     }
 
-    return { ok: true, view, assetMeta, evidence, notices, shareUrl };
+    return { ok: true, view, assetMeta, evidence, notices, shareId: savedId, shareUrl };
   } catch (err) {
     if (err instanceof SignalCheckError)
       return { ok: false, error: err.message };

@@ -11,6 +11,8 @@ import { lookupCustomers } from "@/lib/commerce/customers";
 import { isoToEasternLocal } from "@/lib/commerce/eastern-input";
 import { TEAM_REVIEW_QUESTIONS } from "@/lib/commerce/intake";
 import { loadCustomerHistory, loadOrderForAdmin } from "@/lib/commerce/orders";
+import { isTradeReviewContext, isTradeReviewIntake } from "@/lib/commerce/types";
+import { TradeSummary } from "@/components/commerce/trade-summary";
 import { stripeDashboardUrl, stripeDisputeUrl } from "@/lib/commerce/stripe";
 import {
   disputeChip,
@@ -113,14 +115,16 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ ord
   const now = new Date();
   const dispute = disputeChip(order.dispute_status);
   const { context, intake, product_snapshot: product } = order;
-  const snapshot = context.blueprint;
+  const team = isTradeReviewContext(context) ? null : context;
+  const snapshot = team?.blueprint ?? null;
   const record = snapshot?.view.header.record;
   const notes = events
     .filter((e) => e.kind === "note" && !e.visible_to_customer)
     .reverse()
     .map((e) => ({ id: e.id, created_at: e.created_at, body: e.body, title: e.title }));
-  const direction =
-    TEAM_REVIEW_QUESTIONS.direction.options.find((o) => o.value === intake.direction)?.label ?? "Not sure";
+  const direction = isTradeReviewIntake(intake)
+    ? null
+    : (TEAM_REVIEW_QUESTIONS.direction.options.find((o) => o.value === intake.direction)?.label ?? "Not sure");
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -228,57 +232,97 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ ord
             </dl>
           </Panel>
 
-          <Panel id="team" title="Team">
-            <dl>
-              <Leader label="Team">{context.teamName}</Leader>
-              <Leader label="League">{`${context.leagueName}, ${context.season}`}</Leader>
-              {record && (
-                <Leader label="Record">{`${record.wins}-${record.losses}${record.ties ? `-${record.ties}` : ""}`}</Leader>
-              )}
-              <Leader label="Format">{context.formatDisplay}</Leader>
-              <Leader label="Values">{context.sourceDisplay}</Leader>
-              {snapshot ? (
-                <>
-                  <Leader label="Overall grade">{`${snapshot.overall.toFixed(1)} of 10`}</Leader>
-                  {snapshot.statusLabel && <Leader label="Standing">{snapshot.statusLabel}</Leader>}
-                </>
-              ) : (
-                <Leader label="Blueprint">No Blueprint was built at order time</Leader>
-              )}
-            </dl>
-            <ul role="list" className="mt-2 flex flex-wrap gap-x-4">
-              {(
-                [
-                  ["Blueprint", context.links.blueprint],
-                  ["Overview", context.links.overview],
-                  ["Lineups", context.links.lineups],
-                  ["Trade Ideas", context.links.tradeIdeas],
-                ] as const
-              ).map(([label, href]) => (
-                <li key={label}>
-                  <Link href={href as Route} className={LINK}>
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Panel>
+          {team ? (
+            <Panel id="team" title="Team">
+              <dl>
+                <Leader label="Team">{team.teamName}</Leader>
+                <Leader label="League">{`${team.leagueName}, ${team.season}`}</Leader>
+                {record && (
+                  <Leader label="Record">{`${record.wins}-${record.losses}${record.ties ? `-${record.ties}` : ""}`}</Leader>
+                )}
+                <Leader label="Format">{team.formatDisplay}</Leader>
+                <Leader label="Values">{team.sourceDisplay}</Leader>
+                {snapshot ? (
+                  <>
+                    <Leader label="Overall grade">{`${snapshot.overall.toFixed(1)} of 10`}</Leader>
+                    {snapshot.statusLabel && <Leader label="Standing">{snapshot.statusLabel}</Leader>}
+                  </>
+                ) : (
+                  <Leader label="Blueprint">No Blueprint was built at order time</Leader>
+                )}
+              </dl>
+              <ul role="list" className="mt-2 flex flex-wrap gap-x-4">
+                {(
+                  [
+                    ["Blueprint", team.links.blueprint],
+                    ["Overview", team.links.overview],
+                    ["Lineups", team.links.lineups],
+                    ["Trade Ideas", team.links.tradeIdeas],
+                  ] as const
+                ).map(([label, href]) => (
+                  <li key={label}>
+                    <Link href={href as Route} className={LINK}>
+                      {label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : (
+            isTradeReviewContext(context) && (
+              <Panel id="trade" title="Trade">
+                <TradeSummary trade={context.trade} compact />
+                <dl className="mt-3">
+                  <Leader label="Values">FF Beacon Values</Leader>
+                  {context.trade.valueSnapshotLabel && (
+                    <Leader label="Priced">{context.trade.valueSnapshotLabel}</Leader>
+                  )}
+                  <Leader label="Saved">{context.isPublic ? "Public share link" : "Private copy"}</Leader>
+                </dl>
+                <ul role="list" className="mt-2 flex flex-wrap gap-x-4">
+                  {context.links.share && (
+                    <li>
+                      <Link href={context.links.share as Route} className={LINK}>
+                        Share page
+                      </Link>
+                    </li>
+                  )}
+                  <li>
+                    <Link href={context.links.calculator as Route} className={LINK}>
+                      Trade calculator
+                    </Link>
+                  </li>
+                </ul>
+              </Panel>
+            )
+          )}
 
           <Panel id="intake" title="Intake">
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Direction</dt>
-                <dd className="mt-0.5 text-ink">{direction}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Questions</dt>
-                <dd className="mt-0.5 whitespace-pre-line break-words text-ink">{intake.questions || "None given."}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Off limits</dt>
-                <dd className="mt-0.5 whitespace-pre-line break-words text-ink">{intake.offLimits || "None given."}</dd>
-              </div>
-            </dl>
+            {isTradeReviewIntake(intake) ? (
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Notes</dt>
+                  <dd className="mt-0.5 whitespace-pre-line break-words text-ink">
+                    {intake.notes || "None given. Review the trade on its own."}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Direction</dt>
+                  <dd className="mt-0.5 text-ink">{direction}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Questions</dt>
+                  <dd className="mt-0.5 whitespace-pre-line break-words text-ink">{intake.questions || "None given."}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Off limits</dt>
+                  <dd className="mt-0.5 whitespace-pre-line break-words text-ink">{intake.offLimits || "None given."}</dd>
+                </div>
+              </dl>
+            )}
           </Panel>
 
           <Panel id="internal-notes" title="Internal notes">

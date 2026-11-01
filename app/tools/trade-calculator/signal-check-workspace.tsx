@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { useStepScroll } from "@/lib/use-step-scroll";
+import type { PublicOffer } from "@/lib/commerce/public-offer";
 import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
 import { SleeperImportPanel } from "./sleeper-import-panel";
 
@@ -24,6 +25,7 @@ export function SignalCheckWorkspace({
   showImport,
   signedIn,
   initialUsername,
+  reviewOffer,
 }: {
   formats: FormatOption[];
   minLength: number;
@@ -33,6 +35,8 @@ export function SignalCheckWorkspace({
   showImport: boolean;
   signedIn: boolean;
   initialUsername: string | null;
+  /** The Trade Review, offered under a result; null when not for sale here. */
+  reviewOffer: PublicOffer | null;
 }) {
   const [mode, setMode] = useState<Mode>("build");
   // The import panel costs a server round trip for the league list, so it is
@@ -117,6 +121,8 @@ export function SignalCheckWorkspace({
           initialFormatSlug={initialFormatSlug}
           initialFormatFromHeader={initialFormatFromHeader}
           toolbarLeading={importButton}
+          signedIn={signedIn}
+          reviewOffer={reviewOffer}
         />
       </div>
 
@@ -131,6 +137,7 @@ export function SignalCheckWorkspace({
             signedIn={signedIn}
             initialUsername={initialUsername}
             onBack={backToBuilder}
+            reviewOffer={reviewOffer}
           />
         </div>
       )}

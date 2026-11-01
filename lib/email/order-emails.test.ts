@@ -80,6 +80,33 @@ describe("customer emails", () => {
     expect(email.text).toContain("Hello");
   });
 
+  it("describes a trade review by its trade, in the receipt, the delivery and the admin notice", () => {
+    const trade = {
+      ...ORDER,
+      amount_cents: 395,
+      list_price_cents: 395,
+      product_snapshot: { name: "Trade Review", turnaround_days: 2, tier_rank: 1, family: "trade-review" },
+      context: {
+        kind: "trade-review",
+        summary: "Josh Allen for Bijan Robinson",
+        trade: { formatDisplay: "Dynasty Superflex", sides: [] },
+        links: { share: null, calculator: "/tools/trade-calculator" },
+      },
+      intake: { kind: "trade-review", notes: "@handle in The League" },
+    } as unknown as Order;
+    const receipt = renderOrderEmail("E1", trade);
+    expect(receipt.text).toContain("Trade: Josh Allen for Bijan Robinson");
+    expect(receipt.text).toContain("exactly as Signal Check priced it");
+    expect(receipt.text).not.toContain("Team Blueprint");
+    const delivered = renderOrderEmail("E5", trade, { firstSection: "Take it." });
+    expect(delivered.text).toContain("Your Trade Review of Josh Allen for Bijan Robinson is finished");
+    expect(delivered.text).not.toContain("one follow-up question");
+    expect(renderOrderEmail("E10", trade).text).toContain("start a new order from the trade calculator");
+    const paid = buildAdminOrderPaid(trade, { displayName: "Sam", email: "s@example.com" }, 0);
+    expect(paid.subject).toBe("[Orders] FFB-100001 paid: Trade Review, Josh Allen for Bijan Robinson");
+    expect(paid.text).toContain("Notes: @handle in The League");
+  });
+
   it("prints Eastern time with the zone", () => {
     const email = renderOrderEmail("E1", ORDER);
     expect(email.text).toContain("Jul 1, 2026, 12:30 PM EDT");

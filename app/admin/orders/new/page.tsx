@@ -11,7 +11,11 @@ export const metadata: Metadata = { title: "Create an order" };
 
 export default async function NewOrderPage() {
   await requireAdmin("/admin/orders/new");
-  const products = await loadActiveProducts(createAdminClient());
+  // A complimentary order is built on a league and a roster, so only the products
+  // that take the team review's form are offered here.
+  const products = (await loadActiveProducts(createAdminClient())).filter(
+    (p) => p.intake_form === "team-review",
+  );
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Create an order for a customer</h1>

@@ -85,7 +85,10 @@ export type AnalyticsEvent =
     }
   /** Stripe confirmed the payment on the thank-you page. */
   | { name: "donation_complete"; params: { value: number; currency: "USD" } }
-  | { name: "review_offer_view"; params: { placement: "blueprint" | "league-overview" | "my-beacon" } }
+  | {
+      name: "review_offer_view";
+      params: { placement: "blueprint" | "league-overview" | "my-beacon" | "on-the-clock" | "trade-calculator" };
+    }
   | {
       name: "review_checkout_start";
       params: { tier: string; method: "stripe" | "paypal" | "venmo"; value: number; currency: "USD" };

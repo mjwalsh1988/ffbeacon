@@ -7,8 +7,14 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { stripeConfigured } from "@/lib/stripe/client";
 import { normalizeCode, resolveCoupon } from "@/lib/commerce/coupons";
-import { buildTeamReviewContext, readLeagueRow } from "@/lib/commerce/context";
+import {
+  buildTeamReviewContext,
+  buildTradeReviewContext,
+  readLeagueRow,
+} from "@/lib/commerce/context";
+import { reorderPlace } from "@/lib/commerce/describe";
 import { createOrderInputSchema, intakeSchema } from "@/lib/commerce/intake";
+import type { LeagueCoreRow } from "@/lib/league-pulse";
 import {
   checkPrice,
   countOpenOrders,
@@ -26,7 +32,7 @@ import { loadCommerceSettings } from "@/lib/commerce/settings";
 import { closeOpenSession, startStripeCheckout } from "@/lib/commerce/stripe";
 import { canTransitionPayment } from "@/lib/commerce/transitions";
 import type { Json } from "@/lib/database.types";
-import type { Coupon, Order } from "@/lib/commerce/types";
+import type { Coupon, Order, OrderContext, OrderIntake, TradeReviewContext } from "@/lib/commerce/types";
 
 /**
  * Everything a customer can do to an order.
@@ -63,10 +69,19 @@ function orderPath(orderId: string, query = ""): string {
   return `/my-beacon/orders/${orderId}${query}`;
 }
 
+/**
+ * One action for both kinds of review. The product's `intake_form` must match the
+ * kind the form posted, so a trade product can never be ordered with a team's
+ * context or the other way round.
+ */
 export async function createOrderAction(raw: unknown): Promise<CreateOrderResult> {
   const parsed = createOrderInputSchema.safeParse(raw);
   if (!parsed.success) return refused("Check the form and try again.");
   const input = parsed.data;
+  const back =
+    input.kind === "trade-review"
+      ? `/tools/trade-calculator/review?trade=${input.shareId}`
+      : `/leagues/${input.sleeperLeagueId}/review?roster=${input.rosterId}`;
 
   // 1. Session.
   const supabase = await createClient();
@@ -74,7 +89,6 @@ export async function createOrderAction(raw: unknown): Promise<CreateOrderResult
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    const back = `/leagues/${input.sleeperLeagueId}/review?roster=${input.rosterId}`;
     return {
       ok: false,
       code: "signin",
@@ -94,10 +108,10 @@ export async function createOrderAction(raw: unknown): Promise<CreateOrderResult
     (method === "venmo" && !settings.payments.venmo);
   if (methodOff) return refused("That payment method is switched off at the moment. Pick another.");
 
-  // 3. Product.
+  // 3. Product, and it must take the form that was posted.
   const products = await loadActiveProducts(admin);
   const product = products.find((p) => p.slug === input.productSlug);
-  if (!product) return refused("That review is no longer offered.");
+  if (!product || product.intake_form !== input.kind) return refused("That review is no longer offered.");
 
   // 4. Capacity.
   const open = await countOpenOrders(admin, settings);
@@ -105,10 +119,21 @@ export async function createOrderAction(raw: unknown): Promise<CreateOrderResult
     return refused(settings.storefront.fullyBookedMessage);
   }
 
-  // 5. League and roster.
-  const league = await readLeagueRow(admin, input.sleeperLeagueId);
+  // 5. The subject. A team review reads the league now and builds its context
+  //    after the rate limit, because that build is the expensive step; a trade
+  //    review is one row read, done here.
   const missingTeam = "We could not find that team. Open the league again and try once more.";
-  if (!league) return refused(missingTeam);
+  let league: LeagueCoreRow | null = null;
+  let tradeContext: TradeReviewContext | null = null;
+  if (input.kind === "team-review") {
+    league = await readLeagueRow(admin, input.sleeperLeagueId);
+    if (!league) return refused(missingTeam);
+  } else {
+    tradeContext = await buildTradeReviewContext(admin, input.shareId, user.id);
+    if (!tradeContext) {
+      return refused("We could not find that trade. Run it through Signal Check again and try once more.");
+    }
+  }
 
   // 7. Coupon. (6, the intake, passed with the shape: the schema trims and caps.)
   let coupon: Coupon | null = null;
@@ -136,12 +161,14 @@ export async function createOrderAction(raw: unknown): Promise<CreateOrderResult
     };
   }
 
-  // 9. Duplicate guard. A paid order for the same team is not a duplicate.
+  // 9. Duplicate guard. A paid order for the same thing is not a duplicate.
   const existing = await findOpenDuplicate(admin, {
     userId: user.id,
     productId: product.id,
-    sleeperLeagueId: input.sleeperLeagueId,
-    rosterId: input.rosterId,
+    contextKeys:
+      input.kind === "team-review"
+        ? { sleeperLeagueId: input.sleeperLeagueId, rosterId: String(input.rosterId) }
+        : { shareId: input.shareId },
   });
   if (existing) return { ok: true, redirect: orderPath(existing) };
 
@@ -153,10 +180,21 @@ export async function createOrderAction(raw: unknown): Promise<CreateOrderResult
   });
   if (!allowed) return refused("That is a lot of orders in one minute. Give it a moment and try again.");
 
-  // 11. Context.
-  const source = await resolveSourceSlug(supabase, input.sourceSlug ?? undefined);
-  const context = await buildTeamReviewContext(admin, league, input.rosterId, source.slug);
-  if (!context) return refused(missingTeam);
+  // 11. Context and intake.
+  let context: OrderContext;
+  let intake: OrderIntake;
+  if (input.kind === "team-review" && league) {
+    const source = await resolveSourceSlug(supabase, input.sourceSlug ?? undefined);
+    const built = await buildTeamReviewContext(admin, league, input.rosterId, source.slug);
+    if (!built) return refused(missingTeam);
+    context = built;
+    intake = { ...input.intake, contact: "email" };
+  } else if (input.kind === "trade-review" && tradeContext) {
+    context = tradeContext;
+    intake = { kind: "trade-review", notes: input.intake.notes, contact: "email" };
+  } else {
+    return refused("Check the form and try again.");
+  }
 
   // 12. The insert.
   const now = Date.now();
@@ -185,7 +223,7 @@ export async function createOrderAction(raw: unknown): Promise<CreateOrderResult
     couponId: coupon?.id ?? null,
     couponCode: coupon?.code ?? null,
     context,
-    intake: { ...input.intake, contact: "email" },
+    intake,
     createdActor: "system",
     createdTitle: "Order placed",
   });
@@ -311,7 +349,7 @@ async function reopenRefusal(order: Order, userId: string): Promise<string | nul
   if (!product) return "That review is no longer offered.";
   if (order.coupon_code) {
     const coupon = await resolveCoupon(admin, order.coupon_code, product, userId);
-    if (!coupon.ok) return `${coupon.message} Start a new order from the Blueprint.`;
+    if (!coupon.ok) return `${coupon.message} Start a new order from ${reorderPlace(order.context)}.`;
   }
   return null;
 }
@@ -546,7 +584,9 @@ export async function updateIntakeAction(orderId: unknown, raw: unknown): Promis
   const owned = await ownedOrder(orderId);
   if (!owned) return { ok: false, message: NOT_YOURS };
   const { order } = owned;
-  if (order.intake.providedBy !== "admin") {
+  // Only a team review the admin set up takes answers later; a trade review's one
+  // note travels with the order.
+  if (order.intake.kind === "trade-review" || order.intake.providedBy !== "admin") {
     return { ok: false, message: "The questions on this order are already set." };
   }
   if (order.fulfillment_status !== "queued") {

@@ -1,5 +1,71 @@
 import { describe, expect, it } from "vitest";
-import { checkPrice, refundDecision, searchKind, type RefundFields } from "./orders";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+import {
+  checkPrice,
+  findOpenDuplicate,
+  listSubjectLine,
+  refundDecision,
+  searchKind,
+  type RefundFields,
+} from "./orders";
+
+describe("listSubjectLine", () => {
+  it("prefers the trade summary, then the team and league", () => {
+    expect(listSubjectLine({ team_name: null, league_name: null, summary: "A for B" })).toBe("A for B");
+    expect(listSubjectLine({ team_name: "Night Owls", league_name: "The League", summary: null })).toBe(
+      "Night Owls in The League",
+    );
+    expect(listSubjectLine({ team_name: "Night Owls", league_name: null })).toBe("Night Owls");
+    expect(listSubjectLine({ team_name: null, league_name: null })).toBe("");
+  });
+});
+
+describe("findOpenDuplicate", () => {
+  function recordingClient() {
+    const eqs: Array<[string, string]> = [];
+    const ins: Array<[string, string[]]> = [];
+    const builder = {
+      select: () => builder,
+      eq: (column: string, value: string) => {
+        eqs.push([column, value]);
+        return builder;
+      },
+      in: (column: string, values: string[]) => {
+        ins.push([column, values]);
+        return builder;
+      },
+      order: () => builder,
+      limit: () => builder,
+      maybeSingle: async () => ({ data: { id: "dup" }, error: null }),
+    };
+    const client = { from: () => builder } as unknown as SupabaseClient<Database>;
+    return { client, eqs, ins };
+  }
+
+  it("matches a team review on league and roster, inside unpaid statuses", async () => {
+    const { client, eqs, ins } = recordingClient();
+    const id = await findOpenDuplicate(client, {
+      userId: "u",
+      productId: "p",
+      contextKeys: { sleeperLeagueId: "123", rosterId: "4" },
+    });
+    expect(id).toBe("dup");
+    expect(eqs).toEqual([
+      ["user_id", "u"],
+      ["product_id", "p"],
+      ["context->>sleeperLeagueId", "123"],
+      ["context->>rosterId", "4"],
+    ]);
+    expect(ins).toEqual([["payment_status", ["unpaid", "awaiting_confirmation"]]]);
+  });
+
+  it("matches a trade review on the share id alone", async () => {
+    const { client, eqs } = recordingClient();
+    await findOpenDuplicate(client, { userId: "u", productId: "p", contextKeys: { shareId: "s" } });
+    expect(eqs.slice(2)).toEqual([["context->>shareId", "s"]]);
+  });
+});
 
 describe("checkPrice", () => {
   const base = {

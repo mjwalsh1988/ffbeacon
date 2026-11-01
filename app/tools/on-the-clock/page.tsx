@@ -18,6 +18,7 @@ import {
 import { currentNflSeason } from "@/lib/sleeper";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
+import { loadOfferState, publicOffer } from "@/lib/commerce/offer";
 import {
   resolveHandleGate,
   resolveSleeperViewer,
@@ -87,10 +88,15 @@ export default async function OnTheClockPage({
   // without ever consulting the URL, so on its own a shared `?username=` link
   // would do nothing for the readers most likely to be following one. Both
   // reads are memoized per request, so this is one round trip, not two.
-  const [handleGate, urlViewer] = await Promise.all([
+  // The offer is for the screen after the draft: one memoized read, narrowed to
+  // what the client may hold. Null when the store is closed or the placement is
+  // switched off, and the screen renders nothing for it.
+  const [handleGate, urlViewer, offerState] = await Promise.all([
     resolveHandleGate(supabase, params.username),
     resolveSleeperViewer(supabase, params.username),
+    loadOfferState(admin),
   ]);
+  const reviewOffer = publicOffer(offerState, "on-the-clock");
 
   // Confirmed Discord members don't need the "Join our Discord" CTAs; the hero
   // button becomes a scroll-to-draft shortcut and the bottom CTA points them
@@ -139,6 +145,7 @@ export default async function OnTheClockPage({
                 autoRefreshEnabled={settings.sync.autoRefreshEnabled}
                 autoRefreshSeconds={settings.sync.autoRefreshSeconds}
                 settings={settings}
+                reviewOffer={reviewOffer}
               />
             ) : (
               <>

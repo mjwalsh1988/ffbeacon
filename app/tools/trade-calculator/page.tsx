@@ -8,6 +8,7 @@ import { FFBEACON_SOURCE_SLUG, supportedFormats } from "@/lib/signal-check/forma
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { describeSource, getAvailableSources } from "@/lib/source";
 import { isSignedIn, loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
+import { loadOfferState, publicOffer } from "@/lib/commerce/offer";
 import { serializeJsonLd, webApplicationJsonLd } from "@/lib/json-ld";
 import type { FormatOption } from "./signal-check-builder";
 import { SignalCheckWorkspace } from "./signal-check-workspace";
@@ -111,10 +112,17 @@ export default async function SignalCheckPage({
   // the verdict is ours. That is a deliberate exception to the source toggle,
   // so the reader is told which values these are, and told their own chosen
   // source is not used whenever it is a different one.
-  const [sourceResolution, registry] = await Promise.all([
+  // The Trade Review is offered under a result. The offer is one memoized read,
+  // narrowed to what a client component may hold; a store that is closed, or a
+  // placement switched off in admin, gives null and nothing renders.
+  const [sourceResolution, registry, offerState] = await Promise.all([
     resolveSourceSlug(cookieClient, params.source),
     getAvailableSources(cookieClient),
+    loadOfferState(admin),
   ]);
+  // The Trade Review orders on a SAVED result, and a save is a share link's row,
+  // so the offer is withheld when share links are switched off.
+  const reviewOffer = settings.shareLinksEnabled ? publicOffer(offerState, "trade-calculator") : null;
   const beaconValuesName = describeSource(registry, FFBEACON_SOURCE_SLUG);
   const readerSourceName =
     sourceResolution.slug && sourceResolution.slug !== FFBEACON_SOURCE_SLUG
@@ -206,6 +214,7 @@ export default async function SignalCheckPage({
                 showImport={showImport}
                 signedIn={signedIn}
                 initialUsername={savedUsername}
+                reviewOffer={reviewOffer}
               />
               </>
             )}

@@ -15,10 +15,51 @@ import { readCachedBlueprint } from "@/lib/league-blueprint/cache";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { LEAGUE_CORE_COLUMNS, type LeagueCoreRow } from "@/lib/league-pulse";
 import { loadRosters } from "@/lib/power-pulse/load";
+import type { PublicSharePayload } from "@/lib/signal-check/types";
 import type { SleeperLeague } from "@/lib/sleeper";
-import type { TeamReviewContext } from "./types";
+import { tradeLine } from "./describe";
+import type { TeamReviewContext, TradeReviewContext } from "./types";
 
 type Client = SupabaseClient<Database>;
+
+const SHARE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The trade, read from the saved Signal Check row by its share id. A private
+ * save belongs to the reader who made it; a public one may be ordered on by
+ * anyone holding the link, which is what a share link is for. Null when there is
+ * no such row, or it is someone else's private copy.
+ */
+export async function buildTradeReviewContext(
+  admin: Client,
+  shareId: string,
+  userId: string | null,
+): Promise<TradeReviewContext | null> {
+  if (!SHARE_ID.test(shareId)) return null;
+  const { data, error } = await admin
+    .from("signal_check_analyses")
+    .select("id, public_share_id, public_payload, is_public, user_id, format_slug")
+    .eq("public_share_id", shareId)
+    .maybeSingle();
+  if (error) console.error("[orders] trade read failed", error.message);
+  if (!data || !data.public_payload) return null;
+  if (!data.is_public && data.user_id !== userId) return null;
+
+  const trade = data.public_payload as unknown as PublicSharePayload;
+  return {
+    kind: "trade-review",
+    shareId: data.public_share_id,
+    analysisId: data.id,
+    formatSlug: data.format_slug,
+    isPublic: data.is_public,
+    summary: tradeLine(trade),
+    trade,
+    links: {
+      share: data.is_public ? `/tools/trade-calculator/v/${data.public_share_id}` : null,
+      calculator: "/tools/trade-calculator",
+    },
+  };
+}
 
 export function reviewLinks(sleeperLeagueId: string, rosterId: number): TeamReviewContext["links"] {
   return {
@@ -71,6 +112,7 @@ export async function buildTeamReviewContext(
         });
 
   return {
+    kind: "team-review",
     sleeperLeagueId: league.sleeper_league_id,
     leagueRowId: league.id,
     leagueName: league.name,
