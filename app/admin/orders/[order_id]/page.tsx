@@ -11,6 +11,7 @@ import { lookupCustomers } from "@/lib/commerce/customers";
 import { isoToEasternLocal } from "@/lib/commerce/eastern-input";
 import { TEAM_REVIEW_QUESTIONS } from "@/lib/commerce/intake";
 import { loadCustomerHistory, loadOrderForAdmin } from "@/lib/commerce/orders";
+import { withinDays } from "@/lib/commerce/describe";
 import { isTradeReviewContext, isTradeReviewIntake } from "@/lib/commerce/types";
 import { TradeSummary } from "@/components/commerce/trade-summary";
 import { stripeDashboardUrl, stripeDisputeUrl } from "@/lib/commerce/stripe";
@@ -228,7 +229,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ ord
                 <Leader label="Reference">{order.external_payment_reference}</Leader>
               )}
               {order.due_at && <Leader label="Due by">{formatEastern(order.due_at)}</Leader>}
-              <Leader label="Turnaround">{`${product.turnaround_days} days`}</Leader>
+              <Leader label="Turnaround">{withinDays(product.turnaround_days)}</Leader>
             </dl>
           </Panel>
 

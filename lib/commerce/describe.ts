@@ -34,6 +34,15 @@ export function tradeLine(trade: PublicSharePayload): string {
   return `${line.slice(0, SUMMARY_MAX - 3).trimEnd()}...`;
 }
 
+/**
+ * "within 24 hours" for a one-day turnaround, else "within 3 days". The column
+ * holds whole days with a floor of one, and a day reads better as hours.
+ */
+export function withinDays(days: number): string {
+  if (days <= 1) return "within 24 hours";
+  return `within ${days} days`;
+}
+
 /** The subject of an order in one line: the team and league, or the trade. */
 export function orderSubjectLine(context: OrderContext): string {
   if (isTradeReviewContext(context)) return context.summary || tradeLine(context.trade);

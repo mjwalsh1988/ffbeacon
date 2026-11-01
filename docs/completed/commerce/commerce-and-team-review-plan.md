@@ -1,7 +1,13 @@
 # Beacon Store: one-time purchases, and the Personal Team Review as its first product
 
 Status: BUILT 2026-10-30, revision 2 of the plan, and reviewed a second time the
-same day; see section 22. Migrations 0343 to 0358. Task prefix in progress.md: CM-T###.
+same day; see section 22. Migrations 0343 to 0360. Task prefix in progress.md: CM-T###.
+Turnarounds after launch (the owner's call, 2026-10-31): Basic Review 1 to 2
+days (column 2), Premium Review 2 to 3 days (column 3), Trade Review within 24
+hours and usually an hour or two (column 1). The column is one whole number of
+days and sets the due date, so it holds the top of each range; the feature line
+on the row says the range, and a one-day column reads as "within 24 hours"
+everywhere (lib/commerce/describe.ts withinDays). Migrations 0359 and 0360.
 Second product family after launch: the Trade Review, $3.95, sold under a Signal
 Check result (migration 0358, 2026-10-31); see the end of section 22.
 Price change after the build: the Basic Review is $4.95 (migration 0356, the

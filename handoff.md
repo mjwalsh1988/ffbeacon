@@ -16,6 +16,7 @@ Build complete through CM-T086 (the Trade Review as a second product family, and
 - 0356: the Basic Review priced at $4.95 (the owner's call, 2026-10-30). One data update on products, read back as 495.
 - 0357: the Basic Review's description in the first person (2026-10-31). One data update on products; the Premium description already read that way.
 - 0358: the Trade Review row, intake_form check widened to 'trade-review', placements check widened to 'on-the-clock' and 'trade-calculator', the team reviews given 'on-the-clock' (2026-10-31). Read back live; types unchanged (checks and data only).
+- 0359 and 0360: turnarounds (2026-10-31). Trade Review 1 day with "within 24 hours, usually within an hour or two" in its tagline and features; Basic Review 2 days with "within 1 to 2 days"; Premium Review 3 days with "within 2 to 3 days". Data only.
 
 ## Reviewer findings (one reviewer, all resolved in code)
 

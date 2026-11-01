@@ -48,7 +48,4 @@ export function payWays(methods: readonly PaymentMethod[]): string | null {
   return `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
 }
 
-/** "within 3 days" or "within 1 day". */
-export function withinDays(days: number): string {
-  return `within ${days} ${days === 1 ? "day" : "days"}`;
-}
+export { withinDays } from "@/lib/commerce/describe";

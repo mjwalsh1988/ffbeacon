@@ -31,8 +31,8 @@ describe("the shared words", () => {
     expect(payWays([])).toBeNull();
   });
 
-  it("spells one day and many days", () => {
-    expect(withinDays(1)).toBe("within 1 day");
+  it("says 24 hours for a day and counts the rest", () => {
+    expect(withinDays(1)).toBe("within 24 hours");
     expect(withinDays(3)).toBe("within 3 days");
   });
 });

@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { ArrowRight, Check } from "lucide-react";
+import { withinDays } from "@/lib/commerce/describe";
 import { StatusChip } from "./status-chip";
 
 export type TierCardProduct = {
@@ -52,7 +53,7 @@ function CardBody({ product }: { product: TierCardProduct }) {
       </div>
       {product.tagline && <p className="mt-3 text-sm leading-relaxed text-ink-muted">{product.tagline}</p>}
       <p className="mt-3 text-sm font-medium text-brand-cyan">
-        Delivered within {product.turnaround_days} {product.turnaround_days === 1 ? "day" : "days"} of payment
+        Delivered {withinDays(product.turnaround_days)} of payment
       </p>
       <ul role="list" className="mt-4 space-y-2">
         {product.features.map((feature) => (

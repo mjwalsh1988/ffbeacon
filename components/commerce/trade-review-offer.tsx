@@ -50,11 +50,15 @@ export function TradeReviewOffer({
               ? offer.fullyBookedMessage
               : "The verdict below is the math. Send us this exact trade and we write back what we think: whether we would take it, where it is light or heavy, how we would change it, and one or two other deals worth offering instead."}
           </p>
+          {/* The product's own tagline carries how fast it usually comes back, so the admin can change it. */}
+          {!booked && product.tagline && (
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-brand-cyan">{product.tagline}</p>
+          )}
           {!booked && (
             <ul role="list" className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
               {[
                 "Written by hand",
-                `Delivered to your My Beacon portal ${withinDays(product.turnaround_days)}`,
+                `In your My Beacon portal ${withinDays(product.turnaround_days)}`,
                 ways ? `Pay by ${ways}` : "One-time payment",
               ].map((point) => (
                 <li key={point} className="flex items-center gap-1.5 text-xs text-ink-muted">

@@ -37,6 +37,7 @@ import {
   orderSubjectLabel,
   orderSubjectLine,
   reorderPlace,
+  withinDays,
 } from "@/lib/commerce/describe";
 import { PAY_HANDLE_DISPLAY, manualPayUrl } from "@/lib/commerce/pay-links";
 import { blocksToText, parseRichText, type Block } from "@/lib/commerce/rich-text";
@@ -191,8 +192,7 @@ function buildReceipt(order: Order, kind: "E1" | "E3"): BuiltEmail {
     { label: "Payment", value: methodWord(order.payment_method) },
     { label: "Sold by", value: `${SELLER_NAME}, ${SELLER_EMAIL}` },
   ];
-  const days = order.product_snapshot.turnaround_days;
-  const within = `Expect it in your My Beacon portal within ${days} ${days === 1 ? "day" : "days"}, and an email the moment it lands.`;
+  const within = `Expect it in your My Beacon portal ${withinDays(order.product_snapshot.turnaround_days)}, and an email the moment it lands.`;
   const promise = isTradeReviewContext(order.context)
     ? `We write every review by hand, against the trade exactly as Signal Check priced it and whatever you told us about your league. ${within}`
     : `We write every review by hand, against your Team Blueprint and your league's own numbers. ${within}`;
