@@ -95,6 +95,100 @@ export function renderRelayCard(input: RelayRenderInput): RelayCardText {
   return { headline, facts, sourceLine, viaLine, discordText: short, discordFitted: false };
 }
 
+/** Discord's cap on an embed description, with headroom. */
+export const DISCORD_EMBED_DESCRIPTION_LIMIT = 4000;
+/** Discord's cap on an embed title. */
+const DISCORD_EMBED_TITLE_LIMIT = 256;
+
+/** One Relay on a card that carries a story and its updates. */
+export interface CardRelayInput {
+  headline: string;
+  facts: RelayFact[];
+  sourceHandle: string;
+}
+
+export interface CombinedCardEmbed {
+  title: string;
+  description: string;
+  footer: string;
+  /**
+   * How much had to be left off to fit: "full" is everything, "update-facts"
+   * dropped the facts under each update (every headline kept), "lead-facts"
+   * dropped the lead's facts as well. "overflow" means even the headlines did
+   * not fit and the description was cut at a line; the caller logs it.
+   */
+  fit: "full" | "update-facts" | "lead-facts" | "overflow";
+}
+
+function factLines(facts: RelayFact[]): string[] {
+  return facts
+    .map((f) => ({ label: f.label.trim(), value: f.value.trim() }))
+    .filter((f) => f.label && f.value)
+    .map((f) => discordSafe(`${f.label}: ${f.value}`))
+    .filter(Boolean);
+}
+
+/** "via @A", "via @A and @B", "via @A, @B and @C": each source once, in order. */
+export function combinedViaLine(handles: string[]): string {
+  const seen: string[] = [];
+  for (const h of handles) {
+    const at = handleWithAt(h);
+    if (!seen.includes(at)) seen.push(at);
+  }
+  if (seen.length <= 1) return `via ${seen[0] ?? handleWithAt("")}`;
+  if (seen.length === 2) return `via ${seen[0]} and ${seen[1]}`;
+  return `via ${seen.slice(0, -1).join(", ")} and ${seen[seen.length - 1]}`;
+}
+
+/**
+ * The embed for a Discord card that carries a story and the updates folded
+ * into it: the lead Relay's headline as the title, its facts, then each update
+ * as an "Update:" line with its own facts, oldest first.
+ *
+ * Nothing is dropped silently. When it does not fit, the facts under the
+ * updates go first, then the lead's facts; every headline stays, so each
+ * update is still named on the card, and the full text of every Relay is on
+ * the site. The level reached is returned for the log. Updates are capped
+ * upstream (MAX_CARD_UPDATES in lib/relays/threads.ts) so the headlines alone
+ * always fit in practice.
+ */
+export function renderCombinedRelayEmbed(lead: CardRelayInput, updates: CardRelayInput[]): CombinedCardEmbed {
+  const title = discordSafe(lead.headline.trim()).slice(0, DISCORD_EMBED_TITLE_LIMIT);
+  const footer = combinedViaLine([lead.sourceHandle, ...updates.map((u) => u.sourceHandle)]);
+  const leadFacts = factLines(lead.facts);
+
+  const build = (withLeadFacts: boolean, withUpdateFacts: boolean) => {
+    const blocks: string[] = [];
+    if (withLeadFacts && leadFacts.length > 0) blocks.push(leadFacts.join("\n"));
+    for (const u of updates) {
+      const head = discordSafe(`Update: ${u.headline.trim()}`);
+      const lines = withUpdateFacts ? [head, ...factLines(u.facts)] : [head];
+      blocks.push(lines.join("\n"));
+    }
+    return blocks.join("\n\n");
+  };
+
+  const full = build(true, true);
+  if (full.length <= DISCORD_EMBED_DESCRIPTION_LIMIT) return { title, description: full, footer, fit: "full" };
+  const noUpdateFacts = build(true, false);
+  if (noUpdateFacts.length <= DISCORD_EMBED_DESCRIPTION_LIMIT) {
+    return { title, description: noUpdateFacts, footer, fit: "update-facts" };
+  }
+  const headlinesOnly = build(false, false);
+  if (headlinesOnly.length <= DISCORD_EMBED_DESCRIPTION_LIMIT) {
+    return { title, description: headlinesOnly, footer, fit: "lead-facts" };
+  }
+  // Cut at a line boundary rather than mid-word.
+  const cut = headlinesOnly.slice(0, DISCORD_EMBED_DESCRIPTION_LIMIT);
+  const lastBreak = cut.lastIndexOf("\n");
+  return {
+    title,
+    description: lastBreak > 0 ? cut.slice(0, lastBreak) : cut,
+    footer,
+    fit: "overflow",
+  };
+}
+
 /** The text a retracted Relay's Discord card is edited to. */
 export function renderRetractedDiscordText(input: {
   headline: string;

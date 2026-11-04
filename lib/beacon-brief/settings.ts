@@ -100,6 +100,24 @@ export interface BeaconBriefSettings {
    * gets its own card instead. 0 disables the check (always patch).
    */
   patchMaxAgeMinutes: number;
+  /**
+   * Seconds a new story's Discord card waits before posting, so the posts that
+   * arrive with it (a quote, the edited version with the photo) go out on the
+   * same card. 0 posts at once. See lib/relays/threads.ts.
+   */
+  discordHoldSeconds: number;
+  /**
+   * A follow-up X links to the story (a quote, reply, retweet or edit of its
+   * post), or one carrying the exact same event key, joins the story's card
+   * while the card is younger than this. 0 always posts a new card.
+   */
+  discordEditWindowMinutes: number;
+  /**
+   * The same window for a follow-up the MODEL matched, deliberately short, so
+   * a wrong match can at most add a line to a card posted moments ago. 0
+   * always posts a new card.
+   */
+  discordCoalesceMinutes: number;
   queueMaxAttempts: number;
   discordJobsPerRun: number;
   articleJobsPerRun: number;
@@ -187,6 +205,9 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   playerArticleCapPerDay: 3,
   modelMergeRewrite: "claude-haiku-4-5",
   patchMaxAgeMinutes: 120,
+  discordHoldSeconds: 120,
+  discordEditWindowMinutes: 10,
+  discordCoalesceMinutes: 3,
   queueMaxAttempts: 5,
   discordJobsPerRun: 25,
   articleJobsPerRun: 5,
@@ -370,6 +391,18 @@ export async function loadBeaconBriefSettings(
     patchMaxAgeMinutes: asNum(
       map.get("bb_patch_max_age_minutes"),
       d.patchMaxAgeMinutes,
+    ),
+    discordHoldSeconds: asNum(
+      map.get("bb_discord_hold_seconds"),
+      d.discordHoldSeconds,
+    ),
+    discordEditWindowMinutes: asNum(
+      map.get("bb_discord_edit_window_minutes"),
+      d.discordEditWindowMinutes,
+    ),
+    discordCoalesceMinutes: asNum(
+      map.get("bb_discord_coalesce_minutes"),
+      d.discordCoalesceMinutes,
     ),
     queueMaxAttempts: asNum(
       map.get("bb_queue_max_attempts"),

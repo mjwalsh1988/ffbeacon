@@ -166,6 +166,15 @@ export interface QueueJobPayload {
    */
   kind?: "brief";
   article_id?: string;
+  /** For discord_patch: the ingestion whose Discord message is edited. */
+  target_ingestion_id?: string;
+  /**
+   * For discord_patch only: re-render the target's card from its current
+   * state, the story's own Relay plus every update folded into it (see
+   * lib/relays/threads.ts). Set by the Relay writer when a follow-up joins an
+   * existing card instead of getting its own.
+   */
+  card_refresh?: boolean;
   [key: string]: unknown;
 }
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DISCORD_CONTENT_LIMIT,
+  DISCORD_EMBED_DESCRIPTION_LIMIT,
+  combinedViaLine,
   handleWithAt,
+  renderCombinedRelayEmbed,
   renderRelayCard,
   renderRetractedDiscordText,
 } from "./render";
@@ -86,5 +89,54 @@ describe("renderRetractedDiscordText", () => {
     expect(text).toContain(BASE.headline);
     expect(text.endsWith("via @AdamSchefter")).toBe(true);
     expect(text).not.toMatch(/https?:/);
+  });
+});
+
+describe("renderCombinedRelayEmbed", () => {
+  const lead = {
+    headline: "Cardinals trade QB Jacoby Brissett to the Ravens.",
+    facts: [{ label: "Deal", value: "expected to finish this weekend" }],
+    sourceHandle: "AdamSchefter",
+  };
+  const update = {
+    headline: "Brissett will not play Thursday; debut expected Week 10 on Monday night.",
+    facts: [{ label: "Debut", value: "Week 10 vs. Chargers" }],
+    sourceHandle: "@AdamSchefter",
+  };
+
+  it("leads with the story and lists each update with its facts", () => {
+    const out = renderCombinedRelayEmbed(lead, [update]);
+    expect(out.fit).toBe("full");
+    expect(out.title).toBe(lead.headline);
+    expect(out.description).toBe(
+      "Deal: expected to finish this weekend\n\nUpdate: Brissett will not play Thursday; debut expected Week 10 on Monday night.\nDebut: Week 10 vs. Chargers",
+    );
+    expect(out.footer).toBe("via @AdamSchefter");
+  });
+
+  it("credits each source once, in order", () => {
+    expect(combinedViaLine(["AdamSchefter", "RapSheet"])).toBe("via @AdamSchefter and @RapSheet");
+    expect(combinedViaLine(["a", "b", "a", "c"])).toBe("via @a, @b and @c");
+  });
+
+  it("strips links and mentions from every line", () => {
+    const out = renderCombinedRelayEmbed(lead, [
+      { ...update, headline: "More at https://t.co/x <@&123> @everyone details" },
+    ]);
+    expect(out.description).not.toMatch(/https?:|<@&|@everyone/);
+  });
+
+  it("drops facts before headlines when it does not fit, and keeps every headline", () => {
+    const longFacts = Array.from({ length: 6 }, (_, i) => ({ label: `L${i}`, value: "v".repeat(80) }));
+    const updates = Array.from({ length: 8 }, (_, i) => ({
+      headline: `Update number ${i} ${"h".repeat(200)}`,
+      facts: longFacts,
+      sourceHandle: "AdamSchefter",
+    }));
+    const out = renderCombinedRelayEmbed({ ...lead, facts: longFacts }, updates);
+    expect(out.fit).not.toBe("full");
+    expect(out.fit).not.toBe("overflow");
+    expect(out.description.length).toBeLessThanOrEqual(DISCORD_EMBED_DESCRIPTION_LIMIT);
+    for (let i = 0; i < 8; i++) expect(out.description).toContain(`Update number ${i}`);
   });
 });

@@ -63,9 +63,11 @@ import { buildBriefCard } from "./brief-card";
 import { draftSchema } from "@/lib/brief-desk/draft-schema";
 import { parseEditionMetadata } from "@/lib/brief-desk/edition-metadata";
 import { formatPeriod, formatsPhrase, periodChipLabel } from "@/lib/brief-desk/period";
-import { renderRetractedDiscordText } from "@/lib/relays/render";
-import type { RelayRow } from "@/lib/relays/types";
+import { renderCombinedRelayEmbed, renderRetractedDiscordText } from "@/lib/relays/render";
+import { loadCardUpdates, pendingDiscordPost } from "@/lib/relays/threads";
+import { parseRelayFacts, type RelayRow } from "@/lib/relays/types";
 import { loadRelayForIngestion, relayDiscordText } from "@/lib/relays/write";
+import { chooseCardMediaIndex, discordSnowflakeTimeMs } from "./thread";
 import type {
   ArticleResult,
   BeaconBriefMedia,
@@ -131,6 +133,8 @@ interface WorkerSummary {
   failed: number;
   reaped: number;
   released: number;
+  /** Jobs put back to wait on a story post, with no attempt spent. */
+  deferred?: number;
   skipped?: boolean;
   reason?: string;
 }
@@ -527,6 +531,107 @@ async function buildRelayDiscordMessage(
   };
 }
 
+/**
+ * The Discord message for a story's card: its own Relay plus every update
+ * folded into it (lib/relays/threads.ts). Every Relay-backed post and patch
+ * renders through here, so a correction to the story, a retraction or a new
+ * update can never re-render the card without the updates already on it.
+ *
+ * With no updates it is exactly the single-Relay card (or the retraction
+ * notice) the channel has always had.
+ *
+ *   - existingCard: the card is already in the channel. A retracted story then
+ *     shows the retraction notice above whatever updates still stand; a card
+ *     posting for the first time never opens with a retraction.
+ *   - Null when there is nothing publishable to show: the story is hidden or
+ *     retracted and no update stands, and the card has not posted (or, for a
+ *     hidden story, is left as it was, which is the rule on every other path).
+ *
+ * Images: the story's own post's images when it has any, else the first
+ * update with images of its own, else a quoted post's (chooseCardMediaIndex).
+ */
+async function buildCardMessage(
+  admin: Admin,
+  host: Ingestion,
+  hostRelay: RelayRow,
+  opts: { existingCard: boolean },
+): Promise<DiscordMessageInput | null> {
+  const updates = (await loadCardUpdates(admin, host.id)).filter(
+    (r) => r.status === "published" && r.id !== hostRelay.id,
+  );
+  const retracted = hostRelay.status === "retracted";
+  // A card that first went out AFTER the story was retracted never showed the
+  // story (it carried only the updates), so it is not told the story was
+  // withdrawn. The card's own time is in its message id.
+  const postedMs = discordSnowflakeTimeMs(host.discord_message_id);
+  const retractedMs = new Date(hostRelay.updated_at).getTime();
+  const postedAfterRetraction =
+    postedMs !== null && Number.isFinite(retractedMs) && postedMs > retractedMs;
+  const retractNotice = retracted && opts.existingCard && !postedAfterRetraction;
+
+  if (updates.length === 0) {
+    if (retractNotice) {
+      return {
+        content: renderRetractedDiscordText({
+          headline: hostRelay.headline,
+          sourceHandle: hostRelay.source_handle,
+        }),
+        embeds: [],
+        allowedRoleIds: [],
+        attachments: [],
+      };
+    }
+    if (hostRelay.status !== "published") return null;
+    return buildRelayDiscordMessage(admin, hostRelay, host, await buildMediaAttachments(host));
+  }
+
+  const members: RelayRow[] = hostRelay.status === "published" ? [hostRelay, ...updates] : updates;
+  const memberIngestions: Ingestion[] = [];
+  for (const m of members) {
+    const ing = m.ingestion_id === host.id ? host : await loadIngestion(admin, m.ingestion_id);
+    if (ing) memberIngestions.push(ing);
+  }
+  const mediaIndex = chooseCardMediaIndex(
+    memberIngestions.map((ing) => ({
+      media: (Array.isArray(ing.media) ? ing.media : null) as unknown as BeaconBriefMedia[] | null,
+      quoted: ing.quoted as unknown as BeaconBriefQuoted | null,
+      retweeted: ing.retweeted as unknown as BeaconBriefQuoted | null,
+    })),
+  );
+  const attachments = mediaIndex === null ? [] : await buildMediaAttachments(memberIngestions[mediaIndex]);
+
+  const [lead, ...rest] = members;
+  const toInput = (r: RelayRow) => ({
+    headline: r.headline,
+    facts: parseRelayFacts(r.facts),
+    sourceHandle: r.source_handle,
+  });
+  const embed = renderCombinedRelayEmbed(toInput(lead), rest.map(toInput));
+  if (embed.fit !== "full") {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      level: embed.fit === "overflow" ? "warn" : "info",
+      ingestionId: host.id,
+      message: `combined card for ${members.length} relays did not fit in full (${embed.fit}); every relay is still on the site`,
+    });
+  }
+  return {
+    content: retractNotice
+      ? renderRetractedDiscordText({ headline: hostRelay.headline, sourceHandle: hostRelay.source_handle })
+      : "",
+    embeds: [
+      {
+        title: embed.title,
+        ...(embed.description ? { description: embed.description } : {}),
+        footer: { text: embed.footer },
+        color: RELAY_EMBED_COLOR,
+      },
+    ],
+    allowedRoleIds: [],
+    attachments,
+  };
+}
+
 async function activeWebhookUrl(
   admin: Admin,
   settings: BeaconBriefSettings,
@@ -836,13 +941,23 @@ async function handleDiscordPost(
   if (!ingestion) return { ok: true }; // nothing to post; treat as done
   const relay = await loadRelayForJob(admin, payload, ingestion.id);
   if (relay && relay.status !== "published") {
-    // Hidden by the grounding check or an admin, or retracted: never a card.
+    // Hidden by the grounding check or an admin, or retracted: never a card
+    // for this Relay. Updates folded into its card while it was published
+    // still go out, on a card of their own making, rather than with it.
+    const standing = (await loadCardUpdates(admin, ingestion.id)).some((r) => r.status === "published");
+    if (!standing) {
+      await logBeaconBrief(admin, {
+        stage: "discord_post",
+        ingestionId: ingestion.id,
+        message: `relay is ${relay.status}; no card posted`,
+      });
+      return { ok: true };
+    }
     await logBeaconBrief(admin, {
       stage: "discord_post",
       ingestionId: ingestion.id,
-      message: `relay is ${relay.status}; no card posted`,
+      message: `relay is ${relay.status}; posting the card with the updates folded into it`,
     });
-    return { ok: true };
   }
   const roleIds = relay
     ? []
@@ -904,6 +1019,20 @@ async function postDiscordCard(
   const url = await activeWebhookUrl(admin, settings);
   if (!url) return { ok: false, error: "no active Discord webhook configured" };
 
+  // Built BEFORE the sentinel, so a card with nothing publishable to show
+  // leaves no sentinel behind to block a later legitimate post.
+  const message = relay
+    ? await buildCardMessage(admin, ingestion, relay, { existingCard: false })
+    : buildDiscordMessage(ingestion, roleIds, await buildMediaAttachments(ingestion));
+  if (!message) {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      ingestionId: ingestion.id,
+      message: `relay is ${relay?.status ?? "missing"} and no update on its card stands; no card posted`,
+    });
+    return { ok: true };
+  }
+
   // Pre-post sentinel: record the target webhook BEFORE sending so a crash between
   // the send and the id-write cannot cause a duplicate repost (guard 2 above). On a
   // clean send failure we clear it again so a legitimate retry can repost.
@@ -917,13 +1046,7 @@ async function postDiscordCard(
       error: `failed to set pre-post sentinel: ${sentinelErr.message}`,
     };
 
-  const attachments = await buildMediaAttachments(ingestion);
-  const res = await postWebhookMessage(
-    url,
-    relay
-      ? await buildRelayDiscordMessage(admin, relay, ingestion, attachments)
-      : buildDiscordMessage(ingestion, roleIds, attachments),
-  );
+  const res = await postWebhookMessage(url, message);
   await logBeaconBrief(admin, {
     stage: "discord_post",
     level: res.ok ? "info" : "error",
@@ -953,11 +1076,157 @@ async function postDiscordCard(
   return { ok: true };
 }
 
+/**
+ * What a job handler reports. deferMs, set only with ok false, means "not yet,
+ * and not a failure": the job goes back to pending after that long without
+ * spending an attempt. Used while a card waits on the story post it belongs to.
+ */
+type JobOutcome = {
+  ok: boolean;
+  retryAfterMs?: number | null;
+  error?: string;
+  deferMs?: number;
+};
+
+/**
+ * How long a patch or a card refresh may wait on the story's own post before
+ * waiting counts as failing. Far beyond any hold or ordinary retry, so in
+ * practice only a post that is stuck reaches it, and from there the normal
+ * attempts and the failed-task row make it visible.
+ */
+const STORY_POST_WAIT_LIMIT_MS = 2 * 3_600_000;
+
+/** Wait for the story's post: until just after it is due, at least 20 seconds. */
+function awaitStoryPost(job: QueueRow, postRunAfter: string, error: string): JobOutcome {
+  const waited = Date.now() - new Date(job.created_at).getTime();
+  if (waited > STORY_POST_WAIT_LIMIT_MS) return { ok: false, error: `${error}; waited past the limit` };
+  const dueIn = new Date(postRunAfter).getTime() - Date.now();
+  return { ok: false, error, deferMs: Math.min(Math.max(dueIn + 15_000, 20_000), 15 * 60_000) };
+}
+
+/**
+ * Re-render a story's card from its current state: its own Relay plus every
+ * update folded into it (lib/relays/threads.ts). Idempotent, so a refresh that
+ * finds nothing new re-sends the same card.
+ *
+ * When the card has not posted, the refresh waits for it. When it is never
+ * going to post (its Relay was hidden or retracted before it went out with no
+ * update standing, or its post failed), every update folded into it is posted
+ * as a card of its own: a second card is better than an update nobody sees.
+ */
+async function refreshStoryCard(
+  admin: Admin,
+  job: QueueRow,
+  host: Ingestion,
+  settings: BeaconBriefSettings,
+): Promise<JobOutcome> {
+  const hostRelay = await loadRelayForIngestion(admin, host.id);
+  if (!host.discord_message_id) {
+    const pending = await pendingDiscordPost(admin, host.id);
+    if (pending) {
+      return awaitStoryPost(job, pending.runAfter, "awaiting the story card's own post");
+    }
+    if (host.discord_webhook_id) {
+      // The sentinel without an id: the story card most likely went out and its
+      // id was lost, so it cannot be edited. The updates go out on their own.
+      await logBeaconBrief(admin, {
+        stage: "discord_patch",
+        level: "warn",
+        ingestionId: host.id,
+        message: "story card has no recorded message id; posting its updates as cards of their own",
+      });
+    }
+    return postUpdatesOnTheirOwn(admin, host, settings);
+  }
+  if (!hostRelay) {
+    // A card from before Relays never takes updates; nothing joins one.
+    return postUpdatesOnTheirOwn(admin, host, settings);
+  }
+
+  const message = await buildCardMessage(admin, host, hostRelay, { existingCard: true });
+  if (!message) {
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      ingestionId: host.id,
+      message: `story relay is ${hostRelay.status} and no update on its card stands; card left as it was`,
+    });
+    return { ok: true };
+  }
+  const url = await activeWebhookUrl(admin, settings);
+  if (!url) return { ok: false, error: "no active Discord webhook configured" };
+  const res = await patchWebhookMessage(url, host.discord_message_id, message);
+  await logBeaconBrief(admin, {
+    stage: "discord_patch",
+    level: res.ok ? "info" : "error",
+    ingestionId: host.id,
+    message: res.ok ? "story card refreshed with its updates" : res.error,
+    responsePayload: res as unknown as Json,
+  });
+  if (!res.ok) {
+    // A 404 means the card was deleted in the channel. Editing it can never
+    // succeed, so its updates get cards of their own instead of retrying
+    // into a failed task while nobody sees them.
+    if (res.status === 404) return postUpdatesOnTheirOwn(admin, host, settings);
+    // On the last attempt the same holds for any failure: a refresh that is
+    // about to be marked failed would leave its updates in no card at all, so
+    // they are tried as cards of their own first (and that attempt's own
+    // failure still lands in the failed-task queue).
+    if (job.attempts + 1 >= settings.queueMaxAttempts) {
+      await logBeaconBrief(admin, {
+        stage: "discord_patch",
+        level: "warn",
+        ingestionId: host.id,
+        message: `story card refresh failed on its last attempt (${res.error}); posting its updates as cards of their own`,
+      });
+      return postUpdatesOnTheirOwn(admin, host, settings);
+    }
+    return { ok: false, retryAfterMs: res.retryAfterMs, error: res.error };
+  }
+  return { ok: true };
+}
+
+/**
+ * Give every published update folded into a card that will never show it a
+ * card of its own, and detach it. Posted first and detached after, so a failed
+ * send leaves the update attached and the retried job finds it again; the
+ * per-ingestion guards in postDiscordCard stop a retry from posting one twice.
+ */
+async function postUpdatesOnTheirOwn(
+  admin: Admin,
+  host: Ingestion,
+  settings: BeaconBriefSettings,
+): Promise<JobOutcome> {
+  const updates = (await loadCardUpdates(admin, host.id)).filter((r) => r.status === "published");
+  let sent = 0;
+  for (const update of updates) {
+    const ingestion = await loadIngestion(admin, update.ingestion_id);
+    if (!ingestion) continue;
+    if (sent > 0 && settings.discordPaceMs > 0) await sleep(settings.discordPaceMs);
+    // Detached before rendering, so its own card renders as itself rather
+    // than as part of the story card it is leaving.
+    const detached = { ...update, discord_card_ingestion_id: null };
+    const res = await postDiscordCard(admin, ingestion, [], settings, detached);
+    if (!res.ok) return res;
+    sent += 1;
+    await admin.from("relays").update({ discord_card_ingestion_id: null }).eq("id", update.id);
+  }
+  await logBeaconBrief(admin, {
+    stage: "discord_post",
+    level: updates.length > 0 ? "warn" : "info",
+    ingestionId: host.id,
+    message:
+      updates.length > 0
+        ? `story card is not available; ${sent} update(s) posted as cards of their own`
+        : "story card is not available and carries no published update; nothing to post",
+  });
+  return { ok: true };
+}
+
 async function handleDiscordPatch(
   admin: Admin,
   job: QueueRow,
   settings: BeaconBriefSettings,
-): Promise<{ ok: boolean; retryAfterMs?: number | null; error?: string }> {
+): Promise<JobOutcome> {
   const payload = job.payload as unknown as QueueJobPayload;
   const newIngestion = await loadIngestion(admin, payload.ingestion_id);
   const targetId = (payload.target_ingestion_id as string) ?? null;
@@ -972,32 +1241,38 @@ async function handleDiscordPatch(
     });
     return { ok: true };
   }
+
+  // The Relay behind the card being edited. A retraction or a native edit names
+  // the target's own Relay; a follow-up carding on its own names the new post's.
+  const targetRelay = await loadRelayForJob(admin, payload, target.id);
+
+  // A card refresh, or any edit to a Relay that is shown as an update on
+  // ANOTHER post's card, re-renders that card from its current state. The
+  // Relay's own ingestion has no card, so patching it would edit nothing.
+  if (payload.card_refresh === true) {
+    return refreshStoryCard(admin, job, target, settings);
+  }
+  if (targetRelay?.discord_card_ingestion_id) {
+    const host = await loadIngestion(admin, targetRelay.discord_card_ingestion_id);
+    if (host) return refreshStoryCard(admin, job, host, settings);
+  }
+
   if (!target.discord_message_id) {
     // The original post may simply not have landed YET (its discord_post is still
-    // queued or in flight). Distinguish "pending post" (retry the patch so the
-    // revision is not silently lost, F8) from "never going to post" (give up).
-    // Array read + limit(1), not maybeSingle(): if two discord_post rows ever
-    // exist for one target (retry/release churn), maybeSingle() errors and would
-    // be read as "no pending post", silently dropping the revision (F8 hardening).
-    const { data: pendingPosts } = await admin
-      .from("beacon_brief_queue")
-      .select("id")
-      .eq("job_type", "discord_post")
-      .in("status", ["pending", "processing"])
-      .filter("payload->>ingestion_id", "eq", targetId)
-      .limit(1);
-    if (pendingPosts && pendingPosts.length > 0) {
+    // queued, held, or in flight). Distinguish "pending post" (wait for it, so
+    // the revision is not silently lost, F8) from "never going to post" (give up).
+    // The wait does not spend an attempt: a held card can take minutes to post,
+    // and a correction must not fail for having arrived early.
+    const pending = await pendingDiscordPost(admin, target.id);
+    if (pending) {
       await logBeaconBrief(admin, {
         stage: "discord_patch",
-        level: "warn",
+        level: "info",
         ingestionId: newIngestion.id,
         message:
           "target original not posted yet (discord_post still pending); will retry",
       });
-      return {
-        ok: false,
-        error: "awaiting original discord_post (no message id yet)",
-      };
+      return awaitStoryPost(job, pending.runAfter, "awaiting original discord_post (no message id yet)");
     }
     await logBeaconBrief(admin, {
       stage: "discord_patch",
@@ -1015,27 +1290,30 @@ async function handleDiscordPatch(
   // Bijan Robinson's contract was folded into a three-day-old card, eight straight
   // patches landed and no reader saw any of them. Past the age limit the follow-up
   // gets a card of its own instead of a silent edit nobody will read.
-  // The Relay behind the card being edited. A retraction or a native edit names
-  // the target's own Relay; a follow-up carding on its own names the new post's.
-  const targetRelay = await loadRelayForJob(admin, payload, target.id);
-
+  //
+  // That rule is about NEW information. A correction to the card's own story
+  // (a native edit of its post, or an admin's edit of its Relay) has no post of
+  // its own to announce, and posting one would put the story in the channel
+  // twice, so a Relay-backed card is corrected in place however old it is.
+  // Until 2026-11-04 a native edit of a card past the limit went out as a
+  // second card in the legacy format instead.
+  //
   // A retraction is never too old to apply: a card that says something the
   // reporter withdrew must be corrected however long ago it was posted.
-  const cardAgeMs = Date.now() - new Date(target.created_at).getTime();
+  const cardAgeMs =
+    Date.now() -
+    (discordSnowflakeTimeMs(target.discord_message_id) ?? new Date(target.created_at).getTime());
   const maxCardAgeMs = settings.patchMaxAgeMinutes * 60_000;
-  if (!payload.retract && maxCardAgeMs > 0 && cardAgeMs > maxCardAgeMs) {
+  const newRelay =
+    newIngestion.id === target.id ? null : await loadRelayForIngestion(admin, newIngestion.id);
+  const isCorrection = Boolean(targetRelay) && !newRelay;
+  if (!payload.retract && !isCorrection && maxCardAgeMs > 0 && cardAgeMs > maxCardAgeMs) {
     await logBeaconBrief(admin, {
       stage: "discord_patch",
       level: "info",
       ingestionId: newIngestion.id,
       message: `target card is ${Math.round(cardAgeMs / 60_000)} minutes old (limit ${settings.patchMaxAgeMinutes}); posting a new card instead of a silent edit`,
     });
-    // A native edit of a Relay-backed card has no post of its own to card;
-    // the Relay was already corrected, so a quiet re-render is the right move.
-    if (targetRelay && newIngestion.id === target.id) {
-      return { ok: true };
-    }
-    const newRelay = await loadRelayForIngestion(admin, newIngestion.id);
     return postDiscordCard(
       admin,
       newIngestion,
@@ -1050,42 +1328,37 @@ async function handleDiscordPatch(
   // updateRelayText, and text that fails it leaves the Relay hidden; patching
   // the card anyway would show Discord the exact words the check rejected while
   // the site hid them. The card is left as it was and the reason is logged.
-  if (!payload.retract && targetRelay && targetRelay.status !== "published") {
-    await logBeaconBrief(admin, {
-      stage: "discord_patch",
-      level: "warn",
-      ingestionId: newIngestion.id,
-      message: `relay ${targetRelay.id} is ${targetRelay.status} (${targetRelay.status_reason ?? "no reason recorded"}); the Discord card is left as it was rather than patched with text the site is not showing`,
-    });
-    return { ok: true };
-  }
-
-  const url = await activeWebhookUrl(admin, settings);
-  if (!url) return { ok: false, error: "no active Discord webhook configured" };
-
+  // (When updates folded into the card still stand, buildCardMessage shows
+  // those instead, which carries none of the hidden text.)
+  //
   // A retract patch (approved deletion or an admin retraction) overrides the
   // content with a notice; otherwise patch the original message id with the
   // current Relay text, or, for a post from before Relays, the NEW post content.
-  let message: DiscordMessageInput;
-  if (payload.retract) {
+  // Every Relay-backed message goes through buildCardMessage so the updates on
+  // the card survive a correction or a retraction of the story itself.
+  let message: DiscordMessageInput | null;
+  if (targetRelay) {
+    const relayForCard =
+      payload.retract && targetRelay.status !== "retracted"
+        ? { ...targetRelay, status: "retracted" }
+        : targetRelay;
+    message = await buildCardMessage(admin, target, relayForCard, { existingCard: true });
+    if (!message) {
+      await logBeaconBrief(admin, {
+        stage: "discord_patch",
+        level: "warn",
+        ingestionId: newIngestion.id,
+        message: `relay ${targetRelay.id} is ${targetRelay.status} (${targetRelay.status_reason ?? "no reason recorded"}); the Discord card is left as it was rather than patched with text the site is not showing`,
+      });
+      return { ok: true };
+    }
+  } else if (payload.retract) {
     message = {
-      content: targetRelay
-        ? renderRetractedDiscordText({
-            headline: targetRelay.headline,
-            sourceHandle: targetRelay.source_handle,
-          })
-        : "This story has been retracted. The original source post was removed.",
+      content: "This story has been retracted. The original source post was removed.",
       embeds: [],
       allowedRoleIds: [],
       attachments: [],
     };
-  } else if (targetRelay) {
-    message = await buildRelayDiscordMessage(
-      admin,
-      targetRelay,
-      target,
-      await buildMediaAttachments(target),
-    );
   } else {
     message = buildDiscordMessage(
       newIngestion,
@@ -1093,6 +1366,9 @@ async function handleDiscordPatch(
       await buildMediaAttachments(newIngestion),
     );
   }
+
+  const url = await activeWebhookUrl(admin, settings);
+  if (!url) return { ok: false, error: "no active Discord webhook configured" };
   const res = await patchWebhookMessage(
     url,
     target.discord_message_id,
@@ -2037,7 +2313,7 @@ async function processJob(
   settings: BeaconBriefSettings,
   summary: WorkerSummary,
 ): Promise<void> {
-  let outcome: { ok: boolean; retryAfterMs?: number | null; error?: string };
+  let outcome: JobOutcome;
   try {
     if (job.job_type === "discord_post")
       outcome = await handleDiscordPost(admin, job, settings);
@@ -2076,6 +2352,22 @@ async function processJob(
   if (outcome.ok) {
     await markDone(admin, job.id);
     summary.done += 1;
+  } else if (outcome.deferMs && outcome.deferMs > 0) {
+    // Not yet, and not a failure: back to pending without spending an attempt.
+    // Guarded on 'processing' like every other transition out of a claim.
+    const now = new Date().toISOString();
+    const { data: won } = await admin
+      .from("beacon_brief_queue")
+      .update({
+        status: "pending",
+        last_error: outcome.error ?? null,
+        run_after: new Date(Date.now() + outcome.deferMs).toISOString(),
+        updated_at: now,
+      })
+      .eq("id", job.id)
+      .eq("status", "processing")
+      .select("id");
+    if (won && won.length > 0) summary.deferred = (summary.deferred ?? 0) + 1;
   } else {
     const r = await failOrRetry(
       admin,

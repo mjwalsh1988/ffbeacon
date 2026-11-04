@@ -47,6 +47,14 @@ import { parseRelayFacts } from "@/lib/relays/types";
 import { loadRelayForIngestion, updateRelayText, writeRelay } from "@/lib/relays/write";
 import { normalizeRelayExtraction } from "@/lib/relays/extract";
 import type { NflStateLike } from "@/lib/relays/week";
+import {
+  cardHostId,
+  findThreadTarget,
+  loadCardUpdates,
+  resolveCardHost,
+  type MatchRoute,
+} from "@/lib/relays/threads";
+import { earlierEditIds, orderForThreads, referencedPostIds, repliedToIds, safeCursor } from "./thread";
 import { getNflState } from "@/lib/sleeper";
 import type {
   BeaconBriefSourceItem,
@@ -335,8 +343,15 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
       }
     }
 
-    let lastProcessedId: string | null = null;
-    for (const item of items) {
+    // Time order decides the cursor; processing order puts each post after any
+    // post in this batch it quotes, replies to, retweets or edits, so the link
+    // to it can be found (./thread.ts orderForThreads). The cursor only ever
+    // advances past a post once it and every older post are done, so a
+    // failure mid-batch can never skip an older post that was reordered later.
+    const chronological = items;
+    const done = new Set<string>();
+    let cursorId: string | null = null;
+    for (const item of orderForThreads(items)) {
       if (remaining <= 0) break;
       // Age cutoff: stale posts are ingested for the audit/dedup record but never
       // routed to Discord or article creation.
@@ -379,16 +394,20 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
         });
         break;
       }
-      lastProcessedId = item.source_external_id;
+      done.add(item.source_external_id);
       // Incremental cursor advance: persist progress per item so an interrupted
       // or budget-capped run never reprocesses what it already handled.
-      await admin
-        .from("news_sources")
-        .update({
-          last_cursor: lastProcessedId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", source.id);
+      const nextCursor = safeCursor(chronological, done);
+      if (nextCursor && nextCursor !== cursorId) {
+        cursorId = nextCursor;
+        await admin
+          .from("news_sources")
+          .update({
+            last_cursor: cursorId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", source.id);
+      }
     }
 
     // Reconcile poll status. The cursor was already advanced incrementally per
@@ -447,9 +466,6 @@ function eventKeyForPost(
   ]);
   return buildEventKey(kind, playerIds);
 }
-
-/** How a post was matched to an existing story, for logging and the audit trail. */
-type MatchRoute = "event_key" | "model";
 
 interface DuplicateMatch {
   target: FollowupCandidate;
@@ -626,6 +642,11 @@ async function processRevision(
      * story gets a card of its own.
      */
     nativeEdit?: boolean;
+    /**
+     * How the story was matched, which decides how long its Discord card stays
+     * open to this post (lib/relays/threads.ts resolveCardHost).
+     */
+    route?: MatchRoute;
     /** Discord role ids to mention, when this post gets its own card. */
     roleIds?: string[];
     /** The Relay the matched story already has, when the matcher found one. */
@@ -672,6 +693,7 @@ async function processRevision(
     return;
   }
   const ingestionId = inserted.id;
+  let relayFailed = false;
   summary.ingested += 1;
   summary.revisions += 1;
   await logBeaconBrief(admin, {
@@ -708,13 +730,27 @@ async function processRevision(
 
     let addsNewInformation = true;
     if (target) {
+      // Everything the story's card already says, not only the matched Relay:
+      // a third post repeating what the second added is not new either.
+      const hostId = cardHostId(target);
+      const onCard = (await loadCardUpdates(admin, hostId)).filter(
+        (r) => r.status === "published" && r.id !== target.id,
+      );
+      if (hostId !== target.ingestion_id) {
+        const hostRelay = await loadRelayForIngestion(admin, hostId);
+        if (hostRelay && hostRelay.status === "published" && hostRelay.id !== target.id) onCard.unshift(hostRelay);
+      }
+      const factsLine = (facts: unknown) =>
+        parseRelayFacts(facts)
+          .map((f) => `${f.label}: ${f.value}`)
+          .join(". ");
       const gate = await postAddsNewInformation({
         admin,
         settings,
         article: {
           title: target.headline,
-          tl_dr: parseRelayFacts(target.facts)
-            .map((f) => `${f.label}: ${f.value}`)
+          tl_dr: [factsLine(target.facts), ...onCard.map((r) => `${r.headline} ${factsLine(r.facts)}`.trim())]
+            .filter(Boolean)
             .join(". "),
           content_md: target.timeline,
         },
@@ -733,24 +769,69 @@ async function processRevision(
     }
 
     if (addsNewInformation) {
-      const written = await writeRelay(admin, {
-        ingestion: {
-          id: ingestionId,
-          text: opts.item.text,
-          quoted: (opts.item.quoted as unknown as Json) ?? null,
-          retweeted: (opts.item.retweeted as unknown as Json) ?? null,
-          author_handle: opts.item.author_handle,
-          external_url: opts.item.external_url,
-          created_at: opts.item.created_at,
-          metadata: (opts.item.raw as Json) ?? {},
-        },
-        ai: opts.ai,
-        refs: opts.refs,
-        nflState: opts.nflState ?? null,
-        followsRelayId: target?.id ?? null,
-        discord: true,
+      // One card per story: join the story's card while it is still news,
+      // else post a card of its own (lib/relays/threads.ts).
+      const host = await resolveCardHost(admin, {
+        targetRelay: target ?? null,
+        route: opts.route ?? "model",
+        editWindowMinutes: settings.discordEditWindowMinutes,
+        coalesceMinutes: settings.discordCoalesceMinutes,
       });
-      if (written.discordQueued) summary.discordQueued += 1;
+      await logBeaconBrief(admin, {
+        stage: "revision_link",
+        sourceId: source.id,
+        ingestionId,
+        message: `Discord: ${host.why}`,
+      });
+      try {
+        const written = await writeRelay(admin, {
+          ingestion: {
+            id: ingestionId,
+            text: opts.item.text,
+            quoted: (opts.item.quoted as unknown as Json) ?? null,
+            retweeted: (opts.item.retweeted as unknown as Json) ?? null,
+            author_handle: opts.item.author_handle,
+            external_url: opts.item.external_url,
+            created_at: opts.item.created_at,
+            metadata: (opts.item.raw as Json) ?? {},
+          },
+          ai: opts.ai,
+          refs: opts.refs,
+          nflState: opts.nflState ?? null,
+          followsRelayId: target?.id ?? null,
+          discord: true,
+          discordDelaySeconds: settings.discordHoldSeconds,
+          discordCardHostIngestionId: host.hostIngestionId,
+        });
+        if (written.discordQueued) summary.discordQueued += 1;
+      } catch (err) {
+        // The revision row already exists, so a throw here would leave it
+        // looking processed: the dedupe skips it on every later run and the
+        // follow-up never becomes a Relay or a card, with nobody told. Recorded
+        // where a person will see it instead, the same way the root path does.
+        relayFailed = true;
+        const message = err instanceof Error ? err.message : String(err);
+        await admin
+          .from("news_ingestions")
+          .update({
+            status: "error",
+            filter_detail: { stage: "relay_write", error: message.slice(0, 400) } as unknown as Json,
+          })
+          .eq("id", ingestionId);
+        await admin.from("beacon_brief_moderation").insert({
+          ingestion_id: ingestionId,
+          article_id: null,
+          type: "failed_task",
+          status: "pending",
+          detail: { job_type: "relay_write", error: message.slice(0, 400), attempts: 0 } as unknown as Json,
+        });
+        await logBeaconBrief(admin, {
+          stage: "error",
+          level: "error",
+          ingestionId,
+          message: `relay write failed for follow-up ${ingestionId}: ${message}`,
+        });
+      }
     }
   }
 
@@ -765,6 +846,7 @@ async function processRevision(
     });
     summary.articlesQueued += 1;
   }
+  if (relayFailed) return;
   await admin
     .from("news_ingestions")
     .update({ status: "revised", processed_at: new Date().toISOString() })
@@ -812,10 +894,18 @@ async function refreshRelayForNativeEdit(
     });
     return;
   }
-  // The edited text is now the post of record for this Relay's grounding check.
+  // The edited text is now the post of record for this Relay's grounding check,
+  // and the edited post's images and quoted context are what the card shows: a
+  // reporter often edits a post to ADD the photo, and the card renders its
+  // images from this row. metadata keeps the original raw object, by rule.
   await admin
     .from("news_ingestions")
-    .update({ text: item.text })
+    .update({
+      text: item.text,
+      media: item.media as unknown as Json,
+      quoted: (item.quoted as unknown as Json) ?? null,
+      retweeted: (item.retweeted as unknown as Json) ?? null,
+    })
     .eq("id", priorIngestionId);
   const result = await updateRelayText(
     admin,
@@ -832,6 +922,75 @@ async function refreshRelayForNativeEdit(
       ? `native edit folded into relay (${result.status})`
       : `native edit could not update the relay: ${result.error}`,
   });
+}
+
+/**
+ * The row an edited post edits: the one that carries the story.
+ *
+ * X gives an edit the ids of EVERY earlier version, and the row we hold may be
+ * any of them. The old lookup matched only the version immediately before, so
+ * a second edit found the first edit's revision row, which has no Relay and no
+ * card, and the correction went nowhere. Preference: a row with a Relay (the
+ * post the story was written from), then a root row, then the exact previous
+ * version as before. Same source only, as before: a native edit is always the
+ * same account's own post.
+ */
+async function findNativeEditPrior(
+  admin: Admin,
+  sourceId: string,
+  item: BeaconBriefSourceItem,
+): Promise<{ id: string; article_id: string | null; source_external_id: string; hasRelay: boolean } | null> {
+  const earlier = earlierEditIds(item.raw, item.source_external_id).filter((id) => /^\d{1,25}$/.test(id));
+  if (item.edit_of_external_id && /^\d{1,25}$/.test(item.edit_of_external_id) && !earlier.includes(item.edit_of_external_id)) {
+    earlier.unshift(item.edit_of_external_id);
+  }
+  const exact = async () => {
+    if (!item.edit_of_external_id) return null;
+    const { data } = await admin
+      .from("news_ingestions")
+      .select("id, article_id, source_external_id")
+      .eq("source_id", sourceId)
+      .eq("source_external_id", item.edit_of_external_id)
+      .maybeSingle();
+    if (!data) return null;
+    const { count } = await admin
+      .from("relays")
+      .select("id", { count: "exact", head: true })
+      .eq("ingestion_id", data.id);
+    return { ...data, hasRelay: (count ?? 0) > 0 };
+  };
+  if (earlier.length === 0) return exact();
+
+  const { data: rows, error } = await admin
+    .from("news_ingestions")
+    .select("id, article_id, source_external_id, is_revision, created_at")
+    .eq("source_id", sourceId)
+    .overlaps("source_external_ids", earlier)
+    .order("created_at", { ascending: true })
+    .limit(20);
+  if (error || !rows || rows.length === 0) return exact();
+
+  const { data: relays } = await admin
+    .from("relays")
+    .select("ingestion_id")
+    .in(
+      "ingestion_id",
+      rows.map((r) => r.id),
+    );
+  const withRelay = new Set((relays ?? []).map((r) => r.ingestion_id));
+  const pick =
+    rows.find((r) => withRelay.has(r.id)) ??
+    rows.find((r) => !r.is_revision) ??
+    rows.find((r) => r.source_external_id === item.edit_of_external_id) ??
+    null;
+  return pick
+    ? {
+        id: pick.id,
+        article_id: pick.article_id,
+        source_external_id: pick.source_external_id,
+        hasRelay: withRelay.has(pick.id),
+      }
+    : exact();
 }
 
 async function processItem(
@@ -892,17 +1051,26 @@ async function processItem(
   // call, and is a revision by definition (the source rewrote its own post), so it
   // short-circuits ahead of every gate below exactly as it always has.
   if (item.is_native_edit && item.edit_of_external_id) {
-    const { data: prior } = await admin
-      .from("news_ingestions")
-      .select("id, article_id")
-      .eq("source_id", source.id)
-      .eq("source_external_id", item.edit_of_external_id)
-      .maybeSingle();
+    const found = await findNativeEditPrior(admin, source.id, item);
+    // An edit of a post that never became a story (a quote that added nothing,
+    // a post the filters held back) has no Relay to correct and no card to
+    // patch, so taking the native-edit path would swallow it: the edit may be
+    // exactly where the new fact is. It goes through the full pipeline
+    // instead, where the thread link still ties it to the story it belongs to.
+    // A legacy article-backed post keeps the native path, as before.
+    const prior = found && (found.hasRelay || found.article_id) ? found : null;
+    if (found && !prior) {
+      await logBeaconBrief(admin, {
+        stage: "revision_link",
+        sourceId: source.id,
+        message: `edit of ${found.source_external_id}, which has no Relay; processing the edited post as a post in its own right`,
+      });
+    }
     if (prior) {
       await logBeaconBrief(admin, {
         stage: "revision_link",
         sourceId: source.id,
-        message: `native edit of ${item.edit_of_external_id}`,
+        message: `native edit of ${prior.source_external_id}`,
       });
       // The Relay is corrected first so the discord_patch job queued by
       // processRevision renders the edited text rather than the old one.
@@ -1100,11 +1268,38 @@ async function processItem(
   };
   const eventKey = eventKeyForPost(item, ai, refs.playerIds);
   const nflState = await nflStateOrNull();
-  const followup = await findDuplicateTarget(admin, source, item, settings, {
+
+  // A post that quotes, replies to, retweets or edits a post we already hold
+  // belongs to that post's story: X says so, no model involved. Checked first,
+  // and still gated on a shared subject inside findThreadTarget.
+  const thread = await findThreadTarget(admin, {
+    postIds: [...referencedPostIds(item.raw), ...earlierEditIds(item.raw, item.source_external_id)],
+    replyIds: repliedToIds(item.raw),
+    windowHours: settings.eventKeyWindowHours,
     subject,
-    lookbackHours: settings.followupLookbackHours,
-    eventKey,
   });
+  if (thread.rejected) {
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      sourceId: source.id,
+      message: `thread link not used: ${thread.rejected}`,
+    });
+  }
+  let followup: DuplicateMatch | null = null;
+  if (thread.found) {
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      sourceId: source.id,
+      message: `${item.source_external_id} threads into "${thread.found.target.title}" (it quotes, replies to, retweets or edits that story's post${thread.found.proven ? "" : ", which was itself matched in"})`,
+    });
+    followup = { route: thread.found.proven ? "thread" : "model", target: thread.found.target };
+  } else {
+    followup = await findDuplicateTarget(admin, source, item, settings, {
+      subject,
+      lookbackHours: settings.followupLookbackHours,
+      eventKey,
+    });
+  }
   if (followup) {
     await processRevision(admin, source, item, settings, summary, {
       revisionOfIngestionId: followup.target.ingestion_id,
@@ -1113,7 +1308,8 @@ async function processItem(
       aiStored,
       contextScore: ai.context_score ?? 0,
       eventKey,
-      provenSameEvent: followup.route === "event_key",
+      provenSameEvent: followup.route !== "model",
+      route: followup.route,
       roleIds: refs.roleIds,
       ai,
       refs: resolved,
@@ -1194,6 +1390,7 @@ async function processItem(
       nflState,
       followsRelayId: null,
       discord: true,
+      discordDelaySeconds: settings.discordHoldSeconds,
     });
     if (written.discordQueued) summary.discordQueued += 1;
   } catch (err) {

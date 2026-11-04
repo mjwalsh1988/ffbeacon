@@ -79,7 +79,17 @@ function candidateFrom(
   };
 }
 
-/** Root ingestions (never revisions) inside the window, newest first. */
+/**
+ * Ingestions inside the window, newest first, follow-ups included.
+ *
+ * A follow-up that added something new has a Relay of its own, and until
+ * 2026-11-04 it was never a candidate, because this read kept to root posts.
+ * The next post about the same story could then only match the ORIGINAL, so a
+ * story that had moved on (the Brissett trade, first matched to the Lamar
+ * Jackson injury it followed) kept matching where it started, and a post keyed
+ * to the trade itself found nothing at all. Revisions with no Relay (native
+ * edits, and follow-ups that added nothing) drop out in relaysByIngestion.
+ */
 async function recentRootIngestions(
   admin: Admin,
   opts: { cutoffIso: string; excludeIngestionId?: string | null; eventKey?: string; keyPrefix?: string; limit: number },
@@ -87,7 +97,6 @@ async function recentRootIngestions(
   let q = admin
     .from("news_ingestions")
     .select("id, event_key, created_at")
-    .eq("is_revision", false)
     .in("status", ["published", "processing", "revised"])
     .gte("created_at", opts.cutoffIso)
     // NEWEST first, so the limit drops the OLDEST candidates. Ascending meant
@@ -114,7 +123,9 @@ export async function findExactRelayMatch(
     cutoffIso,
     eventKey: opts.eventKey,
     excludeIngestionId: opts.excludeIngestionId,
-    limit: 10,
+    // Follow-ups that added nothing share the key and have no Relay; room for
+    // them so they cannot crowd out the Relay this lookup exists to find.
+    limit: 25,
   });
   if (rows.length === 0) return null;
   const relays = await relaysByIngestion(admin, rows.map((r) => r.id));

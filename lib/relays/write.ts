@@ -40,6 +40,8 @@ import {
   type RelayStatus,
 } from "./types";
 import { assignRelayWeek, type NflStateLike } from "./week";
+import { enqueueCardRefresh, republishAttachedRelay } from "./threads";
+import { loadBeaconBriefSettings } from "@/lib/beacon-brief/settings";
 
 type Admin = SupabaseClient<Database>;
 type Ingestion = Database["public"]["Tables"]["news_ingestions"]["Row"];
@@ -64,6 +66,19 @@ export interface WriteRelayInput {
   followsRelayId?: string | null;
   /** Enqueue the Discord card for a published Relay. The backfill passes false. */
   discord: boolean;
+  /**
+   * Hold the new card this many seconds before it posts, so posts arriving
+   * with it can join it (bb_discord_hold_seconds). Live curation only; an
+   * admin's force-push posts at once.
+   */
+  discordDelaySeconds?: number;
+  /**
+   * The ingestion whose existing card this Relay joins instead of getting its
+   * own (lib/relays/threads.ts resolveCardHost). Honored only for a Relay that
+   * publishes: a hidden one shows nowhere, and if it is published later it
+   * gets a card of its own.
+   */
+  discordCardHostIngestionId?: string | null;
 }
 
 export interface WriteRelayResult {
@@ -300,6 +315,11 @@ export async function writeRelay(admin: Admin, input: WriteRelayInput): Promise<
   const week = assignRelayWeek(input.nflState, postedAt);
   const slug = await uniqueRelaySlug(admin, ai.suggested_slug || extraction.headline, ingestion.id);
 
+  const cardHost =
+    input.discord && status === "published" && input.discordCardHostIngestionId
+      ? input.discordCardHostIngestionId
+      : null;
+
   const row = {
     ingestion_id: ingestion.id,
     kind: extraction.kind,
@@ -316,6 +336,7 @@ export async function writeRelay(admin: Admin, input: WriteRelayInput): Promise<
     source_url: ingestion.external_url ?? "",
     source_posted_at: postedAt,
     follows_relay_id: input.followsRelayId ?? null,
+    discord_card_ingestion_id: cardHost,
     status,
     status_reason: statusReason,
   };
@@ -421,17 +442,45 @@ export async function writeRelay(admin: Admin, input: WriteRelayInput): Promise<
   }
 
   let discordQueued = false;
-  if (status === "published" && input.discord) {
+  let ownCard = status === "published" && input.discord;
+  if (ownCard && cardHost) {
+    // Joins the story's card: the card is re-rendered with this Relay as an
+    // update rather than a second card going out.
+    discordQueued = await enqueueCardRefresh(admin, {
+      hostIngestionId: cardHost,
+      triggerIngestionId: ingestion.id,
+    });
+    if (discordQueued) {
+      ownCard = false;
+    } else {
+      // Nothing would ever put this update on the story's card, so it is
+      // detached and gets a card of its own: a second card beats no card.
+      // If even the detach fails, the card of its own still goes out: a later
+      // refresh of the story card may then show it twice, which beats never.
+      const { error: detachErr } = await admin
+        .from("relays")
+        .update({ discord_card_ingestion_id: null })
+        .eq("id", relayId);
+      await logBeaconBrief(admin, {
+        stage: "error",
+        level: "warn",
+        ingestionId: ingestion.id,
+        message: `relay ${relayId} could not queue a refresh of the card on ingestion ${cardHost}; posting it as a card of its own${detachErr ? ` (detach also failed: ${detachErr.message})` : ""}`,
+      });
+    }
+  }
+  if (ownCard) {
     const payload: QueueJobPayload = {
       ingestion_id: ingestion.id,
       relay_id: relayId,
       role_ids: [],
     };
+    const delayMs = Math.max(0, Math.min(input.discordDelaySeconds ?? 0, 900)) * 1000;
     const { error: qErr } = await admin.from("beacon_brief_queue").insert({
       job_type: "discord_post",
       payload: payload as unknown as Json,
       status: "pending",
-      run_after: new Date().toISOString(),
+      run_after: new Date(Date.now() + delayMs).toISOString(),
     });
     discordQueued = !qErr;
   }
@@ -568,6 +617,19 @@ export async function updateRelayText(
     await settleRelayReview(admin, relay.ingestion_id, "approved", opts.resolvedBy);
     if (!discord) {
       // Nothing to enqueue, by the caller's instruction.
+    } else if (relay.discord_card_ingestion_id) {
+      // Shown as an update on another post's card. A correction re-renders
+      // that card; a Relay coming back from hidden joins it only while the
+      // card is young, else gets a card of its own (republishAttachedRelay).
+      if (relay.status === "published") {
+        await enqueueCardRefresh(admin, {
+          hostIngestionId: relay.discord_card_ingestion_id,
+          triggerIngestionId: relay.ingestion_id,
+        });
+      } else {
+        const settings = await loadBeaconBriefSettings(admin);
+        await republishAttachedRelay(admin, relay, settings.discordEditWindowMinutes);
+      }
     } else if (ingestion.discord_message_id) {
       const payload: QueueJobPayload = {
         ingestion_id: relay.ingestion_id,
@@ -628,7 +690,7 @@ export async function setRelayStatus(
 ): Promise<{ ok: boolean; error?: string; failures?: GroundingFailure[] }> {
   const { data: relay } = await admin
     .from("relays")
-    .select("id, ingestion_id, status, brief_id, headline, kind, facts, timeline, availability")
+    .select("id, ingestion_id, status, brief_id, headline, kind, facts, timeline, availability, discord_card_ingestion_id")
     .eq("id", relayId)
     .maybeSingle();
   if (!relay) return { ok: false, error: "Relay not found." };
@@ -658,6 +720,21 @@ export async function setRelayStatus(
 
   // Whatever the owner decided here, the review row is answered.
   await settleRelayReview(admin, relay.ingestion_id, status === "published" ? "approved" : "rejected", options.resolvedBy);
+
+  // A Relay shown as an update on another post's card: publishing or hiding it
+  // re-renders that card so it matches the site. A retraction reaches the same
+  // card through the discord_patch below, which the worker redirects to it.
+  if (relay.discord_card_ingestion_id && status !== "retracted" && status !== relay.status) {
+    if (status === "published") {
+      const settings = await loadBeaconBriefSettings(admin);
+      await republishAttachedRelay(admin, relay, settings.discordEditWindowMinutes);
+    } else {
+      await enqueueCardRefresh(admin, {
+        hostIngestionId: relay.discord_card_ingestion_id,
+        triggerIngestionId: relay.ingestion_id,
+      });
+    }
+  }
 
   if (status === "retracted") {
     const payload: QueueJobPayload = {
