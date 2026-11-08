@@ -9,7 +9,7 @@
  *   completed round of any outcome. A second round on the same ET day does
  *   not double-increment; a gap resets it to 1.
  *
- * Day math (isConsecutiveDay, currentEasternGameDate's callers) works on
+ * Day math lives in lib/game-date.ts. It works on
  * plain YYYY-MM-DD strings and never touches a local timezone: each date
  * string is parsed as UTC noon, then diffed by exactly 86,400,000 ms. Noon
  * avoids ever landing on a DST transition instant, and diffing whole UTC
@@ -19,7 +19,11 @@
  * handling is needed.
  */
 
-import { SITE_TIME_ZONE } from "@/lib/datetime";
+import { currentEasternGameDate, isConsecutiveDay } from "@/lib/game-date";
+
+// Moved to lib/game-date.ts (shared with Long Shot); re-exported so the
+// existing importers do not change.
+export { currentEasternGameDate, isConsecutiveDay };
 
 export type RoundOutcome = "won" | "solved_late" | "failed" | "skipped";
 
@@ -36,37 +40,6 @@ export interface ApplyRoundOutcomeInput {
   /** YYYY-MM-DD, the ET calendar day the round completed on. */
   gameDate: string;
   current: StreakState;
-}
-
-const MS_PER_DAY = 86_400_000;
-
-/** Parse a YYYY-MM-DD string as UTC noon of that calendar day. */
-function parseIsoDateUtcNoon(dateStr: string): number {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return Date.UTC(year, month - 1, day, 12, 0, 0);
-}
-
-/** True when `next` is exactly the calendar day after `prev` (YYYY-MM-DD strings). */
-export function isConsecutiveDay(prev: string, next: string): boolean {
-  return parseIsoDateUtcNoon(next) - parseIsoDateUtcNoon(prev) === MS_PER_DAY;
-}
-
-/**
- * The current instant's calendar date in America/New_York, as YYYY-MM-DD.
- * `now` defaults to the live clock; pass it explicitly in tests for
- * determinism around DST boundaries.
- */
-export function currentEasternGameDate(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: SITE_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const year = parts.find((p) => p.type === "year")?.value;
-  const month = parts.find((p) => p.type === "month")?.value;
-  const day = parts.find((p) => p.type === "day")?.value;
-  return `${year}-${month}-${day}`;
 }
 
 /**

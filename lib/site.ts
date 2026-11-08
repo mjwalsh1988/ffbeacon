@@ -124,6 +124,11 @@ export const GAMES_NAV: NavChild[] = [
     href: "/games/would-you-rather",
     description: "Two sides of a real trade. One vote.",
   },
+  {
+    label: "Long Shot",
+    href: "/games/long-shot",
+    description: "Five prompts. Rare answers win.",
+  },
 ];
 
 /** A destination the site search can match on the client. Tools and top-level
@@ -322,6 +327,12 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
       "who won",
       "wyr",
     ],
+  },
+  {
+    label: "Long Shot",
+    href: "/games/long-shot",
+    description: "Five prompts. Rare answers win.",
+    keywords: ["game", "games", "daily", "trivia", "long shot", "rare", "prompts"],
   },
   {
     label: "Games",
@@ -540,6 +551,7 @@ export const FOOTER_COLUMNS: Array<{
       { label: "All Games", href: "/games" },
       { label: "Signal Scout", href: "/games/signal-scout" },
       { label: "Would You Rather?", href: "/games/would-you-rather" },
+      { label: "Long Shot", href: "/games/long-shot" },
     ],
   },
   {

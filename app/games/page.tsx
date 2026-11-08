@@ -5,6 +5,7 @@ import {
   ArrowRight,
   BarChart3,
   Clock,
+  Crosshair,
   Gamepad2,
   Newspaper,
   Radar,
@@ -47,6 +48,7 @@ type Game = GameCatalogEntry & { icon: LucideIcon; status: string };
 const GAME_PRESENTATION: Record<string, { icon: LucideIcon; status: string }> = {
   "Signal Scout": { icon: Radar, status: "New" },
   "Would You Rather?": { icon: Vote, status: "New" },
+  "Long Shot": { icon: Crosshair, status: "New" },
 };
 
 const UNBUILT_GAME = { icon: Gamepad2, status: "In development" };
@@ -73,7 +75,7 @@ export default function GamesPage() {
               detail: playable === 1 ? "Free to play" : "All free to play",
               accent: "cyan",
             },
-            { label: "Cost", value: "$0", detail: "No account needed", accent: "purple" },
+            { label: "Cost", value: "$0", detail: "Accounts are free too", accent: "purple" },
           ]}
         />
       </PageBody>
@@ -91,7 +93,8 @@ export default function GamesPage() {
                 <li>
                   Signal Scout needs no account at all. Would You Rather gives you
                   a few rounds first, then asks for one, so a vote can be counted
-                  once per person.
+                  once per person. Long Shot needs one for every round, because
+                  everyone plays the same five prompts each day.
                 </li>
                 <li>
                   Each game is playable by keyboard, and every clue is text, so a round

@@ -7,8 +7,23 @@ Single source of truth for atomic task status, currently scoped to the Signal Sc
 Update after every task. Task format:
 
 ```
-SS-T### | status | description
-     | files: ...
+SS-T###LS-T010LS-T011LS-T012LS-T013LS-T014LS-T015LS-T016 | completed | Types regenerated to lib/database.types.ts
+     | files: lib/database.types.ts
+     | depends on: LS-T015
+     | verified: yes (MCP output extracted and prettier-formatted; diff is the long_shot tables and RPCs plus prettier whitespace in the generic helpers)| files: supabase/migrations/0368_long_shot_tallies_stats_rpcs.sql
+     | depends on: LS-T014
+     | choice: the plan's column revoke alone does nothing while a table-level SELECT grant exists, so the table SELECT is revoked from authenticated and re-granted on every column except hidden_reason and hidden_at. long_shot_trade_counts reads a non-object adds as {} inside the call so no plan order can raise.
+     | verified: yes (applied via MCP; pg_policies lists it; begin/rollback probe: anon denied, owner scoped, client writes denied); owner selecting hidden_reason denied; RPCs denied to anon and authenticated, increment_tally works as service role| files: supabase/migrations/0367_long_shot_answers.sql
+     | depends on: LS-T013
+     | verified: yes (applied via MCP; pg_policies lists it; begin/rollback probe: anon denied, owner scoped, client writes denied); owner saw 1 of 2 seeded answers| files: supabase/migrations/0366_long_shot_attempts.sql
+     | depends on: LS-T012
+     | verified: yes (applied via MCP; pg_policies lists it; begin/rollback probe: anon denied, owner scoped, client writes denied); owner saw 1 of 2 seeded attempts| files: supabase/migrations/0365_long_shot_prompts.sql
+     | depends on: LS-T011
+     | verified: yes (applied via MCP; pg_policies lists it; begin/rollback probe: anon denied, owner scoped, client writes denied)| files: supabase/migrations/0364_long_shot_puzzles.sql
+     | depends on: LS-T010
+     | verified: yes (applied via MCP; pg_policies lists it; begin/rollback probe: anon denied, owner scoped, client writes denied)| files: supabase/migrations/0363_long_shot_settings.sql
+     | depends on: LS-T002
+     | verified: yes (applied via MCP; pg_policies lists it; begin/rollback probe: anon denied, owner scoped, client writes denied)| files: ...
      | depends on: SS-T###
      | verified: yes/no (RLS verified, a11y audited, security reviewed)
 ```
@@ -17628,3 +17643,224 @@ CM-T087 | completed | Turnarounds set by the owner: Trade Review 1 day, said as 
      | files: supabase/migrations/0359_trade_review_turnaround.sql, supabase/migrations/0360_team_review_turnaround.sql, lib/commerce/describe.ts, lib/email/order-emails.ts, components/commerce/review-href.ts, components/commerce/review-href.test.ts, components/commerce/tier-card.tsx, components/commerce/trade-review-offer.tsx, app/admin/orders/[order_id]/page.tsx, docs/completed/commerce/commerce-and-team-review-plan.md, handoff.md
      | depends on: CM-T086
      | verified: yes (typecheck clean, lint 0 and 0, tests and build in the gate; rows read back live)
+
+## Long Shot
+
+Plan: docs/long-shot/long-shot-plan.md (section 23 is this list). Daily rarity game at /games/long-shot, admin at /admin/long-shot, code in lib/long-shot/. Build started 2026-11-07.
+
+LS-T001 | completed | lib/game-date.ts with the moved helpers and addDays; streaks.ts re-exports; tests moved
+     | files: lib/game-date.ts, lib/game-date.test.ts, lib/signal-scout/streaks.ts, lib/signal-scout/streaks.test.ts
+     | depends on: none
+     | verified: yes (vitest: game-date and streaks, 30 tests pass)
+LS-T002 | completed | progress.md section header and the task list pasted in as pending
+     | files: progress.md
+     | depends on: LS-T001
+     | verified: yes (ASCII only; docs/README.md row for the plan checked present)
+LS-T010 | completed | Migration: long_shot_settings
+     | files: supabase/migrations/0363_long_shot_settings.sql
+     | depends on: LS-T002
+     | verified: yes (applied via Supabase MCP 2026-11-08; pg_policies lists it; one begin/rollback probe: anon denied on every table, owner sees only own attempts, answers and stats, client writes and RPCs denied)
+LS-T011 | completed | Migration: long_shot_puzzles
+     | files: supabase/migrations/0364_long_shot_puzzles.sql
+     | depends on: LS-T010
+     | verified: yes (applied via Supabase MCP 2026-11-08; pg_policies lists it; one begin/rollback probe: anon denied on every table, owner sees only own attempts, answers and stats, client writes and RPCs denied)
+LS-T012 | completed | Migration: long_shot_prompts
+     | files: supabase/migrations/0365_long_shot_prompts.sql
+     | depends on: LS-T011
+     | verified: yes (applied via Supabase MCP 2026-11-08; pg_policies lists it; one begin/rollback probe: anon denied on every table, owner sees only own attempts, answers and stats, client writes and RPCs denied)
+LS-T013 | completed | Migration: long_shot_attempts
+     | files: supabase/migrations/0366_long_shot_attempts.sql
+     | depends on: LS-T012
+     | choice: adds an index on puzzle_id for settlement and the regenerate refusal
+     | verified: yes (applied via Supabase MCP 2026-11-08; pg_policies lists it; one begin/rollback probe: anon denied on every table, owner sees only own attempts, answers and stats, client writes and RPCs denied)
+LS-T014 | completed | Migration: long_shot_answers
+     | files: supabase/migrations/0367_long_shot_answers.sql
+     | depends on: LS-T013
+     | choice: adds an index on prompt_id
+     | verified: yes (applied via Supabase MCP 2026-11-08; pg_policies lists it; one begin/rollback probe: anon denied on every table, owner sees only own attempts, answers and stats, client writes and RPCs denied)
+LS-T015 | completed | Migration: long_shot_answer_tallies, long_shot_user_stats (with the column revoke), the three RPCs
+     | files: supabase/migrations/0368_long_shot_tallies_stats_rpcs.sql
+     | depends on: LS-T014
+     | choice: a column revoke alone does nothing under a table SELECT grant, so the table SELECT is revoked from authenticated and re-granted on every column except hidden_reason and hidden_at; long_shot_trade_counts reads a non-object adds as {} inside the call
+     | verified: yes (applied via Supabase MCP 2026-11-08; pg_policies lists it; one begin/rollback probe: anon denied on every table, owner sees only own attempts, answers and stats, client writes and RPCs denied); owner selecting hidden_reason is denied
+LS-T016 | completed | Types regenerated to lib/database.types.ts
+     | files: lib/database.types.ts
+     | depends on: LS-T015
+     | verified: yes (MCP output extracted and prettier-formatted)
+LS-T020 | completed | types.ts, default-settings.ts, settings.ts (+ tests)
+     | files: lib/long-shot/types.ts, lib/long-shot/default-settings.ts, lib/long-shot/settings.ts, lib/long-shot/settings.test.ts
+     | depends on: LS-T016
+     | choice: DTOs carry a kind discriminator, PromptDto adds basePoints and the answered summaries (the running score and the small strip need them), AttemptDto adds hasPending so a resume knows whether a clock is already running; saveLongShotSettings busts the in-process memo after a save.
+     | verified: yes (vitest settings.test.ts 9 pass)
+LS-T021 | completed | random.ts, tiers.ts (+ tests)
+     | files: lib/long-shot/random.ts, lib/long-shot/random.test.ts, lib/long-shot/tiers.ts, lib/long-shot/tiers.test.ts
+     | depends on: LS-T020
+     | choice: assignTiers takes (entries, cutoffs); points are applied by pointsFor at scoring time, because AnswerEntry stores tier and rate only.
+     | verified: yes (vitest random and tiers pass)
+LS-T022 | completed | completed-week.ts, rates.ts, search-pool.ts, the pool option on searchFantasyPlayers (+ tests)
+     | files: lib/long-shot/completed-week.ts, lib/long-shot/completed-week.test.ts, lib/long-shot/rates.ts, lib/long-shot/rates.test.ts, lib/long-shot/search-pool.ts, lib/long-shot/search-pool.test.ts, lib/player-search.ts, lib/player-search.test.ts
+     | depends on: LS-T021
+     | choice: the pool option widens searchFantasyPlayers' existing pool param to SearchPool | ReadonlySet<string> rather than adding a second name; the Long Shot pool reads players with an inner player_stats embed capped at one row, paged on id.
+     | verified: yes (vitest long-shot and player-search, 52 pass; live data: 2026 week 9 has 151 rows vs 2052, so week 8 is the completed week)
+LS-T023 | completed | templates/types.ts, templates/index.ts, game-line.ts, opponent-line.ts (+ tests)
+     | files: lib/long-shot/templates/types.ts, lib/long-shot/templates/shared.ts, lib/long-shot/templates/index.ts, lib/long-shot/templates/game-line.ts, lib/long-shot/templates/opponent-line.ts, lib/long-shot/templates/game-line.test.ts, lib/long-shot/templates/test-context.ts
+     | depends on: LS-T022
+     | choice: opponent_line reads 'against the {team name}' (the plan wrote 'against {team name}'); family 2's three yardage phrases were unwritten in the plan and read 'had 75 or more rushing yards' etc. The touchdown arm is an or() on rush_td and rec_td, since PostgREST cannot sum columns. GenerationContext adds defaultSourceFormats and now.
+     | verified: yes (vitest long-shot 35 pass; every threshold text built and ASCII-checked; current season never drawn without a completed week)
+LS-T024 | completed | season-finish.ts, market-rank.ts, value-mover.ts (+ tests)
+     | files: lib/long-shot/templates/season-finish.ts, lib/long-shot/templates/market-rank.ts, lib/long-shot/templates/value-mover.ts, lib/long-shot/templates/families-b.test.ts
+     | depends on: LS-T023
+     | choice: market_rank reads the latest generated_at for (format, source) first, then that snapshot's rows; value_mover change columns are percent units (5 means 5 percent), checked live.
+     | verified: yes (vitest long-shot 46 pass; source display name asserted in families 4 and 5; season_finish never draws the cutoff-24 union)
+LS-T025 | completed | waiver-wire.ts, league-trades.ts (+ tests)
+     | files: lib/long-shot/templates/waiver-wire.ts, lib/long-shot/templates/league-trades.ts, lib/long-shot/templates/families-c.test.ts, lib/long-shot/templates/index.ts
+     | depends on: LS-T024
+     | choice: waiver_wire reads roster rates from the qualifying rate season (7.5) rather than literally the current season, so a March puzzle does not read a near-empty season.
+     | verified: yes (vitest long-shot 46 pass)
+LS-T026 | completed | generate.ts with buildPuzzle (+ tests with fake loader and pool)
+     | files: lib/long-shot/generate.ts, lib/long-shot/generate.test.ts
+     | depends on: LS-T025
+     | choice: a skipped family (its skip rule) counts as exhausted at once; an identical (family, params) redraw is logged as duplicate and not reused; generation is split into planPuzzle (no writes, used by the dry run) and generatePuzzle (writes); a prompt insert failure deletes the puzzle row so the next caller retries.
+     | verified: yes (vitest generate.test.ts 10 pass: five distinct families, pool intersection drops an untypeable id, redraw on too small, over-max fails without truncation, short after three tries each, skip counted once, seed and salt reproduce)
+LS-T027 | completed | timer.ts, scoring.ts, streaks.ts, share.ts (+ tests)
+     | files: lib/long-shot/timer.ts, lib/long-shot/timer.test.ts, lib/long-shot/scoring.ts, lib/long-shot/scoring.test.ts, lib/long-shot/streaks.ts, lib/long-shot/streaks.test.ts, lib/long-shot/share.ts, lib/long-shot/share.test.ts
+     | depends on: LS-T026
+     | choice: scoreAnswer takes the points record as a third argument; the share date is formatEasternShortDate plus the year from the game date, since the helper prints no year.
+     | verified: yes (vitest long-shot 82 pass)
+LS-T028 | completed | settle.ts pure half (+ tests)
+     | files: lib/long-shot/settle-math.ts, lib/long-shot/settle-math.test.ts
+     | depends on: LS-T027
+     | choice: the pure half lives in settle-math.ts so settle.ts (the I/O orchestrator, written with the cron in LS-T034 because it needs recordTimeout from LS-T031) stays thin; the rerun-pays-nothing case is tested there against a fake client.
+     | verified: yes (vitest settle-math 7 pass: no bonus under min_room but every attempt settled at 0, share boundary, bonus summed, abandoned gets none, streak reset targets)
+LS-T029 | completed | Dry-run script scripts/long-shot-dry-run.ts, run for three dates, output pasted here
+     | files: scripts/long-shot-dry-run.ts
+     | depends on: LS-T028
+     | verified: yes (run 2026-11-08 against production for three dates; output below)
+     | output 2026-11-09 salt 0: completed week 8 (week 9 has 151 rows, week 8 has 2052); rate season 2026; tries: game_line RB 2026 rush_yd_100 22 pass, market_rank dynasty-ppr-std 50 50 pass, value_mover up 7d 177 too_many, season_finish QB 5 union 19 pass, league_trades 30d >50 0 too_few, opponent_line TE NE 2026 rec_yd_50 2 too_few, waiver_wire 0.5 15 wk8 8 pass, game_line TE 2026 rec_6 23 pass. Five prompts; rate-0 share 0 on all five.
+     | output 2026-11-10 salt 0: tries opponent_line WR CAR 2022 td_1 14 pass (rate-0 share 0.5), waiver_wire 0.5 12 wk8 15 pass, market_rank dynasty-ppr-sflex 50 50 pass, game_line WR 2025 rec_8 45 pass (0.022), league_trades 30d >25 45 pass. Five prompts.
+     | output 2026-11-11 salt 1: tries season_finish QB 24 2025 24 pass, league_trades 90d >50 103 too_many, game_line QB 2023 pass_yd_300 34 pass (0.206), market_rank sflex 50 50 pass, waiver_wire 0.25 12 7 too_few, opponent_line WR HOU 2022 rec_yd_75 10 pass (0.3), value_mover up 30d 145 too_many, season_finish QB 5 2021 5 too_few, league_trades duplicate, game_line TE 2026 rec_yd_75 20 pass. Five prompts.
+     | notes: value_mover runs over 60 at both windows today and will mostly fail its bound; single-season top-5 finishes always hold exactly 5 and fail the 8 floor. Both are admin-tunable per template; nothing changed in code.
+LS-T030 | completed | components/player-guess-combobox.tsx extraction with its test; Signal Scout wrapper; whole suite green
+     | files: components/player-guess-combobox.tsx, components/player-guess-combobox.test.tsx, app/games/signal-scout/guess-combobox.tsx, lib/signal-scout/client.ts
+     | depends on: LS-T029
+     | choice: the repo has no DOM testing library, so the keyboard, Enter, Escape, cap and rate_limited behavior live in exported pure helpers (comboboxKeyAction, applySearchOutcome) that the component calls and the test covers, the same way the other component tests here work. The prop is showTeamLogos rather than the plan's showHeadshots, because Signal Scout already shows a 28px headshot and must stay unchanged: false keeps today's look, true adds the 14px crest. The search prop returns { ok, results } or { ok: false, code } so a rate_limited answer can keep prior results. Added label and an optional onQueryChange.
+     | verified: yes (combobox test 6 pass; typecheck clean; whole suite 584 files and 7931 tests pass)
+LS-T031 | completed | attempt.ts (start, next with repair, answer, recordTimeout), tallies.ts, stats.ts, page-state.ts (+ attempt.test.ts)
+     | files: lib/long-shot/attempt.ts, lib/long-shot/attempt.test.ts, lib/long-shot/tallies.ts, lib/long-shot/stats.ts, lib/long-shot/page-state.ts, lib/long-shot/rank.ts, lib/long-shot/errors.ts, lib/long-shot/team-colors.ts, lib/long-shot/test-fake-client.ts
+     | depends on: LS-T030
+     | choice: submitAnswer takes the route's rate claim as a callback so the claim runs after the ownership, active and stale checks (plan 17.4 order); recordTimeout has a closing option for the settle cron, which advances without the status guard and never completes an abandoned attempt; the 23505 restart of a finished Hurry-Up returns { kind: 'existing' } for an abandoned day; the board exclusion set and daily rank live in rank.ts so the completion panel, Yesterday and the boards agree; team-colors.ts was written here (needed by the answer response) and gets its tests in LS-T039; loadRoom fetches names for every tally tied at the fifth place so the name tie-break is exact; recordCompletion never moves last_completed_date backwards on a late heal.
+     | verified: yes (attempt.test.ts 11 pass against an in-memory fake client: no next prompt text in the answer response, /next creates the pending row, served_at never reset, repair advances and recomputes base_points, a late answer is timed out, stale_prompt, skip refused in Hurry-Up, completion at prompt_count on a 3-prompt puzzle with stats, one active attempt, Film Room writes no tally and no stats; typecheck clean)
+LS-T032 | completed | route-helpers.ts, client.ts; routes state, attempt (maxDuration 60), next, end, answer
+     | files: lib/long-shot/route-helpers.ts, lib/long-shot/route-helpers.test.ts, lib/long-shot/client.ts, app/api/games/long-shot/state/route.ts, app/api/games/long-shot/attempt/route.ts, app/api/games/long-shot/attempt/[id]/next/route.ts, app/api/games/long-shot/attempt/[id]/end/route.ts, app/api/games/long-shot/attempt/[id]/answer/route.ts
+     | depends on: LS-T031
+     | choice: a malformed attempt id answers 404 not_found like an id that is not the caller's; responses wrap their payload as { result } or { state }; the answer route passes its rate claim into submitAnswer so it runs after the stale checks.
+     | verified: yes (route-helpers.test.ts: 403 without header, 401 without user, 503 when disabled, errors mapped without leaking; long-shot suite 98 pass; typecheck clean)
+LS-T033 | completed | Search route; leaderboards.ts, profile-links.ts, leaderboards route
+     | files: app/api/games/long-shot/search/route.ts, app/api/games/long-shot/leaderboards/route.ts, lib/long-shot/leaderboards.ts, lib/long-shot/leaderboards.test.ts, lib/long-shot/profile-links.ts, lib/long-shot/profile-links.test.ts, lib/long-shot/client.ts
+     | depends on: LS-T032
+     | choice: board rows carry a generic figure and secondary (points and bonus on daily, points and days played on all_time, current and best streak on streak); each board order ends on a unique column so pages never repeat a row; all_time lists players with at least one day and streak lists only live streaks; the daily your-rank uses the same dailyRank as the completion panel so the two agree on ties; the search pool and route answer at most 8 results to match the listbox cap.
+     | verified: yes (leaderboards.test.ts and profile-links.test.ts pass: ordering and tie-breaks per board, exclusion set, page-aware ranks, profileHref only for live handles, no raw user id, daily cache key carries the requested date, chunking at 200; long-shot suite 107 pass; typecheck clean)
+LS-T034 | completed | Generate and settle cron routes with time budgets; cron-runs.ts and vercel.json entries
+     | files: app/api/cron/long-shot-generate/route.ts, app/api/cron/long-shot-settle/route.ts, lib/long-shot/settle.ts, lib/long-shot/settle.test.ts, lib/cron-runs.ts, vercel.json
+     | depends on: LS-T033
+     | choice: a short or empty generate day and a settle night that hits its budget are reported through the cron ledger's failedSteps (recorded as error with the full result kept); the tally prune reads old prompt ids paged and deletes in chunks of 200, because PostgREST cannot delete through a subselect; the settle deadline is the 280 s budget minus 20 s, and a puzzle is not started with under 60 s left.
+     | verified: yes (settle.test.ts 3 pass: abandons the open attempt and times out its pending prompt, pays Lone Signal once and a second run pays nothing, stamps the puzzle, zeroes only missed streaks, stops at the deadline without stamping; cron registry and schedule sync tests pass; typecheck clean)
+LS-T035 | completed | film-room-guard.test.ts
+     | files: lib/long-shot/film-room-guard.test.ts, lib/long-shot/stats.ts
+     | depends on: LS-T034
+     | choice: the guard accepts either 'mode === "hurry_up"' or a query guarded '.eq("mode", "hurry_up")', because the stats heal in page-state.ts selects only Hurry-Up rows; stats.ts gained an explicit mode check beside applyCompletion.
+     | verified: yes (guard test 2 pass: every incrementTally, recordCompletion and applyCompletion call in lib/long-shot/ has a Hurry-Up check within 12 lines, and the test proves it found each call)
+LS-T039 | completed | Design primitives: field-geometry.ts, tier-style.ts, team-colors.ts (+ tests); components/long-shot/ mark, field strip, tier chip, clock badge, stage, hero, settled stamp, lone signal badge
+     | files: lib/long-shot/field-geometry.ts, lib/long-shot/field-geometry.test.ts, lib/long-shot/tier-style.ts, lib/long-shot/tier-style.test.ts, lib/long-shot/team-colors.test.ts, lib/long-shot/dates.ts, lib/long-shot/dates.test.ts, lib/long-shot/use-reduced-motion.ts, components/long-shot/long-shot-mark.tsx, components/long-shot/field-strip.tsx, components/long-shot/tier-chip.tsx, components/long-shot/clock-badge.tsx, components/long-shot/stage.tsx, components/long-shot/hero.tsx, components/long-shot/settled-stamp.tsx, components/long-shot/lone-signal-badge.tsx, app/globals.css
+     | depends on: LS-T035
+     | choice: the trail is read as two halves 14 units tall each at the marker (28 together, under the marker's 32 diameter) spanning the whole flight, scaled in from the line in step with the marker; a group of same-tier markers is centered on its landing x and shifted to stay inside the field; the end-zone flash is one 600 ms keyframe (250 ms held, 350 ms back) in app/globals.css; game-date labels live in lib/long-shot/dates.ts with an explicit Eastern timeZone.
+     | verified: yes (field-geometry, tier-style, team-colors and dates tests pass; typecheck and lint clean on the new files)
+LS-T040 | completed | page.tsx (hero, stage, below-stage grid), loading.tsx, error.tsx, how-it-works.tsx, written-sections.tsx
+     | files: app/games/long-shot/page.tsx, app/games/long-shot/loading.tsx, app/games/long-shot/error.tsx, app/games/long-shot/how-it-works.tsx, app/games/long-shot/written-sections.tsx
+     | depends on: LS-T039
+     | choice: the page renders the hero, then the demo (signed out) or the game client (signed in), then the written sections; the below-stage grid is owned by the client so it can hide while a prompt is on screen and refresh after a completion. The paused page shows the hero and one stage panel.
+     | verified: yes (typecheck and lint clean)
+LS-T041 | completed | long-shot-client.tsx state machine with every error state in 18.2, mode-picker.tsx, prompt-card.tsx, countdown.tsx, player-combobox.tsx
+     | files: app/games/long-shot/long-shot-client.tsx, app/games/long-shot/mode-picker.tsx, app/games/long-shot/prompt-card.tsx, app/games/long-shot/countdown.tsx, app/games/long-shot/player-combobox.tsx, app/games/long-shot/strip-records.ts
+     | depends on: LS-T040
+     | choice: an active attempt whose prompt is already on the clock is fetched at once on load (its clock is running anyway); one with no pending prompt shows a Continue panel, so a reopened tab never starts a clock unasked. After today's Hurry-Up is over the picker offers Film Room alone. The picker reads the admin timer in its wording (18A.6's form) rather than the word 'Thirty'.
+     | verified: yes (typecheck and lint clean; behavior exercised in the browser pass)
+LS-T042 | completed | result-panel.tsx with kick trail and end-zone flash, room-bars.tsx, completion-panel.tsx, components/copy-text-button.tsx, analytics events
+     | files: app/games/long-shot/result-panel.tsx, app/games/long-shot/result-text.ts, app/games/long-shot/result-text.test.ts, components/long-shot/room-bars.tsx, app/games/long-shot/completion-panel.tsx, components/copy-text-button.tsx, components/copy-link-button.tsx, lib/analytics.ts
+     | depends on: LS-T041
+     | choice: a timeout or skip has no answer to count, so its room line reads '{total} players have faced this prompt'; CopyLinkButton gained an optional onCopied so long_shot_share fires only after a copy lands; the completion sheet also shows the share text as a visible block so it can be read before copying.
+     | verified: yes (result-text.test.ts pass; typecheck and lint clean)
+LS-T043 | completed | yesterday-panel.tsx (settled and unsettled), my-record-panel.tsx
+     | files: app/games/long-shot/yesterday-panel.tsx, app/games/long-shot/my-record-panel.tsx
+     | depends on: LS-T042
+     | verified: yes (typecheck and lint clean)
+LS-T044 | completed | podium.tsx, board-row.tsx, leaderboard-rail.tsx, leaderboard-panel.tsx with profile links and the paused state
+     | files: components/long-shot/podium.tsx, components/long-shot/board-row.tsx, app/games/long-shot/leaderboard-rail.tsx, app/games/long-shot/leaderboard-panel.tsx
+     | depends on: LS-T043
+     | choice: avatars render through components/image-with-fallback (circles, the people shape) as Signal Scout's board does; signed out the rail names the three boards with no row data at all.
+     | verified: yes (typecheck and lint clean)
+LS-T045 | completed | demo.ts data (queries run once, results pasted) and demo.tsx with the clock choice, native select and Sample ribbon
+     | files: lib/long-shot/demo.ts, lib/long-shot/demo.test.ts, app/games/long-shot/demo.tsx
+     | depends on: LS-T044
+     | choice: each prompt offers its own 30 candidates (answers plus real near-miss decoys), since one shared list of 30 cannot hold the 33 answers; demo tiers are assignTiers over 2026 roster rates read the same day.
+     | verified: yes (demo.test.ts 5 pass; queries run once 2026-11-08 and pasted; typecheck and lint clean)
+LS-T046 | completed | Build agent's own pass of the page at 360, 768 and 1280 against sections 18 and 18A; fixes
+     | files: lib/long-shot/field-geometry.ts, lib/long-shot/field-geometry.test.ts, components/long-shot/field-strip.tsx, components/long-shot/podium.tsx, components/long-shot/board-row.tsx, app/games/long-shot/my-record-panel.tsx, app/games/long-shot/long-shot-client.tsx
+     | depends on: LS-T045
+     | choice: the build agent's own page pass was run as part of the LS-T060a device pass, on the production build, instead of a separate dev-server pass first; the checks are the same list (headings, 44 px targets, overflow, live regions, figures as one text node, metal tones only on the podium).
+     | verified: yes (run together with LS-T060a on the local production build; every fix below landed before the final screenshots)
+LS-T050 | completed | Admin: app/admin/long-shot/page.tsx, actions.ts, long-shot-settings-manager.tsx, puzzle-preview.tsx; nav-tree admin entry
+     | files: app/admin/long-shot/page.tsx, app/admin/long-shot/actions.ts, app/admin/long-shot/long-shot-settings-manager.tsx, app/admin/long-shot/puzzle-preview.tsx, lib/long-shot/template-labels.ts, lib/nav-tree.ts, components/app-shell/nav-icons.ts
+     | depends on: LS-T046
+     | choice: the regenerate, moderation and settle forms are small client components exported from long-shot-settings-manager.tsx; the family labels moved to lib/long-shot/template-labels.ts so the server preview does not import a value from a client module; regenerate reports a clear refusal if it happens to join a player's inline generation on the shared coalesce key; the crosshair NavIconName (registration point 3) was added here with the admin entry.
+     | verified: yes (typecheck and lint clean)
+LS-T060 | completed | Registration points 1 to 11 of section 19; PAGE_CARDS entry checked at /api/og/page/long-shot; full gate green
+     | files: lib/games-catalog.ts, lib/site.ts, app/games/page.tsx, app/page.tsx, app/api/og/page/[key]/route.tsx, lib/sitemap/sections.ts, CLAUDE.md
+     | depends on: LS-T050
+     | choice: points 3 and 8 (nav-tree, NavIconName and analytics) landed with LS-T050 and LS-T042; the games page masthead's cost detail now reads 'Accounts are free too' and the homepage games grid gains a third column from lg so three cards sit on one row.
+     | verified: yes (registration points 1 to 11 applied; /api/og/page/long-shot rendered on the local production build and checked by eye; llms build test passes from playableGames; full gate green: typecheck clean, lint 0 errors 0 warnings, npm test 596 files 7984 tests, npm run build succeeds)
+LS-T060a | completed | Device pass in a real browser at 390, 768, 1280 and 1536 (section 23A)
+     | files: data/long-shot/device-pass/completion-top-1280.jpg, data/long-shot/device-pass/podium-boards-record-1280.jpg, data/long-shot/device-pass/podium-boards-record-1536.jpg, data/long-shot/device-pass/reveal-1536.jpg
+     | depends on: LS-T060
+     | verified: yes (local production build, Claude in Chrome, signed in as the owner; phone and tablet by popup measurement, laptop and desktop by screenshot plus measurement; gate re-run green after the fixes)
+     | pass table (view, width: result):
+     | idle picker, 929 to 1280: pass (puzzle not yet built; first Hurry-Up generated it inline in about 15 s)
+     | Hurry-Up prompt, 929: pass (clock counts, combobox shows headshot and crest, prompt heading takes focus)
+     | timeout reveal, 929: pass (Time ran out. 0 points., focus on Result for prompt 1)
+     | correct reveal, 929 and 1536: pass (headshot in tier frame, count-up, chip, marker on the strip, room bars, Next)
+     | reload mid-prompt, 929: pass (clock resumed at 13 seconds, not 30)
+     | completion sheet, 929 and 1280: pass (150, labeled strip, record list with faces, X F D X D tiles, rank, streak, best day, share text Long Shot, Nov 8, 2026 / X F D X D = 150)
+     | Film Room, 929: pass (today's puzzle once Hurry-Up done, no clock, Skip, resume after reload at prompt 2, End practice back to Your day); database: answered_total and tallies unchanged by Film Room, stats unchanged
+     | boards and podium, 390 / 768 / 1280 / 1536: pass after fixes (seeded five completed attempts, deleted afterwards)
+     | Yesterday and My record, 390 / 768 / 1280 / 1536: pass (seeded settled day with a Lone Signal, deleted afterwards)
+     | signed-out page: checked by fetching the HTML without cookies (demo, clock choice, Sample, sign-in link present; no prompt text from today and no board rows in the source); the interactive demo was not clicked through, because signing out would end the owner's session and the agent cannot sign back in
+     | measurements: one h1 and no skipped heading level at every width; horizontal overflow 0 at 768, 1280 and 1536; 21 px at the 390 popup, identical on /games/signal-scout (the popup scrollbar leaves 375 px, the site header's known overflow), so not this game's
+     | reduced motion: not toggled; changing the OS setting is outside what the agent may do. Code path: useReducedMotion gates the flight, trail, flash, count-up and ring; CSS hides .ls-flash and .ls-trail; the pulse uses motion-reduce:animate-none
+     | defects fixed: (1) a miss marker overlapped the dim to-play markers at the line, and a line group could touch a Chalk marker: misses and pending share one group and a sweep keeps every marker a spread apart (test added); (2) the small strip stretched its circles: aspect ratio now kept; (3) seven-day tiles crushed five letters into 36 px: tiles widen to fit; (4) podium names collapsed to zero height inside fixed-height cards: min-height cards and a non-shrinking name; (5) a fresh load of a finished day pulled focus to Your day past the skip link: focus now moves only on a change of state; (6) a short profile-linked board name was 34 px wide: links get a 44 px minimum
+     | seed SQL: five completed hurry_up attempts for today (timer_seconds 29 as a marker) for five non-admin users, and a 2026-11-07 puzzle (seed_salt 999) with one prompt and a settled owner attempt; removed with delete where timer_seconds = 29 and the seed_salt 999 puzzle; verified zero left
+LS-T061 | completed | The one review: one reviewer sub-agent over the plan and every file touched; every real defect fixed and recorded
+     | files: supabase/migrations/0369_long_shot_atomic_writes.sql, lib/database.types.ts, lib/long-shot/stats.ts, lib/long-shot/generate.ts, lib/long-shot/settle.ts, lib/long-shot/attempt.ts, lib/long-shot/types.ts, lib/long-shot/test-fake-client.ts, lib/player-search.ts, app/games/long-shot/long-shot-client.tsx, app/games/long-shot/countdown.tsx, app/games/long-shot/prompt-card.tsx, app/api/cron/long-shot-settle/route.ts, progress.md
+     | depends on: LS-T060a
+     | verified: yes (one reviewer sub-agent, run once; migration 0369 applied via MCP and its three functions verified service-role only; types regenerated; gate re-run: typecheck clean, lint 0 errors 0 warnings, npm test 596 files 7985 tests, npm run build succeeds)
+     | reviewer found nothing in: RLS and grants, answer-set leaks before answering (apart from finding 3), IDOR, same-origin guard, rate limits, filter injection, admin auth, double counting, 1,000-row truncation, timestamps, non-ASCII
+     | 1 MEDIUM stats anchor set before the stats write, so a failed write never healed: FIXED (reads first, then anchor plus upsert in one RPC, long_shot_record_completion)
+     | 2 MEDIUM a puzzle row was readable before its prompts, and a failed prompt insert could cascade away a player's attempt: FIXED (long_shot_insert_puzzle writes both in one transaction)
+     | 3 MEDIUM Film Room could play an unsettled past day while a Hurry-Up for it was still open past midnight, showing most-given answers to a second account: FIXED (Film Room before today's Hurry-Up plays the latest SETTLED puzzle)
+     | 4 MEDIUM a network retry whose first send had landed got stale_prompt and served the next prompt, starting its clock unasked: FIXED (after a retry, stale_prompt reloads state and shows Continue)
+     | 5 LOW settlement marks and bonus were separate writes after the guard: FIXED (long_shot_settle_attempt does guard, marks and bonus in one transaction, and creates the stats row if missing)
+     | 6 LOW the timer region mounted already filled and likely stayed silent: FIXED (mounts empty, fills after 150 ms)
+     | 7 LOW two regions spoke on a resume: FIXED (the resume announcement is dropped when the prompt loads at once)
+     | 8 LOW the clock ring used the live timer setting: FIXED (PromptDto carries the attempt's frozen timerSeconds)
+     | 9 LOW surname searches could miss pool players behind a 48-row window: FIXED (an explicit pool reads the full 200-row window)
+     | 10 LOW your-rank on all-time and streak counts strictly better rows only: NOT CHANGED, it is Signal Scout's documented tie rule (tied players share the better rank); an admin seeing their own rank while hidden is intended; the streak board's stored values between midnight and the 05:30 UTC settle are the plan's own accepted window
+     | 11 LOW two starts could race the one-active check: FIXED (partial unique index long_shot_attempts_one_active; a 23505 with an active attempt answers attempt_active)
+     | 12 LOW admin regenerate is count-then-delete: NOT CHANGED, admin-only, only possible for a date nobody has started, and the window is one round trip; recorded
+     | 13 LOW past-day copy differed from plan 5.2: FIXED (says yesterday's puzzle when it is yesterday, a past puzzle otherwise)
+     | 14 LOW progress.md had LS-T010 to LS-T016 still pending: TRUE, an earlier update had not landed; FIXED. The plan path in CLAUDE.md is right once LS-T062 moves the plan
+     | 15 LOW the tally prune re-read every old prompt nightly: FIXED (prunes only puzzles 90 to 120 days old)
+LS-T062 | completed | handoff.md final; plan moved to docs/completed/long-shot/ with What shipped differently; docs/README.md row moved to Completed
+     | files: handoff.md, docs/completed/long-shot/long-shot-plan.md (moved from docs/long-shot/), docs/README.md, lib/long-shot/types.ts, app/games/long-shot/page.tsx, scripts/long-shot-dry-run.ts, supabase/migrations/0363 to 0368 (comment paths)
+     | depends on: LS-T061
+     | verified: yes (plan moved with a plain mv because it had never been tracked, so git mv refused; section 30 What shipped differently added; README row moved to Completed with the owner's post-deploy checks; every plan citation in code points at the new path)
+LS-T063 | pending | One commit on main in the owner's voice and git push -u origin main; hash recorded here
+     | depends on: LS-T062

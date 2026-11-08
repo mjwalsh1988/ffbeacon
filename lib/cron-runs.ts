@@ -105,6 +105,8 @@ export type CronJobName =
   | "beacon-brief-worker"
   | "league-sync-worker"
   | "would-you-rather-discord"
+  | "long-shot-generate"
+  | "long-shot-settle"
   | "rebuild-draft-value"
   | "league-relay"
   | "ranking-guest-cleanup"
@@ -362,6 +364,20 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     schedule: "0 * * * *",
     description:
       "Ticks hourly and almost always does nothing. Whether it posts is decided by the times an admin picked at /admin/would-you-rather, read in America/New_York, so the frequency is a setting rather than a cron expression and it holds its Eastern time across daylight saving. On a scheduled hour it posts one anonymised trade to Discord as a poll; on every tick it also folds any poll past its close time into that trade's tally, exactly once each. Off by default: nothing posts until a webhook is chosen and the toggle is turned on.",
+  },
+  {
+    name: "long-shot-generate",
+    label: "Long Shot puzzle generation",
+    schedule: "0 17 * * *",
+    description:
+      "Builds tomorrow's Long Shot puzzle at noon or 1 PM Eastern the day before, after every table it reads has refreshed, and today's too when a missed night left it empty. A date that already has a puzzle is skipped. The result lists every prompt family tried with its parameters, answer count and pass or fail reason, which is the try log on /admin/long-shot. A short or empty day is recorded as a failure.",
+  },
+  {
+    name: "long-shot-settle",
+    label: "Long Shot settlement",
+    schedule: "30 5 * * *",
+    description:
+      "Settles every finished Long Shot day: closes Hurry-Up attempts left unfinished, pays the Lone Signal bonus once per attempt, stamps the puzzle and resets broken streaks. Catches up a missed night oldest first and is safe to run twice. Also closes Film Room attempts idle for a day and prunes old Film Room attempts and tallies.",
   },
   {
     name: "league-relay",

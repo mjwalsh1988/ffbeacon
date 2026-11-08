@@ -15,7 +15,7 @@
  * Presentation-free: the icon and the status badge stay with the page.
  */
 
-export type GameHref = "/games/signal-scout" | "/games/would-you-rather";
+export type GameHref = "/games/signal-scout" | "/games/would-you-rather" | "/games/long-shot";
 
 export type GameCatalogEntry = {
   /**
@@ -52,6 +52,14 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     description:
       "A real trade out of a real league, with the managers' names taken off. Call the winner, then see how the room voted and what the full grade says.",
     cta: "Call a trade",
+  },
+  {
+    href: "/games/long-shot",
+    title: "Long Shot",
+    tagline: "Five prompts. Rare answers win.",
+    description:
+      "The same five fantasy prompts for everyone, every day. Name a player who fits. The answer everyone gives scores 10; the one nobody rosters scores 100.",
+    cta: "Play today's five",
   },
 ];
 

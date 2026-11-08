@@ -31,6 +31,8 @@ type CopyLinkButtonProps = {
    * League Pulse header, where the league switcher wants the width. The button
    * keeps its aria-label either way, so nothing is lost by ear. */
   compactBelowSm?: boolean;
+  /** Told after a copy actually landed, for a surface that counts its own share event. */
+  onCopied?: () => void;
 };
 
 /**
@@ -74,6 +76,7 @@ export function CopyLinkButton({
   noun = "Link",
   prewarmHref,
   compactBelowSm = false,
+  onCopied,
 }: CopyLinkButtonProps) {
   const [status, setStatus] = useState<"idle" | "copied" | "manual">("idle");
   const [resolvedUrl, setResolvedUrl] = useState<string>("");
@@ -116,6 +119,7 @@ export function CopyLinkButton({
       // Counted only when the copy actually worked. The manual fallback below
       // is not counted: nobody can tell whether the reader pressed Ctrl+C.
       trackEvent("share", { method: "copy_link", content_type: currentSection() });
+      onCopied?.();
       setStatus("copied");
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setStatus("idle"), 2500);

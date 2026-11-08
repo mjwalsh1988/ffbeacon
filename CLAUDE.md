@@ -1541,6 +1541,107 @@ Discord poll:
   Browns become "Brown, Brown" at the surname rung, which is a worse thing to
   say rather than a shorter way of saying the same thing.
 
+## Long Shot (the daily rarity game)
+
+`/games/long-shot`, admin at `/admin/long-shot`, code in `lib/long-shot/`.
+Everyone gets the same five prompts each Eastern day ("Name a running back
+with 100 or more rushing yards and a touchdown in one game this season"), each
+with many correct answers computed from our own tables when the day is built.
+A correct answer scores by how few of our redraft leagues roster him: Chalk 10,
+Field 30, Deep 60, Sleeper 85, Long Shot 100. Plan of record:
+`docs/completed/long-shot/long-shot-plan.md`.
+
+ABSOLUTE RULE: two modes, and only one is tracked. Hurry-Up (`hurry_up`) is
+timed, the default, one per user per game date (a partial unique index), and
+the ONLY mode with streaks, boards, stats, tallies and the settled bonus. Film
+Room (`film_room`) is untimed practice: nothing it produces is tallied,
+counted, ranked or shown to anyone but the player. Every `incrementTally`,
+`recordCompletion` and `applyCompletion` call in `lib/long-shot/` sits behind a
+Hurry-Up check, and `lib/long-shot/film-room-guard.test.ts` fails the suite if
+one does not. Film Room plays today's puzzle only once today's Hurry-Up is
+completed or abandoned; before that it plays the latest past day.
+
+ABSOLUTE RULE: the answer sets never reach a browser. `long_shot_prompts` has
+no client policy of any kind. A route returns the prompt text, and the room
+figures (count, total, the five most given CORRECT answers) only after the
+player's own answer is recorded. The answer response never carries the next
+prompt's text. Signed-out visitors get a demo that runs on data shipped in
+`lib/long-shot/demo.ts` and never touches today's puzzle, the search API or the
+database; the game itself requires an account.
+
+ABSOLUTE RULE: the clock is the server's. The pending answer row for a
+position is created by `serveNext` and nowhere else, with `served_at = now()`,
+and serving it again never resets it. The answer response never creates the
+next row, so a prompt's clock starts only when the player presses Next. An
+answer later than `served_at + timer_seconds + grace` is recorded timed out
+whatever the body says. `timer_seconds` is frozen on the attempt; grace is read
+live and never shown to the player. The visible countdown is plain text outside
+any live region; a separate timer region speaks three times (prompt load, 10
+seconds, 5 seconds). The time limit is claimed under the WCAG 2.2.1 essential
+exception, named in words on the mode picker, and Film Room is the untimed way
+to play every prompt.
+
+ABSOLUTE RULE: every write is status-guarded and `base_points` is always
+RECOMPUTED from the answer rows, never incremented (the Signal Scout engine's
+consistency model). The answer row settles first, then the attempt advances
+guarded on its old position; a crash between the two is repaired by the next
+`serveNext`. Completion is keyed on the puzzle's `prompt_count`, never the
+literal 5, so a `short` day completes. Stats are anchored on
+`stats_recorded_at` and a missed write heals on the next page-state read.
+
+Generation: `/api/cron/long-shot-generate` at 17:00 UTC builds tomorrow (and a
+missing today). Inline generation runs ONLY inside POST
+`/api/games/long-shot/attempt` (`maxDuration = 60`), coalesced per date, and a
+23505 on `game_date` means someone else built it. Never generate in a page
+render or `/state`. Seven template families, five distinct a day; each answer
+set is intersected with `lib/long-shot/search-pool.ts` (every QB, RB, WR or TE
+with a stat line since 2020, so retired players can be typed) BEFORE its
+8-to-60 bounds are checked, and a set over its maximum is redrawn, never
+truncated. Tiers are frozen on the prompt row by roster-rate percentile.
+`scripts/long-shot-dry-run.ts --date YYYY-MM-DD [--salt N]` prints a day
+without writing.
+
+Settlement: `/api/cron/long-shot-settle` at 05:30 UTC settles every unsettled
+day up to yesterday, oldest first. Active Hurry-Ups are abandoned and their
+pending prompts timed out; Lone Signal (15 points for a correct answer given by
+under 5 percent of the room, only with at least 20 finished Hurry-Ups) is paid
+through ONE guarded update per attempt on `settled_at is null`, so a rerun pays
+nobody twice; the puzzle is stamped only when every attempt is settled; then
+every streak whose last day is before the settled date is zeroed.
+
+Boards: daily, all-time and streak, Hurry-Up only, the Signal Scout board
+shape. Admins are excluded by default (`hide_admin_users`), because an admin who
+opens Today's room on the admin page has seen answers. A name links to
+`/u/[handle]` only when that Signal profile is live
+(`lib/long-shot/profile-links.ts resolveLiveProfileHandles`, the shared
+implementation for any game). The daily board's top three stand on a podium in
+gold, silver and bronze, the ONE owner-approved place those tones appear; every
+place is also a word.
+
+Visual language: Long Shot has its own (plan 18A), a "stadium at night" stage
+with the field strip as its signature graphic, drawn in code from
+`lib/long-shot/field-geometry.ts`. Tier colors come from
+`lib/long-shot/tier-style.ts` alone. NFL team colors appear only in the
+one-second kick trail, carried to the browser inside the answer response.
+
+Settings: `long_shot_settings` (one `id='global'` row, service role only),
+edited at `/admin/long-shot`, validated by `lib/long-shot/settings.ts`, code
+fallbacks in `lib/long-shot/default-settings.ts`. A settings change alters
+tomorrow's puzzle, never today's.
+
+Module map (lib/long-shot/): `types.ts` (shapes and the rules header),
+`settings.ts`, `default-settings.ts`, `random.ts`, `tiers.ts`, `rates.ts`,
+`completed-week.ts`, `search-pool.ts`, `templates/` (one family per file),
+`generate.ts` (`buildPuzzle` pure, `planPuzzle`, `generatePuzzle`,
+`ensurePuzzle`), `attempt.ts` (the engine), `timer.ts`, `scoring.ts`,
+`tallies.ts`, `stats.ts`, `streaks.ts`, `settle-math.ts` (pure) and `settle.ts`,
+`rank.ts` (the exclusion set and daily rank shared by every surface),
+`leaderboards.ts`, `profile-links.ts`, `page-state.ts`, `route-helpers.ts`,
+`client.ts`, `share.ts`, `demo.ts`, `field-geometry.ts`, `tier-style.ts`,
+`team-colors.ts`, `dates.ts`. Shared components:
+`components/player-guess-combobox.tsx` (also Signal Scout's),
+`components/copy-text-button.tsx`, `components/long-shot/`.
+
 ## Saved Sleeper handle (the identity every tool opens on)
 
 A reader who is signed in and has saved a Sleeper username never types it

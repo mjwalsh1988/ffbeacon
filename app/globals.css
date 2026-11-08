@@ -1664,3 +1664,40 @@ summary [aria-hidden="true"],
     animation: none;
   }
 }
+
+/*
+ * Long Shot (components/long-shot/field-strip.tsx, clock-badge.tsx). The end
+ * zone flashes ONCE in the team's two colors: 60 percent for 250 ms, then back
+ * to nothing over 350 ms. The reduced-motion ring fades over one second and
+ * never moves. Nothing here loops, and nothing here runs under
+ * prefers-reduced-motion except the ring's fade, which carries no movement.
+ */
+@keyframes ls-flash {
+  0%,
+  41.6% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.ls-flash {
+  animation: ls-flash 600ms linear forwards;
+}
+@keyframes ls-ring-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.ls-ring-fade {
+  animation: ls-ring-fade 1000ms linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-flash,
+  .ls-trail {
+    display: none;
+  }
+}

@@ -308,6 +308,16 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/games/would-you-rather",
     badge: "Would You Rather?",
   },
+  "long-shot": {
+    eyebrow: "Daily rarity game",
+    headlineTop: "Five prompts.",
+    headlineBottom: "Rare answers win.",
+    subhead:
+      "The same five fantasy prompts for everyone, every day. The answer everyone gives scores 10. The one nobody rosters scores 100.",
+    facts: ["New puzzle daily", "Free to play", "Streaks and boards"],
+    path: "/games/long-shot",
+    badge: "Long Shot",
+  },
   rankings: {
     eyebrow: "Player rankings",
     headlineTop: "Who is actually",

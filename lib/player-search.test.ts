@@ -183,6 +183,17 @@ describe("searchFantasyPlayers", () => {
     expect(rows).toEqual([]);
     expect(recorded).toHaveLength(0);
   });
+
+  it("filters to an explicit pool Set and skips the rankings window", async () => {
+    // Long Shot's pool keeps a retired player the rankings window drops.
+    const rows = await searchFantasyPlayers(client, {
+      query: "e",
+      limit: 10,
+      pool: new Set(["p-retired", "p-mahomes"]),
+    });
+    expect(rows.map((r) => r.id).sort()).toEqual(["p-mahomes", "p-retired"]);
+    expect(recorded.some((r) => r.table === "rankings")).toBe(false);
+  });
 });
 
 describe("searchFantasyPlayers, the IDP pool (plan R-15)", () => {

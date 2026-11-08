@@ -3425,6 +3425,323 @@ export type Database = {
         };
         Relationships: [];
       };
+      long_shot_answer_tallies: {
+        Row: {
+          count: number;
+          player_id: string;
+          prompt_id: string;
+        };
+        Insert: {
+          count?: number;
+          player_id: string;
+          prompt_id: string;
+        };
+        Update: {
+          count?: number;
+          player_id?: string;
+          prompt_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "long_shot_answer_tallies_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "long_shot_answer_tallies_prompt_id_fkey";
+            columns: ["prompt_id"];
+            isOneToOne: false;
+            referencedRelation: "long_shot_prompts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      long_shot_answers: {
+        Row: {
+          answered_at: string | null;
+          attempt_id: string;
+          correct: boolean | null;
+          id: string;
+          lone_signal: boolean;
+          player_id: string | null;
+          points: number;
+          position: number;
+          prompt_id: string;
+          served_at: string;
+          state: string;
+          tier: string | null;
+        };
+        Insert: {
+          answered_at?: string | null;
+          attempt_id: string;
+          correct?: boolean | null;
+          id?: string;
+          lone_signal?: boolean;
+          player_id?: string | null;
+          points?: number;
+          position: number;
+          prompt_id: string;
+          served_at?: string;
+          state?: string;
+          tier?: string | null;
+        };
+        Update: {
+          answered_at?: string | null;
+          attempt_id?: string;
+          correct?: boolean | null;
+          id?: string;
+          lone_signal?: boolean;
+          player_id?: string | null;
+          points?: number;
+          position?: number;
+          prompt_id?: string;
+          served_at?: string;
+          state?: string;
+          tier?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "long_shot_answers_attempt_id_fkey";
+            columns: ["attempt_id"];
+            isOneToOne: false;
+            referencedRelation: "long_shot_attempts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "long_shot_answers_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "long_shot_answers_prompt_id_fkey";
+            columns: ["prompt_id"];
+            isOneToOne: false;
+            referencedRelation: "long_shot_prompts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      long_shot_attempts: {
+        Row: {
+          base_points: number;
+          bonus_points: number;
+          completed_at: string | null;
+          current_position: number;
+          game_date: string;
+          id: string;
+          mode: string;
+          puzzle_id: string;
+          settled_at: string | null;
+          started_at: string;
+          stats_recorded_at: string | null;
+          status: string;
+          timer_seconds: number | null;
+          total_points: number;
+          user_id: string;
+        };
+        Insert: {
+          base_points?: number;
+          bonus_points?: number;
+          completed_at?: string | null;
+          current_position?: number;
+          game_date: string;
+          id?: string;
+          mode: string;
+          puzzle_id: string;
+          settled_at?: string | null;
+          started_at?: string;
+          stats_recorded_at?: string | null;
+          status?: string;
+          timer_seconds?: number | null;
+          total_points?: number;
+          user_id: string;
+        };
+        Update: {
+          base_points?: number;
+          bonus_points?: number;
+          completed_at?: string | null;
+          current_position?: number;
+          game_date?: string;
+          id?: string;
+          mode?: string;
+          puzzle_id?: string;
+          settled_at?: string | null;
+          started_at?: string;
+          stats_recorded_at?: string | null;
+          status?: string;
+          timer_seconds?: number | null;
+          total_points?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "long_shot_attempts_puzzle_id_fkey";
+            columns: ["puzzle_id"];
+            isOneToOne: false;
+            referencedRelation: "long_shot_puzzles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      long_shot_prompts: {
+        Row: {
+          answer_count: number;
+          answered_total: number;
+          answers: Json;
+          id: string;
+          params: Json;
+          position: number;
+          prompt_text: string;
+          puzzle_id: string;
+          template_key: string;
+        };
+        Insert: {
+          answer_count: number;
+          answered_total?: number;
+          answers: Json;
+          id?: string;
+          params?: Json;
+          position: number;
+          prompt_text: string;
+          puzzle_id: string;
+          template_key: string;
+        };
+        Update: {
+          answer_count?: number;
+          answered_total?: number;
+          answers?: Json;
+          id?: string;
+          params?: Json;
+          position?: number;
+          prompt_text?: string;
+          puzzle_id?: string;
+          template_key?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "long_shot_prompts_puzzle_id_fkey";
+            columns: ["puzzle_id"];
+            isOneToOne: false;
+            referencedRelation: "long_shot_puzzles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      long_shot_puzzles: {
+        Row: {
+          completed_attempts: number;
+          game_date: string;
+          generated_at: string;
+          generated_by: string;
+          id: string;
+          model_version: number;
+          prompt_count: number;
+          seed_salt: number;
+          settled_at: string | null;
+          status: string;
+        };
+        Insert: {
+          completed_attempts?: number;
+          game_date: string;
+          generated_at?: string;
+          generated_by: string;
+          id?: string;
+          model_version?: number;
+          prompt_count: number;
+          seed_salt?: number;
+          settled_at?: string | null;
+          status?: string;
+        };
+        Update: {
+          completed_attempts?: number;
+          game_date?: string;
+          generated_at?: string;
+          generated_by?: string;
+          id?: string;
+          model_version?: number;
+          prompt_count?: number;
+          seed_salt?: number;
+          settled_at?: string | null;
+          status?: string;
+        };
+        Relationships: [];
+      };
+      long_shot_settings: {
+        Row: {
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      long_shot_user_stats: {
+        Row: {
+          best_day_points: number;
+          best_streak: number;
+          current_streak: number;
+          days_played: number;
+          first_completed_at: string | null;
+          hidden_at: string | null;
+          hidden_from_leaderboards: boolean;
+          hidden_reason: string | null;
+          last_completed_date: string | null;
+          lone_signals: number;
+          long_shots: number;
+          total_points: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          best_day_points?: number;
+          best_streak?: number;
+          current_streak?: number;
+          days_played?: number;
+          first_completed_at?: string | null;
+          hidden_at?: string | null;
+          hidden_from_leaderboards?: boolean;
+          hidden_reason?: string | null;
+          last_completed_date?: string | null;
+          lone_signals?: number;
+          long_shots?: number;
+          total_points?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          best_day_points?: number;
+          best_streak?: number;
+          current_streak?: number;
+          days_played?: number;
+          first_completed_at?: string | null;
+          hidden_at?: string | null;
+          hidden_from_leaderboards?: boolean;
+          hidden_reason?: string | null;
+          last_completed_date?: string | null;
+          lone_signals?: number;
+          long_shots?: number;
+          total_points?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       manager_pulse_cache: {
         Row: {
           dynasty_seasons_counted: number;
@@ -9126,6 +9443,79 @@ export type Database = {
           pending_count: number;
         }[];
       };
+      long_shot_complete_attempt: {
+        Args: { p_attempt_id: string };
+        Returns: {
+          base_points: number;
+          bonus_points: number;
+          completed_at: string | null;
+          current_position: number;
+          game_date: string;
+          id: string;
+          mode: string;
+          puzzle_id: string;
+          settled_at: string | null;
+          started_at: string;
+          stats_recorded_at: string | null;
+          status: string;
+          timer_seconds: number | null;
+          total_points: number;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "long_shot_attempts";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      long_shot_increment_tally: {
+        Args: { p_player_id: string; p_prompt_id: string };
+        Returns: undefined;
+      };
+      long_shot_insert_puzzle: {
+        Args: {
+          p_game_date: string;
+          p_generated_by: string;
+          p_model_version: number;
+          p_prompt_count: number;
+          p_prompts: Json;
+          p_seed_salt: number;
+          p_status: string;
+        };
+        Returns: string;
+      };
+      long_shot_record_completion: {
+        Args: {
+          p_attempt_id: string;
+          p_best_day_points: number;
+          p_best_streak: number;
+          p_current_streak: number;
+          p_days_played: number;
+          p_first_completed_at: string;
+          p_last_completed_date: string;
+          p_long_shots: number;
+          p_total_points: number;
+          p_user_id: string;
+        };
+        Returns: boolean;
+      };
+      long_shot_settle_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_bonus: number;
+          p_lone_ids: string[];
+          p_pay_stats: boolean;
+        };
+        Returns: boolean;
+      };
+      long_shot_trade_counts: {
+        Args: { p_since: string };
+        Returns: {
+          league_count: number;
+          sleeper_player_id: string;
+        }[];
+      };
       order_customer_identities: {
         Args: { p_user_ids: string[] };
         Returns: {
@@ -9309,12 +9699,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9336,12 +9726,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9360,12 +9751,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9384,12 +9776,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9402,11 +9795,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

@@ -54,6 +54,7 @@ const TOOL_ICONS: Record<string, NavIconName> = {
 const GAME_ICONS: Record<string, NavIconName> = {
   "/games/signal-scout": "radar",
   "/games/would-you-rather": "scale",
+  "/games/long-shot": "crosshair",
 };
 
 const toolChildren: SiteNavNode[] = TOOLS_NAV.map((tool) => ({
@@ -450,6 +451,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         href: "/admin/would-you-rather",
         hint: "Trade voting game, pool, and the Discord poll",
         icon: "scale",
+      },
+      {
+        id: "/admin/long-shot",
+        label: "Long Shot",
+        href: "/admin/long-shot",
+        hint: "Daily rarity game, puzzles, settings and boards",
+        icon: "crosshair",
       },
       {
         id: "/admin/beacon-ranker",

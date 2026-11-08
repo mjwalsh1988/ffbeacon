@@ -19,6 +19,7 @@ import type {
 } from "@/lib/signal-scout/round-engine";
 import type { Board, LeaderboardRow } from "@/lib/signal-scout/leaderboards";
 import type { SignalTierKey } from "@/lib/signal-scout/scoring";
+import type { SearchPlayerResult } from "@/components/player-guess-combobox";
 
 /** Header that every Signal Scout route requires (CSRF-lite / bot filter). */
 export const SCOUT_REQUEST_HEADER = { "x-requested-with": "ff-beacon" } as const;
@@ -196,13 +197,10 @@ export function skipRound(roundId: string): Promise<ApiResult<{ round: Completed
   );
 }
 
-export interface SearchPlayerResult {
-  id: string;
-  name: string;
-  position: string | null;
-  team: string | null;
-  sleeperId: string | null;
-}
+// The shape lives with the shared combobox so a shared component does not
+// depend on one game's client; re-exported here for existing importers.
+export type { SearchPlayerResult } from "@/components/player-guess-combobox";
+
 
 /**
  * One board page, exactly as lib/signal-scout/leaderboards.ts LeaderboardView

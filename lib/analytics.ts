@@ -66,7 +66,8 @@ export type AnalyticsTool =
   | "faab"
   | "on_the_clock"
   | "who_should_i_start"
-  | "signal_scout";
+  | "signal_scout"
+  | "long_shot";
 
 export type DonateSurface = "header_modal" | "donate_page";
 
@@ -136,6 +137,12 @@ export type AnalyticsEvent =
   | { name: "sign_up"; params: { method: string } }
   /** Someone ran one of the tools. */
   | { name: "tool_use"; params: { tool: AnalyticsTool } }
+  /** A Long Shot attempt started, in either mode. */
+  | { name: "long_shot_start"; params: { mode: "hurry_up" | "film_room" } }
+  /** A Long Shot attempt reached its last prompt. points is the base total. */
+  | { name: "long_shot_complete"; params: { mode: "hurry_up" | "film_room"; points: number } }
+  /** The Long Shot result text or page link was copied. Its own event, so the share event's params stay as they are. */
+  | { name: "long_shot_share"; params: { method: "copy_text" | "copy_link" } }
   /** A copy link or copy image button worked. GA's own recommended name. */
   | {
       name: "share";

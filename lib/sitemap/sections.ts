@@ -126,6 +126,7 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/games", priority: 0.4 },
   { path: "/games/signal-scout", priority: 0.4 },
   { path: "/games/would-you-rather", priority: 0.4 },
+  { path: "/games/long-shot", priority: 0.4 },
   { path: "/about", priority: 0.4 },
   { path: "/author/michael", priority: 0.4 },
   // /donate is listed; /donate/thanks deliberately is not. A receipt is

@@ -52,6 +52,7 @@ import {
   ListOrdered,
   TrendingUp,
   Cog,
+  Crosshair,
   type LucideIcon,
 } from "lucide-react";
 import { formatEasternShortDate } from "@/lib/datetime";
@@ -713,6 +714,15 @@ const FEATURED_GAMES: FeaturedGame[] = [
     icon: Vote,
     status: "New",
   },
+  {
+    href: "/games/long-shot",
+    title: "Long Shot",
+    description:
+      "The same five fantasy prompts for everyone, every day. Name a player who fits. The answer everyone gives scores 10; the one nobody rosters scores 100.",
+    cta: "Play today's five",
+    icon: Crosshair,
+    status: "New",
+  },
 ];
 
 function GamesSection() {
@@ -736,7 +746,7 @@ function GamesSection() {
           </Link>
         </div>
 
-        <div className="mt-12 grid gap-5 md:grid-cols-2">
+        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {FEATURED_GAMES.map((game) => (
             // Keyed by title, not href: an unbuilt game has no href yet.
             <GameCard key={game.title} game={game} />

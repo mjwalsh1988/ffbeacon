@@ -254,11 +254,17 @@ export async function searchFantasyPlayers(
     query: string;
     positions?: readonly string[];
     limit: number;
-    /** Defaults to "ranked". See SearchPool. */
-    pool?: SearchPool;
+    /**
+     * Defaults to "ranked". See SearchPool. A Set of player ids is an explicit
+     * pool chosen by the caller (Long Shot passes lib/long-shot/search-pool.ts,
+     * which keeps retired players the rankings window drops); name matches are
+     * filtered to it and the rankings window is not consulted.
+     */
+    pool?: SearchPool | ReadonlySet<string>;
   },
 ): Promise<FantasyPlayerRow[]> {
-  const pool = opts.pool ?? "ranked";
+  const explicitPool = typeof opts.pool === "object" ? opts.pool : null;
+  const pool: SearchPool = typeof opts.pool === "string" ? opts.pool : "ranked";
   const positions =
     opts.positions ??
     (pool === "ranked+idp"
@@ -269,9 +275,12 @@ export async function searchFantasyPlayers(
   // empty pattern usefully, so answer before spending a round trip on it.
   if (!normalized) return [];
   const escaped = normalized.replace(/[%_]/g, (m) => `\\${m}`);
-  const overfetch = Math.min(opts.limit * OVERFETCH_MULTIPLIER, MAX_OVERFETCH);
+  // An explicit pool keeps players the name window would otherwise crowd out
+  // ("williams" matches 85 skill players, 37 of them in the Long Shot pool), so
+  // it reads the full capped window before filtering.
+  const overfetch = explicitPool ? MAX_OVERFETCH : Math.min(opts.limit * OVERFETCH_MULTIPLIER, MAX_OVERFETCH);
 
-  if (pool === "ranked+idp") {
+  if (pool === "ranked+idp" && !explicitPool) {
     // Two reads, one per side of the ball, each with its own over-fetch.
     // Sharing one window let the ~4,300 defenders Sleeper carries (most of
     // whom the gate then drops) crowd ranked offensive players out of it:
@@ -306,6 +315,8 @@ export async function searchFantasyPlayers(
 
   const rows = await nameMatches(supabase, escaped, positions, overfetch);
   if (rows.length === 0) return [];
+
+  if (explicitPool) return rows.filter((r) => explicitPool.has(r.id)).slice(0, opts.limit);
 
   const ranked = await rankedPlayerIdSet(supabase);
   return rows.filter((r) => ranked.has(r.id)).slice(0, opts.limit);
