@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidGameDate } from "@/lib/game-date";
 import { boardSchema, loadLeaderboardView, MAX_PAGE } from "@/lib/long-shot/leaderboards";
 import { claim, errorJson, guardRequest, handleRouteError, privateJson } from "@/lib/long-shot/route-helpers";
 
@@ -8,10 +9,7 @@ export const runtime = "nodejs";
 const querySchema = z.object({
   board: boardSchema.default("daily"),
   page: z.coerce.number().int().min(1).max(MAX_PAGE).default(1),
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  date: z.string().refine(isValidGameDate, "not a calendar date").optional(),
 });
 
 /**

@@ -53,6 +53,12 @@ export interface LeaderboardView {
   rows: BoardRow[];
   yourRank: BoardRow | null;
   totalPages: number;
+  /**
+   * True when the reader is in the exclusion set (hidden by moderation, or an
+   * admin while hide_admin_users is on): their rank is computed and shown to
+   * them, but their row is never in `rows`, and the panel says so.
+   */
+  viewerHidden: boolean;
 }
 
 export interface RawBoardRow {
@@ -258,5 +264,6 @@ export async function loadLeaderboardView(
     rows,
     yourRank,
     totalPages: Math.min(Math.max(1, Math.ceil(total / PAGE_SIZE)), MAX_PAGE),
+    viewerHidden: meId !== null && excluded.includes(meId),
   };
 }

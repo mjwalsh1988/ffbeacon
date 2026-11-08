@@ -97,6 +97,12 @@ export interface PlayerGuessComboboxProps {
   minLength: number;
   /** Adds the team crest beside the headshot in each option (Long Shot). */
   showTeamLogos: boolean;
+  /**
+   * Show the team code after the position (default true; a null team reads
+   * "FA"). The Long Shot demo passes false, because its shipped candidates
+   * carry no team and "FA" would be a claim about a real player.
+   */
+  showTeam?: boolean;
   search: (q: string, signal: AbortSignal) => Promise<SearchOutcome>;
   onSelect: (player: SearchPlayerResult) => void;
   /** Optional: told whenever the typed text changes, so a parent can clear a stale choice. */
@@ -111,6 +117,7 @@ export function PlayerGuessCombobox({
   debounceMs,
   minLength,
   showTeamLogos,
+  showTeam = true,
   search,
   onSelect,
   onQueryChange,
@@ -134,7 +141,10 @@ export function PlayerGuessCombobox({
   });
 
   const trimmed = query.trim();
-  const longEnough = trimmed.length >= minLength;
+  // Letters and digits count toward the floor, punctuation does not: "C.J."
+  // is two letters, and opening the list for it would promise a match the
+  // search cannot give.
+  const longEnough = trimmed.replace(/[^\p{L}\p{N}]/gu, "").length >= minLength;
   const ruledOutSet = useMemo(() => new Set(ruledOutIds), [ruledOutIds]);
 
   useEffect(() => {
@@ -303,7 +313,8 @@ export function PlayerGuessCombobox({
                   <span className="min-w-0 flex-1 truncate">
                     <span className="text-ink">{r.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
-                      {r.position ?? "?"}, {r.team ?? "FA"}
+                      {r.position ?? "?"}
+                      {showTeam ? `, ${r.team ?? "FA"}` : ""}
                     </span>
                   </span>
                   {ruledOut && (

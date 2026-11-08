@@ -1569,6 +1569,15 @@ prompt's text. Signed-out visitors get a demo that runs on data shipped in
 `lib/long-shot/demo.ts` and never touches today's puzzle, the search API or the
 database; the game itself requires an account.
 
+ABSOLUTE RULE: the player picker is a TYPEAHEAD, never a list to browse. In
+the game and in the demo alike, nothing is listed until `SEARCH_MIN_LENGTH`
+(4) letters are typed, at most eight matches show, and the search route
+enforces the same floor so a hand-written request cannot page through the
+pool two letters at a time. A reader has to think of the player; the picker
+only spares them the spelling. The demo's candidate list is never rendered
+whole (`searchDemoCandidates` filters it by name prefix), because a list a
+reader can scroll is a list they can mine.
+
 ABSOLUTE RULE: the clock is the server's. The pending answer row for a
 position is created by `serveNext` and nowhere else, with `served_at = now()`,
 and serving it again never resets it. The answer response never creates the

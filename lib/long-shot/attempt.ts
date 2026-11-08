@@ -603,6 +603,10 @@ export async function submitAnswer(
     .eq("state", "pending")
     .select("id")
     .maybeSingle();
+  // A well-formed uuid that is not a player fails the foreign key. That is a
+  // bad request, not a server fault, and the prompt stays pending for a real
+  // answer.
+  if (error?.code === "23503") throw new LongShotError("invalid_request");
   fail("answer update failed", error);
   if (!settled) throw new LongShotError("stale_prompt");
 

@@ -20,7 +20,8 @@
  * solved by elimination. Each prompt offers 30 names.
  */
 
-import type { Tier } from "./types";
+import type { SearchPlayerResult } from "@/components/player-guess-combobox";
+import { SEARCH_MIN_LENGTH, type Tier } from "./types";
 
 export interface DemoPlayer {
   name: string;
@@ -34,6 +35,8 @@ export interface DemoAnswer extends DemoPlayer {
 export interface DemoPrompt {
   id: string;
   text: string;
+  /** The position every candidate plays, shown beside a match the way the real picker shows it. */
+  position: "QB" | "RB" | "WR" | "TE";
   answers: DemoAnswer[];
   candidates: DemoPlayer[];
 }
@@ -153,18 +156,21 @@ export const DEMO_PROMPTS: DemoPrompt[] = [
   {
     id: "rb-1000",
     text: "Name a running back with 1,000 or more rushing yards in 2024.",
+    position: "RB",
     answers: RB_ANSWERS,
     candidates: [...RB_ANSWERS.map(toCandidate), ...RB_DECOYS].sort(byName),
   },
   {
     id: "te-top-12",
     text: "Name a tight end who finished top 12 in PPR scoring in 2024.",
+    position: "TE",
     answers: TE_ANSWERS,
     candidates: [...TE_ANSWERS.map(toCandidate), ...TE_DECOYS].sort(byName),
   },
   {
     id: "qb-30-td",
     text: "Name a quarterback who threw 30 or more touchdowns in 2024.",
+    position: "QB",
     answers: QB_ANSWERS,
     candidates: [...QB_ANSWERS.map(toCandidate), ...QB_DECOYS].sort(byName),
   },
@@ -172,4 +178,33 @@ export const DEMO_PROMPTS: DemoPrompt[] = [
 
 export function scoreDemo(prompt: DemoPrompt, sleeperId: string): Tier | null {
   return prompt.answers.find((a) => a.sleeperId === sleeperId)?.tier ?? null;
+}
+
+/** Lowercase, punctuation out, one space between words: "C.J. Stroud" and "cj stroud" meet. */
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The demo's typeahead (plan 11, revised 2026-11-08): the candidate list is
+ * never shown whole, because a list a reader can scroll is a list they can
+ * mine instead of recall. A match appears only once the typed text reaches
+ * SEARCH_MIN_LENGTH characters, and only where it begins a name, a first
+ * name or a surname, the shape the real game's search takes. At most eight,
+ * in the candidates' own order.
+ */
+export function searchDemoCandidates(prompt: DemoPrompt, query: string, limit = 8): SearchPlayerResult[] {
+  const q = normalizeName(query);
+  if (q.length < SEARCH_MIN_LENGTH) return [];
+  return prompt.candidates
+    .filter((c) => {
+      const full = normalizeName(c.name);
+      return full.startsWith(q) || full.split(" ").some((word) => word.startsWith(q));
+    })
+    .slice(0, limit)
+    .map((c) => ({ id: c.sleeperId, name: c.name, position: prompt.position, team: null, sleeperId: c.sleeperId }));
 }

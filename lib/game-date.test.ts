@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, currentEasternGameDate, isConsecutiveDay } from "./game-date";
+import { addDays, currentEasternGameDate, isConsecutiveDay, isValidGameDate } from "./game-date";
 
 describe("currentEasternGameDate: DST boundaries", () => {
   it("maps 2026-03-08T06:30:00Z (1:30 AM EST, spring-forward night) to 2026-03-08", () => {
@@ -85,5 +85,24 @@ describe("addDays", () => {
     expect(addDays("2026-11-07", 0)).toBe("2026-11-07");
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
     expect(addDays("2027-01-01", -1)).toBe("2026-12-31");
+  });
+});
+
+describe("isValidGameDate", () => {
+  it("accepts real calendar dates, a leap day included", () => {
+    expect(isValidGameDate("2026-11-08")).toBe(true);
+    expect(isValidGameDate("2024-02-29")).toBe(true);
+  });
+
+  it("rejects a well-formed string that is not a date", () => {
+    expect(isValidGameDate("2026-13-45")).toBe(false);
+    expect(isValidGameDate("2026-02-30")).toBe(false);
+    expect(isValidGameDate("2025-02-29")).toBe(false);
+  });
+
+  it("rejects anything not shaped YYYY-MM-DD", () => {
+    expect(isValidGameDate("2026-1-8")).toBe(false);
+    expect(isValidGameDate("11/08/2026")).toBe(false);
+    expect(isValidGameDate("")).toBe(false);
   });
 });

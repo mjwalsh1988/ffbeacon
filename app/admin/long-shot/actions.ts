@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-auth";
-import { addDays, currentEasternGameDate } from "@/lib/game-date";
+import { addDays, currentEasternGameDate, isValidGameDate } from "@/lib/game-date";
 import { generatePuzzle } from "@/lib/long-shot/generate";
 import { coalesce } from "@/lib/request-coalesce";
 import { settlePuzzle } from "@/lib/long-shot/settle";
@@ -15,7 +15,7 @@ const GAME_PATH = "/games/long-shot";
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z.string().refine(isValidGameDate, "not a calendar date");
 const uuid = z.string().uuid();
 
 /** Validated server-side; the client payload is never trusted. */

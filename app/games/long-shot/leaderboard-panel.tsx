@@ -96,9 +96,16 @@ export function LeaderboardPanel({
 
       {rows.length === 0 ? (
         <p className="mt-4 text-sm text-ink-muted">
-          {board === "daily"
-            ? "Nobody has finished today's Hurry-Up yet. Be the first on the board."
-            : "No one is on this board yet."}
+          {view?.yourRank && view.board === board
+            ? // The reader has a rank but the rows are empty: they are kept off
+              // the board (said under their rank), or the shared board is a
+              // minute behind.
+              view.viewerHidden
+              ? "Nobody else is on this board yet."
+              : "Nobody else is on this board yet. The shared board refreshes within a minute."
+            : board === "daily"
+              ? "Nobody has finished today's Hurry-Up yet. Be the first on the board."
+              : "No one is on this board yet."}
         </p>
       ) : (
         <div className="mt-4">
@@ -119,6 +126,12 @@ export function LeaderboardPanel({
           <ol aria-label="Your rank">
             <BoardRowItem row={view.yourRank} figureUnit={meta.unit} secondaryLabel={meta.secondary} />
           </ol>
+          {view.viewerHidden && (
+            <p className="px-3 pb-3 text-xs text-ink-muted">
+              Your account is kept off the public boards, so this is where you would stand; nobody else sees this
+              row.
+            </p>
+          )}
         </div>
       )}
 

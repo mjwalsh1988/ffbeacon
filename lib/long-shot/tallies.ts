@@ -13,6 +13,7 @@ import type { AnswerEntry, MostGivenDto } from "./types";
 type Client = SupabaseClient<Database>;
 
 export const MOST_GIVEN_LIMIT = 5;
+const TALLY_CHUNK = 200;
 
 export async function incrementTally(admin: Client, promptId: string, playerId: string | null): Promise<void> {
   const { error } = await admin.rpc("long_shot_increment_tally", {
@@ -83,16 +84,22 @@ export async function loadRoom(
   answers: readonly AnswerEntry[],
 ): Promise<{ roomCount: number; roomTotal: number; mostGiven: MostGivenDto[] }> {
   const answerIds = answers.map((a) => a.player_id);
-  const [promptRes, talliesRes, mineRes] = await Promise.all([
+  // The answer set can run to the admin's max_answers (500), and an in() list
+  // of that many uuids is a GET URL over 18 KB, so it is read in chunks.
+  const chunks: string[][] = [];
+  for (let i = 0; i < answerIds.length; i += TALLY_CHUNK) chunks.push(answerIds.slice(i, i + TALLY_CHUNK));
+  const [promptRes, talliesChunks, mineRes] = await Promise.all([
     admin.from("long_shot_prompts").select("answered_total").eq("id", promptId).maybeSingle(),
-    answerIds.length > 0
-      ? admin
+    Promise.all(
+      chunks.map((ids) =>
+        admin
           .from("long_shot_answer_tallies")
           .select("player_id, count")
           .eq("prompt_id", promptId)
-          .in("player_id", answerIds)
-          .gt("count", 0)
-      : Promise.resolve({ data: [] as { player_id: string; count: number }[], error: null }),
+          .in("player_id", ids)
+          .gt("count", 0),
+      ),
+    ),
     playerId
       ? admin
           .from("long_shot_answer_tallies")
@@ -103,8 +110,11 @@ export async function loadRoom(
       : Promise.resolve({ data: null, error: null }),
   ]);
   if (promptRes.error) throw new Error(`room total read failed: ${promptRes.error.message}`);
-  if (talliesRes.error) throw new Error(`room tallies read failed: ${talliesRes.error.message}`);
-  const tallies = (talliesRes.data ?? []) as { player_id: string; count: number }[];
+  const tallies: { player_id: string; count: number }[] = [];
+  for (const res of talliesChunks) {
+    if (res.error) throw new Error(`room tallies read failed: ${res.error.message}`);
+    tallies.push(...((res.data ?? []) as { player_id: string; count: number }[]));
+  }
   // Names only for the candidates that can reach the top five, ties at the
   // boundary included, so the tie-break by name is exact.
   const sorted = tallies.slice().sort((a, b) => b.count - a.count);

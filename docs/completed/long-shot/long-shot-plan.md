@@ -2250,3 +2250,45 @@ its task in progress.md.
   ended the owner's session. Reduced motion was not toggled in the browser,
   because changing the OS setting is outside what the agent may do; the code
   paths are listed under LS-T060a.
+
+### Post-ship review (2026-11-08, LS-T064)
+
+The owner asked for a full second review of the shipped build and one change
+of behavior. Each departure below supersedes the section it names.
+
+- 11 and 18.3, owner decision: the demo's native `<select>` is gone. On a
+  phone it was a list a visitor could scroll through and pick from, which
+  defeats the point of a recall game. The demo now uses the shared
+  `PlayerGuessCombobox` over its shipped candidate list, filtered locally by
+  `searchDemoCandidates` (name, first-name or surname prefix), still with no
+  network call. In the game and the demo alike the picker shows nothing until
+  `SEARCH_MIN_LENGTH` (4) letters are typed, and the search route enforces the
+  same floor (`MIN_QUERY_LENGTH`), so the picker is a typeahead and never a
+  browsable list. The help text says so. This replaces the "minLength = 2"
+  in 18.3 and the native-select paragraph in 11.
+- 18A.1: the end-zone lettering sits at x 988, the end zone's right edge,
+  because at x 950 a Long Shot marker landed on top of it. The small strip
+  is pinned to the left of its box (`xMinYMid`), because a height-capped SVG
+  centered itself and sat offset from the record list under it.
+- 13.1: `LeaderboardView` carries `viewerHidden`. A reader in the exclusion
+  set (an admin while `hide_admin_users` is on, or a hidden user) still sees
+  their own rank, and the strip now says their row is kept off the public
+  board. When a reader has a rank but the shared rows are empty (the board
+  is cached for a minute), the panel says the board refreshes within a
+  minute instead of "nobody has finished".
+- 18.2: one answer is in flight at a time. The clock reaching zero while an
+  Answer request was still out sent a timeout for the same prompt, received
+  stale_prompt and served the next prompt over the reveal. A failed timeout
+  submission now shows the reload sentence rather than "Press Answer again",
+  because there is no Answer to press.
+- 17.7 and 17.8: a `date` is validated as a real calendar date
+  (`isValidGameDate`), not only by shape; `2026-13-45` was a 500.
+- 17.4: a well-formed uuid that is not a player (a foreign-key failure on
+  the answer row) answers 400 `invalid_request` and leaves the prompt pending.
+- 9: the room's tally read is chunked at 200 ids, because `max_answers` can
+  be set to 500 and an `in()` of that many uuids is a GET over 18 KB.
+- 5.1a: the closed-unfinished panel counts answered prompts only; the
+  timeouts the night records are not "prompts you scored on".
+- 18A.1: the marker flight effect keyed on the flight object, which the
+  result panel rebuilt on every count-up frame, so the flight restarted for
+  the whole count-up; it keys on a string now.

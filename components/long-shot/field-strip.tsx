@@ -67,9 +67,14 @@ export function FieldStrip({
   const beaconId = `ls-strip-beacon-${uid}`;
   const xs = markerPositions(records);
   const [phase, setPhase] = useState<"start" | "flying" | "fading" | "done">(flight ? "start" : "done");
+  // The effect keys on this string, not on the flight object: the result panel
+  // rebuilds that object on every render while its points count up, and an
+  // object dependency restarted the flight sixty times a second for as long
+  // as the count-up ran.
+  const flightKey = flight ? `${flight.position}:${flight.tier ?? "miss"}` : null;
 
   useEffect(() => {
-    if (!flight) return;
+    if (!flightKey) return;
     setPhase("start");
     // Two frames so the start position paints before the transition runs.
     let raf2 = 0;
@@ -84,7 +89,7 @@ export function FieldStrip({
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [flight?.position, flight]);
+  }, [flightKey]);
 
   const flightX = flight ? (xs.get(flight.position) ?? MISS_X) : 0;
   const flies = Boolean(flight && flight.tier && !reduced);
@@ -98,7 +103,9 @@ export function FieldStrip({
         role="img"
         aria-label={label}
         className={`block w-full ${heightClass}`}
-        preserveAspectRatio="xMidYMid meet"
+        // The small strip is height-capped, so its drawing is narrower than
+        // its box; pinning it left keeps it over the record list beneath it.
+        preserveAspectRatio={size === "small" ? "xMinYMid meet" : "xMidYMid meet"}
       >
         <defs>
           <linearGradient id={beaconId} x1="0" y1="0" x2="1" y2="1">
@@ -125,9 +132,10 @@ export function FieldStrip({
           </g>
         ))}
         <text
-          x="950"
+          // At the end zone's right edge, clear of a Long Shot marker landing at 950.
+          x="988"
           y="60"
-          transform="rotate(-90 950 60)"
+          transform="rotate(-90 988 60)"
           textAnchor="middle"
           dominantBaseline="middle"
           fontFamily="var(--font-geist-mono), ui-monospace, monospace"

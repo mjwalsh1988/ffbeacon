@@ -86,6 +86,15 @@ export function LongShotClient({
   const [announcement, setAnnouncement] = useState("");
   const [boardsKey, setBoardsKey] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // One answer in flight at a time. The clock reaching zero while an Answer
+  // request is still out would otherwise send a timeout for the same prompt,
+  // get stale_prompt back and serve the next prompt over the reveal.
+  const answering = useRef(false);
+  // Set when the clock ran out while an Answer was in flight (that timeout
+  // was dropped). If the Answer then fails there is no clock left to run, so
+  // the error gets the reload sentence rather than "your clock is still
+  // running". Cleared whenever a new prompt arrives.
+  const clockOut = useRef(false);
   // Seeded with the first state's key, so a fresh load of a finished day does
   // not pull focus past the skip link; only a change of state moves focus.
   const lastFocused = useRef<string>(
@@ -128,6 +137,7 @@ export function LongShotClient({
   const applyStartOrNext = useCallback(
     async (data: StartOrNext) => {
       if (data.kind === "prompt") {
+        clockOut.current = false;
         setView({ kind: "prompt", prompt: data });
       } else if (data.kind === "completed") {
         setView({ kind: "completed", completed: data });
@@ -211,6 +221,19 @@ export function LongShotClient({
   }
 
   async function answer(prompt: PromptDto, body: { playerId: string | null; timedOut: boolean; skipped: boolean }) {
+    if (answering.current) {
+      if (body.timedOut) clockOut.current = true;
+      return;
+    }
+    answering.current = true;
+    try {
+      await answerInner(prompt, body);
+    } finally {
+      answering.current = false;
+    }
+  }
+
+  async function answerInner(prompt: PromptDto, body: { playerId: string | null; timedOut: boolean; skipped: boolean }) {
     setBusy(true);
     setError(null);
     const payload = { position: prompt.position, ...body };
@@ -242,8 +265,13 @@ export function LongShotClient({
       await goNext(prompt.attemptId);
       return;
     }
+    // A failed timeout has no Answer to press again (the clock is at zero and
+    // nothing is chosen), so it gets the reload sentence; reloading serves the
+    // next prompt and the server records the timeout itself.
     const msg =
-      res.code === "rate_limited" || res.code === "network" ? copyFor(res.code) : GENERIC_ERROR_COPY;
+      !body.timedOut && !clockOut.current && (res.code === "rate_limited" || res.code === "network")
+        ? copyFor(res.code)
+        : GENERIC_ERROR_COPY;
     setError(msg);
     announce(msg);
   }
@@ -354,7 +382,8 @@ export function LongShotClient({
         {hurryToday?.status === "abandoned" && (
           <p className="mt-3 text-base text-ink-muted">
             Your Hurry-Up for today was closed unfinished. You scored {hurryToday.basePoints} on{" "}
-            {hurryToday.answers.length} prompts. Tomorrow&apos;s puzzle is a fresh start.
+            {hurryToday.answers.filter((a) => a.state === "answered").length} answered prompts. Tomorrow&apos;s
+            puzzle is a fresh start.
           </p>
         )}
         <div className="mt-5">

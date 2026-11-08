@@ -2,14 +2,16 @@ import { searchFantasyPlayers } from "@/lib/player-search";
 import { readSleeperId } from "@/lib/ranking-boards";
 import { claim, errorJson, guardRequest, handleRouteError, privateJson } from "@/lib/long-shot/route-helpers";
 import { longShotSearchPool } from "@/lib/long-shot/search-pool";
-import { ELIGIBLE_POSITIONS } from "@/lib/long-shot/types";
+import { ELIGIBLE_POSITIONS, SEARCH_MIN_LENGTH } from "@/lib/long-shot/types";
 import type { SearchPlayerResult } from "@/components/player-guess-combobox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_QUERY_LENGTH = 50;
-const MIN_QUERY_LENGTH = 2;
+// Enforced here as well as in the picker, so a hand-written request cannot
+// turn the search into a browsable list two letters at a time.
+const MIN_QUERY_LENGTH = SEARCH_MIN_LENGTH;
 const RESULT_CAP = 8;
 
 /**

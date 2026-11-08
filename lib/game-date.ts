@@ -47,6 +47,18 @@ export function currentEasternGameDate(now: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * True for a real calendar date written YYYY-MM-DD. A regex alone accepts
+ * 2026-13-45, which Postgres then rejects as a 500.
+ */
+export function isValidGameDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d, 12, 0, 0);
+  const back = new Date(t);
+  return back.getUTCFullYear() === y && back.getUTCMonth() === m - 1 && back.getUTCDate() === d;
+}
+
 /** Shift a YYYY-MM-DD date by `n` calendar days (negative goes back). */
 export function addDays(date: string, n: number): string {
   const shifted = new Date(parseIsoDateUtcNoon(date) + n * MS_PER_DAY);

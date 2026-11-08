@@ -8,9 +8,11 @@
  *
  * It opens with a choice shaped like the real mode picker, "With the clock"
  * or "No clock", made before any prompt is shown (signed-out visitors have no
- * Film Room). The player control is a native select, fully keyboard and
- * screen reader operable with no custom code. It is fenced as a sample in
- * words, not only styling: the ribbon, the badge, the heading and the lead.
+ * Film Room). The player control is the game's own typeahead over the
+ * shipped candidate list: nothing is listed until the first letters are
+ * typed, so the demo, like the game, asks the reader to think of a player
+ * rather than scroll to one. It is fenced as a sample in words, not only
+ * styling: the ribbon, the badge, the heading and the lead.
  */
 
 import Link from "next/link";
@@ -19,12 +21,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { FieldStrip, type StripRecord } from "@/components/long-shot/field-strip";
 import { Stage } from "@/components/long-shot/stage";
 import { TierChip } from "@/components/long-shot/tier-chip";
+import { PlayerGuessCombobox, type SearchPlayerResult } from "@/components/player-guess-combobox";
 import { PlayerHeadshot } from "@/components/player-headshot";
-import { DEMO_PROMPTS, scoreDemo } from "@/lib/long-shot/demo";
+import { DEMO_PROMPTS, scoreDemo, searchDemoCandidates } from "@/lib/long-shot/demo";
 import { DEFAULT_LONG_SHOT_SETTINGS } from "@/lib/long-shot/default-settings";
 import { MISS_STYLE, TIER_STYLE } from "@/lib/long-shot/tier-style";
-import { TIER_WORDS, type Tier } from "@/lib/long-shot/types";
+import { SEARCH_MIN_LENGTH, TIER_WORDS, type Tier } from "@/lib/long-shot/types";
 import { Countdown } from "./countdown";
+import { PICKER_HELP_TEXT } from "./player-combobox";
 
 const POINTS = DEFAULT_LONG_SHOT_SETTINGS.tiers.points;
 const LIMIT = DEFAULT_LONG_SHOT_SETTINGS.timer.seconds;
@@ -49,10 +53,9 @@ export function LongShotDemo() {
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<DemoResult[]>([]);
   const [phase, setPhase] = useState<"prompt" | "result" | "done">("prompt");
-  const [choice, setChoice] = useState("");
+  const [chosen, setChosen] = useState<SearchPlayerResult | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const selectId = useId();
   const headingId = useId();
 
   useEffect(() => {
@@ -63,7 +66,7 @@ export function LongShotDemo() {
   const total = results.reduce((s, r) => s + r.points, 0);
 
   function submit(timedOut: boolean) {
-    const sleeperId = timedOut ? null : choice || null;
+    const sleeperId = timedOut ? null : (chosen?.id ?? null);
     const name = sleeperId ? (prompt.candidates.find((c) => c.sleeperId === sleeperId)?.name ?? null) : null;
     const tier = sleeperId ? scoreDemo(prompt, sleeperId) : null;
     const r: DemoResult = {
@@ -80,7 +83,7 @@ export function LongShotDemo() {
   }
 
   function next() {
-    setChoice("");
+    setChosen(null);
     if (index + 1 >= DEMO_PROMPTS.length) {
       setPhase("done");
       setAnnouncement(`Demo complete. ${total} points.`);
@@ -95,7 +98,7 @@ export function LongShotDemo() {
     setIndex(0);
     setResults([]);
     setPhase("prompt");
-    setChoice("");
+    setChosen(null);
   }
 
   const records: StripRecord[] = DEMO_PROMPTS.map((_, i) => {
@@ -247,25 +250,36 @@ export function LongShotDemo() {
             {prompt.text}
           </h3>
           <div className="mt-6 border-t border-line pt-6">
-            <label htmlFor={selectId} className="block text-sm font-medium text-ink">
-              Choose a player
-            </label>
-            <select
-              id={selectId}
-              value={choice}
-              onChange={(e) => setChoice(e.target.value)}
-              className="mt-2 min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-base text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:text-sm"
-            >
-              <option value="">Select a player</option>
-              {prompt.candidates.map((c) => (
-                <option key={c.sleeperId} value={c.sleeperId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <PlayerGuessCombobox
+              key={`demo-picker-${index}`}
+              disabled={false}
+              ruledOutIds={[]}
+              label="Choose a player"
+              helpText={PICKER_HELP_TEXT}
+              debounceMs={0}
+              minLength={SEARCH_MIN_LENGTH}
+              showTeamLogos={false}
+              showTeam={false}
+              // Local and synchronous: the demo never calls the search API.
+              search={async (q) => ({ ok: true, results: searchDemoCandidates(prompt, q) })}
+              onSelect={setChosen}
+            />
+            <p className="mt-3 flex min-h-11 items-center gap-3 text-sm text-ink-muted" aria-live="off">
+              {chosen ? (
+                <>
+                  <PlayerHeadshot sleeperId={chosen.sleeperId} name="" size={36} />
+                  <span>
+                    Your pick: <span className="font-semibold text-ink">{chosen.name}</span>
+                    {chosen.position ? `, ${chosen.position}` : ""}
+                  </span>
+                </>
+              ) : (
+                <span>No player chosen yet.</span>
+              )}
+            </p>
             <button
               type="button"
-              disabled={!choice}
+              disabled={!chosen}
               onClick={() => submit(false)}
               className="mt-4 inline-flex h-12 items-center justify-center rounded-card bg-brand-cyan px-6 text-base font-bold text-[#07070D] hover:bg-brand-cyan-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-50"
             >

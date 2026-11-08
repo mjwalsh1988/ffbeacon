@@ -55,6 +55,14 @@ export type EligiblePosition = (typeof ELIGIBLE_POSITIONS)[number];
 /** Oldest season player_stats holds; `seasons` runs from here to now. */
 export const STATS_FLOOR_SEASON = 2020;
 
+/**
+ * Letters a reader must type before the player picker shows a match, in the
+ * game and in the demo alike, and the floor the search route enforces. The
+ * picker is a typeahead and never a list to browse: a reader has to think of
+ * the player, and the matches only save them the spelling.
+ */
+export const SEARCH_MIN_LENGTH = 4;
+
 export type TemplateKey =
   | "game_line"
   | "opponent_line"
