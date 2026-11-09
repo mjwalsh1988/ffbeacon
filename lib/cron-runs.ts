@@ -149,6 +149,15 @@ export type CronJobEntry = {
   label: string;
   schedule: string;
   extraSchedules?: readonly string[];
+  /**
+   * The UTC date (YYYY-MM-DD) this job was first deployed. Set it on every new
+   * entry. cron-health reports a job with no runs at all as missed, which is
+   * right for a route that silently never fires, but a job added at 7 PM has
+   * not had its first slot yet when the check runs the next morning. With this
+   * set, a never-run job is reported only once a full gap has passed after the
+   * end of that day. Without it, a never-run job is reported at once.
+   */
+  addedOn?: string;
   description: string;
 };
 
@@ -370,6 +379,7 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     name: "long-shot-generate",
     label: "Long Shot puzzle generation",
     schedule: "0 17 * * *",
+    addedOn: "2026-11-08",
     description:
       "Builds tomorrow's Long Shot puzzle at noon or 1 PM Eastern the day before, after every table it reads has refreshed, and today's too when a missed night left it empty. A date that already has a puzzle is skipped. The result lists every prompt family tried with its parameters, answer count and pass or fail reason, which is the try log on /admin/long-shot. A short or empty day is recorded as a failure.",
   },
@@ -377,6 +387,7 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     name: "long-shot-settle",
     label: "Long Shot settlement",
     schedule: "30 5 * * *",
+    addedOn: "2026-11-08",
     description:
       "Settles every finished Long Shot day: closes Hurry-Up attempts left unfinished, pays the Lone Signal bonus once per attempt, stamps the puzzle and resets broken streaks. Catches up a missed night oldest first and is safe to run twice. Also closes Film Room attempts idle for a day and prunes old Film Room attempts and tallies.",
   },
@@ -384,6 +395,7 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     name: "long-shot-history",
     label: "Long Shot history pool sync",
     schedule: "0 12 1 * *",
+    addedOn: "2026-11-09",
     description:
       "Monthly, on the first at 12:00 UTC: reads the nflverse releases for the current and previous NFL season (rosters, players, draft picks, weekly stats, Hall of Fame) into the Long Shot history pool, then recomputes career totals and prominence for everyone touched. Rookies join the pool during the season and a finished season settles on its own. Safe to run twice; the full 1920 load is the npm run sync:nfl-history script's job.",
   },

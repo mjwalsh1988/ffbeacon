@@ -131,7 +131,22 @@ export type CronJobLike = {
   name: string;
   label: string;
   schedule: string;
+  /** UTC date (YYYY-MM-DD) the job was first deployed. See CronJobEntry. */
+  addedOn?: string;
 };
+
+/**
+ * When a job that has never run starts to count as missed: a full gap after
+ * the END of the UTC day it was added, because the deploy could land at any
+ * hour of that day. Null when the date is absent or unreadable, which keeps
+ * the old behavior of reporting a never-run job at once.
+ */
+export function neverRunDeadlineMs(addedOn: string | undefined, maxGapHours: number): number | null {
+  if (!addedOn || !/^\d{4}-\d{2}-\d{2}$/.test(addedOn)) return null;
+  const dayStart = Date.parse(`${addedOn}T00:00:00Z`);
+  if (!Number.isFinite(dayStart)) return null;
+  return dayStart + (24 + maxGapHours) * 3_600_000;
+}
 
 export type CronMiss = {
   name: string;
@@ -149,7 +164,11 @@ export type CronMiss = {
  *
  * A job with no runs at all is reported, not skipped. A brand new route that has
  * never fired is exactly the case worth surfacing, and "never" is the longest
- * possible gap rather than a missing measurement.
+ * possible gap rather than a missing measurement. The one exception is a job
+ * whose first slot has not come round yet: with `addedOn` set it gets until
+ * `neverRunDeadlineMs` before "never" means anything. That is the 2026-11-09
+ * false alarm, when Long Shot generation shipped at 18:48 UTC and the 16:00
+ * UTC check reported it an hour before its first 17:00 run.
  */
 export function findMissedJobs(
   jobs: ReadonlyArray<CronJobLike>,
@@ -170,6 +189,10 @@ export function findMissedJobs(
       : null;
 
     if (hoursSince !== null && hoursSince <= expectation.maxGapHours) continue;
+    if (hoursSince === null) {
+      const deadline = neverRunDeadlineMs(job.addedOn, expectation.maxGapHours);
+      if (deadline !== null && nowMs < deadline) continue;
+    }
 
     misses.push({
       name: job.name,

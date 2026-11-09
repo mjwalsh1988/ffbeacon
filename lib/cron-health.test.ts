@@ -3,6 +3,7 @@ import {
   expectationFor,
   retentionDaysFor,
   findMissedJobs,
+  neverRunDeadlineMs,
   findFailingJobs,
   FREQUENT_FAILURE_STREAK,
   isStaleRunning,
@@ -124,6 +125,51 @@ describe("findMissedJobs", () => {
     ];
     const misses = findMissedJobs(withSelf, new Map(), AUG, new Set(["cron-health"]));
     expect(misses.map((m) => m.name)).not.toContain("cron-health");
+  });
+
+  describe("a job added recently that has not reached its first slot", () => {
+    // The 2026-11-09 false alarm: Long Shot generation shipped at about 7 PM
+    // UTC on Nov 8, and the 16:00 UTC check on Nov 9 reported it as never run
+    // an hour before its first 17:00 slot.
+    const longShot = {
+      name: "long-shot-generate",
+      label: "Long Shot puzzle generation",
+      schedule: "0 17 * * *",
+      addedOn: "2026-11-08",
+    };
+    const NOV9_CHECK = Date.parse("2026-11-09T16:00:00Z");
+
+    it("is not reported before a full gap has passed after the end of its day", () => {
+      expect(findMissedJobs([longShot], new Map(), NOV9_CHECK)).toEqual([]);
+    });
+
+    it("is reported the next day if it still has never run", () => {
+      const NOV10_CHECK = Date.parse("2026-11-10T16:00:00Z");
+      expect(findMissedJobs([longShot], new Map(), NOV10_CHECK).map((m) => m.name)).toEqual([
+        "long-shot-generate",
+      ]);
+    });
+
+    it("still reports a stale last run whatever its added date says", () => {
+      const last = new Map([["long-shot-generate", hoursAgo(NOV9_CHECK, 30)]]);
+      expect(findMissedJobs([longShot], last, NOV9_CHECK)).toHaveLength(1);
+    });
+
+    it("falls back to reporting at once when the date is unreadable", () => {
+      const bad = { ...longShot, addedOn: "Nov 8" };
+      expect(findMissedJobs([bad], new Map(), NOV9_CHECK)).toHaveLength(1);
+    });
+  });
+});
+
+describe("neverRunDeadlineMs", () => {
+  it("is the end of the added day plus the job's gap", () => {
+    expect(neverRunDeadlineMs("2026-11-08", 26)).toBe(Date.parse("2026-11-10T02:00:00Z"));
+  });
+
+  it("is null without a usable date", () => {
+    expect(neverRunDeadlineMs(undefined, 26)).toBeNull();
+    expect(neverRunDeadlineMs("2026-13-45", 26)).toBeNull();
   });
 });
 

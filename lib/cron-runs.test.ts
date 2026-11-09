@@ -82,6 +82,14 @@ describe("CRON_JOBS registry", () => {
     const names = CRON_JOBS.map((j) => j.name);
     expect(new Set(names).size).toBe(names.length);
   });
+
+  it("writes every addedOn as a real UTC date, or cron-health ignores it", () => {
+    for (const job of CRON_JOBS) {
+      if (job.addedOn === undefined) continue;
+      expect(job.addedOn, job.name).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(new Date(`${job.addedOn}T00:00:00Z`).toISOString().slice(0, 10), job.name).toBe(job.addedOn);
+    }
+  });
 });
 
 describe("failedStepsOf", () => {
