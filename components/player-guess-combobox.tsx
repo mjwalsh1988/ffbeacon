@@ -29,6 +29,8 @@ export interface SearchPlayerResult {
   position: string | null;
   team: string | null;
   sleeperId: string | null;
+  /** Shown in place of the team: a retired player's years and franchises (Long Shot history). */
+  note?: string;
 }
 
 export type SearchOutcome = { ok: true; results: SearchPlayerResult[] } | { ok: false; code: string };
@@ -314,7 +316,7 @@ export function PlayerGuessCombobox({
                     <span className="text-ink">{r.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
                       {r.position ?? "?"}
-                      {showTeam ? `, ${r.team ?? "FA"}` : ""}
+                      {r.note ? `, ${r.note}` : showTeam ? `, ${r.team ?? "FA"}` : ""}
                     </span>
                   </span>
                   {ruledOut && (

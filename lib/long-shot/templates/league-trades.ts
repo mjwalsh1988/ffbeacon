@@ -1,38 +1,43 @@
 /**
- * Family 7, league_trades (plan 7.2): a player traded in more than 25, 50 or
- * 100 of our leagues in the last 30 or 90 days, counted by the
- * long_shot_trade_counts RPC (service role only). Sleeper ids are mapped to
- * players.id through players.external_ids->>'sleeper'; unmapped ids drop.
+ * Family 7, league_trades (plan 7.2, 31.1): one of the 15 or 30 most traded
+ * players across our leagues in the last 30 or 90 days, counted by the
+ * long_shot_trade_counts RPC (service role only). Relative, not an absolute
+ * floor, so the set scales with how many leagues we hold. Sleeper ids are
+ * mapped to players.id through players.external_ids->>'sleeper'; unmapped
+ * ids drop.
  */
 
-import { pick } from "../random";
 import { ELIGIBLE_POSITIONS } from "../types";
-import { distinct } from "./shared";
+import { distinct, grid } from "./shared";
 import type { TemplateFamily } from "./types";
 
 const WINDOWS = [30, 90];
-const FLOORS = [25, 50, 100];
+const TOPS = [15, 30];
 const CHUNK = 200;
 
-/** Pure: Sleeper ids traded in more than `floor` leagues. */
-export function overFloor(rows: ReadonlyArray<{ sleeper_player_id: string; league_count: number }>, floor: number): string[] {
-  return rows.filter((r) => r.league_count > floor).map((r) => r.sleeper_player_id);
+/** Pure: the `top` most traded Sleeper ids, ties at the boundary included. */
+export function mostTraded(rows: ReadonlyArray<{ sleeper_player_id: string; league_count: number }>, top: number): string[] {
+  const sorted = rows.filter((r) => r.league_count > 0).slice().sort((a, b) => b.league_count - a.league_count);
+  const floor = sorted[top - 1]?.league_count;
+  if (floor === undefined) return sorted.map((r) => r.sleeper_player_id);
+  return sorted.filter((r) => r.league_count >= floor).map((r) => r.sleeper_player_id);
 }
 
 export const leagueTrades: TemplateFamily = {
   key: "league_trades",
   enabledByDefault: true,
-  draw(rng) {
-    return { days: pick(WINDOWS, rng), floor: pick(FLOORS, rng) };
+  source: "leagues",
+  draws(rng) {
+    return grid(rng, { days: WINDOWS, top: TOPS });
   },
   text(params) {
-    return `Name a player traded in more than ${Number(params.floor)} of our leagues in the last ${Number(params.days)} days.`;
+    return `Name one of the ${Number(params.top)} most traded players across our leagues in the last ${Number(params.days)} days.`;
   },
   async answers(admin, params, ctx) {
     const since = new Date(ctx.now.getTime() - Number(params.days) * 86_400_000).toISOString();
     const { data, error } = await admin.rpc("long_shot_trade_counts", { p_since: since });
     if (error) throw new Error(`league_trades rpc failed: ${error.message}`);
-    const sleeperIds = overFloor(data ?? [], Number(params.floor));
+    const sleeperIds = mostTraded(data ?? [], Number(params.top));
     const out: string[] = [];
     for (let i = 0; i < sleeperIds.length; i += CHUNK) {
       const chunk = sleeperIds.slice(i, i + CHUNK);

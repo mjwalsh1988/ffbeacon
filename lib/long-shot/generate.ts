@@ -1,5 +1,5 @@
 /**
- * Puzzle generation (plan 6 and 7).
+ * Puzzle generation (plan 6, 7 and 31.1).
  *
  * buildPuzzle is pure given an injected answers loader and pool, so it is unit
  * tested with fakes. generatePuzzle gathers the context, runs buildPuzzle,
@@ -7,37 +7,46 @@
  * ensurePuzzle is the ONE inline generation path, called only by the attempt
  * route; a page render or /state never generates.
  *
- * Selection: shuffle the enabled families, walk them, keep each draw whose
- * typeable answer set falls inside its bounds, until five prompts pass. Short
- * of five, keep drawing fresh parameterizations of any family (used or not)
- * until five pass or every family has been tried three times; then the puzzle
- * is written `short` with what passed. Zero passing prompts writes nothing.
- * A set over its maximum is never truncated: truncating would make a correct
- * answer wrong.
+ * Selection: shuffle the enabled families and walk them once. Each family
+ * lists its parameterizations in seeded random order; the walk skips a draw
+ * that ran in the last MEMORY_DAYS, a draw whose position the day already
+ * asks about, and a family whose SOURCE the day already reads, and keeps the
+ * first remaining draw whose typeable answer set falls inside the family's
+ * bounds, loading at most MAX_TRIES_PER_FAMILY sets per family. Five
+ * prompts are therefore five families, five sources and (where a prompt
+ * names one) five positions. A family repeats only when fewer than five are
+ * enabled. Short of five, the puzzle is written `short` with what passed;
+ * zero passing prompts writes nothing. A set over its maximum is never
+ * truncated: truncating would make a correct answer wrong.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { addDays } from "@/lib/game-date";
 import { currentNflSeason } from "@/lib/nfl-season";
 import { coalesce } from "@/lib/request-coalesce";
 import { getActiveFormats, getAvailableSources, pickDefaultSource } from "@/lib/source";
 import { findCompletedWeek, type CompletedWeekResult } from "./completed-week";
+import { historyIdPool, historyReady, loadHistoryProminence, loadLinkedProminence } from "./history/answers";
 import { mulberry32, seedFor, shuffle } from "./random";
 import { chooseRateSeason, loadRosterRates } from "./rates";
 import { intersectPool, longShotSearchPool } from "./search-pool";
 import { loadLongShotSettings } from "./settings";
 import { FAMILIES } from "./templates";
 import type { GenerationContext, TemplateFamily, TemplateParams } from "./templates/types";
-import { assignTiers } from "./tiers";
+import { assignTiersBanded } from "./tiers";
 import { STATS_FLOOR_SEASON, type AnswerEntry, type LongShotSettings, type TemplateKey } from "./types";
 
 type Client = SupabaseClient<Database>;
 
 export const PROMPTS_PER_DAY = 5;
-export const MAX_TRIES_PER_FAMILY = 3;
-export const MODEL_VERSION = 1;
+/** Answer sets loaded per family per day before it is given up on. */
+export const MAX_TRIES_PER_FAMILY = 4;
+/** A template plus parameters that ran inside this many days is not asked again. */
+export const MEMORY_DAYS = 21;
+export const MODEL_VERSION = 2;
 
-export type TryOutcome = "pass" | "too_few" | "too_many" | "skipped" | "duplicate" | "error";
+export type TryOutcome = "pass" | "too_few" | "too_many" | "skipped" | "recent" | "error";
 
 export interface TryLog {
   template_key: TemplateKey;
@@ -56,6 +65,12 @@ export interface CandidatePrompt {
 
 export type AnswersLoader = (family: TemplateFamily, params: TemplateParams) => Promise<string[]>;
 
+/** Pure: the memory key for a draw. Keys sorted, because jsonb reorders them. */
+export function paramsKey(templateKey: string, params: TemplateParams): string {
+  const sorted = Object.fromEntries(Object.keys(params).sort().map((k) => [k, params[k]]));
+  return `${templateKey}:${JSON.stringify(sorted)}`;
+}
+
 export async function buildPuzzle(
   ctx: GenerationContext,
   families: readonly TemplateFamily[],
@@ -66,62 +81,73 @@ export async function buildPuzzle(
 ): Promise<{ prompts: CandidatePrompt[]; log: TryLog[] }> {
   const enabled = families.filter((f) => settings.templates[f.key]?.enabled);
   const order = shuffle(enabled, rng);
-  const tries = new Map<TemplateKey, number>();
-  const exhausted = new Set<TemplateKey>();
-  const seen = new Set<string>();
+  const usedSources = new Set<string>();
+  const usedPositions = new Set<string>();
+  // Draws that passed today, so the repeat pass cannot ask the same prompt twice.
+  const usedKeys = new Set<string>();
   const prompts: CandidatePrompt[] = [];
   const log: TryLog[] = [];
 
-  async function attempt(family: TemplateFamily): Promise<void> {
-    tries.set(family.key, (tries.get(family.key) ?? 0) + 1);
-    if ((tries.get(family.key) ?? 0) >= MAX_TRIES_PER_FAMILY) exhausted.add(family.key);
-    const params = family.draw(rng, ctx);
-    if (!params) {
-      // A skip rule holds for the whole day; trying again cannot help.
-      exhausted.add(family.key);
+  async function tryFamily(family: TemplateFamily): Promise<boolean> {
+    if (usedSources.has(family.source)) {
+      log.push({ template_key: family.key, params: null, answer_count: null, outcome: "skipped", detail: "source already asked" });
+      return false;
+    }
+    const draws = family.draws(rng, ctx);
+    if (draws.length === 0) {
       log.push({ template_key: family.key, params: null, answer_count: null, outcome: "skipped" });
-      return;
+      return false;
     }
-    const dedupeKey = `${family.key}:${JSON.stringify(params)}`;
-    if (seen.has(dedupeKey)) {
-      log.push({ template_key: family.key, params, answer_count: null, outcome: "duplicate" });
-      return;
+    let tries = 0;
+    for (const params of draws) {
+      if (tries >= MAX_TRIES_PER_FAMILY) break;
+      const key = paramsKey(family.key, params);
+      if (usedKeys.has(key)) continue;
+      if (ctx.recentKeys.has(key)) {
+        log.push({ template_key: family.key, params, answer_count: null, outcome: "recent" });
+        continue;
+      }
+      const position = family.position?.(params) ?? null;
+      if (position && usedPositions.has(position)) continue;
+      tries++;
+      let ids: string[];
+      try {
+        ids = intersectPool(await answersLoader(family, params), pool);
+      } catch (err) {
+        log.push({
+          template_key: family.key,
+          params,
+          answer_count: null,
+          outcome: "error",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+      const bounds = settings.templates[family.key];
+      const outcome: TryOutcome =
+        ids.length < bounds.min_answers ? "too_few" : ids.length > bounds.max_answers ? "too_many" : "pass";
+      log.push({ template_key: family.key, params, answer_count: ids.length, outcome });
+      if (outcome === "pass") {
+        prompts.push({ template_key: family.key, prompt_text: family.text(params, ctx), params, playerIds: ids });
+        usedKeys.add(key);
+        usedSources.add(family.source);
+        if (position) usedPositions.add(position);
+        return true;
+      }
     }
-    seen.add(dedupeKey);
-    let ids: string[];
-    try {
-      ids = intersectPool(await answersLoader(family, params), pool);
-    } catch (err) {
-      log.push({
-        template_key: family.key,
-        params,
-        answer_count: null,
-        outcome: "error",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-      return;
-    }
-    const bounds = settings.templates[family.key];
-    const outcome: TryOutcome =
-      ids.length < bounds.min_answers ? "too_few" : ids.length > bounds.max_answers ? "too_many" : "pass";
-    log.push({ template_key: family.key, params, answer_count: ids.length, outcome });
-    if (outcome === "pass") {
-      prompts.push({ template_key: family.key, prompt_text: family.text(params, ctx), params, playerIds: ids });
-    }
+    return false;
   }
 
-  // Pass one: five distinct families.
   for (const family of order) {
     if (prompts.length >= PROMPTS_PER_DAY) break;
-    await attempt(family);
+    await tryFamily(family);
   }
-  // Fallback: fresh draws of any family until five pass or all are exhausted.
-  while (prompts.length < PROMPTS_PER_DAY) {
-    const open = order.filter((f) => !exhausted.has(f.key));
-    if (open.length === 0) break;
-    for (const family of open) {
+  // Only a small enabled set may repeat a family, and then with fresh draws.
+  if (prompts.length < PROMPTS_PER_DAY && enabled.length < PROMPTS_PER_DAY) {
+    for (const family of order) {
       if (prompts.length >= PROMPTS_PER_DAY) break;
-      await attempt(family);
+      usedSources.delete(family.source);
+      await tryFamily(family);
     }
   }
   return { prompts, log };
@@ -142,20 +168,35 @@ export interface GenerateResult {
   error?: string;
 }
 
+/** Every template plus parameters asked in the MEMORY_DAYS before the date. */
+export async function loadRecentKeys(admin: Client, gameDate: string): Promise<Set<string>> {
+  const { data, error } = await admin
+    .from("long_shot_prompts")
+    .select("template_key, params, long_shot_puzzles!inner(game_date)")
+    .gte("long_shot_puzzles.game_date", addDays(gameDate, -MEMORY_DAYS))
+    .lt("long_shot_puzzles.game_date", gameDate);
+  if (error) throw new Error(`recent prompts read failed: ${error.message}`);
+  return new Set((data ?? []).map((r) => paramsKey(r.template_key, (r.params ?? {}) as TemplateParams)));
+}
+
 /** Everything a generation reads before drawing. */
 export async function loadGenerationContext(
   admin: Client,
   settings: LongShotSettings,
+  gameDate: string,
+  modernPool: ReadonlySet<string>,
   now: Date = new Date(),
 ): Promise<{ ctx: GenerationContext; completed: CompletedWeekResult }> {
   const season = Number(currentNflSeason());
   const seasons: number[] = [];
   for (let s = STATS_FLOOR_SEASON; s <= season; s++) seasons.push(s);
-  const [completed, sources, formats, rateSeason] = await Promise.all([
+  const [completed, sources, formats, rateSeason, ready, recentKeys] = await Promise.all([
     findCompletedWeek(admin, season),
     getAvailableSources(admin),
     getActiveFormats(admin),
     chooseRateSeason(admin, settings.tiers.min_rate_leagues),
+    historyReady(admin),
+    loadRecentKeys(admin, gameDate),
   ]);
   const defaultSlug = pickDefaultSource(sources);
   const def = sources.find((s) => s.slug === defaultSlug) ?? null;
@@ -168,19 +209,24 @@ export async function loadGenerationContext(
     formats: formats.map((f) => ({ id: f.id, slug: f.slug, display_name: f.display_name })),
     rateSeason,
     now,
+    historyFloorSeason: settings.history.floor_season,
+    historyReady: ready,
+    recentKeys,
+    modernPool,
   };
   return { ctx, completed };
 }
 
-/** Pure: tier every candidate and report the share of rate-0 answers. */
+/** Pure: tier every candidate (bands first) and report the share of rate-0 answers. */
 export function tierCandidates(
   prompts: readonly CandidatePrompt[],
   rates: ReadonlyMap<string, number>,
   settings: LongShotSettings,
 ): { answers: AnswerEntry[][]; rateZeroShare: number[] } {
   const answers = prompts.map((p) =>
-    assignTiers(
+    assignTiersBanded(
       p.playerIds.map((id) => ({ player_id: id, rate: rates.get(id) ?? 0 })),
+      settings.tiers.bands,
       settings.tiers.cutoffs,
     ),
   );
@@ -207,10 +253,11 @@ export async function planPuzzle(
   settings: LongShotSettings,
   now: Date = new Date(),
 ): Promise<PlannedPuzzle> {
-  const [{ ctx, completed }, pool] = await Promise.all([
-    loadGenerationContext(admin, settings, now),
-    longShotSearchPool(admin),
-  ]);
+  const [modernPool, historyIds] = await Promise.all([longShotSearchPool(admin), historyIdPool(admin)]);
+  const { ctx, completed } = await loadGenerationContext(admin, settings, gameDate, modernPool, now);
+  // A history id is typeable because the search route returns it; see the id
+  // rule in lib/long-shot/history/answers.ts.
+  const pool = new Set<string>([...modernPool, ...historyIds]);
   const rng = mulberry32(seedFor(gameDate, salt));
   const { prompts, log } = await buildPuzzle(
     ctx,
@@ -222,6 +269,16 @@ export async function planPuzzle(
   );
   const allIds = Array.from(new Set(prompts.flatMap((p) => p.playerIds)));
   const rates = await loadRosterRates(admin, ctx.rateSeason, allIds);
+  // A historical answer's rate is its prominence; so is a modern-pool player's
+  // when nobody rosters him or he has no team (retired since 2020), because a
+  // roster rate of zero, or one stale league's, would make Gronkowski a Long
+  // Shot.
+  const unrated = allIds.filter((id) => !rates.has(id) && historyIds.has(id));
+  for (const [id, p] of await loadHistoryProminence(admin, unrated)) rates.set(id, p);
+  const thin = allIds.filter((id) => !historyIds.has(id) && (rates.get(id) ?? 0) < settings.tiers.bands.long_shot);
+  for (const [id, linked] of await loadLinkedProminence(admin, thin)) {
+    if (!linked.hasTeam || (rates.get(id) ?? 0) === 0) rates.set(id, linked.prominence);
+  }
   const { answers, rateZeroShare } = tierCandidates(prompts, rates, settings);
   return { prompts, answers, rateZeroShare, log, ctx, completed };
 }

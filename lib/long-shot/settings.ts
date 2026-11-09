@@ -53,6 +53,14 @@ export const longShotSettingsSchema = z.object({
     .default(d.timer),
   tiers: z
     .object({
+      bands: z
+        .object({
+          long_shot: share().default(d.tiers.bands.long_shot),
+          sleeper: share().default(d.tiers.bands.sleeper),
+          deep: share().default(d.tiers.bands.deep),
+          field: share().default(d.tiers.bands.field),
+        })
+        .default(d.tiers.bands),
       cutoffs: z
         .object({
           long_shot: share().default(d.tiers.cutoffs.long_shot),
@@ -90,6 +98,11 @@ export const longShotSettingsSchema = z.object({
     })
     .default(d.leaderboards),
   film_room_enabled: z.boolean().default(d.film_room_enabled),
+  history: z
+    .object({
+      floor_season: int(b.history_floor_season.min, b.history_floor_season.max).default(d.history.floor_season),
+    })
+    .default(d.history),
 });
 
 export type ValidateResult =
@@ -97,10 +110,15 @@ export type ValidateResult =
   | { ok: false; error: string };
 
 /** Cross-field rules the schema cannot express. Returns the first broken one. */
+const increasing = (c: LongShotSettings["tiers"]["cutoffs"]) =>
+  c.long_shot < c.sleeper && c.sleeper < c.deep && c.deep < c.field;
+
 function crossFieldError(s: LongShotSettings): string | null {
-  const c = s.tiers.cutoffs;
-  if (!(c.long_shot < c.sleeper && c.sleeper < c.deep && c.deep < c.field)) {
+  if (!increasing(s.tiers.cutoffs)) {
     return "tiers.cutoffs: must be strictly increasing (long_shot < sleeper < deep < field).";
+  }
+  if (!increasing(s.tiers.bands)) {
+    return "tiers.bands: must be strictly increasing (long_shot < sleeper < deep < field).";
   }
   for (let i = 1; i < TIERS.length; i++) {
     if (s.tiers.points[TIERS[i]] <= s.tiers.points[TIERS[i - 1]]) {
@@ -157,10 +175,13 @@ export function clampLongShotSettings(s: LongShotSettings): LongShotSettings {
     t.min_answers = clampNum(t.min_answers, b.min_answers.min, b.min_answers.max);
     t.max_answers = clampNum(Math.max(t.max_answers, t.min_answers), b.max_answers.min, b.max_answers.max);
   }
-  const c = out.tiers.cutoffs;
-  if (!(c.long_shot < c.sleeper && c.sleeper < c.deep && c.deep < c.field)) {
-    out.tiers.cutoffs = { ...d.tiers.cutoffs };
-  }
+  if (!increasing(out.tiers.cutoffs)) out.tiers.cutoffs = { ...d.tiers.cutoffs };
+  if (!increasing(out.tiers.bands)) out.tiers.bands = { ...d.tiers.bands };
+  out.history.floor_season = clampNum(
+    out.history.floor_season,
+    b.history_floor_season.min,
+    b.history_floor_season.max,
+  );
   for (let i = 1; i < TIERS.length; i++) {
     if (out.tiers.points[TIERS[i]] <= out.tiers.points[TIERS[i - 1]]) {
       out.tiers.points = { ...d.tiers.points };

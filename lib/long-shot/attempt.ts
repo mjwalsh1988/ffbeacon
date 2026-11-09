@@ -26,6 +26,7 @@ import type { Database } from "@/lib/database.types";
 import { addDays } from "@/lib/game-date";
 import { LongShotError } from "./errors";
 import { ensurePuzzle } from "./generate";
+import { playerIdExists } from "./history/answers";
 import { dailyRank, loadExclusionSet } from "./rank";
 import { scoreAnswer, sumPoints } from "./scoring";
 import { recordCompletion } from "./stats";
@@ -587,6 +588,11 @@ export async function submitAnswer(
     state = "answered";
     playerId = body.playerId;
     scored = scoreAnswer(prompt.answers, playerId, settings.tiers.points);
+    // A wrong answer is still a player. A well-formed uuid that is neither a
+    // players row nor a history row is a bad request, not a miss, and the
+    // prompt stays pending for a real answer. (The answer column has no
+    // foreign key since migration 0370, because either table may own the id.)
+    if (!scored.correct && !(await playerIdExists(admin, playerId!))) throw new LongShotError("invalid_request");
   }
 
   const { data: settled, error } = await admin
@@ -603,10 +609,6 @@ export async function submitAnswer(
     .eq("state", "pending")
     .select("id")
     .maybeSingle();
-  // A well-formed uuid that is not a player fails the foreign key. That is a
-  // bad request, not a server fault, and the prompt stays pending for a real
-  // answer.
-  if (error?.code === "23503") throw new LongShotError("invalid_request");
   fail("answer update failed", error);
   if (!settled) throw new LongShotError("stale_prompt");
 

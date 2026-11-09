@@ -55,6 +55,12 @@ export type EligiblePosition = (typeof ELIGIBLE_POSITIONS)[number];
 /** Oldest season player_stats holds; `seasons` runs from here to now. */
 export const STATS_FLOOR_SEASON = 2020;
 
+/** Oldest season the history pool's per-season stats hold (nflverse weekly stats). */
+export const HISTORY_STATS_FLOOR_SEASON = 1999;
+
+/** Oldest season the history pool's rosters hold. */
+export const HISTORY_ROSTER_FLOOR_SEASON = 1920;
+
 /**
  * Letters a reader must type before the player picker shows a match, in the
  * game and in the demo alike, and the floor the search route enforces. The
@@ -70,7 +76,14 @@ export type TemplateKey =
   | "market_rank"
   | "value_mover"
   | "waiver_wire"
-  | "league_trades";
+  | "league_trades"
+  | "franchise_era"
+  | "career_span"
+  | "draft_class"
+  | "college_path"
+  | "career_marks"
+  | "history_stat_line"
+  | "history_finish";
 
 export const TEMPLATE_KEYS: readonly TemplateKey[] = [
   "game_line",
@@ -80,7 +93,27 @@ export const TEMPLATE_KEYS: readonly TemplateKey[] = [
   "value_mover",
   "waiver_wire",
   "league_trades",
+  "franchise_era",
+  "career_span",
+  "draft_class",
+  "college_path",
+  "career_marks",
+  "history_stat_line",
+  "history_finish",
 ];
+
+/**
+ * The data a family reads. A day never asks two prompts from one source, so
+ * five prompts are five different kinds of question (plan 31.1).
+ */
+export type TemplateSource =
+  | "stat_lines"
+  | "finishes"
+  | "market"
+  | "leagues"
+  | "history_rosters"
+  | "history_careers"
+  | "history_stats";
 
 /** One entry of a prompt's frozen answer set (long_shot_prompts.answers). */
 export interface AnswerEntry {
@@ -109,6 +142,17 @@ export interface LongShotSettings {
   game_enabled: boolean;
   timer: { seconds: number; grace_seconds: number };
   tiers: {
+    /**
+     * Absolute roster-rate bands (plan 31.4): a rate under `long_shot` is a
+     * Long Shot, under `sleeper` a Sleeper, under `deep` Deep, under `field`
+     * Field, else Chalk. Decided per answer, so a top-50 asset can never be a
+     * Long Shot.
+     */
+    bands: TierCutoffs;
+    /**
+     * Within-set percentile cutoffs, used only to spread a set whose every
+     * answer landed in ONE band across that band and the next two rarer tiers.
+     */
     cutoffs: TierCutoffs;
     points: Record<Tier, number>;
     min_rate_leagues: number;
@@ -117,6 +161,8 @@ export interface LongShotSettings {
   templates: Record<TemplateKey, TemplateSettings>;
   leaderboards: { enabled: boolean; hide_admin_users: boolean };
   film_room_enabled: boolean;
+  /** The history families never ask about a season before this one. */
+  history: { floor_season: number };
 }
 
 /** One answered (or pending) prompt as the browser may see it. */

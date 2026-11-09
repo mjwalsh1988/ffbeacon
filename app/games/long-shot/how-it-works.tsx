@@ -15,7 +15,10 @@ export function HowItWorks({ settings, headingId = "ls-how-it-works" }: { settin
       <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-ink-muted">
         <li>Five prompts, the same for everyone, new every day at midnight Eastern.</li>
         <li>Name one player who fits each prompt. In Hurry-Up you have {settings.timer.seconds} seconds.</li>
-        <li>The fewer of our leagues roster your answer, the more it scores.</li>
+        <li>
+          The fewer of our leagues roster your answer, the more it scores. A retired player scores by how well known he
+          is: the longer the career and the more honors, the fewer the points.
+        </li>
       </ol>
       <ul className="mt-4 space-y-2" aria-label="Tiers and points">
         {[...TIERS].reverse().map((t) => (
@@ -34,6 +37,16 @@ export function HowItWorks({ settings, headingId = "ls-how-it-works" }: { settin
           </span>
         </li>
       </ul>
+      <p className="mt-4 text-xs text-ink-subtle">
+        Historical rosters, draft and stat data from{" "}
+        <a
+          href="https://github.com/nflverse/nflverse-data"
+          className="underline underline-offset-2 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          nflverse
+        </a>
+        , CC BY 4.0.
+      </p>
     </section>
   );
 }

@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { readSleeperId } from "@/lib/ranking-boards";
+import { loadHistoryInfo } from "./history/answers";
 import type { AnswerEntry, MostGivenDto } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -72,6 +73,14 @@ export async function loadPlayerInfo(admin: Client, ids: readonly string[]): Pro
         sleeperId: readSleeperId(p.external_ids as Record<string, unknown> | null),
         teamCode: p.team ?? null,
       });
+    }
+  }
+  // An id the players table does not know is a history pool id (a retired
+  // player), named from history_players with no profile, headshot or team.
+  const missing = unique.filter((id) => !out.has(id));
+  if (missing.length > 0) {
+    for (const [id, info] of await loadHistoryInfo(admin, missing)) {
+      out.set(id, { name: info.name, slug: null, sleeperId: null, teamCode: null });
     }
   }
   return out;

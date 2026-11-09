@@ -17,6 +17,8 @@
     "test:watch": "vitest",
     "check:routes": "tsx scripts/check-reserved-routes.ts",
     "sync:players": "tsx --env-file=.env.local scripts/sync-sleeper-players.ts",
+    "sync:nfl-history": "tsx --env-file=.env.local scripts/sync-nfl-history.ts",
+    "long-shot:generate": "tsx --env-file=.env.local scripts/long-shot-generate.ts",
     "pulse:league": "tsx --env-file=.env.local scripts/pulse-league.ts",
     "relay:preview": "tsx --tsconfig tsconfig.scripts.json --env-file=.env.local scripts/relay-preview.ts",
     "relay:run": "tsx --tsconfig tsconfig.scripts.json --env-file=.env.local scripts/relay-run.ts",

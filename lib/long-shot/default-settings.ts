@@ -15,12 +15,20 @@ const templates = {
   value_mover: { ...TEMPLATE_DEFAULT },
   waiver_wire: { ...TEMPLATE_DEFAULT },
   league_trades: { ...TEMPLATE_DEFAULT },
+  franchise_era: { ...TEMPLATE_DEFAULT },
+  career_span: { ...TEMPLATE_DEFAULT },
+  draft_class: { ...TEMPLATE_DEFAULT },
+  college_path: { ...TEMPLATE_DEFAULT },
+  career_marks: { ...TEMPLATE_DEFAULT },
+  history_stat_line: { ...TEMPLATE_DEFAULT },
+  history_finish: { ...TEMPLATE_DEFAULT },
 } satisfies Record<TemplateKey, TemplateSettings>;
 
 export const DEFAULT_LONG_SHOT_SETTINGS: LongShotSettings = {
   game_enabled: true,
   timer: { seconds: 30, grace_seconds: 2 },
   tiers: {
+    bands: { long_shot: 0.02, sleeper: 0.1, deep: 0.3, field: 0.6 },
     cutoffs: { long_shot: 0.1, sleeper: 0.25, deep: 0.5, field: 0.75 },
     points: { chalk: 10, field: 30, deep: 60, sleeper: 85, long_shot: 100 },
     min_rate_leagues: 50,
@@ -29,6 +37,7 @@ export const DEFAULT_LONG_SHOT_SETTINGS: LongShotSettings = {
   templates,
   leaderboards: { enabled: true, hide_admin_users: true },
   film_room_enabled: true,
+  history: { floor_season: 1950 },
 };
 
 /** Clamp ranges, shown in the admin form's help text and enforced on save. */
@@ -41,4 +50,5 @@ export const LONG_SHOT_SETTING_BOUNDS = {
   bonus_points: { min: 0, max: 500 },
   min_answers: { min: 3, max: 200 },
   max_answers: { min: 3, max: 500 },
+  history_floor_season: { min: 1920, max: 2000 },
 } as const;

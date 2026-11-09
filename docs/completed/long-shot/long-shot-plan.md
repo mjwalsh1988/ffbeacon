@@ -2292,3 +2292,124 @@ of behavior. Each departure below supersedes the section it names.
 - 18A.1: the marker flight effect keyed on the flight object, which the
   result panel rebuilt on every count-up frame, so the flight restarted for
   the whole count-up; it keys on a string now.
+
+---
+
+## 31. Question variety, two-board market questions, banded scoring and the history pool (2026-11-08, LS-T065)
+
+The owner played the 2026-11-08 puzzle and found it repetitive: two season
+finishes, two board questions and a game line. The dry run showed why. Four
+of the seven families failed their 8-to-60 bounds with the parameters they
+could draw (league_trades at a floor of 100 leagues produced 3 answers,
+opponent_line 6, waiver_wire 2, value_mover 177), each got three random tries,
+and the fallback refilled from the three families that passed. The owner also
+asked for questions a reader cannot answer from a rankings page open in
+another tab, for historical players, and for an account of how points are
+decided. Each subsection below supersedes the section it names.
+
+### 31.1 Generation (supersedes 7.2 selection)
+
+- A family lists every parameterization it can run today (`draws`, in
+  seeded random order, capped at `MAX_DRAWS` 16) and declares a `source` (the
+  data it reads: stat_lines, finishes, market, leagues, history_rosters,
+  history_careers, history_stats) and the position a draw names.
+- The generator shuffles the enabled families and walks them once. For each
+  it skips a draw asked in the last `MEMORY_DAYS` (21; the memory key sorts
+  parameter names because jsonb reorders them), a draw naming a position the
+  day already asks about, and a family whose source the day already reads,
+  and keeps the first remaining draw whose typeable answer set fits the
+  bounds, loading at most `MAX_TRIES_PER_FAMILY` (4) sets per family. A family
+  repeats only when fewer than five are enabled; otherwise the day goes
+  `short`.
+- opponent_line unions seasons ("against the Texans in any season since
+  2020") beside the single-season form. waiver_wire spans one, two or three
+  completed weeks with floors 10, 12, 15 and 20. value_mover asks 10 or 15
+  percent and can name a position. league_trades is relative: one of the 15
+  or 30 most traded players, ties at the boundary included.
+
+### 31.2 Market questions (supersedes family 4)
+
+A market_rank prompt always spans two of the default source's boards, which
+no single page shows: inside the top 40 or 60 on board A and at least 15, 25
+or 40 spots lower on board B (gap), or inside the top 40 or 60 on A but
+outside the top 80 or 120 on B (difference). Fewer than two supported formats
+skips the family for the day.
+
+### 31.3 The history pool and seven families
+
+- Source: the nflverse data releases (CC BY 4.0; github.com/nflverse/
+  nflverse-data): season rosters 1920 to the present, the players master
+  file, draft picks 1980 to the present (round, pick, team, Hall of Fame, Pro
+  Bowl and All-Pro counts) and weekly player stats 1999 to the present. Pro
+  Football Reference was ruled out: its terms forbid scraping and tool
+  building and quote a 5,000 dollar minimum for data. The game page carries
+  the attribution line.
+- Tables (migration 0370, service role only): `history_players` (one row per
+  person, keyed `gsis:<id>` or `name:<normalized name>|<birth date>`, with
+  positions, first and last season, franchises, draft slot, honors, 1999-on
+  career totals and `prominence`), `history_player_seasons` (one row per
+  person, season and team with the source row in `metadata`) and
+  `history_player_season_stats` (per-season sums, single-game maxes, PPR
+  points and a positional PPR finish). `lib/long-shot/history/franchises.ts`
+  reads a team code with its season, so BAL is the Colts before 1984 and the
+  Ravens from 1996.
+- Sync: `scripts/sync-nfl-history.ts` (`npm run sync:nfl-history`), run once
+  and then yearly, never scheduled. It merges a name-keyed 1980s person into
+  the id-keyed person of the same name and birth date, links to our players
+  table by Sleeper id then name plus birth date, flags Hall of Famers from
+  the draft file plus one Wikidata query (a failed request leaves the draft
+  flags), and computes prominence.
+- The id rule (`lib/long-shot/history/answers.ts`): a person linked to a
+  players row in the modern pool answers under that players.id; everyone
+  else under their history_players.id. The search route falls through to the
+  history pool with the same rule after the modern results, and the picker
+  shows a retired player's years and franchises in place of a team.
+  `long_shot_answers.player_id` and the tallies lose their players foreign
+  key; the engine checks an id exists in either table before recording a
+  wrong answer.
+- Families: franchise_era (position, franchise, decade), career_span
+  (position, decade of the first season, at least 8, 10 or 12 seasons),
+  draft_class (position and round in a decade, or first round by a franchise
+  since a year), college_path (24 programs, position, played in or after a
+  year), career_marks (Hall of Fame or Pro Bowl counts, "drafted in 1980 or
+  later"; career totals "since 1999"), history_stat_line (season totals and
+  single-game highs in 1999 to 2009 or 2010 to 2019), history_finish (top 3,
+  5 or 12 PPR finish in those windows). Roster questions ask the positions
+  the era's rosters hold: QB and RB from 1920, WR from 1950, TE from 1960.
+  The three families that filter a per-season position also require a
+  career position of QB, RB, WR or TE, so every answer is one the typeahead
+  returns. `settings.history.floor_season` (default 1950, 1920 to 2000) is
+  the oldest season any history family asks about; an empty pool skips every
+  history family.
+- Reviewer findings (one sub-agent, all fixed): the repeat pass could ask
+  the same draw twice on one day (a same-day key set now); the history
+  search cut its window before excluding linked modern people (paged until
+  the limit is met); the players master writes draft teams in present-day
+  codes while the draft file uses era codes (era read first, then
+  `franchiseForModernCode`); a person known only from the stats file had no
+  position (master fields and a stats position fallback); the Wikidata Hall
+  of Fame match accepted a candidate with no birth date and any inductee
+  (players only, birth year required); a 1990s window said "the Titans" for
+  the Oilers years (both names when a window straddles 1997); the draft team
+  form promised any position but answered the four; a linked player with one
+  stale league's roster was a Long Shot (prominence whenever the players row
+  has no team).
+
+### 31.4 Scoring (supersedes 7.5 tiering)
+
+- How points were decided before this build: each answer's rate was
+  `redraft_rostered / redraft_total` from the qualifying `player_roster_rates`
+  season; the set was sorted by rate and position i of n gave p = i / n, with
+  p under 0.10 Long Shot, 0.25 Sleeper, 0.50 Deep, 0.75 Field, else Chalk. The
+  tiers were relative to the other correct answers, so the five
+  least-rostered of a top-50 board scored 100 and exactly two or three of any
+  24-answer set were Long Shots whatever their rate.
+- Now: bands first. `settings.tiers.bands` are absolute rates (under 0.02
+  Long Shot, 0.10 Sleeper, 0.30 Deep, 0.60 Field, else Chalk) read per answer.
+  Only a set whose every answer lands in one band is spread by the within-set
+  percentile (`tiers.cutoffs`) across that band and the next two rarer tiers,
+  so a top-50 board still rewards its least-rostered names with Deep as the
+  ceiling. A historical answer's rate is its `prominence` (Hall of Fame 0.95;
+  otherwise seasons played 35 percent, Pro Bowls 30, All-Pro 20, first-round
+  pedigree 10, games 10), read through the same bands. The Lone Signal bonus
+  is unchanged. Tiers stay frozen on the prompt row.

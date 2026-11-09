@@ -1548,8 +1548,10 @@ Everyone gets the same five prompts each Eastern day ("Name a running back
 with 100 or more rushing yards and a touchdown in one game this season"), each
 with many correct answers computed from our own tables when the day is built.
 A correct answer scores by how few of our redraft leagues roster him: Chalk 10,
-Field 30, Deep 60, Sleeper 85, Long Shot 100. Plan of record:
-`docs/completed/long-shot/long-shot-plan.md`.
+Field 30, Deep 60, Sleeper 85, Long Shot 100. Half the question families
+reach back through a history pool of every NFL roster since 1920 (section 31
+of the plan), so a day can ask who played for the Raiders in the 1970s. Plan
+of record: `docs/completed/long-shot/long-shot-plan.md`.
 
 ABSOLUTE RULE: two modes, and only one is tracked. Hurry-Up (`hurry_up`) is
 timed, the default, one per user per game date (a partial unique index), and
@@ -1602,13 +1604,56 @@ Generation: `/api/cron/long-shot-generate` at 17:00 UTC builds tomorrow (and a
 missing today). Inline generation runs ONLY inside POST
 `/api/games/long-shot/attempt` (`maxDuration = 60`), coalesced per date, and a
 23505 on `game_date` means someone else built it. Never generate in a page
-render or `/state`. Seven template families, five distinct a day; each answer
-set is intersected with `lib/long-shot/search-pool.ts` (every QB, RB, WR or TE
-with a stat line since 2020, so retired players can be typed) BEFORE its
-8-to-60 bounds are checked, and a set over its maximum is redrawn, never
-truncated. Tiers are frozen on the prompt row by roster-rate percentile.
+render or `/state`. Fourteen template families (`lib/long-shot/templates/`),
+each declaring a SOURCE (the data it reads) and the position a draw names.
 `scripts/long-shot-dry-run.ts --date YYYY-MM-DD [--salt N]` prints a day
-without writing.
+without writing; `npm run long-shot:generate -- --date YYYY-MM-DD [--replace]`
+writes one.
+
+ABSOLUTE RULE: five prompts are five families, five sources and (where a
+prompt names one) five positions, and a template plus parameters that ran in
+the last 21 days (`MEMORY_DAYS`) is not asked again. A family lists every
+parameterization it can run today (`draws`, seeded order) and the generator
+keeps the first whose typeable answer set fits the family's 8-to-60 bounds,
+loading at most four sets per family, so a family fails only when NO
+parameterization fits. A family repeats only when fewer than five are
+enabled; otherwise the day goes `short`. Never go back to "three random tries
+and refill from whatever passed": that is how a day became three season
+finishes and two board questions. Every answer set is intersected with the
+typeable pool (`lib/long-shot/search-pool.ts` plus every history id) BEFORE
+its bounds are checked, and a set over its maximum is redrawn, never
+truncated. A market question always spans TWO boards (a gap or a difference
+between formats), never one page a reader could open beside the game.
+
+Scoring: BANDS FIRST (`lib/long-shot/tiers.ts assignTiersBanded`). Each
+answer takes the tier of the absolute roster-rate band it falls in
+(`settings.tiers.bands`: under 2 percent Long Shot, 10 Sleeper, 30 Deep, 60
+Field, else Chalk), so a player rostered everywhere is never a Long Shot
+however elite the company on the prompt. Only a set whose every answer lands
+in ONE band is spread by within-set percentile (`tiers.cutoffs`), across that
+band and the next two rarer tiers. A historical player's "rate" is his
+`prominence` (seasons, Pro Bowls, All-Pro, Hall of Fame, draft round, games;
+`lib/long-shot/history/prominence.ts`), read through the same bands. Tiers
+stay frozen on the prompt row.
+
+History pool: `history_players`, `history_player_seasons` and
+`history_player_season_stats` (migration 0370, service role only), filled by
+`npm run sync:nfl-history` from the nflverse data releases (CC BY 4.0; rosters
+1920 on, players, draft picks 1980 on, weekly stats 1999 on aggregated per
+season). Run it once and then yearly; it is never scheduled. The game page
+carries the attribution line. `lib/long-shot/history/franchises.ts` maps every
+era's team code to its modern franchise WITH the season (BAL is the Colts
+before 1984 and the Ravens from 1996). The ID RULE (`history/answers.ts`): a
+person linked to a players row that is in the modern pool answers under that
+players.id; everyone else under their history_players.id; the search route
+and every history family apply the same rule, so the id a reader can pick is
+the id the prompt holds. `long_shot_answers.player_id` and the tallies have
+NO foreign key since 0370 (either table may own the id); the engine checks an
+id exists before recording a wrong answer. Roster questions ask the positions
+the era's rosters hold (QB and RB from 1920, WR from 1950, TE from 1960);
+honors questions say "drafted in 1980 or later" and totals say "since 1999",
+because that is exactly what the data proves. `settings.history.floor_season` (1950) is the
+oldest season any history family asks about.
 
 Settlement: `/api/cron/long-shot-settle` at 05:30 UTC settles every unsettled
 day up to yesterday, oldest first. Active Hurry-Ups are abandoned and their
@@ -1640,7 +1685,9 @@ tomorrow's puzzle, never today's.
 
 Module map (lib/long-shot/): `types.ts` (shapes and the rules header),
 `settings.ts`, `default-settings.ts`, `random.ts`, `tiers.ts`, `rates.ts`,
-`completed-week.ts`, `search-pool.ts`, `templates/` (one family per file),
+`completed-week.ts`, `search-pool.ts`, `templates/` (one family per file,
+`shared.ts` and `history-shared.ts` for the draw and paging helpers),
+`history/` (`franchises.ts`, `prominence.ts`, `answers.ts`, `csv.ts`),
 `generate.ts` (`buildPuzzle` pure, `planPuzzle`, `generatePuzzle`,
 `ensurePuzzle`), `attempt.ts` (the engine), `timer.ts`, `scoring.ts`,
 `tallies.ts`, `stats.ts`, `streaks.ts`, `settle-math.ts` (pure) and `settle.ts`,

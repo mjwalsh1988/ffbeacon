@@ -16,6 +16,10 @@ export function fakeCtx(overrides: Partial<GenerationContext> = {}): GenerationC
     ],
     rateSeason: 2026,
     now: new Date("2026-11-08T17:00:00Z"),
+    historyFloorSeason: 1950,
+    historyReady: true,
+    recentKeys: new Set(),
+    modernPool: new Set(),
     ...overrides,
   };
 }

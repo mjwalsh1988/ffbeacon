@@ -1,32 +1,68 @@
 /**
- * Helpers shared by the template families. The season draw and phrase are
- * here so families 1 and 2 cannot disagree about what "the current season"
- * means.
+ * Helpers shared by the template families. The season list and phrase are
+ * here so the stat families cannot disagree about what "the current season"
+ * means, and the draw helpers are here so every family lists its
+ * parameterizations the same way (plan 31.1).
  */
 
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { pick } from "../random";
-import type { Client, GenerationContext } from "./types";
+import { pick, shuffle } from "../random";
+import type { Client, GenerationContext, TemplateParams } from "./types";
+
+/** Most draws a family offers generate.ts for one day. */
+export const MAX_DRAWS = 16;
 
 /** Prior seasons only: every season but the current one. */
 export function priorSeasons(ctx: GenerationContext): number[] {
   return ctx.seasons.filter((s) => s !== ctx.season);
 }
 
-/**
- * 50 percent the current season when it has a completed week, 50 percent
- * uniform over prior seasons; with no completed week, uniform over prior.
- */
-export function drawStatSeason(rng: () => number, ctx: GenerationContext): number {
+/** Seasons a stat family may ask about: prior seasons, plus the current one once it has a completed week. */
+export function statSeasons(ctx: GenerationContext): number[] {
   const prior = priorSeasons(ctx);
-  const currentEligible = ctx.completedWeek !== null;
-  if (prior.length === 0) return ctx.season;
-  if (currentEligible && rng() < 0.5) return ctx.season;
-  return pick(prior, rng);
+  return ctx.completedWeek !== null ? [...prior, ctx.season] : prior;
 }
 
 export function seasonPhrase(season: number, ctx: GenerationContext): string {
   return season === ctx.season ? "in the current season" : `in the ${season} season`;
+}
+
+/** Every combination of the option lists, in seeded random order, capped. */
+export function grid(rng: () => number, options: Record<string, readonly (string | number | boolean)[]>): TemplateParams[] {
+  let combos: TemplateParams[] = [{}];
+  for (const [key, values] of Object.entries(options)) {
+    const next: TemplateParams[] = [];
+    for (const c of combos) for (const v of values) next.push({ ...c, [key]: v });
+    combos = next;
+  }
+  return shuffle(combos, rng).slice(0, MAX_DRAWS);
+}
+
+/** An already built list of parameterizations, in seeded random order, capped. */
+export function shuffleParams(rng: () => number, all: readonly TemplateParams[]): TemplateParams[] {
+  return shuffle(all, rng).slice(0, MAX_DRAWS);
+}
+
+/** `count` distinct random draws from a generator, for grids too large to enumerate. */
+export function sampleDraws(rng: () => number, count: number, draw: () => TemplateParams): TemplateParams[] {
+  const seen = new Set<string>();
+  const out: TemplateParams[] = [];
+  for (let i = 0; i < count * 4 && out.length < count; i++) {
+    const p = draw();
+    const key = JSON.stringify(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
+export { pick };
+
+/** The position a draw names, or null for "any player". */
+export function positionOf(params: TemplateParams): string | null {
+  const p = params.position;
+  return typeof p === "string" && p !== "any" ? p : null;
 }
 
 /** Distinct, in first-seen order. */
@@ -74,4 +110,14 @@ export async function statLinePlayers(
     }>;
   });
   return distinct(rows.map((r) => r.player_id));
+}
+
+/** The same line over several seasons, unioned. */
+export async function statLinePlayersAcross(
+  admin: Client,
+  seasons: readonly number[],
+  opts: { position: string; all: StatFilter[]; any?: StatFilter[]; opponent?: string },
+): Promise<string[]> {
+  const sets = await Promise.all(seasons.map((season) => statLinePlayers(admin, { ...opts, season })));
+  return distinct(sets.flat());
 }

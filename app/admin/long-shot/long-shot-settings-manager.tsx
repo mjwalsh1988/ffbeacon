@@ -133,12 +133,32 @@ export function LongShotSettingsManager({ initialSettings }: { initialSettings: 
       </fieldset>
 
       <fieldset className="grid gap-4 rounded-card border border-line p-4 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold text-ink">History pool</legend>
+        <NumberField
+          label="Oldest season asked about"
+          help={`${B.history_floor_season.min} to ${B.history_floor_season.max}. The history families never ask about a season before this one. Rosters hold 1920 on; stats hold 1999 on.`}
+          value={s.history.floor_season}
+          onChange={(v) => set((d) => void (d.history.floor_season = v))}
+        />
+      </fieldset>
+
+      <fieldset className="grid gap-4 rounded-card border border-line p-4 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold text-ink">Tiers</legend>
         {(["long_shot", "sleeper", "deep", "field"] as const).map((k) => (
           <NumberField
+            key={`band-${k}`}
+            label={`${TIER_WORDS[k]} band`}
+            help="Absolute roster rate (or prominence) under which an answer is this tier. Strictly increasing from Long Shot to Field; at or over the Field band is Chalk."
+            step={0.01}
+            value={s.tiers.bands[k]}
+            onChange={(v) => set((d) => void (d.tiers.bands[k] = v))}
+          />
+        ))}
+        {(["long_shot", "sleeper", "deep", "field"] as const).map((k) => (
+          <NumberField
             key={k}
-            label={`${TIER_WORDS[k]} cutoff`}
-            help="A share between 0 and 1, strictly increasing from Long Shot to Field."
+            label={`${TIER_WORDS[k]} spread cutoff`}
+            help="Within-set percentile, used only to spread a set whose every answer landed in one band. Strictly increasing from Long Shot to Field."
             step={0.01}
             value={s.tiers.cutoffs[k]}
             onChange={(v) => set((d) => void (d.tiers.cutoffs[k] = v))}

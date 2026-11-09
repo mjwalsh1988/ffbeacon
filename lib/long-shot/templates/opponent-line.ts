@@ -1,16 +1,29 @@
 /**
- * Family 2, opponent_line (plan 7.2): a game line against one opponent in one
- * season. Rows with a null opponent never match the equality filter.
+ * Family 2, opponent_line (plan 7.2, 31.1): a game line against one opponent,
+ * in one season or in any season since 2020. One team in one season at one
+ * position rarely clears eight answers, so the union form carries most days.
+ * Rows with a null opponent never match the equality filter.
  */
 
 import { NFL_TEAMS, nflTeamName } from "@/lib/nfl-teams";
 import { positionNoun } from "@/lib/site";
-import { pick } from "../random";
-import { drawStatSeason, seasonPhrase, statLinePlayers, type StatFilter } from "./shared";
+import { STATS_FLOOR_SEASON } from "../types";
+import {
+  MAX_DRAWS,
+  pick,
+  positionOf,
+  sampleDraws,
+  seasonPhrase,
+  statLinePlayersAcross,
+  statSeasons,
+  type StatFilter,
+} from "./shared";
 import type { TemplateFamily, TemplateParams } from "./types";
 
 type Pos = "RB" | "WR" | "TE";
 const POSITIONS: Pos[] = ["RB", "WR", "TE"];
+/** 0 means every season since the floor. */
+const ALL_SEASONS = 0;
 
 interface OpponentThreshold {
   id: string;
@@ -53,22 +66,33 @@ function threshold(params: TemplateParams): OpponentThreshold {
 export const opponentLine: TemplateFamily = {
   key: "opponent_line",
   enabledByDefault: true,
-  draw(rng, ctx) {
-    const position = pick(POSITIONS, rng);
-    const opponent = pick(NFL_TEAMS, rng).code;
-    const season = drawStatSeason(rng, ctx);
-    const t = pick(OPPONENT_THRESHOLDS[position], rng);
-    return { position, opponent, season, threshold: t.id };
+  source: "stat_lines",
+  draws(rng, ctx) {
+    const seasons = [ALL_SEASONS, ALL_SEASONS, ...statSeasons(ctx)];
+    return sampleDraws(rng, MAX_DRAWS, () => {
+      const position = pick(POSITIONS, rng);
+      return {
+        position,
+        opponent: pick(NFL_TEAMS, rng).code,
+        season: pick(seasons, rng),
+        threshold: pick(OPPONENT_THRESHOLDS[position], rng).id,
+      };
+    });
   },
+  position: positionOf,
   text(params, ctx) {
     const t = threshold(params);
     const team = nflTeamName(String(params.opponent)) ?? String(params.opponent);
-    return `Name a ${positionNoun(String(params.position))} who ${t.phrase} against the ${team} ${seasonPhrase(Number(params.season), ctx)}.`;
+    const when =
+      Number(params.season) === ALL_SEASONS
+        ? `in any season since ${STATS_FLOOR_SEASON}`
+        : seasonPhrase(Number(params.season), ctx);
+    return `Name a ${positionNoun(String(params.position))} who ${t.phrase} against the ${team} ${when}.`;
   },
-  answers(admin, params) {
+  answers(admin, params, ctx) {
     const t = threshold(params);
-    return statLinePlayers(admin, {
-      season: Number(params.season),
+    const seasons = Number(params.season) === ALL_SEASONS ? statSeasons(ctx) : [Number(params.season)];
+    return statLinePlayersAcross(admin, seasons, {
       position: String(params.position),
       all: t.all,
       any: t.any,

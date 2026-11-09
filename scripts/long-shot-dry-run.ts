@@ -39,6 +39,9 @@ async function main() {
   );
   console.log(`Roster-rate season: ${plan.ctx.rateSeason ?? "none (every rate is 0)"}`);
   console.log(`Default source: ${plan.ctx.defaultSource?.display ?? "none"}`);
+  console.log(
+    `History pool: ${plan.ctx.historyReady ? `synced, floor ${plan.ctx.historyFloorSeason}` : "EMPTY (run npm run sync:nfl-history)"}; ${plan.ctx.recentKeys.size} recent draws excluded`,
+  );
   console.log("");
   console.log("Tries:");
   for (const t of plan.log) {

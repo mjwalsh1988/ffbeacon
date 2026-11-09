@@ -1,5 +1,6 @@
 import { searchFantasyPlayers } from "@/lib/player-search";
 import { readSleeperId } from "@/lib/ranking-boards";
+import { searchHistoryPlayers } from "@/lib/long-shot/history/answers";
 import { claim, errorJson, guardRequest, handleRouteError, privateJson } from "@/lib/long-shot/route-helpers";
 import { longShotSearchPool } from "@/lib/long-shot/search-pool";
 import { ELIGIBLE_POSITIONS, SEARCH_MIN_LENGTH } from "@/lib/long-shot/types";
@@ -15,12 +16,13 @@ const MIN_QUERY_LENGTH = SEARCH_MIN_LENGTH;
 const RESULT_CAP = 8;
 
 /**
- * GET /api/games/long-shot/search?q= (plan 17.5)
+ * GET /api/games/long-shot/search?q= (plan 17.5 and 31.3)
  *
  * The Signal Scout search route's hardening, but signed-in only (the demo
- * never calls it) and drawn from the Long Shot pool: every QB, RB, WR or TE
- * with a stat line since 2020, so a retired player who answers a historical
- * prompt can be typed. Round-independent public player data only.
+ * never calls it) and drawn from two pools: every QB, RB, WR or TE with a
+ * stat line since 2020, then the history pool (lib/long-shot/history) for
+ * everyone else back to 1920, under the id rule in history/answers.ts.
+ * Round-independent public player data only.
  */
 export async function GET(req: Request) {
   const g = await guardRequest(req);
@@ -47,6 +49,10 @@ export async function GET(req: Request) {
       team: r.team,
       sleeperId: readSleeperId(r.external_ids as Record<string, unknown> | null),
     }));
+    if (results.length < RESULT_CAP) {
+      const history = await searchHistoryPlayers(g.admin, query, RESULT_CAP - results.length, pool);
+      results.push(...history);
+    }
     return privateJson({ results });
   } catch (err) {
     return handleRouteError(err, "search");

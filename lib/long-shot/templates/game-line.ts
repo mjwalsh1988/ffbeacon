@@ -4,8 +4,8 @@
  */
 
 import { positionNoun } from "@/lib/site";
-import { pick } from "../random";
-import { drawStatSeason, seasonPhrase, statLinePlayers, type StatFilter } from "./shared";
+import { shuffle } from "../random";
+import { MAX_DRAWS, positionOf, seasonPhrase, statLinePlayers, statSeasons, type StatFilter } from "./shared";
 import type { TemplateFamily, TemplateParams } from "./types";
 
 export interface GameLineThreshold {
@@ -71,12 +71,15 @@ function threshold(params: TemplateParams): GameLineThreshold {
 export const gameLine: TemplateFamily = {
   key: "game_line",
   enabledByDefault: true,
-  draw(rng, ctx) {
-    const position = pick(POSITIONS, rng);
-    const season = drawStatSeason(rng, ctx);
-    const t = pick(GAME_LINE_THRESHOLDS[position], rng);
-    return { position, season, threshold: t.id };
+  source: "stat_lines",
+  draws(rng, ctx) {
+    const all: TemplateParams[] = [];
+    for (const position of POSITIONS)
+      for (const season of statSeasons(ctx))
+        for (const t of GAME_LINE_THRESHOLDS[position]) all.push({ position, season, threshold: t.id });
+    return shuffle(all, rng).slice(0, MAX_DRAWS);
   },
+  position: positionOf,
   text(params, ctx) {
     const t = threshold(params);
     return `Name a ${positionNoun(String(params.position))} who had ${t.phrase} in one game ${seasonPhrase(Number(params.season), ctx)}.`;

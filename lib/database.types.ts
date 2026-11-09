@@ -2155,6 +2155,249 @@ export type Database = {
           },
         ];
       };
+      history_player_season_stats: {
+        Row: {
+          games: number;
+          history_player_id: string;
+          max_pass_td: number;
+          max_pass_yd: number;
+          max_rec: number;
+          max_rec_td: number;
+          max_rec_yd: number;
+          max_rush_td: number;
+          max_rush_yd: number;
+          pass_td: number;
+          pass_yd: number;
+          position: string | null;
+          ppr_finish: number | null;
+          ppr_points: number;
+          rec: number;
+          rec_td: number;
+          rec_yd: number;
+          rush_td: number;
+          rush_yd: number;
+          season: number;
+          team_code: string | null;
+        };
+        Insert: {
+          games?: number;
+          history_player_id: string;
+          max_pass_td?: number;
+          max_pass_yd?: number;
+          max_rec?: number;
+          max_rec_td?: number;
+          max_rec_yd?: number;
+          max_rush_td?: number;
+          max_rush_yd?: number;
+          pass_td?: number;
+          pass_yd?: number;
+          position?: string | null;
+          ppr_finish?: number | null;
+          ppr_points?: number;
+          rec?: number;
+          rec_td?: number;
+          rec_yd?: number;
+          rush_td?: number;
+          rush_yd?: number;
+          season: number;
+          team_code?: string | null;
+        };
+        Update: {
+          games?: number;
+          history_player_id?: string;
+          max_pass_td?: number;
+          max_pass_yd?: number;
+          max_rec?: number;
+          max_rec_td?: number;
+          max_rec_yd?: number;
+          max_rush_td?: number;
+          max_rush_yd?: number;
+          pass_td?: number;
+          pass_yd?: number;
+          position?: string | null;
+          ppr_finish?: number | null;
+          ppr_points?: number;
+          rec?: number;
+          rec_td?: number;
+          rec_yd?: number;
+          rush_td?: number;
+          rush_yd?: number;
+          season?: number;
+          team_code?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "history_player_season_stats_history_player_id_fkey";
+            columns: ["history_player_id"];
+            isOneToOne: false;
+            referencedRelation: "history_players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      history_player_seasons: {
+        Row: {
+          franchise_key: string | null;
+          history_player_id: string;
+          id: number;
+          metadata: Json | null;
+          position: string | null;
+          season: number;
+          team_code: string;
+        };
+        Insert: {
+          franchise_key?: string | null;
+          history_player_id: string;
+          id?: never;
+          metadata?: Json | null;
+          position?: string | null;
+          season: number;
+          team_code: string;
+        };
+        Update: {
+          franchise_key?: string | null;
+          history_player_id?: string;
+          id?: never;
+          metadata?: Json | null;
+          position?: string | null;
+          season?: number;
+          team_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "history_player_seasons_history_player_id_fkey";
+            columns: ["history_player_id"];
+            isOneToOne: false;
+            referencedRelation: "history_players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      history_players: {
+        Row: {
+          all_pro: number;
+          birth_date: string | null;
+          career_games: number | null;
+          career_pass_td: number | null;
+          career_pass_yd: number | null;
+          career_rec: number | null;
+          career_rec_td: number | null;
+          career_rec_yd: number | null;
+          career_rush_td: number | null;
+          career_rush_yd: number | null;
+          college: string | null;
+          draft_pick: number | null;
+          draft_round: number | null;
+          draft_team: string | null;
+          draft_year: number | null;
+          first_name: string | null;
+          first_season: number;
+          franchise_keys: string[];
+          full_name: string;
+          gsis_id: string | null;
+          headshot_url: string | null;
+          hof: boolean;
+          id: string;
+          last_name: string | null;
+          last_season: number;
+          metadata: Json | null;
+          natural_key: string;
+          pfr_id: string | null;
+          player_id: string | null;
+          position: string | null;
+          pro_bowls: number;
+          prominence: number;
+          search_name: string;
+          seasons_played: number;
+          sleeper_id: string | null;
+          synced_at: string;
+        };
+        Insert: {
+          all_pro?: number;
+          birth_date?: string | null;
+          career_games?: number | null;
+          career_pass_td?: number | null;
+          career_pass_yd?: number | null;
+          career_rec?: number | null;
+          career_rec_td?: number | null;
+          career_rec_yd?: number | null;
+          career_rush_td?: number | null;
+          career_rush_yd?: number | null;
+          college?: string | null;
+          draft_pick?: number | null;
+          draft_round?: number | null;
+          draft_team?: string | null;
+          draft_year?: number | null;
+          first_name?: string | null;
+          first_season: number;
+          franchise_keys?: string[];
+          full_name: string;
+          gsis_id?: string | null;
+          headshot_url?: string | null;
+          hof?: boolean;
+          id?: string;
+          last_name?: string | null;
+          last_season: number;
+          metadata?: Json | null;
+          natural_key: string;
+          pfr_id?: string | null;
+          player_id?: string | null;
+          position?: string | null;
+          pro_bowls?: number;
+          prominence?: number;
+          search_name: string;
+          seasons_played?: number;
+          sleeper_id?: string | null;
+          synced_at?: string;
+        };
+        Update: {
+          all_pro?: number;
+          birth_date?: string | null;
+          career_games?: number | null;
+          career_pass_td?: number | null;
+          career_pass_yd?: number | null;
+          career_rec?: number | null;
+          career_rec_td?: number | null;
+          career_rec_yd?: number | null;
+          career_rush_td?: number | null;
+          career_rush_yd?: number | null;
+          college?: string | null;
+          draft_pick?: number | null;
+          draft_round?: number | null;
+          draft_team?: string | null;
+          draft_year?: number | null;
+          first_name?: string | null;
+          first_season?: number;
+          franchise_keys?: string[];
+          full_name?: string;
+          gsis_id?: string | null;
+          headshot_url?: string | null;
+          hof?: boolean;
+          id?: string;
+          last_name?: string | null;
+          last_season?: number;
+          metadata?: Json | null;
+          natural_key?: string;
+          pfr_id?: string | null;
+          player_id?: string | null;
+          position?: string | null;
+          pro_bowls?: number;
+          prominence?: number;
+          search_name?: string;
+          seasons_played?: number;
+          sleeper_id?: string | null;
+          synced_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "history_players_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       league_activity: {
         Row: {
           category: string;
@@ -3443,13 +3686,6 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "long_shot_answer_tallies_player_id_fkey";
-            columns: ["player_id"];
-            isOneToOne: false;
-            referencedRelation: "players";
-            referencedColumns: ["id"];
-          },
-          {
             foreignKeyName: "long_shot_answer_tallies_prompt_id_fkey";
             columns: ["prompt_id"];
             isOneToOne: false;
@@ -3507,13 +3743,6 @@ export type Database = {
             columns: ["attempt_id"];
             isOneToOne: false;
             referencedRelation: "long_shot_attempts";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "long_shot_answers_player_id_fkey";
-            columns: ["player_id"];
-            isOneToOne: false;
-            referencedRelation: "players";
             referencedColumns: ["id"];
           },
           {

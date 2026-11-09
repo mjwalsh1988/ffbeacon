@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mulberry32 } from "../random";
-import { drawStatSeason } from "./shared";
+import { statSeasons } from "./shared";
 import { GAME_LINE_THRESHOLDS, gameLine } from "./game-line";
 import { OPPONENT_THRESHOLDS, opponentLine } from "./opponent-line";
 import { fakeCtx } from "./test-context";
@@ -25,38 +25,36 @@ describe("game_line text", () => {
     expect(text).toBe("Name a quarterback who had 300 or more passing yards in one game in the current season.");
   });
 
-  it("draws a valid parameter set", () => {
-    const p = gameLine.draw(mulberry32(5), fakeCtx());
-    expect(p).not.toBeNull();
-    expect(() => gameLine.text(p!, fakeCtx())).not.toThrow();
+  it("offers valid parameter sets that name their position", () => {
+    const draws = gameLine.draws(mulberry32(5), fakeCtx());
+    expect(draws.length).toBeGreaterThan(0);
+    for (const p of draws) {
+      expect(() => gameLine.text(p, fakeCtx())).not.toThrow();
+      expect(gameLine.position!(p)).toBe(p.position);
+    }
   });
 });
 
 describe("opponent_line text", () => {
-  it("builds every threshold with the team name", () => {
+  it("builds every threshold with the team name, in one season or across seasons", () => {
     const ctx = fakeCtx();
     for (const [position, list] of Object.entries(OPPONENT_THRESHOLDS)) {
       for (const t of list) {
         const text = opponentLine.text({ position, opponent: "KC", season: 2023, threshold: t.id }, ctx);
         expect(text).toContain(t.phrase);
-        expect(text).toContain("Kansas City Chiefs");
+        expect(text).toContain("Kansas City Chiefs in the 2023 season.");
         expect(text).toMatch(ASCII);
       }
     }
+    expect(opponentLine.text({ position: "RB", opponent: "HOU", season: 0, threshold: "td_1" }, ctx)).toBe(
+      "Name a running back who scored a touchdown against the Houston Texans in any season since 2020.",
+    );
   });
 });
 
-describe("drawStatSeason", () => {
-  it("never draws the current season when completedWeek is null", () => {
-    const ctx = fakeCtx({ completedWeek: null });
-    const rng = mulberry32(11);
-    for (let i = 0; i < 200; i++) expect(drawStatSeason(rng, ctx)).not.toBe(2026);
-  });
-
-  it("draws the current season sometimes when it has a completed week", () => {
-    const ctx = fakeCtx();
-    const rng = mulberry32(11);
-    const seen = new Set(Array.from({ length: 200 }, () => drawStatSeason(rng, ctx)));
-    expect(seen.has(2026)).toBe(true);
+describe("statSeasons", () => {
+  it("leaves the current season out until it has a completed week", () => {
+    expect(statSeasons(fakeCtx({ completedWeek: null }))).not.toContain(2026);
+    expect(statSeasons(fakeCtx())).toContain(2026);
   });
 });
