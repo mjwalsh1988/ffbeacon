@@ -107,6 +107,7 @@ export type CronJobName =
   | "would-you-rather-discord"
   | "long-shot-generate"
   | "long-shot-settle"
+  | "long-shot-history"
   | "rebuild-draft-value"
   | "league-relay"
   | "ranking-guest-cleanup"
@@ -378,6 +379,13 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     schedule: "30 5 * * *",
     description:
       "Settles every finished Long Shot day: closes Hurry-Up attempts left unfinished, pays the Lone Signal bonus once per attempt, stamps the puzzle and resets broken streaks. Catches up a missed night oldest first and is safe to run twice. Also closes Film Room attempts idle for a day and prunes old Film Room attempts and tallies.",
+  },
+  {
+    name: "long-shot-history",
+    label: "Long Shot history pool sync",
+    schedule: "0 12 1 * *",
+    description:
+      "Monthly, on the first at 12:00 UTC: reads the nflverse releases for the current and previous NFL season (rosters, players, draft picks, weekly stats, Hall of Fame) into the Long Shot history pool, then recomputes career totals and prominence for everyone touched. Rookies join the pool during the season and a finished season settles on its own. Safe to run twice; the full 1920 load is the npm run sync:nfl-history script's job.",
   },
   {
     name: "league-relay",

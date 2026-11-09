@@ -3,6 +3,16 @@ import { historyAnswerIds, historyNote, normalizeSearchName } from "./answers";
 import { parseCsv, num } from "./csv";
 import { franchiseFor, franchiseForModernCode } from "./franchises";
 import { HOF_PROMINENCE, prominenceOf } from "./prominence";
+import { currentHistorySeason, incrementalFromSeason } from "./sync";
+
+describe("the sync window", () => {
+  it("treats a season as current from March and syncs it with the one before", () => {
+    expect(currentHistorySeason(new Date("2026-11-08T12:00:00Z"))).toBe(2026);
+    expect(currentHistorySeason(new Date("2027-02-01T12:00:00Z"))).toBe(2026);
+    expect(currentHistorySeason(new Date("2027-03-01T12:00:00Z"))).toBe(2027);
+    expect(incrementalFromSeason(new Date("2026-11-08T12:00:00Z"))).toBe(2025);
+  });
+});
 
 describe("franchiseFor", () => {
   it("reads a code with its season", () => {

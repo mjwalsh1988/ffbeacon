@@ -13,7 +13,7 @@ Plan: docs/completed/long-shot/long-shot-plan.md (section 30 lists what shipped 
 
 - Migrations 0363 to 0370, all applied to cilvpyivysjxpxbudkfa through the Supabase MCP. 0370 adds history_players, history_player_seasons and history_player_season_stats (service role only) and drops the players foreign keys on long_shot_answers.player_id and long_shot_answer_tallies.player_id, because an answer may now be a history id.
 - lib/long-shot/ (model, generator with fourteen prompt families, attempt engine, settlement, boards, profile links, client, history helpers), the routes under app/api/games/long-shot/, two crons (long-shot-generate 17:00 UTC, long-shot-settle 05:30 UTC), the page at /games/long-shot with the signed-out demo, the admin page at /admin/long-shot, the shared player combobox.
-- scripts/sync-nfl-history.ts (npm run sync:nfl-history) fills the history pool from the nflverse releases; scripts/long-shot-generate.ts (npm run long-shot:generate) writes a day from the command line; scripts/long-shot-dry-run.ts prints one without writing.
+- lib/long-shot/history/sync.ts fills the history pool from the nflverse releases: the monthly cron long-shot-history (first of the month, 12:00 UTC) syncs the current and previous season, and scripts/sync-nfl-history.ts (npm run sync:nfl-history) is the one-time 1920 load. Migration 0371 adds the recompute function the sync calls. scripts/long-shot-generate.ts (npm run long-shot:generate) writes a day from the command line; scripts/long-shot-dry-run.ts prints one without writing.
 
 ## Owner checks after the push deploys
 
@@ -21,7 +21,7 @@ Plan: docs/completed/long-shot/long-shot-plan.md (section 30 lists what shipped 
 2. Confirm the first long-shot-generate run in cron_runs (17:00 UTC) built tomorrow with five families from five sources (the admin page's try log shows the sources skipped as "source already asked").
 3. Type a retired player's name in the picker (four letters) and confirm the note shows his years and franchises.
 4. The next morning, confirm the long-shot-settle run (05:30 UTC) and the Yesterday panel.
-5. Once a year, after the season ends, run npm run sync:nfl-history to add the finished season to the pool.
+5. On the first of next month, confirm the long-shot-history run (12:00 UTC) in cron_runs; it keeps the pool current on its own.
 
 ## Blocked
 

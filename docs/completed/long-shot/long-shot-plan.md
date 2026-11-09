@@ -2353,12 +2353,19 @@ skips the family for the day.
   points and a positional PPR finish). `lib/long-shot/history/franchises.ts`
   reads a team code with its season, so BAL is the Colts before 1984 and the
   Ravens from 1996.
-- Sync: `scripts/sync-nfl-history.ts` (`npm run sync:nfl-history`), run once
-  and then yearly, never scheduled. It merges a name-keyed 1980s person into
-  the id-keyed person of the same name and birth date, links to our players
-  table by Sleeper id then name plus birth date, flags Hall of Famers from
-  the draft file plus one Wikidata query (a failed request leaves the draft
-  flags), and computes prominence.
+- Sync: `lib/long-shot/history/sync.ts syncNflHistory`. The monthly cron
+  `/api/cron/long-shot-history` (the first at 12:00 UTC, in vercel.json and
+  lib/cron-runs.ts) reads the current and previous season, upserts the rows,
+  then recomputes every touched person's career-wide columns in the database
+  (`long_shot_history_recompute`, migration 0371, service role only) and
+  prominence in TypeScript; a partial run never writes provisional career
+  columns. `npm run sync:nfl-history` is the same function from 1920, run
+  once for the initial load and kept for a rebuild. The sync merges a
+  name-keyed 1980s person into the id-keyed person of the same name and birth
+  date, links to our players table by Sleeper id then name plus birth date,
+  and flags Hall of Famers from the draft file plus one Wikidata query of
+  inducted players (a failed request leaves the draft flags and is a failed
+  step on the cron run).
 - The id rule (`lib/long-shot/history/answers.ts`): a person linked to a
   players row in the modern pool answers under that players.id; everyone
   else under their history_players.id. The search route falls through to the

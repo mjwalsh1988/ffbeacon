@@ -142,6 +142,10 @@
       "schedule": "30 5 * * *"
     },
     {
+      "path": "/api/cron/long-shot-history",
+      "schedule": "0 12 1 * *"
+    },
+    {
       "path": "/api/cron/league-relay",
       "schedule": "*/15 * * * *"
     },

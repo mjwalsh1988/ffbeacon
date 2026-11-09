@@ -9698,6 +9698,10 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      long_shot_history_recompute: {
+        Args: { p_since?: number | null };
+        Returns: number;
+      };
       long_shot_increment_tally: {
         Args: { p_player_id: string; p_prompt_id: string };
         Returns: undefined;

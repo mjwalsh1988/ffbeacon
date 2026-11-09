@@ -1637,10 +1637,14 @@ band and the next two rarer tiers. A historical player's "rate" is his
 stay frozen on the prompt row.
 
 History pool: `history_players`, `history_player_seasons` and
-`history_player_season_stats` (migration 0370, service role only), filled by
-`npm run sync:nfl-history` from the nflverse data releases (CC BY 4.0; rosters
-1920 on, players, draft picks 1980 on, weekly stats 1999 on aggregated per
-season). Run it once and then yearly; it is never scheduled. The game page
+`history_player_season_stats` (migration 0370, service role only), filled from
+the nflverse data releases (CC BY 4.0; rosters 1920 on, players, draft picks
+1980 on, weekly stats 1999 on aggregated per season) by
+`lib/long-shot/history/sync.ts`. The monthly cron `/api/cron/long-shot-history`
+(the first at 12:00 UTC) syncs the current and previous season and then calls
+`long_shot_history_recompute` (migration 0371) and a prominence pass for
+everyone touched, so nobody has to remember anything; `npm run
+sync:nfl-history` is the one-time 1920 load and a rebuild tool. The game page
 carries the attribution line. `lib/long-shot/history/franchises.ts` maps every
 era's team code to its modern franchise WITH the season (BAL is the Colts
 before 1984 and the Ravens from 1996). The ID RULE (`history/answers.ts`): a
