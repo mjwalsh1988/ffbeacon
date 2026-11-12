@@ -237,17 +237,26 @@ async function main() {
   for (const row of rows) {
     let marketLine = "no priors client";
     if (supabase) {
-      const { data } = await supabase
+      const { data: seasonRows } = await supabase
         .from("faab_market_priors")
-        .select("sample_size, p50, p75, p90, p99")
+        .select("season, sample_size, p50, p75, p90, p99")
         .eq("league_kind", row.cell.leagueKind)
         .eq("superflex", "any")
         .eq("position", "any")
         .eq("phase", row.cell.phase)
         .eq("bidders", row.interested >= 4 ? "4p" : String(Math.max(1, row.interested)))
-        .maybeSingle();
+        // The table holds this season's cell and last season's for the same
+        // situation, so a maybeSingle here errors on two rows and every
+        // scenario prints "no cell". Take both and apply the site's own rule
+        // (mergeSeasonCells): the newer cell once it has enough samples, the
+        // older one until then.
+        .order("season", { ascending: false })
+        .limit(2);
+      const [newer, older] = seasonRows ?? [];
+      const minSamples = DEFAULT_FAAB_SETTINGS.priors.minCellSamples;
+      const data = newer && newer.sample_size < minSamples && older ? older : newer;
       marketLine = data
-        ? `real: p50 ${data.p50}%  p75 ${data.p75}%  p90 ${data.p90}%  p99 ${data.p99}%  (n=${data.sample_size})`
+        ? `real: p50 ${data.p50}%  p75 ${data.p75}%  p90 ${data.p90}%  p99 ${data.p99}%  (n=${data.sample_size}, ${data.season})`
         : "real: no cell";
     }
 

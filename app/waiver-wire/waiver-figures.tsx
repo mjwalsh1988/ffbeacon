@@ -5,7 +5,8 @@
  *
  *   - MEASURED FROM OUR OWN LEAGUES. `ClearingPriceFigure` draws
  *     `faab_market_priors`, the anonymous clearing-price quantiles built from
- *     every waiver auction in every league synced to the site. It is read at
+ *     this season's waiver auctions in the leagues synced to the site, with
+ *     last season's cell standing in where this one is thin. It is read at
  *     render through `lib/guides/faab-market-figures.ts`, never typed out, and
  *     a cell under the calculator's own publishing threshold prints
  *     "Not enough data yet" rather than a figure nobody should stand behind.
@@ -79,10 +80,18 @@ export function ClearingPriceFigure({ slices }: { slices: ClearingSlice[] }) {
   const solo = slices[0]?.read;
   const crowd = slices.at(-1)?.read;
 
+  // A slice this season has not filled yet shows last season's cell. The
+  // table's Sample column says which, row by row; the sentence must not call
+  // the whole figure this season's when part of it is not.
+  const borrowed = usable.some((s) => s.read?.fromPriorSeason);
+  const measuredFrom = borrowed
+    ? "Measured from real claims in the leagues synced to FF Beacon, with last season's standing in where this season has too few so far"
+    : "Measured from this season's claims in the leagues synced to FF Beacon";
+
   const summary =
     usable.length === 0
       ? "We do not yet hold enough waiver auctions to publish clearing prices by how many teams were bidding."
-      : `Measured from this season's claims in the leagues synced to FF Beacon, an uncontested claim clears near ${
+      : `${measuredFrom}, an uncontested claim clears near ${
           solo?.enough ? budgetPct(solo.p50) : "nothing"
         } while a claim four or more teams wanted clears near ${
           crowd?.enough ? budgetPct(crowd.p50) : "several times that"
@@ -431,7 +440,11 @@ export function FreeClaimFigure({ read }: { read: MarketRead | null }) {
     <ChartFigure
       titleLevel={3}
       title="Most waiver claims cost nothing"
-      description="The share of winning claims that cleared at zero, across this season's waiver auctions in the leagues synced to FF Beacon."
+      description={
+        read?.fromPriorSeason
+          ? "The share of winning claims that cleared at zero, across last season's waiver auctions in the leagues synced to FF Beacon. This season does not have enough claims yet."
+          : "The share of winning claims that cleared at zero, across this season's waiver auctions in the leagues synced to FF Beacon."
+      }
       summary={
         enough && free != null
           ? `${shareText(free)} percent of winning waiver claims cleared for nothing at all, because nobody else put in for that player. The budget is not for those. It is for the small number of weeks when somebody's job changes and several managers want the same name. Across every claim, the median winning bid is ${budgetPct(read.p50)}.`

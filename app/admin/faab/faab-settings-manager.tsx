@@ -3100,7 +3100,7 @@ export function FaabSettingsManager({
       <SectionCard
         title="Replay"
         badge={{ tone: "advanced", label: "Advanced" }}
-        blurb="Run the price model against every settled auction in the database and see how often its recommended bid would have won. Reads only: nothing is written, nothing is synced, and no reader sees anything change."
+        blurb="Run the price model against every settled auction of this season and last, the seasons the prices are built from, and see how often its recommended bid would have won. Reads only: nothing is written, nothing is synced, and no reader sees anything change."
       >
         <p className="rounded-card border border-line bg-base/40 p-3 text-xs leading-relaxed text-ink-muted">
           Historical rosters are not stored, so the replay cannot apply the
@@ -3123,7 +3123,7 @@ export function FaabSettingsManager({
         </button>
         <p aria-live="polite" className="mt-2 text-sm text-ink-muted">
           {isReplaying
-            ? "Replaying every settled auction we hold. This can take a minute."
+            ? "Replaying every settled auction of this season and last. This can take a minute."
             : replayMessage}
         </p>
 

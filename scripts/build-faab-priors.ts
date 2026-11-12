@@ -36,6 +36,15 @@ async function main() {
       skipCells,
     });
     first = false;
+    // Another run holds the lease (the hourly cron, or a slice of this script
+    // that was stopped before it could release). Nothing was read, so say so
+    // and fail rather than print "nothing to do" and build a showcase from a
+    // sample that may be half replaced.
+    if (result.skipped) {
+      throw new Error(
+        `${result.skipped}. The lease clears itself within about 12 minutes; run this again then.`,
+      );
+    }
     const pass = result.pass;
     console.log(
       `Season ${result.currentSeason ?? "none"}: ${pass ? `${pass.full ? "full" : "incremental"} pass${pass.resumed ? " (resumed)" : ""}, ${pass.leaguesRead} leagues, ${pass.auctionsWritten} auctions` : "nothing to do"}${result.partial ? ", continuing..." : ""}`,

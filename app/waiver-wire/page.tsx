@@ -1124,9 +1124,10 @@ function PriceSection({ market }: { market: WaiverMarket }) {
       <div className="grid gap-6 2xl:grid-cols-2 2xl:items-start">
         <div>
           <Para>
-            These are not estimates. They are measured from every waiver auction in every league
-            synced to FF Beacon, stored as anonymous quantiles with no league, roster or manager
-            attached to any of them.
+            These are not estimates. They are measured from this season&apos;s waiver auctions in
+            the leagues synced to FF Beacon, with last season&apos;s standing in for any situation
+            this season has not seen enough of yet, and stored as anonymous quantiles with no
+            league, roster or manager attached to any of them.
           </Para>
           <Para>
             The number that surprises people is how many claims cost nothing at all. Most weeks,

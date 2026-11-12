@@ -1,7 +1,7 @@
 /**
  * scripts/faab-replay.ts
  *
- * Replay the FAAB price model against every auction we hold:
+ * Replay the FAAB price model against every auction of this season and last:
  *   npm run faab:replay
  *
  * Reads only. Writes nothing, syncs nothing, and is deliberately NOT wired into

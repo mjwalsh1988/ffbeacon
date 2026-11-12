@@ -124,14 +124,15 @@ export type ReplayActionResult =
   | { ok: false; error: string };
 
 /**
- * Replay the price model against every settled auction we hold.
+ * Replay the price model against every settled auction of this season and
+ * last, the seasons the cells price from.
  *
  * Reads only: it writes nothing and syncs nothing, which is why it carries no
  * revalidation. The same work `npm run faab:replay` prints, run from the admin
  * panel so a settings change can be checked without a terminal.
  *
  * Admin-only on the same terms as the two actions above, and for a plainer
- * reason than usual: it reads every auction in the database and is expensive,
+ * reason than usual: it reads two seasons of auctions and is expensive,
  * so it must never be reachable by anyone who is not signed in as an admin.
  * The individual outcome rows are deliberately NOT returned. They carry league
  * ids, and the page only ever shows the aggregate buckets.

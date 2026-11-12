@@ -63,13 +63,37 @@ function numberFrom(value: unknown): number | null {
   return null;
 }
 
-async function loadLeagueFacts(supabase: ServiceClient): Promise<Map<string, LeagueFacts>> {
+/**
+ * The seasons the market cells price: this season and last, by the same rule
+ * the cron and every read use (currentPriorSeason). Null when no league
+ * exists, in which case there is nothing to replay either.
+ */
+async function pricedSeasons(supabase: ServiceClient): Promise<number[] | null> {
+  const { data: newest, error } = await supabase
+    .from("leagues")
+    .select("season")
+    .order("season", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`faab replay season read failed: ${error.message}`);
+  const current = currentPriorSeason(
+    newest?.season == null ? null : Number(newest.season),
+    Date.now(),
+  );
+  return current === null ? null : [current, current - 1];
+}
+
+async function loadLeagueFacts(
+  supabase: ServiceClient,
+  seasons: number[],
+): Promise<Map<string, LeagueFacts>> {
   const leagues = new Map<string, LeagueFacts>();
 
   const leagueRows = await fetchAllRows("faab replay leagues", (from, to) =>
     supabase
       .from("leagues")
       .select("id, season, metadata, roster_positions")
+      .in("season", seasons)
       .order("id", { ascending: true })
       .range(from, to),
   );
@@ -90,12 +114,19 @@ async function loadLeagueFacts(supabase: ServiceClient): Promise<Map<string, Lea
     });
   }
 
-  const rosterRows = await fetchAllRows("faab replay rosters", (from, to) =>
-    supabase
-      .from("rosters")
-      .select("league_id, sleeper_roster_id, metadata")
-      .order("id", { ascending: true })
-      .range(from, to),
+  // Only the budgeted leagues of the priced seasons, in id chunks, rather
+  // than every roster we hold.
+  const rosterRows = await fetchAllRowsInChunks(
+    "faab replay rosters",
+    Array.from(leagues.keys()),
+    (chunk, from, to) =>
+      supabase
+        .from("rosters")
+        .select("league_id, sleeper_roster_id, metadata")
+        .in("league_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    100,
   );
   for (const row of rosterRows) {
     const league = leagues.get(row.league_id);
@@ -155,29 +186,34 @@ export async function loadPriorCellsForReplay(
       .order("cell_key", { ascending: true })
       .range(from, to),
   );
-  const { data: newest } = await supabase
-    .from("leagues")
-    .select("season")
-    .order("season", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const seasons = await pricedSeasons(supabase);
   // Same per-cell season rule as the page read, so the replay grades the
   // prices a reader is actually shown.
   return mergeSeasonCells(
     rows.map((row) => toPriorCell(row as unknown as Record<string, unknown>)),
     minCellSamples,
-    currentPriorSeason(newest?.season == null ? null : Number(newest.season), Date.now()),
+    seasons === null ? null : seasons[0],
   );
 }
 
 /**
- * Every settled auction we hold, in the shape the replay engine grades.
+ * Every settled auction of this season and last, in the shape the replay
+ * engine grades.
  *
- * Nothing is filtered here beyond what makes an auction unreadable. The engine
- * decides what counts, because the engine is the part with tests.
+ * THE SEASONS ARE THE CELLS' SEASONS. The cells price from this season, with
+ * last season standing in per cell, so those are the auctions a recommendation
+ * can fairly be graded against. This used to read every waiver row we hold:
+ * that graded this season's prices against 2023 auctions they were never
+ * built from, and it was the same whole-table sweep that ran the nightly
+ * recalc past its budget on 2026-11-12.
+ *
+ * Nothing else is filtered here beyond what makes an auction unreadable. The
+ * engine decides what counts, because the engine is the part with tests.
  */
 export async function loadReplayAuctions(supabase: ServiceClient): Promise<ReplayAuction[]> {
-  const leagues = await loadLeagueFacts(supabase);
+  const seasons = await pricedSeasons(supabase);
+  if (seasons === null) return [];
+  const leagues = await loadLeagueFacts(supabase, seasons);
 
   const rowsByLeague = new Map<string, AuctionTransactionRow[]>();
   const waiverRows = await fetchAllRows("faab replay waiver transactions", (from, to) =>
@@ -185,6 +221,7 @@ export async function loadReplayAuctions(supabase: ServiceClient): Promise<Repla
       .from("league_transactions")
       .select("league_id, season, week, type, status, adds, roster_ids, metadata")
       .eq("type", "waiver")
+      .in("season", seasons)
       .order("id", { ascending: true })
       .range(from, to),
   );

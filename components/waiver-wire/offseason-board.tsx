@@ -130,16 +130,18 @@ function LeaderColumn({ player, leagues }: { player: Ranked; leagues: number }) 
         From week {player.typicalWeek}, {games(player.points.games)}, {one(perGame)} a game
       </p>
       <dl className="mt-3">
+        <Leader label="Cost">
+          <span className="text-brand-cyan">{costText(player)}</span>
+        </Leader>
         <Leader label="Leagues">
           <span className="font-mono tabular-nums">
             {player.leagues} of {leagues}
           </span>
         </Leader>
-        <Bar fraction={player.share} className="mb-1" />
-        <Leader label="Cost">
-          <span className="text-brand-cyan">{costText(player)}</span>
-        </Leader>
       </dl>
+      {/* The share of leagues, drawn under the Leagues line. After the dl, not
+          inside it: a dl may hold nothing but its dt and dd groups. */}
+      <Bar fraction={player.share} />
     </li>
   );
 }

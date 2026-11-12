@@ -3,6 +3,7 @@ import {
   PRIOR_LOGIC_VERSION,
   WATERMARK_OVERLAP_MS,
   currentPriorSeason,
+  leaseSecondsFor,
   planPass,
   watermarkAfter,
   type PriorBuildState,
@@ -180,6 +181,17 @@ describe("planPass", () => {
       { forceFull: true },
     );
     expect(plan).toMatchObject({ resumed: false, full: true, cursor: null, startedAt: NOW });
+  });
+});
+
+describe("leaseSecondsFor", () => {
+  it("outlives the cron route's 300-second limit", () => {
+    expect(leaseSecondsFor(220_000)).toBeGreaterThan(300);
+    expect(leaseSecondsFor(0)).toBeGreaterThan(300);
+  });
+
+  it("outlives a script's ten-minute slice, so the cron cannot start beside it", () => {
+    expect(leaseSecondsFor(10 * 60 * 1000)).toBeGreaterThan(600);
   });
 });
 

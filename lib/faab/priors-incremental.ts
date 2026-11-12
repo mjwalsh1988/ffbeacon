@@ -68,10 +68,28 @@ const CELLS_RESERVE_MS = 60_000;
  */
 export const CELLS_REFRESH_MS = 24 * 60 * 60 * 1000;
 /**
- * The lease outlives the route's 300-second limit, so a run the platform
- * kills cannot leave a second run free to start beside a still-running one.
+ * The shortest lease: it outlives the route's 300-second limit, so a run the
+ * platform kills cannot leave a second run free to start beside a
+ * still-running one.
  */
 const LEASE_SECONDS = 330;
+/**
+ * What a lease allows past the run's own budget. The budget only stops new
+ * batches; the cell rebuild that follows a finished walk may start with as
+ * little as CELLS_RESERVE_MS of it left and then run on.
+ */
+const LEASE_MARGIN_SECONDS = 120;
+
+/**
+ * How long a run with this budget holds the lease. Sized to the budget, never
+ * a constant: `npm run faab:priors` runs ten-minute slices, and a 330-second
+ * lease would lapse halfway through one and let the hourly cron start a
+ * second pass beside it.
+ */
+export function leaseSecondsFor(budgetMs: number): number {
+  const fromBudget = Math.ceil(Math.max(0, budgetMs) / 1000) + LEASE_MARGIN_SECONDS;
+  return Math.max(LEASE_SECONDS, fromBudget);
+}
 
 export type PriorBuildState = {
   current_season: number | null;
@@ -242,8 +260,8 @@ async function changedLeagues(
   return ((data ?? []) as unknown[]).map((v) => String(v));
 }
 
-async function claimLease(supabase: ServiceClient): Promise<string | null> {
-  const { data, error } = await supabase.rpc("claim_faab_prior_lease", { p_seconds: LEASE_SECONDS });
+async function claimLease(supabase: ServiceClient, seconds: number): Promise<string | null> {
+  const { data, error } = await supabase.rpc("claim_faab_prior_lease", { p_seconds: seconds });
   if (error) throw new Error(`faab priors lease claim failed: ${error.message}`);
   return typeof data === "string" ? data : null;
 }
@@ -433,7 +451,7 @@ export async function runFaabPriors(
     durationMs: elapsed(),
   });
 
-  const token = await claimLease(supabase);
+  const token = await claimLease(supabase, leaseSecondsFor(opts.budgetMs));
   if (!token) return idle("another FAAB priors run is in progress", null);
   try {
     return await runUnderLease(supabase, opts, started, idle);
