@@ -62,6 +62,7 @@ import {
   WeekRail,
 } from "@/components/waiver-wire/board-rail";
 import { resolveWaiverContext } from "@/lib/waiver-wire/context";
+import { resolveSeasonClock } from "@/lib/start-sit/clock";
 import { loadWaiverBoardCached, unavailableBoard } from "@/lib/waiver-wire/load";
 import { loadBudgetSpreadCached, type BudgetSpread } from "@/lib/waiver-wire/budgets";
 import { weekPath } from "@/lib/waiver-wire/weeks";
@@ -122,41 +123,69 @@ const DESCRIPTION =
   "This week's fantasy football waiver wire pickups with a FAAB bid for each as a percentage of your budget, priced from real claims. Plus when waivers process on Sleeper, Yahoo and ESPN, and priority against FAAB.";
 const CANONICAL = `${SITE.url}/waiver-wire`;
 
-export const metadata: Metadata = {
-  title: { absolute: TITLE },
-  description: DESCRIPTION,
-  alternates: { canonical: "/waiver-wire" },
-  keywords: [
-    "waiver wire",
-    "fantasy football waiver wire",
-    "fantasy waiver wire",
-    "nfl waiver wire",
-    "waiver wire adds",
-    "waiver priority fantasy football",
-    "waiver claim fantasy football",
-    "how does the waiver wire work",
-    "when do waivers process",
-    "dynasty waiver wire",
-    "waiver wire pickups",
-    "best waiver wire pickups",
-    "waiver wire adds this week",
-    "faab bids",
-    "how much faab to bid",
-    "faab bid percentage",
-    "faab bid amounts",
-  ],
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
-  },
-  ...pageShareMetadata({
-    key: "waiver-wire",
-    title: TITLE,
-    description: DESCRIPTION,
-    path: "/waiver-wire",
-  }),
-};
+const KEYWORDS = [
+  "waiver wire",
+  "fantasy football waiver wire",
+  "fantasy waiver wire",
+  "nfl waiver wire",
+  "waiver wire adds",
+  "waiver priority fantasy football",
+  "waiver claim fantasy football",
+  "how does the waiver wire work",
+  "when do waivers process",
+  "dynasty waiver wire",
+  "waiver wire pickups",
+  "best waiver wire pickups",
+  "waiver wire adds this week",
+  "faab bids",
+  "how much faab to bid",
+  "faab bid percentage",
+  "faab bid amounts",
+];
+
+/**
+ * The title and description, by time of year. Between seasons the hub shows
+ * last season's best pickups rather than a weekly board, and a search result
+ * that promised "this week's pickups" would be promising a page that is not
+ * there. The offseason copy keeps the same search terms and says plainly what
+ * the page holds until the new season starts.
+ */
+function pageCopy(offseasonSeason: number | null): { title: string; description: string } {
+  if (offseasonSeason === null) return { title: TITLE, description: DESCRIPTION };
+  return {
+    title: `Fantasy Football Waiver Wire: Best Pickups of ${offseasonSeason}, FAAB Bids and How It Works`,
+    description: `It is the offseason, so until the ${offseasonSeason + 1} season starts this is a look back: the best fantasy football waiver wire pickups of ${offseasonSeason}, ranked by the points they scored after the pickup, with the FAAB each one cost. Plus how waivers, priority and FAAB bids work.`,
+  };
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  // The same clock the page reads. A failed read falls back to the in-season
+  // copy rather than failing the page.
+  let offseasonSeason: number | null = null;
+  try {
+    offseasonSeason = offseasonSeasonFor(await resolveSeasonClock(createAdminClient()));
+  } catch {
+    offseasonSeason = null;
+  }
+  const copy = pageCopy(offseasonSeason);
+  return {
+    title: { absolute: copy.title },
+    description: copy.description,
+    alternates: { canonical: "/waiver-wire" },
+    keywords: KEYWORDS,
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+    },
+    ...pageShareMetadata({
+      key: "waiver-wire",
+      title: copy.title,
+      description: copy.description,
+      path: "/waiver-wire",
+    }),
+  };
+}
 
 /* ---------- Lessons ---------- */
 
@@ -490,8 +519,8 @@ export default async function WaiverWirePage({
     {
       "@context": "https://schema.org",
       "@type": "Article",
-      headline: TITLE,
-      description: DESCRIPTION,
+      headline: pageCopy(offseasonSeason).title,
+      description: pageCopy(offseasonSeason).description,
       inLanguage: "en-US",
       isAccessibleForFree: true,
       author: authorJsonLd(),
