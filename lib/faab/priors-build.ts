@@ -1,5 +1,9 @@
 /**
- * What a waiver claim actually clears at, measured across every league we hold.
+ * What a waiver claim actually clears at, measured from one season's auctions.
+ *
+ * The builder is season-agnostic: it is handed one season's kept sample at a
+ * time (lib/faab/priors-incremental.ts), and the read decides per cell whether
+ * this season's cell or last season's is used (priors-math.ts mergeSeasonCells).
  *
  * This is the only part of the calculator that speaks for the wider market
  * rather than for one league. It turns real auctions into quantile cells:

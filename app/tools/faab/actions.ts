@@ -241,10 +241,8 @@ export async function fetchMarketCell(input: {
   }
 
   try {
-    const [cells, settings] = await Promise.all([
-      loadPriorCellsCached(),
-      loadFaabSettings(createAdminClient()),
-    ]);
+    const settings = await loadFaabSettings(createAdminClient());
+    const cells = await loadPriorCellsCached(settings.priors.minCellSamples);
     const picked = pickCell(
       cells,
       {

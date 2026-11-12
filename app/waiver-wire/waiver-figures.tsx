@@ -56,7 +56,7 @@ export type ClearingSlice = { label: string; read: MarketRead | null };
  *
  * The single most useful number on this page, and the one nobody else can
  * publish: not what a pundit thinks a player is worth, but what claims like
- * this one have actually settled at across every league we hold. The bars are
+ * this one have actually settled at this season in the leagues we hold. The bars are
  * medians; the table under them carries the upper quantiles, because the
  * median is what you pay to win a normal one and the 90th is what you pay to
  * win the one everybody wants.
@@ -82,7 +82,7 @@ export function ClearingPriceFigure({ slices }: { slices: ClearingSlice[] }) {
   const summary =
     usable.length === 0
       ? "We do not yet hold enough waiver auctions to publish clearing prices by how many teams were bidding."
-      : `Measured across every league synced to FF Beacon, an uncontested claim clears near ${
+      : `Measured from this season's claims in the leagues synced to FF Beacon, an uncontested claim clears near ${
           solo?.enough ? budgetPct(solo.p50) : "nothing"
         } while a claim four or more teams wanted clears near ${
           crowd?.enough ? budgetPct(crowd.p50) : "several times that"
@@ -431,7 +431,7 @@ export function FreeClaimFigure({ read }: { read: MarketRead | null }) {
     <ChartFigure
       titleLevel={3}
       title="Most waiver claims cost nothing"
-      description="The share of winning claims that cleared at zero, across every waiver auction in the leagues synced to FF Beacon."
+      description="The share of winning claims that cleared at zero, across this season's waiver auctions in the leagues synced to FF Beacon."
       summary={
         enough && free != null
           ? `${shareText(free)} percent of winning waiver claims cleared for nothing at all, because nobody else put in for that player. The budget is not for those. It is for the small number of weeks when somebody's job changes and several managers want the same name. Across every claim, the median winning bid is ${budgetPct(read.p50)}.`

@@ -154,6 +154,8 @@ export function bidSpoken(bid: BoardBid, market: ClaimMarket | null): string {
     bid.basis === "market" || !market
       ? "priced from the measured market for players like him"
       : "priced mostly from what he has cost in real claims";
+  // A borrowed season is printed as visible text under the bid on every
+  // surface, so it is not repeated here.
   return `of your season budget. The lower figure wins about 6 times in 10, the higher about 9 in 10, ${source}.`;
 }
 
@@ -348,6 +350,7 @@ export function WaiverPlayerCard({
               <BidMeter bid={bid} market={market} className="mt-2" />
               <p className="mt-1.5 text-[10.5px] leading-snug text-ink-subtle sm:text-[11px]">
                 of budget, {BIDDERS_TEXT[bid.bidders].toLowerCase()}
+                {bid.priorSeason ? `, priced from ${bid.priorSeason} claims` : ""}
               </p>
               <BidInDollars
                 lowPct={bid.lowPct}

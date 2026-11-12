@@ -40,6 +40,8 @@ function cell(over: Partial<PriorCell> = {}): PriorCell {
     leaguesCount: 40,
     seasons: [2024, 2025],
     builtAt: "2026-09-19T12:00:00.000Z",
+    season: 2026,
+    fromPriorSeason: false,
     ...over,
   };
 }

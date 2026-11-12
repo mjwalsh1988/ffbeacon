@@ -990,7 +990,7 @@ export async function calculateLeagueFaab(
   // ---- the auction ---------------------------------------------------------
   // Everything above answers "what is he worth to me". This answers "what
   // will it take", which is a question about the other eleven wallets.
-  const priorCells = await loadPriorCellsCached();
+  const priorCells = await loadPriorCellsCached(settings.priors.minCellSamples);
   // A chopped league is priced against CHOPPED cells, and its phase is how
   // much of the field is left rather than the week of the calendar. Reading
   // type 3 as redraft (which it becomes once it is correctly not a keeper

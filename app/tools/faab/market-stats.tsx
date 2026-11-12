@@ -144,7 +144,9 @@ function rowsFor(
     const cell = byKey.get(key);
     if (!cell) continue;
     rows.push({
-      label,
+      // A row borrowed from last season names its season, so a table that
+      // mixes the two years never passes one off as the other.
+      label: cell.fromPriorSeason ? `${label} (${cell.season})` : label,
       sampleSize: cell.sampleSize,
       median: cell.p50,
       p75: cell.p75,
@@ -165,7 +167,7 @@ function rowsFor(
 export async function loadMarketFacts(
   minCellSamples: number,
 ): Promise<MarketFacts | null> {
-  const cells = await loadPriorCellsCached();
+  const cells = await loadPriorCellsCached(minCellSamples);
   if (cells.length === 0) return null;
 
   const byKey = new Map(cells.map((cell) => [cell.cellKey, cell]));
@@ -207,6 +209,13 @@ function superflexShare(byKey: Map<string, PriorCell>): number | null {
  * same cell printing 12% in one table and 12.0% in another is the kind of
  * difference a reader reads as two different measurements.
  */
+/** "the 2026 season" or "seasons 2025 to 2026". */
+export function seasonsPhrase(facts: Pick<MarketFacts, "seasonMin" | "seasonMax">): string {
+  return facts.seasonMin === facts.seasonMax
+    ? `the ${facts.seasonMax} season`
+    : `seasons ${facts.seasonMin} to ${facts.seasonMax}`;
+}
+
 export function pct(value: number): string {
   return `${Math.round(value * 10) / 10}%`;
 }
@@ -228,8 +237,9 @@ export function MarketStats({ facts }: { facts: MarketFacts | null }) {
       </h2>
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-muted">
         Winning FAAB bids from {facts.leagues.toLocaleString()} Sleeper leagues
-        synced to FF Beacon, seasons {facts.seasonMin} to {facts.seasonMax}, as
-        a share of each league&apos;s budget. Updated{" "}
+        synced to FF Beacon, {seasonsPhrase(facts)}, as a share of each
+        league&apos;s budget. A row marked with last season&apos;s year has too few
+        claims this season so far and uses last season&apos;s instead. Updated{" "}
         {formatEasternDate(facts.builtAt)}. No league or manager is
         identifiable.
       </p>

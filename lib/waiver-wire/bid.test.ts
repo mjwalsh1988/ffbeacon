@@ -27,6 +27,8 @@ function cell(bidders: PriorCell["bidders"], q: Partial<PriorCell> = {}): PriorC
     leaguesCount: 100,
     seasons: [2026],
     builtAt: "2026-09-29T00:00:00Z",
+    season: 2026,
+    fromPriorSeason: false,
     ...q,
   };
 }

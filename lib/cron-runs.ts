@@ -93,6 +93,7 @@ export type CronJobName =
   | "sync-dynastyprocess"
   | "recalculate-beacon"
   | "recalculate-derived"
+  | "faab-priors"
   | "beacon-reference-drift"
   | "beacon-reference-rebuild"
   | "sync-sleeper-stats"
@@ -281,6 +282,14 @@ export const CRON_JOBS: ReadonlyArray<CronJobEntry> = [
     schedule: "0 10 * * *",
     description:
       "Rebuilds the global rankings and player_value_trends tables from the latest values.",
+  },
+  {
+    name: "faab-priors",
+    label: "FAAB price cells",
+    schedule: "25 * * * *",
+    addedOn: "2026-11-12",
+    description:
+      "Keeps the FAAB clearing-price cells current, incrementally: re-reads only the leagues whose waiver claims changed since the last completed pass, for this season and last, and rebuilds a season's cells when its pass completes. A pass that runs out of time resumes on the next tick. Prices come from this season, with last season standing in per cell until this season has enough claims. In the offseason it also refreshes the waiver wire's look back at last season's best pickups, at most weekly. Moved off the rankings recalc on 2026-11-12, when the weekly full rebuild there ran past that job's time budget.",
   },
   {
     name: "rebuild-draft-value",

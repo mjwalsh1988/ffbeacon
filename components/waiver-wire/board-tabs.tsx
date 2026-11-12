@@ -49,6 +49,7 @@ export function BoardTabs({
   initialKey,
   label,
   param = "pos",
+  countLabel = "worth a claim",
 }: {
   tabs: BoardTab[];
   initialKey: string;
@@ -56,6 +57,8 @@ export function BoardTabs({
   label: string;
   /** The search parameter the selected tab is mirrored into. */
   param?: string;
+  /** Spoken after each tab's count, e.g. "worth a claim". */
+  countLabel?: string;
 }) {
   const baseId = useId();
   const [active, setActive] = useState(
@@ -145,7 +148,7 @@ export function BoardTabs({
                 }`}
               >
                 {tab.count}
-                <span className="sr-only"> worth a claim</span>
+                <span className="sr-only"> {countLabel}</span>
               </span>
               {selected && (
                 <span

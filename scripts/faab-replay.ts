@@ -69,7 +69,7 @@ async function main() {
   const settings = await loadFaabSettings(supabase);
 
   console.log("Loading market cells...");
-  const cells = await loadPriorCellsForReplay(supabase);
+  const cells = await loadPriorCellsForReplay(supabase, settings.priors.minCellSamples);
   if (cells.length === 0) {
     console.log("No cells in faab_market_priors. Run npm run faab:priors first.");
     return;

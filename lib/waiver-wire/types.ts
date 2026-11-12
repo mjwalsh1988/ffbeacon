@@ -169,6 +169,13 @@ export type BoardBid = {
   basis: "claims" | "blended" | "market";
   tier: "free" | "cheap" | "real" | "priority";
   tierLabel: string;
+  /**
+   * The season the market half of the price was measured in, when it is LAST
+   * season's cell standing in because this season has too few claims for this
+   * situation. Null when the market read is this season's, or when his own
+   * claims carry the price. Every surface that shows the bid says so.
+   */
+  priorSeason: number | null;
 };
 
 /** One player on the board. */

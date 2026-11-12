@@ -230,10 +230,8 @@ const PHASE_CELLS: { key: string; label: string; week: number }[] = [
 ];
 
 async function loadFaabMarket(): Promise<FaabMarket> {
-  const [cells, settings] = await Promise.all([
-    loadPriorCellsCached(),
-    loadFaabSettings(createAdminClient()),
-  ]);
+  const settings = await loadFaabSettings(createAdminClient());
+  const cells = await loadPriorCellsCached(settings.priors.minCellSamples);
   const minSamples = settings.priors.minCellSamples;
   const calendar = settings.market.calendar;
 

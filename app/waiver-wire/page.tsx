@@ -72,6 +72,9 @@ import { KeyIdea, LessonCard, Para, TileGrid, TryIt } from "@/components/waiver-
 import { HotClaims } from "@/components/waiver-wire/hot-claims";
 import { PercentExplainer } from "@/components/waiver-wire/percent-explainer";
 import { topPickup } from "@/lib/waiver-wire/reasons";
+import { loadPickupShowcaseCached, offseasonSeasonFor } from "@/lib/waiver-wire/offseason";
+import { rankShowcase, type ShowcaseScoring } from "@/lib/waiver-wire/offseason-build";
+import { OffseasonBoard } from "@/components/waiver-wire/offseason-board";
 import {
   ClearingPriceFigure,
   FreeClaimFigure,
@@ -336,10 +339,8 @@ const BIDDER_CELLS: { key: string; label: string }[] = [
 ];
 
 async function loadWaiverMarket(): Promise<WaiverMarket> {
-  const [cells, settings] = await Promise.all([
-    loadPriorCellsCached(),
-    loadFaabSettings(createAdminClient()),
-  ]);
+  const settings = await loadFaabSettings(createAdminClient());
+  const cells = await loadPriorCellsCached(settings.priors.minCellSamples);
   const minSamples = settings.priors.minCellSamples;
   const bidders = BIDDER_CELLS.map((cell) => ({
     label: cell.label,
@@ -383,14 +384,21 @@ export default async function WaiverWirePage({
   });
 
   const week = context.currentWeek;
+  // Between seasons the board has no week to rank. The hub shows last
+  // season's best pickups instead, and skips the board read entirely.
+  const offseasonSeason = offseasonSeasonFor({
+    season: context.season,
+    currentWeek: context.currentWeek,
+  });
+  const offseason = offseasonSeason !== null;
 
-  const [isMember, market, spread, board] = await Promise.all([
+  const [isMember, market, spread, board, showcase] = await Promise.all([
     isDiscordMember(),
     loadWaiverMarket(),
     context.season != null
       ? loadBudgetSpreadCached(context.season)
       : Promise.resolve<BudgetSpread>({ total: 0, buckets: [], otherLeagues: 0 }),
-    context.format && context.sourceSlug
+    !offseason && context.format && context.sourceSlug
       ? loadWaiverBoardCached({
           week,
           format: context.format,
@@ -407,7 +415,18 @@ export default async function WaiverWirePage({
             sourceName: context.sourceName,
           }),
         ),
+    offseasonSeason !== null ? loadPickupShowcaseCached(offseasonSeason) : Promise.resolve(null),
   ]);
+
+  const scoringType = context.format?.scoring_type;
+  const showcaseScoring: ShowcaseScoring =
+    scoringType === "standard" || scoringType === "half_ppr" ? scoringType : "ppr";
+  const showcaseTePremium = Number(context.format?.te_premium_bonus ?? 0) || 0;
+  // Ranked exactly as the board ranks it, so the structured data lists what
+  // the reader is shown.
+  const showcaseRanked = showcase
+    ? rankShowcase(showcase.players, showcaseScoring, showcaseTePremium, showcase.leagues)
+    : [];
 
   const position = parsePosition(search.pos);
 
@@ -415,14 +434,22 @@ export default async function WaiverWirePage({
   // hero stays whichever tab a shared link opens on.
   const hero = topPickup(board.rows);
 
-  const chips: MastheadChip[] = [
-    { label: "Updated weekly", tone: "cyan" },
-    { label: `Week ${week}`, tone: "purple" },
-    { label: board.assumptions.formatName, tone: "plain" },
-  ];
+  const chips: MastheadChip[] = offseason
+    ? [
+        { label: "Offseason", tone: "cyan" },
+        { label: `${offseasonSeason} in review`, tone: "purple" },
+        { label: context.format?.display_name ?? board.assumptions.formatName, tone: "plain" },
+      ]
+    : [
+        { label: "Updated weekly", tone: "cyan" },
+        { label: `Week ${week}`, tone: "purple" },
+        { label: board.assumptions.formatName, tone: "plain" },
+      ];
 
+  // In the offseason the masthead carries no stats: the report's own
+  // letterhead states the same figures a few lines below.
   const stats: MastheadStat[] = [];
-  if (!board.emptyReason) {
+  if (!offseason && !board.emptyReason) {
     stats.push({
       label: "On the wire",
       value: String(board.rows.length),
@@ -430,7 +457,7 @@ export default async function WaiverWirePage({
       accent: "cyan",
     });
   }
-  const leagues = board.rows.find((r) => r.rosterRate)?.rosterRate?.total;
+  const leagues = offseason ? undefined : board.rows.find((r) => r.rosterRate)?.rosterRate?.total;
   if (leagues) {
     stats.push({
       label: "Leagues measured",
@@ -451,7 +478,7 @@ export default async function WaiverWirePage({
       accent: "purple",
     });
   }
-  if (market.overall?.enough) {
+  if (!offseason && market.overall?.enough) {
     stats.push({
       label: "Claims that cost nothing",
       value: `${Math.round(market.overall.zeroShare * 100)}%`,
@@ -481,7 +508,23 @@ export default async function WaiverWirePage({
       ...(board.rosterRatesComputedAt ? { dateModified: board.rosterRatesComputedAt } : {}),
     },
     faqPageJsonLd(FAQ),
-    ...(board.rows.length > 0
+    ...(offseason && showcaseRanked.length > 0
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: `Best fantasy football waiver wire pickups of ${offseasonSeason}`,
+            numberOfItems: Math.min(10, showcaseRanked.length),
+            itemListElement: showcaseRanked.slice(0, 10).map((p, i) => ({
+              "@type": "ListItem",
+              position: i + 1,
+              name: `${p.name}, ${p.position}`,
+              url: `${SITE.url}/players/${encodeURIComponent(p.slug)}`,
+            })),
+          },
+        ]
+      : []),
+    ...(!offseason && board.rows.length > 0
       ? [
           {
             "@context": "https://schema.org",
@@ -526,14 +569,18 @@ export default async function WaiverWirePage({
           title="The fantasy football waiver wire"
           chips={chips}
           stats={stats}
-          description="How claims work, when they run, and who is worth putting one in for this week. Every name below is measured: who actually still has him, whose role just changed, and what a claim like that has been costing."
+          description={
+            offseason
+              ? `How claims work, when they run, and what last season's wire paid out. The weekly board is resting until the ${(offseasonSeason ?? 0) + 1} season; below are the ${offseasonSeason} pickups that made the biggest difference, measured across real leagues.`
+              : "How claims work, when they run, and who is worth putting one in for this week. Every name below is measured: who actually still has him, whose role just changed, and what a claim like that has been costing."
+          }
           actions={
             <>
               <a
-                href="#board-heading"
+                href={offseason ? "#offseason-heading" : "#board-heading"}
                 className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 py-3 sm:w-auto text-sm font-semibold text-[#07070D] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                This week&apos;s pickups
+                {offseason ? "Last season's best pickups" : "This week's pickups"}
                 <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
               </a>
               <Link
@@ -576,7 +623,7 @@ export default async function WaiverWirePage({
               currentWeek={context.currentWeek}
               season={board.season || null}
             />
-            <MethodRail board={board} />
+            {!offseason && <MethodRail board={board} />}
             <NextRail
               links={[
                 {
@@ -601,28 +648,43 @@ export default async function WaiverWirePage({
       >
         <TheShortVersion />
 
-        <BudgetProvider>
-          {hero && <TopPickup row={hero} week={week} isPast={false} />}
-
-          <WaiverBoardPanel
-            board={board}
-            basePath="/waiver-wire"
-            activePosition={position}
-            headingId="board-heading"
-            heading="This week's waiver wire pickups"
-            excludePlayerIds={hero ? [hero.playerId] : []}
+        {offseason ? (
+          <OffseasonBoard
+            showcase={showcase}
+            season={offseasonSeason}
+            scoring={{
+              scoring: showcaseScoring,
+              tePremiumBonus: showcaseTePremium,
+              formatName: context.format?.display_name ?? board.assumptions.formatName,
+            }}
+            initialPosition={firstParam(search.pos)?.toUpperCase() ?? null}
           />
-        </BudgetProvider>
+        ) : (
+          <>
+            <BudgetProvider>
+              {hero && <TopPickup row={hero} week={week} isPast={false} />}
 
-        <HotClaims claims={board.hotClaims} window={board.assumptions.claimWeeks} />
+              <WaiverBoardPanel
+                board={board}
+                basePath="/waiver-wire"
+                activePosition={position}
+                headingId="board-heading"
+                heading="This week's waiver wire pickups"
+                excludePlayerIds={hero ? [hero.playerId] : []}
+              />
+            </BudgetProvider>
 
-        <Link
-          href={weekPath(week)}
-          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2.5 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        >
-          Open the week {week} page on its own
-          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-        </Link>
+            <HotClaims claims={board.hotClaims} window={board.assumptions.claimWeeks} />
+
+            <Link
+              href={weekPath(week)}
+              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2.5 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Open the week {week} page on its own
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </>
+        )}
       </PageColumns>
 
       <PageBody>

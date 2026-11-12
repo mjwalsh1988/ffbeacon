@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { loadFaabSettings } from "@/lib/faab/settings";
-import { priorsBuiltAt } from "@/lib/faab/priors-write";
+import { priorsBuiltAt } from "@/lib/faab/priors-incremental";
 import { FaabSettingsManager, type PriorsStatus } from "./faab-settings-manager";
 
 export const dynamic = "force-dynamic";
+// The Rebuild button runs a slice of the full pass inside its server action.
+export const maxDuration = 300;
 
 export const metadata: Metadata = { title: "FAAB Calculator" };
 

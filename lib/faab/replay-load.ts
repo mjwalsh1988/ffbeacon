@@ -29,7 +29,12 @@ import { fetchAllRows, fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
 import { groupAuctions, type AuctionTransactionRow } from "./league-load";
 import type { PriorLeagueKind } from "./priors-build";
 import { aliveFractionFor, isSuperflexShape, leagueKindFor } from "./priors-load";
-import { toPriorCell, type PriorCell } from "./priors-math";
+import {
+  currentPriorSeason,
+  mergeSeasonCells,
+  toPriorCell,
+  type PriorCell,
+} from "./priors-math";
 import type { ReplayAuction, ReplayBid } from "./replay";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -136,17 +141,33 @@ async function loadPositions(
  * `unstable_cache`, which a script has no business pulling in. The replay
  * wants today's cells anyway: it usually runs right after a rebuild.
  */
-export async function loadPriorCellsForReplay(supabase: ServiceClient): Promise<PriorCell[]> {
+export async function loadPriorCellsForReplay(
+  supabase: ServiceClient,
+  minCellSamples: number,
+): Promise<PriorCell[]> {
   const rows = await fetchAllRows("faab replay market cells", (from, to) =>
     supabase
       .from("faab_market_priors")
       .select(
-        "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at",
+        "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at, season",
       )
+      .order("season", { ascending: true })
       .order("cell_key", { ascending: true })
       .range(from, to),
   );
-  return rows.map((row) => toPriorCell(row as unknown as Record<string, unknown>));
+  const { data: newest } = await supabase
+    .from("leagues")
+    .select("season")
+    .order("season", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  // Same per-cell season rule as the page read, so the replay grades the
+  // prices a reader is actually shown.
+  return mergeSeasonCells(
+    rows.map((row) => toPriorCell(row as unknown as Record<string, unknown>)),
+    minCellSamples,
+    currentPriorSeason(newest?.season == null ? null : Number(newest.season), Date.now()),
+  );
 }
 
 /**

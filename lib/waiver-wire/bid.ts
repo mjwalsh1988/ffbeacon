@@ -261,7 +261,12 @@ export function boardBid(params: {
   const lowPct = Math.round(clamp(low, 0, 100));
   const highPct = Math.max(lowPct, Math.round(clamp(high, 0, 100)));
 
-  return { lowPct, highPct, bidders, basis, ...tierFor(highPct) };
+  // Only the market half can be borrowed from last season; his own claims
+  // are always this season's.
+  const priorSeason =
+    basis !== "claims" && picked?.cell.fromPriorSeason ? picked.cell.season : null;
+
+  return { lowPct, highPct, bidders, basis, priorSeason, ...tierFor(highPct) };
 }
 
 /**

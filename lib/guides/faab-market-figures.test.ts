@@ -34,6 +34,8 @@ function cell(overrides: Partial<PriorCell> = {}): PriorCell {
     leaguesCount: 16,
     seasons: [2025, 2026],
     builtAt: "2026-09-19 22:29:29.406+00",
+    season: 2026,
+    fromPriorSeason: false,
     ...overrides,
   };
 }

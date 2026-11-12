@@ -676,7 +676,13 @@ export async function syncNflHistory(admin: Client, opts: SyncOptions): Promise<
 
   // Career-wide columns from every stored row, then prominence for everyone touched.
   const since = fromSeason > ROSTER_FLOOR ? fromSeason : null;
-  const { data: recomputed, error: recomputeError } = await admin.rpc("long_shot_history_recompute", { p_since: since });
+  // p_since defaults to NULL in SQL (every season), and the generated types
+  // spell an optional argument without `| null`, so a null is sent by leaving
+  // the argument out.
+  const { data: recomputed, error: recomputeError } = await admin.rpc(
+    "long_shot_history_recompute",
+    since === null ? {} : { p_since: since },
+  );
   if (recomputeError) throw new Error(`history recompute failed: ${recomputeError.message}`);
   summary.recomputed = Number(recomputed ?? 0);
   summary.prominenceUpdated = await recomputeProminence(admin, since);

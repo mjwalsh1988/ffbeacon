@@ -28,9 +28,13 @@ export const CACHE_TAGS = {
   playerTrades: "player-trades",
   /** articles / article_players reads used by the profile news teaser. */
   playerArticles: "player-articles",
-  /** faab_market_priors: the anonymous clearing-price cells, rebuilt at most
-   *  every few days by the derived-data cron or by npm run faab:priors. */
+  /** faab_market_priors: the anonymous clearing-price cells (this season and
+   *  last), rebuilt by the hourly faab-priors cron when a pass completes, or by
+   *  npm run faab:priors. */
   faabPriors: "faab-priors",
+  /** waiver_pickup_showcases: the waiver wire's offseason board, rebuilt by
+   *  the faab-priors cron at most weekly while the season is over. */
+  waiverShowcase: "waiver-showcase",
   /** player_market_latest reads (Sleeper ADP), refreshed by the nightly
    *  sync-sleeper-market cron, which busts this tag when it writes. */
   marketAdp: "market-adp",

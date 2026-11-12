@@ -804,14 +804,16 @@ export function FaabSettingsManager({
     startRebuild(async () => {
       const res = await rebuildFaabPriors();
       if (res.ok) {
-        setPriorsStatus({
-          builtAt: res.builtAt,
-          cells: res.cells,
-          leagues: res.leagues,
-        });
-        setPriorsMessage(
-          `Rebuilt ${res.cells} cells from ${res.auctions} auctions across ${res.leagues} leagues. ${res.deleted} stale cells removed.`,
-        );
+        if (res.complete) {
+          setPriorsStatus((prev) => ({ ...prev, builtAt: res.builtAt, cells: res.cells }));
+          setPriorsMessage(
+            `Rebuilt ${res.cells} cells from ${res.auctions} auctions after reading ${res.leaguesRead} leagues. ${res.deleted} stale cells removed.`,
+          );
+        } else {
+          setPriorsMessage(
+            `Full rebuild started: ${res.leaguesRead} leagues read so far. The hourly job finishes the rest, and the current cells keep serving until it does.`,
+          );
+        }
       } else {
         setPriorsMessage(`Rebuild failed: ${res.error}`);
       }
@@ -2365,13 +2367,13 @@ export function FaabSettingsManager({
       <SectionCard
         title="Market data"
         badge={{ tone: "strategy", label: "Strategy" }}
-        blurb="What a waiver claim actually costs, measured across every league we hold and stored as anonymous quantiles by situation. The nightly derived-data job rebuilds these when they go stale; this is the same work on demand."
+        blurb="What a waiver claim actually costs, measured from this season's auctions and stored as anonymous quantiles by situation. Last season's cell stands in for any situation this season has not yet filled. The hourly FAAB price job keeps these current by re-reading only leagues whose claims changed."
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label="Minimum samples per cell"
             htmlFor={`${ids}-pri-min`}
-            hint="A cell thinner than this falls back to a coarser one instead of being trusted."
+            hint="A cell thinner than this uses last season's cell for the same situation, then a coarser cell. Applied when the cells are read, so no rebuild is needed after changing it."
           >
             <NumberInput
               id={`${ids}-pri-min`}
@@ -2380,20 +2382,6 @@ export function FaabSettingsManager({
               step="1"
               min={1}
               max={10000}
-            />
-          </Field>
-          <Field
-            label="Rebuild after this many days"
-            htmlFor={`${ids}-pri-stale`}
-            hint="The nightly job rebuilds only when the newest cell is older than this. 1 to 60."
-          >
-            <NumberInput
-              id={`${ids}-pri-stale`}
-              value={settings.priors.staleAfterDays}
-              onChange={(n) => patchPriors({ staleAfterDays: Math.round(n) })}
-              step="1"
-              min={1}
-              max={60}
             />
           </Field>
         </div>
@@ -2455,7 +2443,7 @@ export function FaabSettingsManager({
         <div className="mt-5 rounded-card border border-line bg-base/60 p-3">
           <p className="text-sm text-ink-muted">
             {priorsStatus.builtAt
-              ? `Last built ${formatEastern(priorsStatus.builtAt)}, ${priorsStatus.cells} cells from ${priorsStatus.leagues} leagues.`
+              ? `Last built ${formatEastern(priorsStatus.builtAt)}: ${priorsStatus.cells} cells across this season and last, the widest drawn from ${priorsStatus.leagues} leagues.`
               : "Not built yet. No cells are stored, so the calculator is pricing without measured market data."}
           </p>
           <button
@@ -2465,16 +2453,17 @@ export function FaabSettingsManager({
             className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink hover:border-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             <RefreshCw aria-hidden="true" className="h-4 w-4" />
-            {isRebuilding ? "Rebuilding..." : "Rebuild now"}
+            {isRebuilding ? "Rebuilding..." : "Full rebuild"}
           </button>
           <p aria-live="polite" className="mt-2 text-sm text-ink-muted">
             {isRebuilding
-              ? "Rebuilding the market cells. This reads every auction we hold, so it can take a minute."
+              ? "Reading every league of this season and last. This can take up to four minutes; anything left is finished by the hourly job."
               : priorsMessage}
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-ink-subtle">
-            A rebuild uses the minimum sample size already saved, so save this
-            page first if you have just changed it.
+            The hourly job already keeps these current. A full rebuild is for a
+            change to the build logic, or a league whose budget changed without
+            any claim changing.
           </p>
         </div>
       </SectionCard>

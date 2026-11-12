@@ -333,7 +333,7 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
   const [universe, rateRows, cells, claimMarket] = await Promise.all([
     loadRankedUniverseCached({ formatConfigId: format.id, source: sourceSlug }),
     loadRosterRates(supabase, season),
-    loadPriorCellsCached().catch((error) => {
+    loadPriorCellsCached(params.settings.priors.minCellSamples).catch((error) => {
       console.error("[waiver-wire] market cells read failed", error);
       return [];
     }),

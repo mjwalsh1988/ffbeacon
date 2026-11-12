@@ -34,6 +34,11 @@ export type MarketRead = {
   leaguesCount: number;
   seasons: number[];
   builtAt: string;
+  /**
+   * True when this season had too few claims in this slice and last season's
+   * cell is standing in (lib/faab/priors-math.ts mergeSeasonCells).
+   */
+  fromPriorSeason: boolean;
   /** Share of auctions that cleared for nothing, 0 to 1. */
   zeroShare: number;
   /**
@@ -71,6 +76,7 @@ export function readCell(
     leaguesCount: cell.leaguesCount,
     seasons: cell.seasons,
     builtAt: cell.builtAt,
+    fromPriorSeason: cell.fromPriorSeason,
     zeroShare: cell.zeroShare,
     p25: cell.p25,
     p50: cell.p50,
@@ -119,12 +125,17 @@ export function seasonsText(seasons: number[]): string {
   return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
 }
 
-/** "324 claims, 16 leagues, 2025 and 2026". The provenance of every figure. */
+/**
+ * "324 claims, 16 leagues, 2026". The provenance of every figure. A cell
+ * borrowed from last season says so: "..., 2025, last season's until this one
+ * has enough".
+ */
 export function sampleText(read: MarketRead): string {
   const claims = `${read.sampleSize.toLocaleString("en-US")} ${read.sampleSize === 1 ? "claim" : "claims"}`;
   const leagues = `${read.leaguesCount.toLocaleString("en-US")} ${read.leaguesCount === 1 ? "league" : "leagues"}`;
   const seasons = seasonsText(read.seasons);
-  return seasons ? `${claims}, ${leagues}, ${seasons}` : `${claims}, ${leagues}`;
+  const base = seasons ? `${claims}, ${leagues}, ${seasons}` : `${claims}, ${leagues}`;
+  return read.fromPriorSeason ? `${base}, last season's until this one has enough` : base;
 }
 
 /**

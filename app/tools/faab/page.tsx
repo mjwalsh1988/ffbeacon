@@ -186,7 +186,7 @@ export default async function FaabPage({
         <WrittenSections market={marketFacts} />
         <MarketStats facts={marketFacts} />
         {/* After the market tables on purpose. Those establish what a claim
-            costs across every league we hold; this one splits the largest
+            costs this season across the leagues we hold; this one splits the largest
             division inside that number and needs the general figure to have
             been made first. */}
         <DynastySection facts={marketFacts} />

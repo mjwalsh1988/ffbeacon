@@ -219,6 +219,9 @@ export function TopPickup({
               <BidMeter bid={bid} market={market} className="mt-3" />
               <p className="mt-2 text-xs leading-snug text-ink-subtle">
                 of your season budget. {BIDDERS_TEXT[bid.bidders]}.
+                {bid.priorSeason
+                  ? ` Priced from ${bid.priorSeason} claims until this season has enough.`
+                  : ""}
               </p>
               <BidInDollars
                 lowPct={bid.lowPct}

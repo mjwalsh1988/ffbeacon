@@ -30,7 +30,13 @@
 import Link from "next/link";
 
 import { ChartFigure, DataTable, SERIES_A, SERIES_B, Td, Th, makeScale } from "@/components/chart-kit";
-import { MarketTable, pct, type MarketFacts, type MarketRow } from "./market-stats";
+import {
+  MarketTable,
+  pct,
+  seasonsPhrase,
+  type MarketFacts,
+  type MarketRow,
+} from "./market-stats";
 
 /** One bidder count with both formats' medians beside it. */
 type Pair = {
@@ -255,8 +261,8 @@ export function DynastySection({ facts }: { facts: MarketFacts | null }) {
       <p className="mt-6 max-w-3xl text-sm leading-relaxed text-ink-muted">
         Figures above come from {dynastyAuctions.toLocaleString()} priced
         dynasty and keeper auctions and {redraftAuctions.toLocaleString()}{" "}
-        redraft auctions across the Sleeper leagues synced to FF Beacon, seasons{" "}
-        {facts.seasonMin} to {facts.seasonMax}. Building a roster rather than
+        redraft auctions across the Sleeper leagues synced to FF Beacon,{" "}
+        {seasonsPhrase(facts)}. Building a roster rather than
         pricing one claim? Our{" "}
         <Link
           href="/guides/dynasty-strategy"

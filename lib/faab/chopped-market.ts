@@ -52,9 +52,7 @@ export function buildChoppedMarket(cells: PriorCell[], minSamples: number): Chop
 }
 
 export async function loadChoppedMarket(): Promise<ChoppedMarket> {
-  const [cells, settings] = await Promise.all([
-    loadPriorCellsCached(),
-    loadFaabSettings(createAdminClient()),
-  ]);
+  const settings = await loadFaabSettings(createAdminClient());
+  const cells = await loadPriorCellsCached(settings.priors.minCellSamples);
   return buildChoppedMarket(cells, settings.priors.minCellSamples);
 }

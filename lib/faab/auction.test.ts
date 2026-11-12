@@ -53,6 +53,8 @@ function cell(): PriorCell {
     leaguesCount: 50,
     seasons: [2025],
     builtAt: "2026-09-19T00:00:00.000Z",
+    season: 2026,
+    fromPriorSeason: false,
   };
 }
 

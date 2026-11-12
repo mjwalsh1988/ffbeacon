@@ -26,6 +26,8 @@ function cell(over: Partial<PriorCell> = {}): PriorCell {
     leaguesCount: 20,
     seasons: [2024, 2025],
     builtAt: "2026-09-19T12:00:00.000Z",
+    season: 2026,
+    fromPriorSeason: false,
     ...over,
   };
 }
@@ -75,14 +77,14 @@ describe("pickCell", () => {
     ];
     const picked = pickCell(cells, WANT, 30);
     expect(picked?.cell.cellKey).toBe("any|any|any|any|any");
-    expect(picked?.fellBackTo).toBe("every auction we hold");
+    expect(picked?.fellBackTo).toBe("every auction this season");
   });
 
   it("returns the widest cell it found rather than nothing when none clears the bar", () => {
     const only = cell({ cellKey: "any|any|any|any|any", sampleSize: 3 });
     const picked = pickCell([only], WANT, 30);
     expect(picked?.cell.sampleSize).toBe(3);
-    expect(picked?.fellBackTo).toBe("every auction we hold");
+    expect(picked?.fellBackTo).toBe("every auction this season");
   });
 
   it("returns null with no cells at all", () => {

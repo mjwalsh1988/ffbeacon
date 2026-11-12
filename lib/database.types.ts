@@ -1925,6 +1925,7 @@ export type Database = {
           position: string;
           runner_up_ratio_p50: number | null;
           sample_size: number;
+          season: number;
           seasons: number[];
           superflex: string;
           zero_share: number;
@@ -1948,6 +1949,7 @@ export type Database = {
           position: string;
           runner_up_ratio_p50?: number | null;
           sample_size: number;
+          season: number;
           seasons: number[];
           superflex: string;
           zero_share: number;
@@ -1971,9 +1973,123 @@ export type Database = {
           position?: string;
           runner_up_ratio_p50?: number | null;
           sample_size?: number;
+          season?: number;
           seasons?: number[];
           superflex?: string;
           zero_share?: number;
+        };
+        Relationships: [];
+      };
+      faab_prior_auctions: {
+        Row: {
+          alive_fraction: number | null;
+          bidder_count: number;
+          built_at: string;
+          id: number;
+          league_id: string;
+          league_kind: string;
+          player_sleeper_id: string;
+          position: string | null;
+          runner_up_pct: number | null;
+          season: number;
+          superflex: boolean;
+          week: number;
+          winning_pct: number;
+        };
+        Insert: {
+          alive_fraction?: number | null;
+          bidder_count: number;
+          built_at?: string;
+          id?: never;
+          league_id: string;
+          league_kind: string;
+          player_sleeper_id: string;
+          position?: string | null;
+          runner_up_pct?: number | null;
+          season: number;
+          superflex: boolean;
+          week: number;
+          winning_pct: number;
+        };
+        Update: {
+          alive_fraction?: number | null;
+          bidder_count?: number;
+          built_at?: string;
+          id?: never;
+          league_id?: string;
+          league_kind?: string;
+          player_sleeper_id?: string;
+          position?: string | null;
+          runner_up_pct?: number | null;
+          season?: number;
+          superflex?: boolean;
+          week?: number;
+          winning_pct?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "faab_prior_auctions_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      faab_prior_build_state: {
+        Row: {
+          current_season: number | null;
+          id: string;
+          last_cells_built_at: string | null;
+          last_pass_completed_at: string | null;
+          lease_token: string | null;
+          lease_until: string | null;
+          logic_version: number;
+          pass_cursor: string | null;
+          pass_dirty_seasons: number[];
+          pass_full: boolean;
+          pass_logic_version: number | null;
+          pass_season: number | null;
+          pass_since: string | null;
+          pass_started_at: string | null;
+          updated_at: string;
+          watermark: string | null;
+        };
+        Insert: {
+          current_season?: number | null;
+          id?: string;
+          last_cells_built_at?: string | null;
+          last_pass_completed_at?: string | null;
+          lease_token?: string | null;
+          lease_until?: string | null;
+          logic_version?: number;
+          pass_cursor?: string | null;
+          pass_dirty_seasons?: number[];
+          pass_full?: boolean;
+          pass_logic_version?: number | null;
+          pass_season?: number | null;
+          pass_since?: string | null;
+          pass_started_at?: string | null;
+          updated_at?: string;
+          watermark?: string | null;
+        };
+        Update: {
+          current_season?: number | null;
+          id?: string;
+          last_cells_built_at?: string | null;
+          last_pass_completed_at?: string | null;
+          lease_token?: string | null;
+          lease_until?: string | null;
+          logic_version?: number;
+          pass_cursor?: string | null;
+          pass_dirty_seasons?: number[];
+          pass_full?: boolean;
+          pass_logic_version?: number | null;
+          pass_season?: number | null;
+          pass_since?: string | null;
+          pass_started_at?: string | null;
+          updated_at?: string;
+          watermark?: string | null;
         };
         Relationships: [];
       };
@@ -3440,6 +3556,7 @@ export type Database = {
           sleeper_transaction_id: string;
           status: string | null;
           type: string;
+          updated_at: string;
           waiver_budget: Json;
           week: number | null;
         };
@@ -3457,6 +3574,7 @@ export type Database = {
           sleeper_transaction_id: string;
           status?: string | null;
           type: string;
+          updated_at?: string;
           waiver_budget?: Json;
           week?: number | null;
         };
@@ -3474,6 +3592,7 @@ export type Database = {
           sleeper_transaction_id?: string;
           status?: string | null;
           type?: string;
+          updated_at?: string;
           waiver_budget?: Json;
           week?: number | null;
         };
@@ -9157,6 +9276,27 @@ export type Database = {
           },
         ];
       };
+      waiver_pickup_showcases: {
+        Row: {
+          built_at: string;
+          leagues_count: number;
+          players: Json;
+          season: number;
+        };
+        Insert: {
+          built_at?: string;
+          leagues_count: number;
+          players?: Json;
+          season: number;
+        };
+        Update: {
+          built_at?: string;
+          leagues_count?: number;
+          players?: Json;
+          season?: number;
+        };
+        Relationships: [];
+      };
       would_you_rather_discord_polls: {
         Row: {
           answer_id_a: number | null;
@@ -9543,6 +9683,7 @@ export type Database = {
         };
         Returns: Json;
       };
+      claim_faab_prior_lease: { Args: { p_seconds: number }; Returns: string };
       claim_league_sync_jobs: {
         Args: { p_limit: number };
         Returns: {
@@ -9617,6 +9758,15 @@ export type Database = {
         Args: { p_leagues: Json; p_max_leagues?: number; p_run_id: string };
         Returns: Json;
       };
+      faab_prior_changed_leagues: {
+        Args: {
+          p_after: string;
+          p_limit: number;
+          p_seasons: number[];
+          p_since: string;
+        };
+        Returns: string[];
+      };
       find_player_trade_transactions: {
         Args: { p_limit?: number; p_sleeper_id: string };
         Returns: {
@@ -9633,6 +9783,7 @@ export type Database = {
           sleeper_transaction_id: string;
           status: string | null;
           type: string;
+          updated_at: string;
           waiver_budget: Json;
           week: number | null;
         }[];
@@ -9699,7 +9850,7 @@ export type Database = {
         };
       };
       long_shot_history_recompute: {
-        Args: { p_since?: number | null };
+        Args: { p_since?: number };
         Returns: number;
       };
       long_shot_increment_tally: {
@@ -9763,6 +9914,10 @@ export type Database = {
       refresh_player_roster_rates: {
         Args: { p_season: number };
         Returns: number;
+      };
+      release_faab_prior_lease: {
+        Args: { p_token: string };
+        Returns: undefined;
       };
       release_league_sync: {
         Args: { p_actor_key: string };
@@ -9911,6 +10066,10 @@ export type Database = {
           sleeper_player_id: string;
         }[];
       };
+      waiver_pickup_counts: {
+        Args: { p_league_ids: string[]; p_season: number };
+        Returns: Json;
+      };
     };
     Enums: {
       [_ in never]: never;
@@ -9932,12 +10091,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9959,13 +10118,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9984,13 +10142,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -10009,13 +10166,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -10028,11 +10184,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

@@ -1,36 +1,41 @@
 /**
- * Read every waiver auction we hold, across every league, and reduce it to the
+ * Read the waiver auctions of a BATCH of leagues and reduce them to the
  * anonymous shape the priors builder consumes.
  *
- * This is the one place in the product that sweeps the whole
- * `league_transactions` table. It runs from a script and from the nightly
- * derived-data cron, never from a page render, and it iterates transaction
- * rows rather than leagues: there is no per-league compute here and none may
- * be added, for the same scaling reason as every other on-demand model.
+ * This used to sweep the whole `league_transactions` table on every rebuild.
+ * It now reads only the leagues the incremental pass hands it
+ * (lib/faab/priors-incremental.ts), for this season and last, so a run costs
+ * what changed rather than what exists. It still iterates transaction rows for
+ * those leagues, never per-league compute: no Sleeper request and no model.
  *
  * PAGINATION IS NOT OPTIONAL. PostgREST truncates a select at 1,000 rows and
- * says nothing about it, and this table holds tens of thousands. Every read
- * below pages with .range() over a unique order until a short page comes
- * back, and a failed page throws rather than feeding the builder a partial set.
+ * says nothing about it. Every read below pages over a unique key until a
+ * short page comes back, and a failed page throws rather than feeding the
+ * builder a partial set.
  *
- * Nothing identifying leaves this module: the league id travels only so the
- * builder can count distinct leagues, and the builder stores the count rather
- * than the ids.
+ * The league id and the Sleeper player id travel with each auction because
+ * the kept sample (`faab_prior_auctions`, service role only) needs them: the
+ * league id to replace a changed league's rows and to count distinct leagues,
+ * the player id for the offseason showcase's median bid. The published cells
+ * store counts and quantiles only.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all";
+import {
+  fetchAllRowsInChunks,
+  fetchAllRowsInChunksByKeyset,
+} from "@/lib/supabase/fetch-all";
 import {
   groupAuctions,
   type AuctionTransactionRow,
-  type LeagueAuction,
 } from "./league-load";
 import type { PriorAuction, PriorLeagueKind } from "./priors-build";
 
 type ServiceClient = SupabaseClient<Database>;
 
-const PAGE = 1000;
+/** League ids per `.in()` request: well inside a URL, few enough round trips. */
+const ID_CHUNK = 100;
 
 type LeagueFacts = {
   id: string;
@@ -42,6 +47,9 @@ type LeagueFacts = {
   /** Sleeper roster id to the week it was eliminated, chopped leagues only. */
   eliminatedByRoster: Map<number, number>;
 };
+
+/** One won auction as the kept sample stores it. */
+export type KeptAuction = PriorAuction & { playerSleeperId: string };
 
 function numberFrom(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -74,66 +82,71 @@ export function isSuperflexShape(rosterPositions: unknown): boolean {
   return tokens.filter((t) => t === "QB").length >= 2;
 }
 
-async function loadLeagueFacts(supabase: ServiceClient): Promise<Map<string, LeagueFacts>> {
+async function loadLeagueFacts(
+  supabase: ServiceClient,
+  leagueIds: string[],
+): Promise<{ leagues: Map<string, LeagueFacts>; seasons: Set<number> }> {
   const leagues = new Map<string, LeagueFacts>();
+  const seasons = new Set<number>();
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("leagues")
-      .select("id, season, metadata, roster_positions")
-      // Paging with no sort is not stable in PostgREST: a boundary can skip a
-      // row or hand the same one back twice, and a repeat here would inflate
-      // a league's roster count and double an auction into the published
-      // quantiles. Same reason lib/faab/outlook.ts orders by id.
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`faab priors leagues read failed at row ${from}: ${error.message}`);
-    if (!data || data.length === 0) break;
+  const leagueRows = await fetchAllRowsInChunks(
+    "faab priors leagues",
+    leagueIds,
+    (chunk, from, to) =>
+      supabase
+        .from("leagues")
+        .select("id, season, metadata, roster_positions")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ID_CHUNK,
+  );
 
-    for (const row of data) {
-      const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
-      const totalBudget = numberFrom(meta.settings?.waiver_budget);
-      // A league with no published budget cannot be expressed as a share of
-      // one, and dividing by zero would turn every bid into infinity.
-      if (totalBudget === null || totalBudget <= 0) continue;
-      leagues.set(row.id, {
-        id: row.id,
-        season: Number(row.season),
-        totalBudget,
-        kind: leagueKindFor(numberFrom(meta.settings?.type)),
-        superflex: isSuperflexShape(row.roster_positions),
-        rosterCount: 0,
-        eliminatedByRoster: new Map(),
-      });
-    }
-
-    if (data.length < PAGE) break;
+  for (const row of leagueRows) {
+    seasons.add(Number(row.season));
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    const totalBudget = numberFrom(meta.settings?.waiver_budget);
+    // A league with no published budget cannot be expressed as a share of
+    // one, and dividing by zero would turn every bid into infinity.
+    if (totalBudget === null || totalBudget <= 0) continue;
+    leagues.set(row.id, {
+      id: row.id,
+      season: Number(row.season),
+      totalBudget,
+      kind: leagueKindFor(numberFrom(meta.settings?.type)),
+      superflex: isSuperflexShape(row.roster_positions),
+      rosterCount: 0,
+      eliminatedByRoster: new Map(),
+    });
   }
 
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("rosters")
-      .select("league_id, sleeper_roster_id, metadata")
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`faab priors rosters read failed at row ${from}: ${error.message}`);
-    if (!data || data.length === 0) break;
+  // Ordered by id: unsorted paging can hand a row back twice, which would
+  // inflate a league's roster count and with it the chopped alive fraction.
+  const rosterRows = await fetchAllRowsInChunks(
+    "faab priors rosters",
+    Array.from(leagues.keys()),
+    (chunk, from, to) =>
+      supabase
+        .from("rosters")
+        .select("league_id, sleeper_roster_id, metadata")
+        .in("league_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ID_CHUNK,
+  );
 
-    for (const row of data) {
-      const league = leagues.get(row.league_id);
-      if (!league) continue;
-      league.rosterCount += 1;
-      const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
-      const eliminated = numberFrom(meta.settings?.eliminated);
-      if (eliminated !== null && eliminated > 0) {
-        league.eliminatedByRoster.set(Number(row.sleeper_roster_id), eliminated);
-      }
+  for (const row of rosterRows) {
+    const league = leagues.get(row.league_id);
+    if (!league) continue;
+    league.rosterCount += 1;
+    const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+    const eliminated = numberFrom(meta.settings?.eliminated);
+    if (eliminated !== null && eliminated > 0) {
+      league.eliminatedByRoster.set(Number(row.sleeper_roster_id), eliminated);
     }
-
-    if (data.length < PAGE) break;
   }
 
-  return leagues;
+  return { leagues, seasons };
 }
 
 /** Position per Sleeper player id, for the players our auctions mention. */
@@ -175,42 +188,69 @@ export function aliveFractionFor(league: LeagueFacts, week: number): number | nu
   return Math.max(0, Math.min(1, alive / league.rosterCount));
 }
 
-export type AuctionUniverse = {
-  auctions: PriorAuction[];
-  /** Leagues that contributed at least one auction. */
-  leagues: number;
+type WaiverRow = AuctionTransactionRow & { id: string; league_id: string };
+
+export type LeagueAuctionBatch = {
+  auctions: KeptAuction[];
+  /** The season every league in the batch is filed under, budget or not. */
+  leagueSeasons: Set<number>;
 };
 
-/** Every usable auction across every synced league, as anonymous rows. */
-export async function loadAuctionUniverse(supabase: ServiceClient): Promise<AuctionUniverse> {
-  const leagues = await loadLeagueFacts(supabase);
+/**
+ * Every won auction in these leagues for these seasons.
+ *
+ * A league with no published budget contributes nothing, and the caller still
+ * clears its old rows: a league whose commissioner removed FAAB has no
+ * auctions to price from any more.
+ */
+export async function loadLeagueAuctions(
+  supabase: ServiceClient,
+  leagueIds: string[],
+  seasons: number[],
+): Promise<LeagueAuctionBatch> {
+  if (leagueIds.length === 0 || seasons.length === 0) {
+    return { auctions: [], leagueSeasons: new Set() };
+  }
+  const { leagues, seasons: leagueSeasons } = await loadLeagueFacts(supabase, leagueIds);
+  const budgeted = Array.from(leagues.keys());
+  if (budgeted.length === 0) return { auctions: [], leagueSeasons };
+
+  // Keyset on id rather than offset paging: offset makes Postgres discard
+  // every earlier row on every page, and a chopped or dynasty league can hold
+  // thousands of failed bids.
+  const rows = await fetchAllRowsInChunksByKeyset<WaiverRow, string, string>(
+    "faab priors waiver transactions",
+    budgeted,
+    (chunk, after, limit) => {
+      let q = supabase
+        .from("league_transactions")
+        .select("id, league_id, season, week, type, status, adds, roster_ids, metadata")
+        .in("league_id", chunk)
+        .eq("type", "waiver")
+        .in("season", seasons)
+        .order("id", { ascending: true })
+        .limit(limit);
+      if (after !== null) q = q.gt("id", after);
+      return q as unknown as PromiseLike<{
+        data: WaiverRow[] | null;
+        error: { message: string } | null;
+      }>;
+    },
+    (row) => row.id,
+    ID_CHUNK,
+  );
 
   const rowsByLeague = new Map<string, AuctionTransactionRow[]>();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("league_transactions")
-      .select("league_id, season, week, type, status, adds, roster_ids, metadata")
-      .eq("type", "waiver")
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`faab priors waiver transactions read failed at row ${from}: ${error.message}`);
-    if (!data || data.length === 0) break;
-
-    for (const row of data) {
-      const leagueId = (row as { league_id: string }).league_id;
-      if (!leagues.has(leagueId)) continue;
-      const list = rowsByLeague.get(leagueId) ?? [];
-      list.push(row as AuctionTransactionRow);
-      rowsByLeague.set(leagueId, list);
-    }
-
-    if (data.length < PAGE) break;
+  for (const row of rows) {
+    const list = rowsByLeague.get(row.league_id) ?? [];
+    list.push(row);
+    rowsByLeague.set(row.league_id, list);
   }
 
-  const grouped = new Map<string, LeagueAuction[]>();
+  const grouped = new Map<string, ReturnType<typeof groupAuctions>>();
   const sleeperIds = new Set<string>();
-  for (const [leagueId, rows] of rowsByLeague) {
-    const auctions = groupAuctions(rows);
+  for (const [leagueId, leagueRows] of rowsByLeague) {
+    const auctions = groupAuctions(leagueRows);
     if (auctions.length === 0) continue;
     grouped.set(leagueId, auctions);
     for (const auction of auctions) sleeperIds.add(auction.playerSleeperId);
@@ -218,8 +258,7 @@ export async function loadAuctionUniverse(supabase: ServiceClient): Promise<Auct
 
   const positions = await loadPositions(supabase, Array.from(sleeperIds));
 
-  const out: PriorAuction[] = [];
-  const contributing = new Set<string>();
+  const out: KeptAuction[] = [];
   for (const [leagueId, auctions] of grouped) {
     const league = leagues.get(leagueId);
     if (!league) continue;
@@ -240,10 +279,10 @@ export async function loadAuctionUniverse(supabase: ServiceClient): Promise<Auct
         runnerUpPct: rivals.length > 0 ? asPct(rivals[0].amount) : null,
         leagueId,
         season: auction.season,
+        playerSleeperId: auction.playerSleeperId,
       });
-      contributing.add(leagueId);
     }
   }
 
-  return { auctions: out, leagues: contributing.size };
+  return { auctions: out, leagueSeasons };
 }

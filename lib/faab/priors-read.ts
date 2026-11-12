@@ -11,17 +11,27 @@
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
 import { createCachedReadClient } from "@/lib/supabase/server";
-import { toPriorCell, type PriorCell } from "./priors-math";
+import {
+  currentPriorSeason,
+  mergeSeasonCells,
+  toPriorCell,
+  type PriorCell,
+} from "./priors-math";
 
 export type {
   PickedCell,
   PriorCell,
   PriorWant,
 } from "./priors-math";
-export { bidForTargetFromCell, pickCell, priorCdf } from "./priors-math";
+export {
+  bidForTargetFromCell,
+  mergeSeasonCells,
+  pickCell,
+  priorCdf,
+} from "./priors-math";
 
 const CELL_COLUMNS =
-  "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at";
+  "cell_key, league_kind, superflex, position, phase, bidders, sample_size, zero_share, p05, p10, p25, p50, p75, p90, p95, p99, runner_up_ratio_p50, leagues_count, seasons, built_at, season";
 
 /** PostgREST caps a response at 1,000 rows whatever `limit` asks for. */
 const PAGE_SIZE = 1000;
@@ -47,7 +57,9 @@ const PAGE_SIZE = 1000;
  * Page until a short page arrives. See the memory note on this exact trap:
  * a `select()` without `range()` truncates at 1,000 rows and says nothing.
  */
-async function readAllCells(): Promise<PriorCell[]> {
+type CellRead = { cells: PriorCell[]; maxLeagueSeason: number | null };
+
+async function readAllCells(): Promise<CellRead> {
   // The publishable-key client, on purpose: these cells are public by policy
   // (anon SELECT), they carry no identifier, and a cached read that needs the
   // service role would be a cached read holding a secret-key client open.
@@ -57,17 +69,30 @@ async function readAllCells(): Promise<PriorCell[]> {
     const { data, error } = await supabase
       .from("faab_market_priors")
       .select(CELL_COLUMNS)
+      .order("season", { ascending: true })
       .order("cell_key", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     // A failed page mid-read would leave a PARTIAL market, which is the same
-    // silent half-answer this function exists to stop. Return nothing instead:
-    // every consumer already handles an empty list by saying so on the page.
-    if (error) return [];
+    // silent half-answer this function exists to stop. Throw, so the cache
+    // never stores the failure for a day; the caller falls back to a direct
+    // read and, failing that, to an empty market every page already handles.
+    if (error) throw new Error(`faab priors read failed: ${error.message}`);
     if (!data || data.length === 0) break;
     for (const row of data) out.push(toPriorCell(row as unknown as Record<string, unknown>));
     if (data.length < PAGE_SIZE) break;
   }
-  return out;
+
+  // Which season is "this season" is decided by the leagues, never by which
+  // cells happen to exist (see mergeSeasonCells). leagues is public by policy.
+  const { data: newest, error: seasonError } = await supabase
+    .from("leagues")
+    .select("season")
+    .order("season", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (seasonError) throw new Error(`faab priors season read failed: ${seasonError.message}`);
+
+  return { cells: out, maxLeagueSeason: newest?.season == null ? null : Number(newest.season) };
 }
 
 const cachedRead = unstable_cache(readAllCells, ["faab-market-priors"], {
@@ -89,10 +114,24 @@ const cachedRead = unstable_cache(readAllCells, ["faab-market-priors"], {
  * engine into a script turns a cache miss into a crash, which is how the
  * first end-to-end run of the chopped model failed.
  */
-export async function loadPriorCellsCached(): Promise<PriorCell[]> {
+export async function loadPriorCellsCached(minCellSamples: number): Promise<PriorCell[]> {
+  let read: CellRead;
   try {
-    return await cachedRead();
+    read = await cachedRead();
   } catch {
-    return readAllCells();
+    try {
+      read = await readAllCells();
+    } catch {
+      return [];
+    }
   }
+  // The table holds this season's cells and last season's. Every consumer
+  // gets exactly one cell per key, chosen by the per-cell rule in
+  // mergeSeasonCells, so no page can quote last year's price while this
+  // year's cell already has enough auctions behind it.
+  return mergeSeasonCells(
+    read.cells,
+    minCellSamples,
+    currentPriorSeason(read.maxLeagueSeason, Date.now()),
+  );
 }

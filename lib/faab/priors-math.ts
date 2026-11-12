@@ -18,6 +18,7 @@
  * quantiles describe.
  */
 
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 import type { PriorBidders, PriorLeagueKind } from "./priors-build";
 
 export type PriorCell = {
@@ -41,6 +42,14 @@ export type PriorCell = {
   leaguesCount: number;
   seasons: number[];
   builtAt: string;
+  /** The NFL season this cell's auctions were filed in. */
+  season: number;
+  /**
+   * True when this season's cell was too thin and last season's stands in
+   * for it. Set only by `mergeSeasonCells`; every page that shows a price
+   * from such a cell says so in words.
+   */
+  fromPriorSeason: boolean;
 };
 
 export type PriorWant = {
@@ -88,7 +97,86 @@ export function toPriorCell(row: Record<string, unknown>): PriorCell {
     leaguesCount: num(row.leagues_count),
     seasons: Array.isArray(row.seasons) ? row.seasons.map((s) => num(s)) : [],
     builtAt: String(row.built_at ?? ""),
+    season: num(row.season),
+    fromPriorSeason: false,
   };
+}
+
+/** The calendar year in New York, which is the year an NFL season is filed under. */
+function easternYear(nowMs: number): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: SITE_TIME_ZONE, year: "numeric" }).format(
+      new Date(nowMs),
+    ),
+  );
+}
+
+/**
+ * Which season is "this season" for prices: the newest season any league is
+ * filed under, never later than the current Eastern calendar year. The cron
+ * and every read use this one rule, so the two can never disagree about which
+ * year a cell belongs to. The cap keeps one oddly dated league from moving the
+ * whole market a year ahead.
+ */
+export function currentPriorSeason(maxLeagueSeason: number | null, nowMs: number): number | null {
+  if (maxLeagueSeason === null || !Number.isFinite(maxLeagueSeason)) return null;
+  return Math.min(maxLeagueSeason, easternYear(nowMs));
+}
+
+/**
+ * One cell per key: this season's, or last season's while this one is thin.
+ *
+ * The owner's rule, per cell rather than with one global switch, read
+ * literally: this season's cell is used the moment it has minCellSamples
+ * auctions, and until then last season's cell for the same situation is used
+ * instead. Nothing older than last season is ever stored, so nothing older
+ * can be used. This season's thin cell appears only when last season has no
+ * cell for that key at all.
+ *
+ * "This season" is PASSED IN (currentPriorSeason), never inferred from which
+ * cells exist. In January a dynasty league renews under the new year before
+ * that year has a single claim; inferring the season from the cells would then
+ * call last season's cells this season's and drop every "last season" label
+ * for eight months. Null only when no league exists at all, in which case the
+ * newest stored season stands in.
+ *
+ * The swap happens BEFORE pickCell walks its ladder, on purpose. A reader
+ * whose exact situation is thin this year gets the same situation from last
+ * year rather than a broader slice of this year, which is the comparison that
+ * actually prices their claim.
+ */
+export function mergeSeasonCells(
+  cells: PriorCell[],
+  minCellSamples: number,
+  currentSeason: number | null,
+): PriorCell[] {
+  if (cells.length === 0) return [];
+  let current = currentSeason ?? -Infinity;
+  if (currentSeason === null) for (const c of cells) if (c.season > current) current = c.season;
+  const previous = current - 1;
+
+  const now = new Map<string, PriorCell>();
+  const before = new Map<string, PriorCell>();
+  for (const c of cells) {
+    if (c.season === current) now.set(c.cellKey, c);
+    else if (c.season === previous) before.set(c.cellKey, c);
+  }
+
+  const out: PriorCell[] = [];
+  const keys = new Set<string>([...now.keys(), ...before.keys()]);
+  for (const key of keys) {
+    const cur = now.get(key);
+    const prev = before.get(key);
+    if (cur && cur.sampleSize >= minCellSamples) {
+      out.push({ ...cur, fromPriorSeason: false });
+    } else if (prev) {
+      out.push({ ...prev, fromPriorSeason: true });
+    } else if (cur) {
+      out.push({ ...cur, fromPriorSeason: false });
+    }
+  }
+  out.sort((a, b) => a.cellKey.localeCompare(b.cellKey));
+  return out;
 }
 
 function keyFor(want: {
@@ -126,7 +214,7 @@ const LADDER: Array<{ label: string; widen: (want: PriorWant) => Partial<Record<
       widen: () => ({ position: "any", superflex: "any", phase: "any", leagueKind: "any" }),
     },
     {
-      label: "every auction we hold",
+      label: "every auction this season",
       widen: () => ({
         position: "any",
         superflex: "any",
@@ -159,13 +247,26 @@ export function pickCell(
     if (!cell) continue;
     last = cell;
     if (cell.sampleSize >= minCellSamples) {
-      return { cell, fellBackTo: rung.label === "" ? null : rung.label };
+      return { cell, fellBackTo: describeFallback(rung.label === "" ? null : rung.label, cell) };
     }
   }
 
   // Nothing cleared the bar. The widest cell we found is still the best answer
   // available, and its sample size travels with it so the page can hedge.
-  return last ? { cell: last, fellBackTo: "every auction we hold" } : null;
+  return last ? { cell: last, fellBackTo: describeFallback("every auction this season", last) } : null;
+}
+
+/**
+ * The fallback sentence fragment, naming last season when its cell is the one
+ * used: "every position", "2025 claims until this season has enough", or
+ * "every position, from 2025 claims until this season has enough". Pages
+ * print it after "widens to".
+ */
+function describeFallback(widened: string | null, cell: PriorCell): string | null {
+  if (!cell.fromPriorSeason) return widened;
+  const borrowed = `${cell.season} claims until this season has enough`;
+  if (widened === "every auction this season") return `every ${cell.season} auction until this season has enough`;
+  return widened ? `${widened}, from ${borrowed}` : borrowed;
 }
 
 /**
