@@ -79,7 +79,6 @@ export function SiteFooter({ toolOrder }: { toolOrder?: readonly string[] } = {}
                       <span
                         className="cursor-default text-ink-subtle/70"
                         aria-disabled="true"
-                        title="Coming soon"
                       >
                         {link.label}
                       </span>
@@ -125,8 +124,7 @@ function AboutColumn() {
             {link.disabled ? (
               <span
                 aria-disabled="true"
-                aria-label={`${SITE.name} on ${link.label} (coming soon)`}
-                title="Coming soon"
+                aria-label={`${SITE.name} on ${link.label} (no link)`}
                 className="inline-flex h-9 w-9 cursor-default items-center justify-center rounded-full border border-line bg-surface text-ink-subtle/70"
               >
                 <SocialIcon name={link.label} className="h-4 w-4" />

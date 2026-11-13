@@ -65,10 +65,11 @@
  *                       the same reason, from the same read (hasPublishedEditions).
  *   /rankings/community While no format's community board is published. The page
  *                       is noindex until one is; see communityRankingPaths.
+ *   Defender profiles   Every DL, LB and DB profile sets noindex (no value source
+ *                       prices a defender, so the page is a stat table). They are
+ *                       reached from search, /rankings/idp and League Pulse.
  */
 
-import { idpRelevantPlayerIdSet } from "@/lib/player-search";
-import { IDP_POSITIONS } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/server";
 import { memoTtl } from "@/lib/memo-ttl";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -128,6 +129,8 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/games/would-you-rather", priority: 0.4 },
   { path: "/games/long-shot", priority: 0.4 },
   { path: "/about", priority: 0.4 },
+  { path: "/contact", priority: 0.4 },
+  { path: "/editorial-policy", priority: 0.4 },
   { path: "/author/michael", priority: 0.4 },
   // /donate is listed; /donate/thanks deliberately is not. A receipt is
   // per-visit, carries a session id, and is marked noindex on the page itself.
@@ -322,30 +325,6 @@ async function rankedPlayerSlugs(supabase: Admin): Promise<string[]> {
     if (slug) slugs.add(slug);
   }
   return [...slugs];
-}
-
-/**
- * Defender profile slugs that pass the IDP relevance gate (plan R-15, R-17).
- *
- * No value source ranks a defender, so rankedPlayerSlugs never finds one. The
- * gate is the defensive equivalent (a real season of snaps, or a depth chart
- * spot), and a defender outside it is noindexed on the page itself, so the
- * sitemap and the robots tag agree. Paged over the three positions and filtered
- * in memory: an .in() over 1,500 ids is the URL-length failure described above.
- */
-export async function idpPlayerSlugs(supabase: Admin): Promise<string[]> {
-  const gate = await idpRelevantPlayerIdSet(supabase);
-  const rows = await fetchAllRows("[sitemap] defenders", (from, to) =>
-    supabase
-      .from("players")
-      .select("id, slug")
-      .in("position", [...IDP_POSITIONS])
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
-  const slugs: string[] = [];
-  for (const row of rows) if (row.slug && gate.has(row.id)) slugs.push(row.slug);
-  return slugs;
 }
 
 /* ------------------------------------------------------------------ */
@@ -565,11 +544,12 @@ async function playersSection(supabase: Admin): Promise<SitemapUrl[]> {
     .limit(1);
   const rankingsUpdatedAt = newest([latestRanking?.[0]?.generated_at]);
 
-  const [ranked, defenders] = await Promise.all([
-    rankedPlayerSlugs(supabase),
-    idpPlayerSlugs(supabase),
-  ]);
-  const slugs = [...new Set([...ranked, ...defenders])];
+  // Ranked players only. Defender profiles were listed here behind the IDP
+  // relevance gate until 2026-11-13; no value source prices a defender, so
+  // each one is a stat table with no market value, and together they were two
+  // thirds of this file. The page marks every defender noindex
+  // (app/players/[slug]/page.tsx), and the two must change together.
+  const slugs = await rankedPlayerSlugs(supabase);
   return slugs.map((slug) => ({
     loc: `${SITE.url}/players/${slug}`,
     lastModified: rankingsUpdatedAt,

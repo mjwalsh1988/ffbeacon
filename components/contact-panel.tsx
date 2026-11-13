@@ -2,7 +2,7 @@
 
 /**
  * The "send us a message" panel that sits in the rail on About and the author
- * page.
+ * page, and leads the main column on /contact.
  *
  * It posts to /api/guide/submit, the same intake the Signal Guide's question
  * form uses, with this page's `page_key`. That route already carries the parts

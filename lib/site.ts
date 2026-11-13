@@ -579,7 +579,9 @@ export const FOOTER_COLUMNS: Array<{
     heading: "Site",
     links: [
       { label: "About", href: "/about" },
+      { label: "Contact", href: "/contact" },
       { label: "Author", href: "/author/michael" },
+      { label: "Editorial Policy", href: "/editorial-policy" },
       // The header's Donate button is the fast path; this is the one people can
       // find again later, and the one that survives being pasted into a message.
       { label: "Donate", href: "/donate" },

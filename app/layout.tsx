@@ -67,6 +67,18 @@ export const metadata: Metadata = {
     "max-snippet": -1,
     "max-video-preview": -1,
   },
+  // Google AdSense site ownership, as the meta tag (2026-11-13). AdSense offers
+  // three ways to connect a site: this tag, the ad script, or ads.txt. The site
+  // had ads.txt alone, and AdSense reported that file "Not found" while Vercel's
+  // bot checkpoint stood in front of it. The tag rides on every page's own HTML,
+  // loads nothing from Google and sets no cookie, so it adds a second route to
+  // verification without serving an ad before the site is approved. The id is
+  // the publisher id in public/ads.txt; change one and change the other.
+  // Next merges metadata shallowly, so a page that sets its own `other`
+  // replaces this object and drops the tag. No page does today.
+  other: {
+    "google-adsense-account": "ca-pub-6888936505618934",
+  },
   // Favicons live in /public/img. We explicitly enumerate them so Next.js
   // never falls back to its starter favicon (which still ships as a stale
   // app/favicon.ico when scaffolded) and so browsers pick the highest-

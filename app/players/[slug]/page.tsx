@@ -6,7 +6,6 @@ import { serializeJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SITE, isDefender, positionNoun } from "@/lib/site";
-import { idpRelevantPlayerIdSet } from "@/lib/player-search";
 import {
   loadPlayerAndContext,
   loadTeamRow,
@@ -52,7 +51,8 @@ type PlayerPageProps = {
  * data unique to that tab (the game log, the trade ledger); Beacon Brief
  * carries the player's own news coverage, which is unique in the same way.
  * Overview is the default and keeps the original title/description below,
- * unmodified by this table.
+ * unmodified by this table. The canonical is the bare profile on every tab
+ * (see generateMetadata); these are for the browser tab and a shared link.
  *
  * `description` is a suffix that STARTS with the name, so the shared cap
  * below can shorten only the name for an unusually long one, not the fixed
@@ -158,26 +158,27 @@ export async function generateMetadata({
         (n) =>
           `${n} (${posTeam}) fantasy football profile: trade value and trend, weekly projections, game-log stats, and news.`,
       );
-  let canonical = bareCanonical;
+  // One canonical per player, whatever the tab (2026-11-13). The tabs used to
+  // be self-canonical so each could be indexed on its own URL, which made one
+  // player up to four index entries sharing a layout and a hero. That is the
+  // templated-page pattern Google's AdSense review rejected the site for, so
+  // every tab now points at the profile itself. The tab keeps its own title
+  // and description, because a reader who shares or bookmarks it sees those.
+  const canonical = bareCanonical;
 
   if (activeTab !== "overview") {
     const tabMeta = (defender ? DEFENDER_TAB_METADATA : TAB_METADATA)[activeTab];
     title = `${name} ${tabMeta.titleSuffix}`;
     description = capDescription(name, tabMeta.description);
-    // Self-referencing: the canonical keeps the tab parameter, so each tab's
-    // unique content can be indexed on its own URL instead of collapsing onto
-    // the overview.
-    canonical = `${bareCanonical}?tab=${activeTab}`;
   }
 
-  // A defender outside the IDP relevance gate (plan R-15, R-17) is a
-  // practice-squad or long-gone name: still reachable, not worth an index
-  // entry. The gate is a memoised set, so this costs no query per page.
-  let indexable = true;
-  if (defender) {
-    const gate = await idpRelevantPlayerIdSet(supabase).catch(() => null);
-    indexable = gate ? gate.has(player.id) : true;
-  }
+  // No defender profile is offered to a search index (2026-11-13). No value
+  // source prices a defender, so the page is a stat table under the words "No
+  // market value", and 1,500 of them were two thirds of everything the sitemap
+  // advertised. The pages stay reachable from search, the IDP rankings and
+  // League Pulse; lib/sitemap/sections.ts leaves them out to match. Reverse
+  // both together if defender profiles ever carry writing of their own.
+  const indexable = !defender;
 
   const ogImage = `${SITE.url}/api/og/player/${slug}`;
   return {

@@ -189,11 +189,12 @@ function FeatureOffNotice() {
         <Clock className="h-6 w-6" />
       </span>
       <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">
-        On The Clock is not enabled yet.
+        On The Clock is switched off right now.
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-        We are putting the finishing touches on the live draft room. Check back soon.
-        In the meantime, you can explore your leagues with Sleeper League Pulse.
+        The live draft room is closed for the moment. Sleeper League Pulse reads the
+        same leagues, so you can still go through your rosters and your draft picks
+        there.
       </p>
       <Link
         href="/tools/league-pulse"

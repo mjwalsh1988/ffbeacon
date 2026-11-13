@@ -39,6 +39,7 @@ export type GuidePageKey =
   | "account"
   | "creator-profile"
   | "about"
+  | "contact"
   | "author";
 
 export type GuidePageDef = {
@@ -127,6 +128,7 @@ export const GUIDE_PAGES: GuidePageDef[] = [
   },
   { key: "dashboard", title: "My Beacon Dashboard", match: (p) => p === "/my-beacon" },
   { key: "about", title: "About", match: (p) => p === "/about" },
+  { key: "contact", title: "Contact", match: (p) => p === "/contact" },
   { key: "author", title: "Author", match: (p) => p.startsWith("/author/") },
   { key: "home", title: "Home", match: (p) => p === "/" },
   // Public creator profile. Served at /{handle} (the alias) and at /u/{handle}

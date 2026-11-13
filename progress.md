@@ -17924,3 +17924,18 @@ T741 | completed | FAAB and waiver prices come from one league pool at a time: r
      | depends on: T738, T739, T740
      | design: pickCell never widens the league kind, so a thin pool returns its own thin cell (or null) instead of a pooled one; league mode picks its pool with leagueKindFor, the classifier that files the auctions, so a keeper league is priced from redraft where its claims are; waiver_claim_market takes the pool and reads faab_prior_auctions (79 ms against 12 to 31 seconds from league_transactions, identical per-player counts); published tables on the waiver page, the calculator and the FAAB guide read pool cells and name the pool; the offseason board stores a median per pool
      | verified: yes (typecheck, lint 0/0, npm test green, build; migrations 0375 to 0377 applied through the MCP, grants service_role only, new function matched the old one for 460 players in weeks 8 to 9; one reviewer sub-agent, eight findings, seven fixed and one left as noted in the session report)
+T742 | completed | Defender profiles are noindex and out of the players sitemap, and every player tab URL names the bare profile as its canonical
+     | files: app/players/[slug]/page.tsx, lib/sitemap/sections.ts, lib/sitemap/sections.test.ts, lib/llms/llms-full-txt.ts
+     | depends on: none
+     | design: AdSense declined the site for low value content on 2026-11-01. About 1,560 of the 2,370 sitemap URLs were defender profiles with no market value, and each player was up to four indexable tab URLs. The page and the sitemap change together
+     | verified: yes (typecheck, lint 0/0, npm test green, build; one reviewer sub-agent)
+T743 | completed | /contact and /editorial-policy pages, with footer links, share cards, sitemap entries, About rail tiles, and contact-form emails that say message instead of question
+     | files: app/contact/page.tsx, app/editorial-policy/page.tsx, supabase/migrations/0378_contact_and_editorial_policy_pages.sql, lib/signal/reserved-routes.ts, lib/guide/registry.ts, lib/site.ts, lib/sitemap/sections.ts, app/api/og/page/[key]/route.tsx, app/about/page.tsx, components/contact-panel.tsx, lib/email/guide-emails.ts, app/api/guide/submit/route.ts, lib/llms/llms-full-txt.ts
+     | depends on: none
+     | design: the contact form leads the main column so it is first on a phone; it reuses the shared intake with page_key contact. The editorial policy states how Relays and Brief editions are produced and where language models are used, checked against the code by the reviewer
+     | verified: yes (typecheck, lint 0/0, npm test green, build; migration 0378 applied through the MCP, data only; both pages rendered locally; one reviewer sub-agent, findings fixed)
+T744 | completed | AdSense site verification meta tag in the root layout, and placeholder wording removed from the footer, the tools hub and the On The Clock off state
+     | files: app/layout.tsx, components/site-footer.tsx, app/tools/page.tsx, app/tools/on-the-clock/page.tsx
+     | depends on: none
+     | design: the meta tag loads nothing from Google and sets no cookie. A Vercel firewall rule (dashboard, not the repo) bypasses bot protection for /ads.txt and /robots.txt only; both answered 200 to curl after publish
+     | verified: yes (typecheck, lint 0/0, npm test green, build)

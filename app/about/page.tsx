@@ -10,8 +10,10 @@ import {
   Clock,
   Contrast,
   Eye,
+  FileText,
   HeartHandshake,
   Keyboard,
+  Mail,
   Newspaper,
   Radar,
   Scale,
@@ -210,6 +212,19 @@ export default async function AboutPage() {
                   icon={UserCircle}
                   title="Who builds this"
                   body="Michael, twenty seasons in, and why a fantasy site needed building this way."
+                />
+                <LinkTile
+                  href="/contact"
+                  icon={Mail}
+                  title="Contact"
+                  body="Every way to reach us, and what to include in a bug report."
+                  accent="purple"
+                />
+                <LinkTile
+                  href="/editorial-policy"
+                  icon={FileText}
+                  title="Editorial policy"
+                  body="Who writes what, where the numbers come from, and how corrections work."
                 />
                 <LinkTile
                   href="/donate"

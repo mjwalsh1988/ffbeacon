@@ -248,6 +248,26 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/privacy",
     badge: "Privacy",
   },
+  contact: {
+    eyebrow: "Contact FF Beacon",
+    headlineTop: "Write to the person",
+    headlineBottom: "who builds it",
+    subhead:
+      "Bug reports, wrong numbers, accessibility problems, and anything else. One inbox, and a person reads every message.",
+    facts: ["A person reads it", "Free", "No account needed"],
+    path: "/contact",
+    badge: "Contact",
+  },
+  "editorial-policy": {
+    eyebrow: "Editorial policy",
+    headlineTop: "How we write,",
+    headlineBottom: "and how we check it",
+    subhead:
+      "Who writes FF Beacon, where every number comes from, how the Beacon Brief is put together, and how a mistake gets fixed.",
+    facts: ["Plain English", "Independent"],
+    path: "/editorial-policy",
+    badge: "Editorial policy",
+  },
   terms: {
     eyebrow: "Terms of service",
     headlineTop: "The rules for",

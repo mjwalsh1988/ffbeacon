@@ -132,7 +132,7 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h3("Player profiles");
   source("/players/{player-slug}");
   p(
-    "One profile per fantasy-relevant player. An offensive player's profile covers current trade value and its trend, weekly projections, career and game-log statistics, graded trades the player has been part of, and every Beacon Brief story that mentions them. An individual defensive player (defensive lineman, linebacker or defensive back) has no trade value, because no value source prices defenders. That profile carries tackles, sacks, snap share, a weekly game log scored under a choice of IDP scoring systems, the depth chart spot and season finishes in Sleeper default IDP scoring. Profiles are enumerated in the players sitemap rather than listed here, because the set changes with the rankings and the season.",
+    "One profile per fantasy-relevant player. An offensive player's profile covers current trade value and its trend, weekly projections, career and game-log statistics, graded trades the player has been part of, and every Beacon Brief story that mentions them. An individual defensive player (defensive lineman, linebacker or defensive back) has no trade value, because no value source prices defenders. That profile carries tackles, sacks, snap share, a weekly game log scored under a choice of IDP scoring systems, the depth chart spot and season finishes in Sleeper default IDP scoring. Offensive profiles are enumerated in the players sitemap rather than listed here, because the set changes with the rankings and the season. Defender profiles are not in that sitemap and are marked noindex; they are reached from the site search and from /rankings/idp.",
   );
 
   /* ---------------------------------------------------------------- */
@@ -287,7 +287,7 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h2("Editorial and authorship");
   source(SITE.author.bylineHref);
   p(
-    `${SITE.name} is built by ${SITE.author.legalName}, who writes every guide and every Beacon Brief edition and is the byline on each of them. There is no other editorial staff and no sponsored content.`,
+    `${SITE.name} is built by ${SITE.author.legalName}, who writes every guide and is the byline on each guide and each Beacon Brief edition. An edition's first draft is assembled by an automated run that uses a language model, working from the week's Relays and the site's own numbers, and it is published only after he reviews and approves it. There is no other editorial staff and no sponsored content. The editorial policy at ${u("/editorial-policy")} sets this out in full.`,
     `A Relay is a structured report of one source post and credits that post's reporter with a link. ${SITE.name} does not claim the reporting; an edition adds the fantasy read on top of it.`,
   );
 
@@ -297,6 +297,8 @@ export function buildLlmsFullTxt(data: LlmsData): string {
     `- Privacy policy: ${u("/privacy")}. What is collected, why, who it is shared with, what happens when you donate, and how to have it deleted.`,
     `- Terms of service: ${u("/terms")}. The rules for using the site, how donations work, and how the service is provided.`,
     `- Donations: ${u("/donate")}. Optional, one-time, and not refunded, because nothing is being sold.`,
+    `- Editorial policy: ${u("/editorial-policy")}. Who writes what, how the Beacon Brief is produced, where language models are used, and how a mistake is corrected.`,
+    `- Contact: ${u("/contact")}. A form and an email address for bug reports, data corrections, accessibility problems, and privacy requests.`,
   );
 
   /* ---------------------------------------------------------------- */

@@ -8,6 +8,7 @@ import { EMAIL_SITE_URL } from "@/lib/email/layout";
 import {
   buildAdminNotificationEmail,
   buildAskerConfirmationEmail,
+  isContactMessage,
 } from "@/lib/email/guide-emails";
 
 /**
@@ -111,7 +112,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           error:
-            "You have sent several questions in a short time. Please wait a few minutes and try again.",
+            "You have sent several messages in a short time. Please wait a few minutes and try again.",
         },
         { status: 429 },
       );
@@ -171,7 +172,9 @@ export async function POST(req: Request) {
     const tasks: Promise<unknown>[] = [
       sendEmail({
         to: ADMIN_EMAIL,
-        subject: `New Signal question from ${v.value.name}`,
+        subject: isContactMessage(v.value.pageKey)
+          ? `New contact message from ${v.value.name}`
+          : `New Signal question from ${v.value.name}`,
         html: adminMail.html,
         text: adminMail.text,
         // Let the team reply straight to the asker when an address was given.
@@ -184,7 +187,9 @@ export async function POST(req: Request) {
       tasks.push(
         sendEmail({
           to: v.value.email,
-          subject: "We received your question | FF Beacon",
+          subject: isContactMessage(v.value.pageKey)
+            ? "We received your message | FF Beacon"
+            : "We received your question | FF Beacon",
           html: askerMail.html,
           text: askerMail.text,
         }),

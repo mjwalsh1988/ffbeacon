@@ -270,7 +270,7 @@ function CtaSection({ isMember }: { isMember: boolean }) {
           }}
         >
           <SectionEyebrow>
-            {isMember ? "New: free games" : "More on the way"}
+            {isMember ? "New: free games" : "Help from real people"}
           </SectionEyebrow>
           <h2
             id="cta-heading"
@@ -283,7 +283,7 @@ function CtaSection({ isMember }: { isMember: boolean }) {
           <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
             {isMember
               ? "You're already part of the crew, so we'll skip the invite. We just launched free fantasy games. Take a break from the tools and see how sharp your instincts really are."
-              : "Drop into our Discord for free help from real fantasy players on any tool here, and more tools are on the way. Want to know what shaped these ones and who is behind them? Read about FF Beacon."}
+              : "Drop into our Discord for free help from real fantasy players on any tool here. Want to know what shaped these ones and who is behind them? Read about FF Beacon."}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             {isMember ? (
