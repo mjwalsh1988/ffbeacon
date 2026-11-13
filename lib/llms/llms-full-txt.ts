@@ -287,7 +287,7 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h2("Editorial and authorship");
   source(SITE.author.bylineHref);
   p(
-    `${SITE.name} is built by ${SITE.author.legalName}, who writes every guide and is the byline on each guide and each Beacon Brief edition. An edition's first draft is assembled by an automated run that uses a language model, working from the week's Relays and the site's own numbers, and it is published only after he reviews and approves it. There is no other editorial staff and no sponsored content. The editorial policy at ${u("/editorial-policy")} sets this out in full.`,
+    `${SITE.name} is built by ${SITE.author.legalName}, who writes every guide and is the byline on each guide and each Beacon Brief edition. The research for an edition is gathered with the help of a language model, from the week's Relays and the site's own numbers. He puts the edition together from that research, rewrites and edits it, and it is published only when he approves it. There is no other editorial staff and no sponsored content. The editorial policy at ${u("/editorial-policy")} sets this out in full.`,
     `A Relay is a structured report of one source post and credits that post's reporter with a link. ${SITE.name} does not claim the reporting; an edition adds the fantasy read on top of it.`,
   );
 

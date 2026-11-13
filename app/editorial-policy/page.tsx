@@ -34,13 +34,18 @@ const CONTACT = SITE.legalContactEmail;
  * the repository that makes it true, and a change there is a change here:
  *
  *   - Guides carry a byline and two dates: lib/guides/published.ts.
- *   - A Brief edition is drafted by an automated run from the week's Relays
- *     and the site's own numbers (lib/brief-desk/bundle.ts and
- *     instructions-seed.ts), and approval by the owner is the only path to
- *     published (lib/brief-desk/publish.ts).
- *   - Relays are written by a language model from reporters' posts and credit
- *     the reporter (lib/beacon-brief/ai.ts, app/brief/relay/[slug]/page.tsx).
+ *   - The research for a Brief edition is gathered by an automated run from
+ *     the week's Relays and the site's own numbers (lib/brief-desk/bundle.ts
+ *     and instructions-seed.ts). The owner puts the edition together, rewrites
+ *     and edits it, and his approval is the only path to published
+ *     (lib/brief-desk/publish.ts).
+ *   - Relays are automated summaries of reporters' posts and credit the
+ *     reporter (lib/beacon-brief/ai.ts, app/brief/relay/[slug]/page.tsx).
  *     They are noindex (lib/beacon-brief/index-quality.ts).
+ *
+ * Wording rule from the owner (2026-11-13): the page says a language model is
+ * used for RESEARCH and never that one writes anything. The owner reviews,
+ * rewrites and edits every edition himself, and the page says that.
  *   - Trade verdicts and their reasons are arithmetic and fixed templates,
  *     never generated text (lib/trade-impact/).
  *   - No value source prices a defender (lib/site.ts isDefender and the IDP
@@ -164,33 +169,34 @@ export default function EditorialPolicyPage() {
             <h3 className="pt-1 text-base font-semibold text-ink">Relays</h3>
             <p>
               A Relay is a short report of something an NFL reporter posted: an
-              injury, a signing, a depth chart change. Relays are written by a
-              language model from the reporter&apos;s post, and each one names the
-              reporter it came from. A Relay is published automatically, once a
-              software check confirms that the names and numbers in it are in the
-              post. One that fails the check is held back for a person to look at.
+              injury, a signing, a depth chart change. A Relay is an automated
+              summary of the reporter&apos;s post, and each one names the reporter
+              it came from. It is published once a software check confirms that
+              the names and numbers in it are in the post. One that fails the
+              check is held back for {SITE.author.name} to look at.
             </p>
             <p>
               A Relay is not original reporting and does not claim to be. Relays are
               kept out of search engines on purpose, because a summary of someone
               else&apos;s report is not a page that should compete with it. Older
-              single-story articles in the Brief were written the same automated way
+              single-story articles in the Brief were produced the same automated way
               and are kept out of search engines too.
             </p>
             <h3 className="pt-1 text-base font-semibold text-ink">Weekly editions</h3>
             <p>
               A weekly edition is the long read: the week&apos;s games, how the
-              projections did, injuries, and what to do about it. A first draft is
-              assembled by an automated writing run that uses a language model and is
-              allowed to work from three things only: the week&apos;s Relays, numbers
-              the site computed from its own data, and pages it fetches during that
-              run to check that a report is still true. Its instructions forbid it
-              from stating a roster, a timeline or a contract detail that is in none
-              of those.
+              projections did, injuries, and what to do about it. The research for an
+              edition is done with the help of a language model, which gathers
+              material from three places only: the week&apos;s Relays, numbers the
+              site computed from its own data, and pages it fetches to check that a
+              report is still true. Its instructions forbid it from bringing back a
+              roster, a timeline or a contract detail that is in none of those.
             </p>
             <p>
-              No edition is published automatically. {SITE.author.name} reads every
-              draft, and an edition goes live only when he approves it. The charts,
+              {SITE.author.name} puts each edition together from that research. He
+              reviews all of it, rewrites it, edits it, and decides what the edition
+              says. No edition is published automatically: one goes live only when
+              he approves it. The charts,
               tables and score cards in an edition are drawn by the site from its own
               data, so a figure in a card is the stored figure and not a number
               somebody typed.
@@ -231,8 +237,10 @@ export default function EditorialPolicyPage() {
 
           <Section id="models" title="6. Where language models are used, and where they are not">
             <p>
-              Language models write Relays and the first draft of each weekly
-              edition, as described above. They do not grade trades. A trade verdict
+              Language models are used for research: summarizing a reporter&apos;s
+              post for a Relay, and gathering the material for each weekly edition,
+              as described above. The guides and the editions are written by{" "}
+              {SITE.author.name}. Language models do not grade trades. A trade verdict
               and every reason printed under it come from arithmetic and fixed
               sentence templates, so each sentence cites a figure that is on the same
               screen and can be checked against it. Projections and the league models
