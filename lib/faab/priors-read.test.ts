@@ -62,28 +62,46 @@ describe("pickCell", () => {
       cell({ cellKey: "dynasty|yes|any|wk2_6|3", sampleSize: 2 }),
       cell({ cellKey: "dynasty|any|any|wk2_6|3", sampleSize: 3 }),
       cell({ cellKey: "dynasty|any|any|any|3", sampleSize: 4 }),
-      cell({ cellKey: "any|any|any|any|3", sampleSize: 500 }),
+      cell({ cellKey: "dynasty|any|any|any|any", leagueKind: "dynasty", sampleSize: 500 }),
     ];
     const picked = pickCell(cells, WANT, 30);
-    expect(picked?.cell.cellKey).toBe("any|any|any|any|3");
-    expect(picked?.fellBackTo).toBe("every league type");
+    expect(picked?.cell.cellKey).toBe("dynasty|any|any|any|any");
+    expect(picked?.fellBackTo).toBe("every dynasty auction this season");
   });
 
-  it("falls all the way to every auction when even the league type is thin", () => {
+  it("never leaves its own pool, however many auctions the other pools hold", () => {
     const cells = [
-      cell({ cellKey: "dynasty|yes|RB|wk2_6|3", sampleSize: 1 }),
-      cell({ cellKey: "any|any|any|any|3", sampleSize: 2 }),
+      cell({ cellKey: "dynasty|yes|RB|wk2_6|3", leagueKind: "dynasty", sampleSize: 1 }),
+      cell({ cellKey: "dynasty|any|any|any|any", leagueKind: "dynasty", sampleSize: 6 }),
+      cell({ cellKey: "redraft|yes|RB|wk2_6|3", leagueKind: "redraft", sampleSize: 4000 }),
+      cell({ cellKey: "any|any|any|any|3", sampleSize: 5000 }),
       cell({ cellKey: "any|any|any|any|any", sampleSize: 9000 }),
     ];
     const picked = pickCell(cells, WANT, 30);
-    expect(picked?.cell.cellKey).toBe("any|any|any|any|any");
-    expect(picked?.fellBackTo).toBe("every auction this season");
+    expect(picked?.cell.cellKey).toBe("dynasty|any|any|any|any");
+    expect(picked?.cell.sampleSize).toBe(6);
+    expect(picked?.fellBackTo).toBe("every dynasty auction this season");
+  });
+
+  it("returns null when the pool has no cell at all, rather than another pool's", () => {
+    const cells = [
+      cell({ cellKey: "redraft|any|any|any|any", leagueKind: "redraft", sampleSize: 4000 }),
+      cell({ cellKey: "any|any|any|any|any", sampleSize: 9000 }),
+    ];
+    expect(pickCell(cells, WANT, 30)).toBeNull();
   });
 
   it("returns the widest cell it found rather than nothing when none clears the bar", () => {
-    const only = cell({ cellKey: "any|any|any|any|any", sampleSize: 3 });
+    const only = cell({ cellKey: "dynasty|any|any|any|any", leagueKind: "dynasty", sampleSize: 3 });
     const picked = pickCell([only], WANT, 30);
     expect(picked?.cell.sampleSize).toBe(3);
+    expect(picked?.fellBackTo).toBe("every dynasty auction this season");
+  });
+
+  it("reads the pooled cells only for a caller that asks for any league kind", () => {
+    const only = cell({ cellKey: "any|any|any|any|any", sampleSize: 900 });
+    const picked = pickCell([only], { ...WANT, leagueKind: "any" }, 30);
+    expect(picked?.cell.cellKey).toBe("any|any|any|any|any");
     expect(picked?.fellBackTo).toBe("every auction this season");
   });
 
@@ -185,11 +203,12 @@ describe("a chopped league asks for chopped cells", () => {
     expect(picked?.fellBackTo).toBeNull();
   });
 
-  it("falls back past the league type only when the chopped cells are thin", () => {
+  it("stays on chopped cells even when they are thin", () => {
     const thin = cell({ cellKey: "chopped|any|any|alive_lt30|3", sampleSize: 2 });
+    const pool = cell({ cellKey: "chopped|any|any|any|any", leagueKind: "chopped", sampleSize: 12 });
     const wide = cell({ cellKey: "any|any|any|any|3", sampleSize: 900 });
     const picked = pickCell(
-      [thin, wide],
+      [thin, pool, wide],
       {
         leagueKind: "chopped",
         superflex: null,
@@ -199,6 +218,7 @@ describe("a chopped league asks for chopped cells", () => {
       },
       30,
     );
-    expect(picked?.cell.cellKey).toBe("any|any|any|any|3");
+    expect(picked?.cell.cellKey).toBe("chopped|any|any|any|any");
+    expect(picked?.fellBackTo).toBe("every chopped auction this season");
   });
 });

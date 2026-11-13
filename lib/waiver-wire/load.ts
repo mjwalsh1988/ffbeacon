@@ -337,7 +337,7 @@ async function loadWaiverBoardUncached(params: LoadBoardParams): Promise<WaiverB
       console.error("[waiver-wire] market cells read failed", error);
       return [];
     }),
-    loadClaimMarketCached(season, claimWindow),
+    loadClaimMarketCached(season, claimWindow, leagueKind),
   ]);
 
   if (universe.length === 0) {
@@ -634,7 +634,9 @@ export async function loadWaiverBoardCached(params: LoadBoardParams): Promise<Wa
     [
       // The row shape is part of the key. v2 is the percentage bid and the claim
       // market (migration 0331); an old entry would render with fields missing.
-      "waiver-board-v2",
+      // v3 is the one-pool read (migration 0375): a v2 entry holds prices
+      // blended across league kinds and must not be served for another hour.
+      "waiver-board-v3",
       String(clock.season ?? "none"),
       String(params.week),
       params.format.id,

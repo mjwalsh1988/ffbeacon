@@ -214,7 +214,7 @@ function faqFor(week: number, board: WaiverBoard, hero: WaiverBoard["rows"][numb
       ? [
           {
             question: `Who was the most-claimed player on waivers in ${claimWeeksText(a.claimWeeks ?? { from: week, to: week })}?`,
-            answer: `${hot.name} (${hot.position}${hot.team ? `, ${hot.team}` : ""}), claimed in ${hot.market.leagues} of the synced leagues with ${hot.market.avgBidders.toFixed(1)} teams bidding on average. The median winning bid was ${Math.round(hot.market.p50)} percent of the season budget, and the middle half of winning bids ran from ${Math.round(hot.market.p25)} to ${Math.round(hot.market.p75)} percent.`,
+            answer: `${hot.name} (${hot.position}${hot.team ? `, ${hot.team}` : ""}), claimed in ${hot.market.leagues} of the synced ${a.marketName.split(" ")[0]} leagues with ${hot.market.avgBidders.toFixed(1)} teams bidding on average. The median winning bid was ${Math.round(hot.market.p50)} percent of the season budget, and the middle half of winning bids ran from ${Math.round(hot.market.p25)} to ${Math.round(hot.market.p75)} percent.`,
           },
         ]
       : []),
@@ -520,7 +520,11 @@ export default async function WaiverWeekPage({
           />
         </BudgetProvider>
 
-        <HotClaims claims={board.hotClaims} window={board.assumptions.claimWeeks} />
+        <HotClaims
+          claims={board.hotClaims}
+          window={board.assumptions.claimWeeks}
+          marketName={board.assumptions.marketName}
+        />
 
         <WeekPager prev={prev} next={next} />
       </PageColumns>

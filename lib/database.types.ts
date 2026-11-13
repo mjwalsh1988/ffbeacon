@@ -10051,21 +10051,42 @@ export type Database = {
           leagues: number;
         }[];
       };
-      waiver_claim_market: {
-        Args: { p_from_week: number; p_season: number; p_to_week: number };
-        Returns: {
-          auctions: number;
-          avg_bidders: number;
-          contested_share: number;
-          latest_week: number;
-          leagues: number;
-          p25: number;
-          p50: number;
-          p75: number;
-          p90: number;
-          sleeper_player_id: string;
-        }[];
-      };
+      waiver_claim_market:
+        | {
+            Args: { p_from_week: number; p_season: number; p_to_week: number };
+            Returns: {
+              auctions: number;
+              avg_bidders: number;
+              contested_share: number;
+              latest_week: number;
+              leagues: number;
+              p25: number;
+              p50: number;
+              p75: number;
+              p90: number;
+              sleeper_player_id: string;
+            }[];
+          }
+        | {
+            Args: {
+              p_from_week: number;
+              p_league_kind: string;
+              p_season: number;
+              p_to_week: number;
+            };
+            Returns: {
+              auctions: number;
+              avg_bidders: number;
+              contested_share: number;
+              latest_week: number;
+              leagues: number;
+              p25: number;
+              p50: number;
+              p75: number;
+              p90: number;
+              sleeper_player_id: string;
+            }[];
+          };
       waiver_pickup_counts: {
         Args: { p_league_ids: string[]; p_season: number };
         Returns: Json;

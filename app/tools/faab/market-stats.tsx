@@ -43,6 +43,11 @@ export type MarketRow = {
 };
 
 export type MarketFacts = {
+  /**
+   * Redraft leagues and redraft auctions behind the first three tables.
+   * `byBidders`, `byPhase`, `byPosition` and `runnerUpRatio` are the redraft
+   * pool too; nothing in this shape is pooled across league kinds.
+   */
   leagues: number;
   auctions: number;
   seasonMin: number;
@@ -75,30 +80,42 @@ export type MarketFacts = {
    * only one the table can actually support.
    */
   dynastySuperflexShare: number | null;
+  /**
+   * The seasons behind the dynasty rows, read off the dynasty pool's own
+   * cell. Kept apart from seasonMin and seasonMax, which are the redraft
+   * pool's: the two can differ the day one pool borrows last season and the
+   * other does not.
+   */
+  dynastySeasons: { seasonMin: number; seasonMax: number };
 };
 
-const BIDDER_ROWS: Array<[string, string]> = [
-  ["any|any|any|any|1", "1 team"],
-  ["any|any|any|any|2", "2 teams"],
-  ["any|any|any|any|3", "3 teams"],
-  ["any|any|any|any|4p", "4 or more teams"],
-];
-
+/**
+ * NO TABLE HERE READS A POOLED CELL. Redraft, dynasty and chopped leagues are
+ * three separate pools and a figure from one is never mixed with another's.
+ * The first three tables are the REDRAFT pool (keeper leagues price with it),
+ * the dynasty section further down the page is the dynasty pool, and the
+ * chopped table is the chopped pool. They used to read the "any" cells, which
+ * this season are nearly half chopped auctions, so the page's headline medians
+ * described no kind of league a reader actually plays in.
+ */
 const PHASE_ROWS: Array<[string, string]> = [
-  ["any|any|any|wk1|any", "Week 1"],
-  ["any|any|any|wk2_6|any", "Weeks 2 to 6"],
-  ["any|any|any|wk7_10|any", "Weeks 7 to 10"],
-  ["any|any|any|wk11_13|any", "Weeks 11 to 13"],
-  ["any|any|any|wk14p|any", "Week 14 and later"],
+  ["redraft|any|any|wk1|any", "Week 1"],
+  ["redraft|any|any|wk2_6|any", "Weeks 2 to 6"],
+  ["redraft|any|any|wk7_10|any", "Weeks 7 to 10"],
+  ["redraft|any|any|wk11_13|any", "Weeks 11 to 13"],
+  ["redraft|any|any|wk14p|any", "Week 14 and later"],
 ];
 
 const POSITION_ROWS: Array<[string, string]> = [
-  ["any|no|QB|any|3", "QB, one-quarterback league"],
-  ["any|yes|QB|any|3", "QB, superflex"],
-  ["any|any|RB|any|3", "RB"],
-  ["any|any|WR|any|3", "WR"],
-  ["any|any|TE|any|3", "TE"],
+  ["redraft|no|QB|any|3", "QB, one-quarterback league"],
+  ["redraft|yes|QB|any|3", "QB, superflex"],
+  ["redraft|any|RB|any|3", "RB"],
+  ["redraft|any|WR|any|3", "WR"],
+  ["redraft|any|TE|any|3", "TE"],
 ];
+
+/** The redraft pool's widest cell: every redraft auction we hold. */
+const REDRAFT_POOL_KEY = "redraft|any|any|any|any";
 
 /**
  * The same four bidder counts on both boards, in the same order, so the two
@@ -171,7 +188,9 @@ export async function loadMarketFacts(
   if (cells.length === 0) return null;
 
   const byKey = new Map(cells.map((cell) => [cell.cellKey, cell]));
-  const all = byKey.get("any|any|any|any|any");
+  // The headline counts, the seasons and the runner-up ratio all describe the
+  // redraft pool, because they are printed beside the redraft tables.
+  const all = byKey.get(REDRAFT_POOL_KEY);
   if (!all || all.sampleSize === 0) return null;
 
   const seasons = all.seasons.length > 0 ? all.seasons : [0];
@@ -183,7 +202,7 @@ export async function loadMarketFacts(
     seasonMax: Math.max(...seasons),
     builtAt: all.builtAt,
     runnerUpRatio: all.runnerUpRatioP50,
-    byBidders: rowsFor(byKey, BIDDER_ROWS, minCellSamples),
+    byBidders: rowsFor(byKey, REDRAFT_BIDDER_ROWS, minCellSamples),
     byPhase: rowsFor(byKey, PHASE_ROWS, minCellSamples),
     byPosition: rowsFor(byKey, POSITION_ROWS, minCellSamples),
     chopped: rowsFor(byKey, CHOPPED_ROWS, minCellSamples),
@@ -191,7 +210,17 @@ export async function loadMarketFacts(
     redraftByBidders: rowsFor(byKey, REDRAFT_BIDDER_ROWS, minCellSamples),
     dynastyByPosition: rowsFor(byKey, DYNASTY_POSITION_ROWS, minCellSamples),
     dynastySuperflexShare: superflexShare(byKey),
+    dynastySeasons: seasonRange(byKey.get("dynasty|any|any|any|any")?.seasons, seasons),
   };
+}
+
+/** The first and last season in a cell, or the fallback when it has none. */
+function seasonRange(
+  cellSeasons: number[] | undefined,
+  fallback: number[],
+): { seasonMin: number; seasonMax: number } {
+  const list = cellSeasons && cellSeasons.length > 0 ? cellSeasons : fallback;
+  return { seasonMin: Math.min(...list), seasonMax: Math.max(...list) };
 }
 
 /** How much of the dynasty market is superflex, read off the two cells. */
@@ -236,27 +265,32 @@ export function MarketStats({ facts }: { facts: MarketFacts | null }) {
         What leagues actually pay
       </h2>
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-muted">
-        Winning FAAB bids from {facts.leagues.toLocaleString()} Sleeper leagues
+        Redraft, dynasty and chopped leagues are measured separately and never
+        mixed, because each pays differently for the same player, and the
+        calculator prices your claim from your own league type only. The first
+        three tables are winning FAAB bids from{" "}
+        {facts.leagues.toLocaleString()} redraft and keeper Sleeper leagues
         synced to FF Beacon, {seasonsPhrase(facts)}, as a share of each
-        league&apos;s budget. A row marked with last season&apos;s year has too few
-        claims this season so far and uses last season&apos;s instead. Updated{" "}
-        {formatEasternDate(facts.builtAt)}. No league or manager is
-        identifiable.
+        league&apos;s budget. Chopped leagues have their own table here and
+        dynasty leagues their own section below. A row marked with last
+        season&apos;s year has too few claims this season so far and uses last
+        season&apos;s instead. Updated {formatEasternDate(facts.builtAt)}. No
+        league or manager is identifiable.
       </p>
 
       <div className="mt-6 space-y-8">
         <BiddersBlock rows={facts.byBidders} />
         <TableBlock
           id="faab-market-phase"
-          heading="By week of the season"
-          caption="Median and upper-end winning bids by stretch of the season, as a share of the league's budget."
+          heading="Redraft leagues, by week of the season"
+          caption="Median and upper-end winning bids in redraft leagues by stretch of the season, as a share of the league's budget."
           firstColumn="Time of season"
           rows={facts.byPhase}
         />
         <TableBlock
           id="faab-market-position"
-          heading="By position, when 3 or more teams bid"
-          caption="Median and upper-end winning bids by position in contested auctions, as a share of the league's budget. Quarterbacks are split by whether the league starts one or two."
+          heading="Redraft leagues, by position, when 3 or more teams bid"
+          caption="Median and upper-end winning bids in redraft leagues by position in contested auctions, as a share of the league's budget. Quarterbacks are split by whether the league starts one or two."
           firstColumn="Position"
           rows={facts.byPosition}
         />
@@ -271,8 +305,8 @@ export function MarketStats({ facts }: { facts: MarketFacts | null }) {
 
       {facts.runnerUpRatio !== null && (
         <p className="mt-6 max-w-3xl text-sm leading-relaxed text-ink-muted">
-          Winners paid a median of {ratio(facts.runnerUpRatio)} times the
-          second-highest bid. That gap is why the calculator prices the
+          In redraft leagues, winners paid a median of{" "}
+          {ratio(facts.runnerUpRatio)} times the second-highest bid. That gap is why the calculator prices the
           competition rather than the player alone.
         </p>
       )}
@@ -300,14 +334,14 @@ function BiddersBlock({ rows }: { rows: MarketRow[] }) {
   const height = usable.length * (barHeight + gap) + gap;
   const x = makeScale(0, max, labelWidth, width - 56);
 
-  const summary = `Median winning bid rises with the number of bidders: ${usable
+  const summary = `In redraft leagues the median winning bid rises with the number of bidders: ${usable
     .map((row) => `${row.label.toLowerCase()} ${pct(row.median)}`)
     .join(", ")}.`;
 
   return (
     <div>
       <h3 className="text-lg font-semibold tracking-tight text-ink">
-        By how many teams bid
+        Redraft leagues, by how many teams bid
       </h3>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-muted">
         The single biggest thing that decides what a claim costs is how many
@@ -317,12 +351,12 @@ function BiddersBlock({ rows }: { rows: MarketRow[] }) {
       <div className="mt-3">
         <ChartFigure
           titleLevel={4}
-          title="Median winning bid by number of bidders"
+          title="Median winning bid in redraft leagues by number of bidders"
           summary={summary}
           tableLabel="View the medians drawn above"
           table={
             <DataTable
-              caption="Median winning bid by number of bidders, as a share of the league's budget."
+              caption="Median winning bid in redraft leagues by number of bidders, as a share of the league's budget."
               head={
                 <>
                   <Th>Teams bidding</Th>
@@ -384,7 +418,7 @@ function BiddersBlock({ rows }: { rows: MarketRow[] }) {
 
       <div className="mt-3">
         <MarketTable
-          caption="Winning bids by number of bidders, as a share of the league's budget."
+          caption="Winning bids in redraft leagues by number of bidders, as a share of the league's budget."
           firstColumn="Teams bidding"
           rows={rows}
         />

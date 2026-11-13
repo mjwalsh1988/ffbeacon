@@ -1,9 +1,9 @@
 /**
  * What each player actually cost on waivers, across the synced leagues.
  *
- * One call to `waiver_claim_market()` (migration 0331), which does the
- * grouping in SQL: a single early-season week holds tens of thousands of
- * waiver rows and the board needs five numbers for each of about 160 players.
+ * One call to `waiver_claim_market()` (migrations 0331, 0375 and 0377), which
+ * does the aggregation in SQL: a single early-season week holds thousands of
+ * auctions and the board needs five numbers for each of about 160 players.
  * The function is service-role only, so this is the admin client, and nothing
  * it returns identifies a league, roster or manager.
  *
@@ -20,13 +20,29 @@
  * from the market cells alone. Returning the empty map from inside the cache
  * would have pinned one timeout to every reader for an hour.
  *
- * Cached for an hour per (season, window): claims land in batches on waiver
- * night, and every format and source shares the same auctions.
+ * ONE POOL AT A TIME. The function takes the league kind (migration 0375) and
+ * reads only auctions of that kind. A redraft board quotes what redraft rooms
+ * paid for him and a dynasty board what dynasty rooms paid; the two are never
+ * blended, because they are prices for different decisions.
+ *
+ * IT READS THE KEPT SAMPLE (migration 0377), `faab_prior_auctions`, not the
+ * raw transactions. Those rows are the auctions the market cells are built
+ * from, grouped by the same rule and filed under a league kind by the same
+ * classifier (lib/faab/priors-load.ts leagueKindFor), so a claim price and a
+ * market cell can never disagree about which pool a league is in. Rebuilding
+ * the auctions from `league_transactions` on every call took 12 to 31 seconds
+ * for an early-season week, past PostgREST's eight. The sample is refreshed
+ * hourly by /api/cron/faab-priors, so a claim shows within about two hours.
+ *
+ * Cached for an hour per (season, window, league kind): claims land in batches
+ * on waiver night, and every format and source of one kind shares the same
+ * auctions.
  */
 
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CACHE_TTL } from "@/lib/cache-tags";
+import type { PriorLeagueKind } from "@/lib/faab/priors-build";
 import type { ClaimMarket } from "./types";
 
 export type ClaimWindow = { from: number; to: number };
@@ -43,11 +59,13 @@ function num(value: unknown): number {
 async function loadClaimMarketUncached(
   season: number,
   window: ClaimWindow,
+  leagueKind: PriorLeagueKind,
 ): Promise<Array<[string, ClaimMarket]>> {
   const { data, error } = await createAdminClient().rpc("waiver_claim_market", {
     p_season: season,
     p_from_week: window.from,
     p_to_week: window.to,
+    p_league_kind: leagueKind,
   });
   if (error) throw new Error(`waiver claim market read failed: ${error.message}`);
   return (data ?? []).map((row) => [
@@ -70,11 +88,14 @@ async function loadClaimMarketUncached(
 export async function loadClaimMarketCached(
   season: number,
   window: ClaimWindow,
+  leagueKind: PriorLeagueKind,
 ): Promise<Map<string, ClaimMarket>> {
   try {
     const entries = await unstable_cache(
-      () => loadClaimMarketUncached(season, window),
-      ["waiver-claim-market", String(season), String(window.from), String(window.to)],
+      () => loadClaimMarketUncached(season, window, leagueKind),
+      // The pool is part of the key: a redraft board and a dynasty board read
+      // different auctions and must never share an entry.
+      ["waiver-claim-market", String(season), String(window.from), String(window.to), leagueKind],
       { revalidate: CACHE_TTL.hourly },
     )();
     return new Map(entries);

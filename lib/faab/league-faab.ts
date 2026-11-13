@@ -82,7 +82,7 @@ import {
   standardPhase,
   type PriorLeagueKind,
 } from "./priors-build";
-import { isSuperflexShape } from "./priors-load";
+import { isSuperflexShape, leagueKindFor } from "./priors-load";
 import { loadPriorCellsCached, pickCell } from "./priors-read";
 import {
   computeLeagueTendencies,
@@ -996,16 +996,31 @@ export async function calculateLeagueFaab(
   // type 3 as redraft (which it becomes once it is correctly not a keeper
   // league) judged a guillotine room hot or cold against redraft prices,
   // which is the category error this whole build exists to remove.
+  //
+  // The pool is read with the SAME classifier that files auctions into it
+  // (leagueKindFor, on Sleeper's own league type), so a league is always
+  // priced from the pool its own claims went into. This used to key off
+  // `isKeeperLeague`, which is true for keeper leagues as well: a keeper
+  // league's auctions were filed under redraft and then priced from dynasty.
+  // `isKeeperLeague` still decides the drop guard, which is a different
+  // question (is a cut permanent) with a deliberately wider answer.
+  //
+  // A Sleeper type 3 league with elimination switched off and nobody out yet
+  // is not `chopped` for the survival model, but its auctions are still filed
+  // in the chopped pool, so that is the pool it is priced from, at the phase
+  // for a full field. It was read as redraft before, which is a pool none of
+  // its own claims are in.
   const leagueKindForPriors: PriorLeagueKind = chopped
     ? "chopped"
-    : valueContext.isKeeperLeague
-      ? "dynasty"
-      : "redraft";
-  const aliveFractionNow = chopped
-    ? aliveIds.length / Math.max(1, rosters.length)
+    : leagueKindFor(money.sleeperType);
+  const choppedPool = leagueKindForPriors === "chopped";
+  const aliveFractionNow = choppedPool
+    ? chopped
+      ? aliveIds.length / Math.max(1, rosters.length)
+      : 1
     : null;
   const phaseFor = (week: number) =>
-    chopped ? choppedPhase(aliveFractionNow) : standardPhase(week);
+    choppedPool ? choppedPhase(aliveFractionNow) : standardPhase(week);
   const superflex = isSuperflexShape(league.rosterPositions);
 
   const auctions = settings.auction.enabled

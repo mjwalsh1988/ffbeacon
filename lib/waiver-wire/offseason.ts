@@ -31,14 +31,16 @@ import {
 } from "@/lib/supabase/fetch-all";
 import {
   foldPickupCounts,
+  isShowcasePool,
   isShowcasePosition,
-  medianOf,
+  poolBids,
   pointsAfter,
   qualifyingLeagues,
   selectStored,
   typicalWeek,
   type PickupAggregate,
   type PickupCountRow,
+  type ShowcasePool,
   type ShowcasePosition,
   type ShowcaseEntry,
   type WeekLine,
@@ -163,14 +165,16 @@ export async function buildPickupShowcase(
     linesByPlayer.set(s.player_id, list);
   }
 
-  type BidRow = { id: number; player_sleeper_id: string; winning_pct: number };
+  // The league kind travels with every bid, so the median is taken inside one
+  // pool and a dynasty price never lands on a redraft reader's board.
+  type BidRow = { id: number; player_sleeper_id: string; winning_pct: number; league_kind: string };
   const bids = await fetchAllRowsInChunksByKeyset<BidRow, string, number>(
     "showcase bids",
     candidates.map((c) => c.sleeperId),
     (chunk, after, limit) => {
       let q = supabase
         .from("faab_prior_auctions")
-        .select("id, player_sleeper_id, winning_pct")
+        .select("id, player_sleeper_id, winning_pct, league_kind")
         .eq("season", season)
         .in("player_sleeper_id", chunk)
         .order("id", { ascending: true })
@@ -180,10 +184,12 @@ export async function buildPickupShowcase(
     },
     (row) => row.id,
   );
-  const bidsBySleeper = new Map<string, number[]>();
+  const bidsBySleeper = new Map<string, Array<{ pool: ShowcasePool; pct: number }>>();
   for (const b of bids) {
+    // Chopped claims are skipped: the board has no chopped format to show them under.
+    if (!isShowcasePool(b.league_kind)) continue;
     const list = bidsBySleeper.get(b.player_sleeper_id) ?? [];
-    list.push(Math.min(100, Math.max(0, Number(b.winning_pct))));
+    list.push({ pool: b.league_kind, pct: Number(b.winning_pct) });
     bidsBySleeper.set(b.player_sleeper_id, list);
   }
 
@@ -194,8 +200,6 @@ export async function buildPickupShowcase(
     if (week === null) continue;
     const points = pointsAfter(linesByPlayer.get(player.id) ?? [], week);
     if (points.games === 0) continue;
-    const priced = bidsBySleeper.get(c.sleeperId) ?? [];
-    const median = medianOf(priced);
     entries.push({
       playerId: player.id,
       sleeperId: c.sleeperId,
@@ -204,8 +208,7 @@ export async function buildPickupShowcase(
       leagues: c.leagues,
       viaWaiver: c.viaWaiver,
       viaFreeAgent: c.viaFreeAgent,
-      medianBidPct: median === null ? null : Math.round(median * 10) / 10,
-      bidSamples: priced.length,
+      bidsByPool: poolBids(bidsBySleeper.get(c.sleeperId) ?? []),
       points,
     });
   }

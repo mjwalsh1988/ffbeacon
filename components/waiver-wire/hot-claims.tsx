@@ -96,12 +96,21 @@ function NameLink({ claim, rank }: { claim: HotClaim; rank: number | null }) {
 export function HotClaims({
   claims,
   window,
+  marketName,
   headingId = "hot-claims-heading",
 }: {
   claims: HotClaim[];
   window: { from: number; to: number } | null;
+  /**
+   * The pool the claims were counted in, e.g. "redraft one-quarterback". The
+   * counts come from that league kind only, so the words have to say so.
+   */
+  marketName: string;
   headingId?: string;
 }) {
+  // "redraft" or "dynasty": the lineup half of the name is not what a count
+  // of leagues is filtered by.
+  const pool = marketName.split(" ")[0];
   if (claims.length === 0 || !window) return null;
   const weeks = claimWeeksText(window);
   const podium = claims.slice(0, 3);
@@ -137,7 +146,7 @@ export function HotClaims({
           </h2>
         </div>
         <p className="max-w-sm text-xs leading-relaxed text-ink-muted sm:text-right">
-          Counted across the Sleeper leagues synced to FF Beacon. Bars show the middle half of
+          Counted across the {pool} Sleeper leagues synced to FF Beacon. Bars show the middle half of
           winning bids from 0 to 100% of budget; the tick is the median.
         </p>
       </div>

@@ -180,12 +180,9 @@ export type MarketCellResult =
   | { ok: true; cell: PriorCell; fellBackTo: string | null }
   | { ok: false; error: string };
 
-const PRIOR_KINDS: Array<PriorLeagueKind | "any"> = [
-  "redraft",
-  "dynasty",
-  "chopped",
-  "any",
-];
+// No "any": manual mode always names its league type, and a pooled cell
+// would price a claim from a mix of three different games.
+const PRIOR_KINDS: PriorLeagueKind[] = ["redraft", "dynasty", "chopped"];
 const PRIOR_BIDDERS: Array<PriorBidders | "any"> = ["1", "2", "3", "4p", "any"];
 const POSITION_PATTERN = /^[A-Z]{1,4}$/;
 const PHASE_PATTERN = /^[a-z0-9_]{1,16}$/;
@@ -212,7 +209,7 @@ export async function fetchMarketCell(input: {
   bidders: string;
 }): Promise<MarketCellResult> {
   const leagueKind = String(input.leagueKind ?? "");
-  if (!PRIOR_KINDS.includes(leagueKind as PriorLeagueKind | "any")) {
+  if (!PRIOR_KINDS.includes(leagueKind as PriorLeagueKind)) {
     return { ok: false, error: "Invalid league type" };
   }
   const bidders = String(input.bidders ?? "");
@@ -246,7 +243,7 @@ export async function fetchMarketCell(input: {
     const picked = pickCell(
       cells,
       {
-        leagueKind: leagueKind as PriorLeagueKind | "any",
+        leagueKind: leagueKind as PriorLeagueKind,
         superflex,
         position,
         phase,

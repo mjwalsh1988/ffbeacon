@@ -162,12 +162,54 @@ export type ShowcaseEntry = {
   leagues: number;
   viaWaiver: number;
   viaFreeAgent: number;
-  /** Median winning FAAB bid, share of budget 0 to 100; null with no priced claim. */
-  medianBidPct: number | null;
-  /** How many priced FAAB claims the median is drawn from. */
-  bidSamples: number;
+  /**
+   * What he cost, ONE POOL AT A TIME. Redraft and dynasty leagues pay
+   * differently for the same pickup, so the median is kept per pool and the
+   * page reads the pool its reader's format belongs to. A pool with no priced
+   * claim of his has no key. Chopped claims are left out: no format the board
+   * can show is a chopped one.
+   *
+   * Optional because a row stored before this split carries a single median
+   * pooled across every league kind. That figure is never shown; the row
+   * reads as unpriced until its next weekly rebuild.
+   */
+  bidsByPool?: Partial<Record<ShowcasePool, PoolBid>>;
   points: PointsAfter;
 };
+
+/** The pools the offseason board can price a pickup from. */
+export type ShowcasePool = "redraft" | "dynasty";
+
+export function isShowcasePool(value: unknown): value is ShowcasePool {
+  return value === "redraft" || value === "dynasty";
+}
+
+export type PoolBid = {
+  /** Median winning FAAB bid in this pool, share of budget 0 to 100. */
+  medianPct: number;
+  /** How many priced FAAB claims the median is drawn from. */
+  samples: number;
+};
+
+/** The per-pool medians for one player's winning bids. Pure. */
+export function poolBids(
+  bids: Array<{ pool: ShowcasePool; pct: number }>,
+): Partial<Record<ShowcasePool, PoolBid>> {
+  const byPool = new Map<ShowcasePool, number[]>();
+  for (const b of bids) {
+    if (!Number.isFinite(b.pct)) continue;
+    const list = byPool.get(b.pool) ?? [];
+    list.push(Math.min(100, Math.max(0, b.pct)));
+    byPool.set(b.pool, list);
+  }
+  const out: Partial<Record<ShowcasePool, PoolBid>> = {};
+  for (const [pool, values] of byPool) {
+    const median = medianOf(values);
+    if (median === null) continue;
+    out[pool] = { medianPct: Math.round(median * 10) / 10, samples: values.length };
+  }
+  return out;
+}
 
 export type ShowcaseScoring = "ppr" | "half_ppr" | "standard";
 
@@ -268,13 +310,21 @@ export function rankShowcase<T extends Rankable>(
     .sort((a, b) => b.scored - a.scored || b.leagues - a.leagues || a.playerId.localeCompare(b.playerId));
 }
 
-/** What a pickup like this cost, as a figure and the words that explain it. */
+/**
+ * What a pickup like this cost in ONE pool, as a figure and the words that
+ * explain it. A redraft reader is quoted the redraft median and a dynasty
+ * reader the dynasty one; a pool with too few priced claims says so rather
+ * than borrowing the other pool's price.
+ */
 export function pickupCost(
-  p: Pick<ShowcaseEntry, "medianBidPct" | "bidSamples" | "viaWaiver" | "viaFreeAgent">,
+  p: Pick<ShowcaseEntry, "bidsByPool" | "viaWaiver" | "viaFreeAgent">,
+  pool: ShowcasePool,
 ): { kind: "bid" | "free" | "unpriced"; pct: number | null; samples: number } {
-  if (p.medianBidPct !== null && p.bidSamples >= MIN_BID_SAMPLES) {
-    return { kind: "bid", pct: p.medianBidPct, samples: p.bidSamples };
+  const bid = p.bidsByPool?.[pool];
+  const samples = bid?.samples ?? 0;
+  if (bid && samples >= MIN_BID_SAMPLES) {
+    return { kind: "bid", pct: bid.medianPct, samples };
   }
-  if (p.viaFreeAgent >= p.viaWaiver) return { kind: "free", pct: null, samples: p.bidSamples };
-  return { kind: "unpriced", pct: null, samples: p.bidSamples };
+  if (p.viaFreeAgent >= p.viaWaiver) return { kind: "free", pct: null, samples };
+  return { kind: "unpriced", pct: null, samples };
 }

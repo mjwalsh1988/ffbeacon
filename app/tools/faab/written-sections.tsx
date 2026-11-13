@@ -143,7 +143,7 @@ function dynastyAnswer(market: MarketFacts | null): string {
   if (!contested || !against || against.median <= 0) return mechanics;
 
   const ratio = Math.round((contested.median / against.median) * 10) / 10;
-  return `It costs more, but only when somebody else wants the player. With ${contested.label.toLowerCase()} bidding, the median winning claim in our synced dynasty and keeper leagues is ${pct(contested.median)} of budget against ${pct(against.median)} in redraft, about ${ratio} times the price. Unopposed claims go for nothing in both. ${mechanics}`;
+  return `It costs more, but only when somebody else wants the player. With ${contested.label.toLowerCase()} bidding, the median winning claim in our synced dynasty leagues is ${pct(contested.median)} of budget against ${pct(against.median)} in redraft, about ${ratio} times the price. Unopposed claims go for nothing in both. ${mechanics}`;
 }
 
 /**
@@ -165,7 +165,7 @@ function bidRealityAnswer(market: MarketFacts | null): string {
       ? ""
       : ` Winners paid a median of ${Math.round(market.runnerUpRatio * 10) / 10} times the second-highest bid, so the number that wins is set by the competition rather than by the player.`;
 
-  return `Less than most people expect, until somebody else wants the same player. Across ${market.auctions.toLocaleString()} winning bids from ${market.leagues.toLocaleString()} synced Sleeper leagues, the median claim by number of bidders runs ${parts.join("; ")}, as a share of the league's budget.${ratioClause} The tables above break it down by week, position and league type.`;
+  return `Less than most people expect, until somebody else wants the same player. Across ${market.auctions.toLocaleString()} winning bids from ${market.leagues.toLocaleString()} synced redraft and keeper Sleeper leagues, the median claim by number of bidders runs ${parts.join("; ")}, as a share of the league's budget.${ratioClause} Dynasty and chopped leagues pay differently and are measured separately; the tables above and the dynasty section break each one down.`;
 }
 
 const LINK_CLASS =

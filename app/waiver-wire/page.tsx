@@ -50,7 +50,9 @@ import { faqPageJsonLd } from "@/components/tool-explainer";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { createAdminClient } from "@/lib/supabase/server";
+import type { PriorLeagueKind } from "@/lib/faab/priors-build";
 import { loadPriorCellsCached } from "@/lib/faab/priors-read";
+import { priorLeagueKind } from "@/lib/waiver-wire/bid";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { newestBuiltAt, readCell, type MarketRead } from "@/lib/guides/faab-market-figures";
 import { WaiverBoardPanel } from "@/components/waiver-wire/waiver-board";
@@ -254,7 +256,7 @@ const LESSONS: {
     headingId: "price-heading",
     heading: "What a claim actually costs",
     short: "What it costs",
-    takeaway: "Most of them cost nothing.",
+    takeaway: "Usually far less than you think.",
     icon: Receipt,
   },
   {
@@ -315,7 +317,7 @@ const FAQ: FaqAccordionItem[] = [
   {
     question: "Can you bid zero FAAB?",
     answer:
-      "In most leagues yes, and a zero-dollar claim is how the majority of waiver adds are made, because most players nobody else wants. Measured across the leagues synced to this site, most winning claims clear for nothing at all. A one-dollar bid still beats every zero, though, so if there is any chance somebody else had the same idea it is the cheapest insurance in fantasy football.",
+      "In most leagues yes, and a zero-dollar claim is how a large share of waiver adds are made, because most players nobody else wants. Measured across the leagues synced to this site, most winning claims had no other bidder, and many of those cleared for nothing at all. A one-dollar bid still beats every zero, though, so if there is any chance somebody else had the same idea it is the cheapest insurance in fantasy football.",
   },
   {
     question: "Should I use my waiver priority or wait?",
@@ -347,6 +349,8 @@ const FAQ: FaqAccordionItem[] = [
 /* ---------- Market data ---------- */
 
 type WaiverMarket = {
+  /** Which pool the figures were read from: "redraft" or "dynasty". */
+  pool: PriorLeagueKind;
   bidders: ClearingSlice[];
   overall: MarketRead | null;
   updatedAt: string | null;
@@ -356,27 +360,33 @@ type WaiverMarket = {
  * The measured clearing prices this page quotes.
  *
  * The same `faab_market_priors` cells the FAAB guide reads, through the same
- * helper, so the two pages can never quote different medians for the same
- * slice of the market. Read at render rather than hardcoded, and a cell below
- * the calculator's own publishing threshold prints "Not enough data yet".
+ * helper. Read at render rather than hardcoded, and a cell below the
+ * calculator's own publishing threshold prints "Not enough data yet".
+ *
+ * ONE POOL, THE READER'S OWN. The figures come from the cells of the league
+ * kind the reader's format belongs to, the same pool the board's bids are
+ * priced from, and every caption names it. They used to read the pooled "any"
+ * cells, which this season are nearly half chopped auctions: a redraft reader
+ * was shown a median no redraft league produced.
  */
-const BIDDER_CELLS: { key: string; label: string }[] = [
-  { key: "any|any|any|any|1", label: "Nobody else bid" },
-  { key: "any|any|any|any|2", label: "Two teams bidding" },
-  { key: "any|any|any|any|3", label: "Three teams bidding" },
-  { key: "any|any|any|any|4p", label: "Four or more bidding" },
+const BIDDER_CELLS: { bidders: string; label: string }[] = [
+  { bidders: "1", label: "Nobody else bid" },
+  { bidders: "2", label: "Two teams bidding" },
+  { bidders: "3", label: "Three teams bidding" },
+  { bidders: "4p", label: "Four or more bidding" },
 ];
 
-async function loadWaiverMarket(): Promise<WaiverMarket> {
+async function loadWaiverMarket(pool: PriorLeagueKind): Promise<WaiverMarket> {
   const settings = await loadFaabSettings(createAdminClient());
   const cells = await loadPriorCellsCached(settings.priors.minCellSamples);
   const minSamples = settings.priors.minCellSamples;
   const bidders = BIDDER_CELLS.map((cell) => ({
     label: cell.label,
-    read: readCell(cells, cell.key, minSamples),
+    read: readCell(cells, `${pool}|any|any|any|${cell.bidders}`, minSamples),
   }));
-  const overall = readCell(cells, "any|any|any|any|any", minSamples);
+  const overall = readCell(cells, `${pool}|any|any|any|any`, minSamples);
   return {
+    pool,
     bidders,
     overall,
     updatedAt: newestBuiltAt([overall, ...bidders.map((b) => b.read)]),
@@ -423,7 +433,7 @@ export default async function WaiverWirePage({
 
   const [isMember, market, spread, board, showcase] = await Promise.all([
     isDiscordMember(),
-    loadWaiverMarket(),
+    loadWaiverMarket(priorLeagueKind(context.format?.league_type)),
     context.season != null
       ? loadBudgetSpreadCached(context.season)
       : Promise.resolve<BudgetSpread>({ total: 0, buckets: [], otherLeagues: 0 }),
@@ -511,7 +521,7 @@ export default async function WaiverWirePage({
     stats.push({
       label: "Claims that cost nothing",
       value: `${Math.round(market.overall.zeroShare * 100)}%`,
-      detail: "of winning claims",
+      detail: `of winning ${market.pool} claims`,
     });
   }
 
@@ -685,6 +695,7 @@ export default async function WaiverWirePage({
               scoring: showcaseScoring,
               tePremiumBonus: showcaseTePremium,
               formatName: context.format?.display_name ?? board.assumptions.formatName,
+              pool: market.pool === "dynasty" ? "dynasty" : "redraft",
             }}
             initialPosition={firstParam(search.pos)?.toUpperCase() ?? null}
           />
@@ -703,7 +714,11 @@ export default async function WaiverWirePage({
               />
             </BudgetProvider>
 
-            <HotClaims claims={board.hotClaims} window={board.assumptions.claimWeeks} />
+            <HotClaims
+              claims={board.hotClaims}
+              window={board.assumptions.claimWeeks}
+              marketName={board.assumptions.marketName}
+            />
 
             <Link
               href={weekPath(week)}
@@ -1154,9 +1169,11 @@ function PriceSection({ market }: { market: WaiverMarket }) {
         <div>
           <Para>
             These are not estimates. They are measured from this season&apos;s waiver auctions in
-            the leagues synced to FF Beacon, with last season&apos;s standing in for any situation
-            this season has not seen enough of yet, and stored as anonymous quantiles with no
-            league, roster or manager attached to any of them.
+            the {market.pool} leagues synced to FF Beacon, with last season&apos;s standing in for
+            any situation this season has not seen enough of yet, and stored as anonymous
+            quantiles with no league, roster or manager attached to any of them. Redraft, dynasty
+            and chopped leagues are measured separately and never mixed, because each pays
+            differently for the same player. The figures here follow the format you have selected.
           </Para>
           <Para>
             The number that surprises people is how many claims cost nothing at all. Most weeks,
@@ -1165,10 +1182,10 @@ function PriceSection({ market }: { market: WaiverMarket }) {
             work that out at once.
           </Para>
         </div>
-        <FreeClaimFigure read={market.overall} />
+        <FreeClaimFigure read={market.overall} pool={market.pool} />
       </div>
       <div className="mt-6">
-        <ClearingPriceFigure slices={market.bidders} />
+        <ClearingPriceFigure slices={market.bidders} pool={market.pool} />
       </div>
       <Para>
         Read those two together and the whole strategy falls out of them. The number of rivals
@@ -1307,7 +1324,7 @@ function MistakesSection() {
       />
       <Para>
         The counterweight to all of that is the thing the measured prices above actually show:
-        most claims cost nothing, so the cost of being slightly too aggressive is small and the
+        most claims are uncontested and many cost nothing, so the cost of being slightly too aggressive is small and the
         cost of being permanently too cautious is a budget you never spent.
       </Para>
 

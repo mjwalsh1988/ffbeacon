@@ -33,9 +33,16 @@ export type ChoppedPlatformKey =
   | "fantasy-life"
   | "other";
 
+/**
+ * Keeper sits with redraft, not dynasty. The three choices are the three price
+ * pools, and a keeper league's own auctions are filed in the redraft pool
+ * (lib/faab/priors-load.ts leagueKindFor), which is also where a connected
+ * keeper league is priced from. Labeling dynasty "Dynasty or keeper" sent the
+ * same league to a different pool depending on which mode it was priced in.
+ */
 export const LEAGUE_TYPE_LABEL: Record<ManualLeagueType, string> = {
-  redraft: "Redraft",
-  dynasty: "Dynasty or keeper",
+  redraft: "Redraft or keeper",
+  dynasty: "Dynasty",
   chopped: "Chopped or guillotine",
 };
 

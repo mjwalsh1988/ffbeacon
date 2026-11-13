@@ -43,6 +43,7 @@ import {
   SHOWCASE_POSITIONS,
   pickupCost,
   rankShowcase,
+  type ShowcasePool,
   type ShowcasePosition,
   type ShowcaseScoring,
 } from "@/lib/waiver-wire/offseason-build";
@@ -64,6 +65,8 @@ export type OffseasonScoring = {
   tePremiumBonus: number;
   /** e.g. "Redraft PPR", the resolved format's display name. */
   formatName: string;
+  /** The league kind the format belongs to; every cost is quoted from it alone. */
+  pool: ShowcasePool;
 };
 
 type Ranked = ShowcasePlayer & { scored: number; share: number };
@@ -91,18 +94,26 @@ function games(n: number): string {
 }
 
 /** The cost, in words a row can carry. */
-function costText(p: ShowcasePlayer): string {
-  const c = pickupCost(p);
+function costText(p: ShowcasePlayer, pool: ShowcasePool): string {
+  const c = pickupCost(p, pool);
   if (c.kind === "bid" && c.pct !== null) {
-    return `${pct(c.pct)} median bid, ${c.samples} ${c.samples === 1 ? "claim" : "claims"}`;
+    return `${pct(c.pct)} median bid, ${c.samples} ${pool} ${c.samples === 1 ? "claim" : "claims"}`;
   }
   if (c.kind === "free") return "Mostly free agent adds";
-  return "Too few priced claims";
+  return `Too few priced ${pool} claims`;
 }
 
 /* ---------- 01: the best pickup at each position ---------- */
 
-function LeaderColumn({ player, leagues }: { player: Ranked; leagues: number }) {
+function LeaderColumn({
+  player,
+  leagues,
+  pool,
+}: {
+  player: Ranked;
+  leagues: number;
+  pool: ShowcasePool;
+}) {
   const hue = POSITION_HEX[player.position];
   const perGame = player.points.games > 0 ? player.scored / player.points.games : 0;
   return (
@@ -131,7 +142,7 @@ function LeaderColumn({ player, leagues }: { player: Ranked; leagues: number }) 
       </p>
       <dl className="mt-3">
         <Leader label="Cost">
-          <span className="text-brand-cyan">{costText(player)}</span>
+          <span className="text-brand-cyan">{costText(player, pool)}</span>
         </Leader>
         <Leader label="Leagues">
           <span className="font-mono tabular-nums">
@@ -148,7 +159,17 @@ function LeaderColumn({ player, leagues }: { player: Ranked; leagues: number }) 
 
 /* ---------- 02: the ranked table ---------- */
 
-function PickupTable({ rows, leagues, caption }: { rows: Ranked[]; leagues: number; caption: string }) {
+function PickupTable({
+  rows,
+  leagues,
+  caption,
+  pool,
+}: {
+  rows: Ranked[];
+  leagues: number;
+  caption: string;
+  pool: ShowcasePool;
+}) {
   const shown = rows.slice(0, MAX_ROWS);
   const top = shown[0]?.scored ?? 0;
   return (
@@ -224,7 +245,7 @@ function PickupTable({ rows, leagues, caption }: { rows: Ranked[]; leagues: numb
                   {p.leagues} of {leagues}
                 </span>
                 <span className="block text-[11px] text-ink-subtle">{pct(p.share * 100)} of leagues</span>
-                <span className="block text-[11px] text-brand-cyan">{costText(p)}</span>
+                <span className="block text-[11px] text-brand-cyan">{costText(p, pool)}</span>
               </td>
             </tr>
           );
@@ -331,8 +352,9 @@ export function OffseasonBoard({
   const mostAdded = [...ranked].sort((a, b) => b.leagues - a.leagues)[0];
   // The biggest return on the smallest outlay: the top scorer among pickups
   // that cleared at 1% of a budget or less, or went mostly to free agents.
+  const pool = scoring.pool;
   const bargain = ranked.find((p) => {
-    const c = pickupCost(p);
+    const c = pickupCost(p, pool);
     return c.kind === "free" || (c.kind === "bid" && c.pct !== null && c.pct <= 1);
   });
 
@@ -346,7 +368,7 @@ export function OffseasonBoard({
     });
   }
   if (bargain) {
-    const c = pickupCost(bargain);
+    const c = pickupCost(bargain, pool);
     details.push({
       label: "Biggest bargain",
       value: `${bargain.name}, ${one(bargain.scored)} points for ${
@@ -368,6 +390,7 @@ export function OffseasonBoard({
         <PickupTable
           rows={ranked}
           leagues={leagues}
+          pool={pool}
           caption={`The best ${season} waiver wire pickups at every position, ranked by ${scoringWords(scoring)} after the pickup`}
         />
       ),
@@ -384,6 +407,7 @@ export function OffseasonBoard({
           <PickupTable
             rows={rows}
             leagues={leagues}
+            pool={pool}
             caption={`The best ${season} ${POSITION_WORD[pos]} pickups, ranked by ${scoringWords(scoring)} after the pickup`}
           />
         ),
@@ -409,7 +433,7 @@ export function OffseasonBoard({
       >
         <ol role="list" className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2 xl:grid-cols-4">
           {leaders.map((p) => (
-            <LeaderColumn key={p.playerId} player={p} leagues={leagues} />
+            <LeaderColumn key={p.playerId} player={p} leagues={leagues} pool={pool} />
           ))}
         </ol>
       </SheetSection>
@@ -440,8 +464,10 @@ export function OffseasonBoard({
             end, under {scoring.formatName} scoring.
           </li>
           <li className="py-3">
-            <span className="font-semibold text-ink">The cost. </span>The median winning FAAB bid as a
-            share of the season budget, with the number of priced claims behind it.
+            <span className="font-semibold text-ink">The cost. </span>The median winning FAAB bid in{" "}
+            {pool} leagues only, as a share of the season budget, with the number of priced claims
+            behind it. Redraft and dynasty leagues pay differently for the same player, so the two
+            are never mixed and the figure follows the format you have selected.
           </li>
           <li className="py-3">
             <span className="font-semibold text-ink">The leagues. </span>Readers connected them

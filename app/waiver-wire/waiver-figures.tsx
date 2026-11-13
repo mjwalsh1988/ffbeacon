@@ -66,7 +66,14 @@ export type ClearingSlice = { label: string; read: MarketRead | null };
  * words in place of the bar, rather than dropped, so the shape of what we do
  * and do not know is visible.
  */
-export function ClearingPriceFigure({ slices }: { slices: ClearingSlice[] }) {
+export function ClearingPriceFigure({
+  slices,
+  pool,
+}: {
+  slices: ClearingSlice[];
+  /** The league kind every slice was read from, named in every caption. */
+  pool: string;
+}) {
   const usable = slices.filter((s) => s.read?.enough);
   const max = Math.max(4, ...usable.map((s) => s.read?.p90 ?? 0));
 
@@ -85,12 +92,12 @@ export function ClearingPriceFigure({ slices }: { slices: ClearingSlice[] }) {
   // the whole figure this season's when part of it is not.
   const borrowed = usable.some((s) => s.read?.fromPriorSeason);
   const measuredFrom = borrowed
-    ? "Measured from real claims in the leagues synced to FF Beacon, with last season's standing in where this season has too few so far"
-    : "Measured from this season's claims in the leagues synced to FF Beacon";
+    ? `Measured from real claims in the ${pool} leagues synced to FF Beacon, with last season's standing in where this season has too few so far`
+    : `Measured from this season's claims in the ${pool} leagues synced to FF Beacon`;
 
   const summary =
     usable.length === 0
-      ? "We do not yet hold enough waiver auctions to publish clearing prices by how many teams were bidding."
+      ? `We do not yet hold enough waiver auctions from ${pool} leagues to publish clearing prices by how many teams were bidding.`
       : `${measuredFrom}, an uncontested claim clears near ${
           solo?.enough ? budgetPct(solo.p50) : "nothing"
         } while a claim four or more teams wanted clears near ${
@@ -101,12 +108,12 @@ export function ClearingPriceFigure({ slices }: { slices: ClearingSlice[] }) {
     <ChartFigure
       titleLevel={3}
       title="What a waiver claim actually costs, by how many teams wanted him"
-      description="Median winning bid as a percentage of the league's whole season budget, so it reads the same in a $100 league and a $1,000 one. Measured from real waiver auctions in leagues synced to FF Beacon, not from anybody's opinion."
+      description={`Median winning bid as a percentage of the league's whole season budget, so it reads the same in a $100 league and a $1,000 one. Measured from real waiver auctions in ${pool} leagues synced to FF Beacon, not from anybody's opinion.`}
       summary={summary}
       tableLabel="View the prices behind this chart"
       table={
         <DataTable
-          caption="Median, 75th and 90th percentile winning bids by number of bidding teams, as a share of the league's whole budget."
+          caption={`Median, 75th and 90th percentile winning bids in ${pool} leagues by number of bidding teams, as a share of the league's whole budget.`}
           head={
             <>
               <Th>Teams bidding</Th>
@@ -432,28 +439,35 @@ export function ProcessingFigure({ rows = PROCESSING_ROWS }: { rows?: Processing
  * that are not, and hoarding it all season is the mistake rather than the
  * discipline.
  */
-export function FreeClaimFigure({ read }: { read: MarketRead | null }) {
+export function FreeClaimFigure({
+  read,
+  pool,
+}: {
+  read: MarketRead | null;
+  /** The league kind the figure was read from, named in every caption. */
+  pool: string;
+}) {
   const enough = !!read?.enough;
   const free = enough ? read.zeroShare : null;
 
   return (
     <ChartFigure
       titleLevel={3}
-      title="Most waiver claims cost nothing"
+      title="How many waiver claims cost nothing"
       description={
         read?.fromPriorSeason
-          ? "The share of winning claims that cleared at zero, across last season's waiver auctions in the leagues synced to FF Beacon. This season does not have enough claims yet."
-          : "The share of winning claims that cleared at zero, across this season's waiver auctions in the leagues synced to FF Beacon."
+          ? `The share of winning claims that cleared at zero, across last season's waiver auctions in the ${pool} leagues synced to FF Beacon. This season does not have enough claims yet.`
+          : `The share of winning claims that cleared at zero, across this season's waiver auctions in the ${pool} leagues synced to FF Beacon.`
       }
       summary={
         enough && free != null
-          ? `${shareText(free)} percent of winning waiver claims cleared for nothing at all, because nobody else put in for that player. The budget is not for those. It is for the small number of weeks when somebody's job changes and several managers want the same name. Across every claim, the median winning bid is ${budgetPct(read.p50)}.`
-          : "We do not yet hold enough waiver auctions to publish how often a claim clears for nothing."
+          ? `${shareText(free)} percent of winning waiver claims in ${pool} leagues cleared for nothing at all, because nobody else put in for that player. The budget is not for those. It is for the small number of weeks when somebody's job changes and several managers want the same name. Across every ${pool} claim, the median winning bid is ${budgetPct(read.p50)}.`
+          : `We do not yet hold enough waiver auctions from ${pool} leagues to publish how often a claim clears for nothing.`
       }
       tableLabel="View the numbers behind this"
       table={
         <DataTable
-          caption="Share of winning waiver claims that cleared at zero, and the median winning bid, across all measured auctions."
+          caption={`Share of winning waiver claims that cleared at zero, and the median winning bid, across all measured auctions in ${pool} leagues.`}
           head={
             <>
               <Th>Figure</Th>

@@ -214,19 +214,24 @@ type FaabMarket = {
   updatedAt: string | null;
 };
 
+// The REDRAFT pool, not the pooled "any" cells. Redraft, dynasty and chopped
+// leagues are measured separately and never mixed: the pooled bidder cells
+// were nearly half chopped auctions this season, and this guide's lessons are
+// about a standard one-season league. The chopped section reads the chopped
+// pool, and the calculator's dynasty section carries the dynasty one.
 const BIDDER_CELLS: { key: string; label: string }[] = [
-  { key: "any|any|any|any|1", label: "Nobody else bid" },
-  { key: "any|any|any|any|2", label: "Two teams bidding" },
-  { key: "any|any|any|any|3", label: "Three teams bidding" },
-  { key: "any|any|any|any|4p", label: "Four or more bidding" },
+  { key: "redraft|any|any|any|1", label: "Nobody else bid" },
+  { key: "redraft|any|any|any|2", label: "Two teams bidding" },
+  { key: "redraft|any|any|any|3", label: "Three teams bidding" },
+  { key: "redraft|any|any|any|4p", label: "Four or more bidding" },
 ];
 
 const PHASE_CELLS: { key: string; label: string; week: number }[] = [
-  { key: "any|any|any|wk1|any", label: "Week 1", week: 1 },
-  { key: "any|any|any|wk2_6|any", label: "Weeks 2 to 6", week: 2 },
-  { key: "any|any|any|wk7_10|any", label: "Weeks 7 to 10", week: 7 },
-  { key: "any|any|any|wk11_13|any", label: "Weeks 11 to 13", week: 11 },
-  { key: "any|any|any|wk14p|any", label: "Week 14 on", week: 14 },
+  { key: "redraft|any|any|wk1|any", label: "Week 1", week: 1 },
+  { key: "redraft|any|any|wk2_6|any", label: "Weeks 2 to 6", week: 2 },
+  { key: "redraft|any|any|wk7_10|any", label: "Weeks 7 to 10", week: 7 },
+  { key: "redraft|any|any|wk11_13|any", label: "Weeks 11 to 13", week: 11 },
+  { key: "redraft|any|any|wk14p|any", label: "Week 14 on", week: 14 },
 ];
 
 async function loadFaabMarket(): Promise<FaabMarket> {
@@ -752,8 +757,8 @@ function HowMuchSection({ market }: { market: FaabMarket }) {
       />
       {contested && (
         <Para>
-          Company is what actually moves a price, and we can measure how much. Across the leagues
-          synced into this site, the median winning bid on a claim two teams wanted was{" "}
+          Company is what actually moves a price, and we can measure how much. Across the redraft
+          leagues synced into this site, the median winning bid on a claim two teams wanted was{" "}
           {pctText(two!.p50)} percent of the whole budget ({sampleText(two!)}). With three teams
           on it the median was {pctText(three!.p50)} percent ({sampleText(three!)}), and with
           four or more it was {pctText(four!.p50)} percent ({sampleText(four!)}).
@@ -834,8 +839,8 @@ function TimingSection({ market }: { market: FaabMarket }) {
       </Para>
       {measured && (
         <Para>
-          Close to half of all waiver claims clear for nothing in every stretch of the season, so
-          the median is the wrong number to look at. Look at the top quarter, where the contested
+          A large share of waiver claims clear for nothing in every stretch of the season, so the
+          median is the wrong number to look at. These figures are from redraft leagues only. Look at the top quarter, where the contested
           claims live. The dearest quarter of winning bids cleared above{" "}
           {pctText(dearest!.read!.p75)} percent of the budget in{" "}
           {dearest!.label.toLowerCase()}, which is the most expensive stretch we measure, and
@@ -845,7 +850,7 @@ function TimingSection({ market }: { market: FaabMarket }) {
         </Para>
       )}
       <GuideTable
-        caption="Winning bids as a share of the league's whole budget, measured across the leagues synced into FF Beacon, beside what the calculator does with each stretch. A multiplier above 1 means it expects rivals to bid up."
+        caption="Winning bids as a share of the league's whole budget, measured across the redraft leagues synced into FF Beacon, beside what the calculator does with each stretch. A multiplier above 1 means it expects rivals to bid up."
         head={[
           "Stretch of the season",
           "Top quarter cleared above",

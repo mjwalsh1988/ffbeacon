@@ -4,11 +4,11 @@ import type { PriorCell } from "@/lib/faab/priors-math";
 import { boardBid, estimateBidders, ownQuantile, priorLeagueKind } from "./bid";
 import type { ClaimMarket } from "./types";
 
-/** One market cell, "any" on every dimension but the bidder count. */
+/** One dynasty market cell, "any" on every other dimension but the bidder count. */
 function cell(bidders: PriorCell["bidders"], q: Partial<PriorCell> = {}): PriorCell {
   return {
-    cellKey: `any|any|any|any|${bidders}`,
-    leagueKind: "any",
+    cellKey: `dynasty|any|any|any|${bidders}`,
+    leagueKind: "dynasty",
     superflex: "any",
     position: "any",
     phase: "any",
@@ -114,6 +114,12 @@ describe("boardBid", () => {
 
   it("says nothing rather than zero when there is nothing measured", () => {
     expect(boardBid({ ...BASE, cells: [], market: null })).toBeNull();
+  });
+
+  it("never prices a redraft board off dynasty cells", () => {
+    // CELLS holds dynasty cells only. A redraft board has nothing measured in
+    // its own pool, so it says nothing rather than borrowing dynasty prices.
+    expect(boardBid({ ...BASE, leagueKind: "redraft", market: null })).toBeNull();
   });
 
   it("still prices from his own claims when the market cells are missing", () => {

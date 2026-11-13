@@ -111,7 +111,7 @@ export function DynastySection({ facts }: { facts: MarketFacts | null }) {
         How dynasty FAAB is different
       </h2>
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-muted">
-        Dynasty and keeper managers are not bidding on the rest of a season.
+        Dynasty managers are not bidding on the rest of a season.
         They are bidding on a player they intend to own next year as well, out
         of a budget that does not come back. That changes what a claim is worth,
         and our own auctions show exactly where it changes and where it does
@@ -164,7 +164,7 @@ export function DynastySection({ facts }: { facts: MarketFacts | null }) {
               tableLabel="View the medians drawn above"
               table={
                 <DataTable
-                  caption="Median winning bid by number of bidders in redraft against dynasty and keeper leagues, as a share of the league's budget."
+                  caption="Median winning bid by number of bidders in redraft against dynasty leagues, as a share of the league's budget."
                   head={
                     <>
                       <Th>Teams bidding</Th>
@@ -189,7 +189,7 @@ export function DynastySection({ facts }: { facts: MarketFacts | null }) {
 
           <div className="mt-3">
             <MarketTable
-              caption="Winning bids in dynasty and keeper leagues by number of bidders, as a share of the league's budget."
+              caption="Winning bids in dynasty leagues by number of bidders, as a share of the league's budget."
               firstColumn="Teams bidding, dynasty"
               rows={facts.dynastyByBidders}
             />
@@ -220,7 +220,7 @@ export function DynastySection({ facts }: { facts: MarketFacts | null }) {
             </p>
             <div className="mt-3">
               <MarketTable
-                caption="Winning bids in dynasty and keeper leagues by position in contested auctions, as a share of the league's budget."
+                caption="Winning bids in dynasty leagues by position in contested auctions, as a share of the league's budget."
                 firstColumn="Position"
                 rows={facts.dynastyByPosition}
               />
@@ -260,9 +260,10 @@ export function DynastySection({ facts }: { facts: MarketFacts | null }) {
 
       <p className="mt-6 max-w-3xl text-sm leading-relaxed text-ink-muted">
         Figures above come from {dynastyAuctions.toLocaleString()} priced
-        dynasty and keeper auctions and {redraftAuctions.toLocaleString()}{" "}
-        redraft auctions across the Sleeper leagues synced to FF Beacon,{" "}
-        {seasonsPhrase(facts)}. Building a roster rather than
+        dynasty auctions and {redraftAuctions.toLocaleString()}{" "}
+        redraft and keeper auctions across the Sleeper leagues synced to FF
+        Beacon, {seasonsPhrase(facts.dynastySeasons)}. The two are measured
+        separately and never mixed. Building a roster rather than
         pricing one claim? Our{" "}
         <Link
           href="/guides/dynasty-strategy"

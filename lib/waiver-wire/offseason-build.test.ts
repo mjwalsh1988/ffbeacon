@@ -5,7 +5,9 @@ import {
   foldPickupCounts,
   medianOf,
   offseasonSeasonFor,
+  pickupCost,
   pointsAfter,
+  poolBids,
   qualifyingLeagues,
   scoredPoints,
   selectStored,
@@ -125,8 +127,7 @@ describe("selectStored", () => {
       leagues: 10,
       viaWaiver: 5,
       viaFreeAgent: 5,
-      medianBidPct: null,
-      bidSamples: 0,
+      bidsByPool: {},
       points: { ppr, half: ppr, std: ppr, rec: 0, games: 10 },
     };
   }
@@ -137,6 +138,40 @@ describe("selectStored", () => {
     const stored = selectStored([...qbs, ...tes]);
     expect(stored.filter((e) => e.position === "TE")).toHaveLength(3);
     expect(stored.filter((e) => e.position === "QB")).toHaveLength(STORED_PER_POSITION);
+  });
+});
+
+describe("poolBids and pickupCost", () => {
+  const bids = poolBids([
+    { pool: "redraft", pct: 2 },
+    { pool: "redraft", pct: 4 },
+    { pool: "redraft", pct: 6 },
+    { pool: "dynasty", pct: 30 },
+    { pool: "dynasty", pct: 40 },
+    { pool: "dynasty", pct: 50 },
+    { pool: "dynasty", pct: 250 },
+  ]);
+  const entry = { bidsByPool: bids, viaWaiver: 7, viaFreeAgent: 0 };
+
+  it("takes each pool's median from that pool's bids only", () => {
+    expect(bids.redraft).toEqual({ medianPct: 4, samples: 3 });
+    // 250 is clamped to the whole budget before the median is taken.
+    expect(bids.dynasty).toEqual({ medianPct: 40, samples: 4 });
+  });
+
+  it("quotes a reader their own pool's price", () => {
+    expect(pickupCost(entry, "redraft")).toEqual({ kind: "bid", pct: 4, samples: 3 });
+    expect(pickupCost(entry, "dynasty")).toEqual({ kind: "bid", pct: 40, samples: 4 });
+  });
+
+  it("says unpriced rather than borrowing the other pool's price", () => {
+    const dynastyOnly = { ...entry, bidsByPool: { dynasty: bids.dynasty! } };
+    expect(pickupCost(dynastyOnly, "redraft")).toEqual({ kind: "unpriced", pct: null, samples: 0 });
+  });
+
+  it("reads a row stored before the split as unpriced, never its pooled median", () => {
+    const legacy = { medianBidPct: 22, bidSamples: 90, viaWaiver: 7, viaFreeAgent: 0 };
+    expect(pickupCost(legacy, "redraft").kind).toBe("unpriced");
   });
 });
 

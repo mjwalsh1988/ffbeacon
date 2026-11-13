@@ -17,7 +17,7 @@ import {
  * than about which cell got picked (priors-read.test.ts owns that).
  */
 function cell(over: Partial<PriorCell> = {}): PriorCell {
-  const key = over.cellKey ?? "any|any|any|any|any";
+  const key = over.cellKey ?? "redraft|any|any|any|any";
   const [leagueKind, superflex, position, phase, bidders] = key.split("|");
   return {
     cellKey: key,
@@ -105,8 +105,8 @@ describe("replayOne", () => {
     // would subtract a reader the dimension never double counted, and price a
     // contested auction off a thinner room's distribution.
     const cells = [
-      cell({ cellKey: "any|any|any|any|2", p50: 4 }),
-      cell({ cellKey: "any|any|any|any|3", p50: 40 }),
+      cell({ cellKey: "redraft|any|any|any|2", p50: 4 }),
+      cell({ cellKey: "redraft|any|any|any|3", p50: 40 }),
     ];
     const three = auction({
       bids: [
@@ -116,7 +116,7 @@ describe("replayOne", () => {
       ],
     });
     const outcome = replayOne(three, cells, options(), 1);
-    expect(outcome?.cellKey).toBe("any|any|any|any|3");
+    expect(outcome?.cellKey).toBe("redraft|any|any|any|3");
   });
 
   it("returns null when no cell covers the auction", () => {
@@ -233,7 +233,10 @@ describe("replayAuctions", () => {
       auction({ ...base, week: 8, aliveFraction: 0.4 }),
       auction({ ...base, week: 14, aliveFraction: 0.1 }),
     ];
-    const { summary } = replayAuctions(rows, CELLS, options());
+    // A chopped auction is priced from the chopped pool only, so the shared
+    // redraft cell cannot stand in for it.
+    const choppedCells = [cell({ cellKey: "chopped|any|any|any|any" })];
+    const { summary } = replayAuctions(rows, choppedCells, options());
 
     expect(summary.chopped.map((b) => b.key)).toEqual([
       "alive_50p",

@@ -11,7 +11,8 @@
  * samples is noise wearing a number's clothes. So we drop one dimension at a
  * time, in the order that costs the least accuracy, until the cell has enough
  * samples to mean something, and we report which rung we landed on so the page
- * can say so out loud.
+ * can say so out loud. The one dimension it never drops is the league kind:
+ * redraft, dynasty and chopped are separate pools (see LADDER).
  *
  * `priorCdf` turns a cell into a win curve: the chance a bid of b wins is the
  * chance the clearing price was at or below b, which is exactly what these
@@ -194,36 +195,42 @@ function keyFor(want: {
  *
  * Position goes first because the bidder count and the time of year move a
  * price further than the position does: three teams chasing anybody is dearer
- * than one team chasing a running back. Superflex next, then the phase, and
- * the league kind last, because a dynasty room and a redraft room genuinely
- * pay differently and that distinction is the last one worth giving up.
+ * than one team chasing a running back. Superflex next, then the phase.
  * Bidder count is never dropped on its own: it is the strongest signal we
- * have, so it only goes in the final everything-any rung.
+ * have, so it only goes in the final rung.
+ *
+ * THE LEAGUE KIND IS NEVER WIDENED. Redraft, dynasty and chopped are three
+ * separate pools, and a league is priced from its own pool only. A dynasty
+ * room pays for a player it keeps for years, a chopped room pays to survive
+ * the week, and a redraft room pays for the rest of one season, so a price
+ * borrowed across that line describes a different decision. The ladder used
+ * to end on two "every league type" rungs; a thin chopped or dynasty cell
+ * then quietly read a distribution that was mostly redraft. Now the widest
+ * rung is every auction IN THE SAME POOL, and when that pool is thin the
+ * caller gets that thin cell with its sample size (or null when the pool has
+ * no cell at all) and says so, rather than a confident number from another
+ * game. Only a caller that asks for "any" outright reads the pooled cells.
  */
-const LADDER: Array<{ label: string; widen: (want: PriorWant) => Partial<Record<string, string>> }> =
-  [
-    { label: "", widen: () => ({}) },
-    { label: "every position", widen: () => ({ position: "any" }) },
-    { label: "every position and lineup type", widen: () => ({ position: "any", superflex: "any" }) },
-    {
-      label: "every position, lineup type and time of season",
-      widen: () => ({ position: "any", superflex: "any", phase: "any" }),
-    },
-    {
-      label: "every league type",
-      widen: () => ({ position: "any", superflex: "any", phase: "any", leagueKind: "any" }),
-    },
-    {
-      label: "every auction this season",
-      widen: () => ({
-        position: "any",
-        superflex: "any",
-        phase: "any",
-        leagueKind: "any",
-        bidders: "any",
-      }),
-    },
-  ];
+const WIDEST_RUNG = "widest";
+
+const LADDER: Array<{ label: string; widen: Partial<Record<string, string>> }> = [
+  { label: "", widen: {} },
+  { label: "every position", widen: { position: "any" } },
+  { label: "every position and lineup type", widen: { position: "any", superflex: "any" } },
+  {
+    label: "every position, lineup type and time of season",
+    widen: { position: "any", superflex: "any", phase: "any" },
+  },
+  {
+    label: WIDEST_RUNG,
+    widen: { position: "any", superflex: "any", phase: "any", bidders: "any" },
+  },
+];
+
+/** "redraft " in front of "auction", or nothing for the pooled read. */
+function poolWord(kind: PriorCell["leagueKind"]): string {
+  return kind === "any" ? "" : `${kind} `;
+}
 
 export function pickCell(
   cells: PriorCell[],
@@ -243,7 +250,7 @@ export function pickCell(
 
   let last: PriorCell | null = null;
   for (const rung of LADDER) {
-    const cell = byKey.get(keyFor({ ...base, ...rung.widen(want) }));
+    const cell = byKey.get(keyFor({ ...base, ...rung.widen }));
     if (!cell) continue;
     last = cell;
     if (cell.sampleSize >= minCellSamples) {
@@ -251,21 +258,27 @@ export function pickCell(
     }
   }
 
-  // Nothing cleared the bar. The widest cell we found is still the best answer
-  // available, and its sample size travels with it so the page can hedge.
-  return last ? { cell: last, fellBackTo: describeFallback("every auction this season", last) } : null;
+  // Nothing cleared the bar. The widest cell we found IN THIS POOL is still
+  // the best answer available, and its sample size travels with it so the
+  // page can hedge. It is never another pool's cell.
+  return last ? { cell: last, fellBackTo: describeFallback(WIDEST_RUNG, last) } : null;
 }
 
 /**
  * The fallback sentence fragment, naming last season when its cell is the one
- * used: "every position", "2025 claims until this season has enough", or
- * "every position, from 2025 claims until this season has enough". Pages
- * print it after "widens to".
+ * used: "every position", "every redraft auction this season", "2025 claims
+ * until this season has enough", or "every position, from 2025 claims until
+ * this season has enough". Pages print it after "widens to".
  */
 function describeFallback(widened: string | null, cell: PriorCell): string | null {
+  const pool = poolWord(cell.leagueKind);
+  if (widened === WIDEST_RUNG) {
+    return cell.fromPriorSeason
+      ? `every ${cell.season} ${pool}auction until this season has enough`
+      : `every ${pool}auction this season`;
+  }
   if (!cell.fromPriorSeason) return widened;
   const borrowed = `${cell.season} claims until this season has enough`;
-  if (widened === "every auction this season") return `every ${cell.season} auction until this season has enough`;
   return widened ? `${widened}, from ${borrowed}` : borrowed;
 }
 
