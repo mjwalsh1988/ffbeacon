@@ -464,8 +464,8 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "Pick order normally runs in reverse standings order. Because it is the only way new talent enters a dynasty league, rookie picks trade like currency all year.",
         ],
         link: {
-          href: "/guides/dynasty-strategy#picks-heading",
-          label: "How often rookie picks hit, by slot",
+          href: "/guides/dynasty-rookie-draft",
+          label: "The dynasty rookie draft guide",
         },
       },
       {

@@ -53,6 +53,7 @@ import {
   TrendingUp,
   Cog,
   Crosshair,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 import { formatEasternShortDate } from "@/lib/datetime";
@@ -1288,6 +1289,16 @@ const HOME_GUIDE_DETAILS: Record<string, HomeGuideDetail> = {
       "Why the middle is the worst place in dynasty",
       "Who the dynasty market pays for by age, live from tonight's values",
       "Rookie pick hit rates by slot, and when picks are cheapest",
+    ],
+  },
+  "dynasty-rookie-draft": {
+    icon: GraduationCap,
+    hint: "Rookie picks: the odds, the price and the timing",
+    lessons: [
+      "What hundreds of real Sleeper rookie drafts looked like",
+      "Hit rates for every pick slot, and today's price of each one",
+      "NFL draft capital by position, and why landing spot comes second",
+      "When pick prices peak and dip through the year",
     ],
   },
   "fantasy-football-playoffs": {

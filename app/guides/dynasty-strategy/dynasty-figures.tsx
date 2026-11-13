@@ -9,6 +9,7 @@ import {
 import { formatEasternShortDate } from "@/lib/datetime";
 import { teamStatusBands } from "@/lib/league-team-status";
 import { positionNounMap } from "@/lib/site";
+import { ROOKIE_PICK_HIT_RATES } from "@/lib/guides/dynasty-rookie-draft";
 import {
   AGE_BANDS,
   AGE_MARKET_TOP_N,
@@ -622,18 +623,10 @@ export function AgeMarketFigure({ market }: { market: DynastyAgeMarket }) {
 
 /* ---------- Lesson 4: rookie pick hit rates, published ---------- */
 
-// Dynasty Nerds, Mychal Warno, March 17, 2025, rookie drafts 2018 to 2023. A
-// "hit" is a Tier 1 season or multiple Tier 2 or better seasons; "hit or mid"
-// adds a Tier 2 season with a Tier 3, or multiple Tier 3 seasons.
-const HIT_RATES: { slot: string; hit: number; hitOrMid: number }[] = [
-  { slot: "1.01", hit: 83.33, hitOrMid: 100 },
-  { slot: "1.02 to 1.04", hit: 70.83, hitOrMid: 83.33 },
-  { slot: "1.05 to 1.08", hit: 37.5, hitOrMid: 41.67 },
-  { slot: "1.09 to 1.12", hit: 45.83, hitOrMid: 62.5 },
-  { slot: "2.01 to 2.06", hit: 22.22, hitOrMid: 30.56 },
-  { slot: "2.07 to 2.12", hit: 19.44, hitOrMid: 33.33 },
-  { slot: "Round 3 and later", hit: 8.33, hitOrMid: 13.89 },
-];
+// The Dynasty Nerds figures (Mychal Warno, March 2025, rookie drafts 2018 to
+// 2023) live in lib/guides/dynasty-rookie-draft.ts, because the rookie draft
+// guide draws the same array and the two pages must not disagree.
+const HIT_RATES = ROOKIE_PICK_HIT_RATES;
 
 function pct(n: number): string {
   return `${Math.round(n)}%`;

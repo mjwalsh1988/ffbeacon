@@ -93,6 +93,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "Linebackers, defensive linemen and defensive backs. How IDP scoring changes which of them matter, and how to draft and manage them.",
     badge: "10 lessons",
   },
+  "dynasty-rookie-draft": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "The rookie draft guide:",
+    headlineBottom: "what every pick is worth",
+    subhead:
+      "How dynasty rookie drafts work, the odds on every pick, when pick prices peak and dip, and how to read the NFL draft. With figures from real rookie drafts.",
+    badge: "10 lessons",
+  },
   "faab-settings-by-platform": {
     eyebrow: "Fantasy Football Guide",
     headlineTop: "FAAB and waiver settings,",

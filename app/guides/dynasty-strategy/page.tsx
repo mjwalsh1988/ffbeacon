@@ -108,8 +108,6 @@ export const metadata: Metadata = {
     "dynasty rebuild strategy",
     "dynasty contender strategy",
     "dynasty age curve",
-    "dynasty rookie draft strategy",
-    "rookie pick hit rate",
     "dynasty startup strategy",
     "dynasty taxi squad",
     "dynasty trade calendar",
@@ -186,7 +184,7 @@ const FAQ: FaqAccordionItem[] = [
   {
     question: "When are rookie picks worth the most?",
     answer:
-      "Around the NFL draft and the rookie drafts in late April and May, when every manager has a name attached to every slot. Footballguys' study of KeepTradeCut prices found the best time to buy a pick is the start of the regular season in September and the best time to sell is right after the NFL draft. Picks tend to drift lower through the summer months.",
+      "Around the NFL draft and the rookie drafts in late April and May, when every manager has a name attached to every slot. The dynasty rookie draft guide on this site has the full price calendar.",
   },
   {
     question: "How do taxi squads work on Sleeper?",
@@ -915,7 +913,12 @@ function PicksSection() {
         nothing for you this season, and past the top four it has
         roughly even odds of ever scoring anything. Rebuilders should want
         picks in the top four and players they already know, and should sell
-        the picks in between at their peak, which Lesson 5 puts in May.
+        the picks in between at their peak, which Lesson 5 puts in May. The{" "}
+        <Link href="/guides/dynasty-rookie-draft" className={LINK_CLASS}>
+          rookie draft guide
+        </Link>{" "}
+        goes further: what each pick slot costs today, how NFL draft round
+        changes the odds, and where the newest class went in real drafts.
       </Para>
       <KeyIdea>
         Price a rookie pick by its odds. Past the first four picks it is a

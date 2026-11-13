@@ -15,6 +15,7 @@ import {
   Trophy,
   Swords,
   Shield,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -257,6 +258,19 @@ const GUIDES: Guide[] = [
       "Put in your league and see your lane: Contender, Loaded, Bubble or Rebuilder",
       "Rookie pick hit rates by slot, and when picks are cheapest",
       "An age clock for your starters, and a pre-deadline checklist",
+    ],
+  },
+  {
+    icon: GraduationCap,
+    title: "Dynasty rookie draft guide",
+    href: "/guides/dynasty-rookie-draft",
+    description:
+      "The rookie draft and the offseason around it. How the draft runs, the odds and the price of every pick, when pick prices peak and dip, how to read the NFL draft, and how to trade before, during and after.",
+    bullets: [
+      "Ten lessons, with figures from hundreds of real Sleeper rookie drafts",
+      "Hit-rate meters for every pick slot, and today's price of each one",
+      "NFL draft capital by position, and a box that sorts any rookie",
+      "Where the newest class actually went, and how far leagues disagree",
     ],
   },
   {

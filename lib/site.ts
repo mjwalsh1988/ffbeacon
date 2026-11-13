@@ -492,6 +492,25 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     ],
   },
   {
+    label: "Rookie Draft Guide",
+    href: "/guides/dynasty-rookie-draft",
+    description: "How dynasty rookie drafts work, and what every rookie pick is worth",
+    keywords: [
+      "rookie draft",
+      "dynasty rookie draft",
+      "rookie draft strategy",
+      "rookie picks",
+      "rookie pick value",
+      "pick values",
+      "hit rate",
+      "draft capital",
+      "landing spot",
+      "offseason",
+      "linear draft",
+      "trade picks",
+    ],
+  },
+  {
     label: "Playoff Guide",
     href: "/guides/fantasy-football-playoffs",
     description:

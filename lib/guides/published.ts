@@ -133,7 +133,8 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // No year in the slug, for the same reason as the other strategy guides:
     // the method does not expire. The one live figure refreshes itself.
     publishedAt: "2026-09-18T09:00:00-04:00",
-    updatedAt: "2026-09-18T09:00:00-04:00",
+    // 2026-11-13: the rookie pick lesson links the new rookie draft guide.
+    updatedAt: "2026-11-13T18:00:00-05:00",
     priority: 0.8,
   },
   {
@@ -190,6 +191,21 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     publishedAt: "2026-09-24T09:00:00-04:00",
     // 2026-10-15: the draft and in-season lessons link the new IDP rankings page.
     updatedAt: "2026-10-15T18:00:00-04:00",
+    priority: 0.8,
+  },
+  {
+    slug: "dynasty-rookie-draft",
+    navLabel: "Rookie Draft Guide",
+    title: "Dynasty rookie draft guide: strategy, pick values and timing",
+    summary:
+      "How dynasty rookie drafts work, the odds and the price of every rookie pick, when pick prices peak and dip, how to read NFL draft capital and landing spots, and how to trade picks through the offseason, with figures from real rookie drafts",
+    // No year in the slug, for the same reason as the other strategy guides:
+    // the method does not expire, and the live figures (real rookie drafts,
+    // the class board, pick prices) move to each new class on their own.
+    // /guides/dynasty-strategy keeps contend-or-rebuild; this guide keeps the
+    // rookie draft and the picks, so the two do not compete for one query.
+    publishedAt: "2026-11-13T18:00:00-05:00",
+    updatedAt: "2026-11-13T18:00:00-05:00",
     priority: 0.8,
   },
 ];

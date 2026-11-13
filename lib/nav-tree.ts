@@ -244,6 +244,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "hourglass",
       },
       {
+        id: "/guides/dynasty-rookie-draft",
+        label: "Rookie Draft Guide",
+        href: "/guides/dynasty-rookie-draft",
+        hint: "Rookie picks, odds and prices",
+        icon: "graduationCap",
+      },
+      {
         id: "/guides/fantasy-football-playoffs",
         label: "Playoff Guide",
         href: "/guides/fantasy-football-playoffs",
