@@ -109,7 +109,8 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // No year in the slug, for the same reason as the draft guide: the method
     // does not expire.
     publishedAt: "2026-09-15T12:00:00-04:00",
-    updatedAt: "2026-09-15T12:00:00-04:00",
+    // 2026-11-13: the picks lesson links the rookie draft guide.
+    updatedAt: "2026-11-13T21:00:00-05:00",
     priority: 0.8,
   },
   {
@@ -121,7 +122,8 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // No year in the slug, for the same reason as the draft and trade guides:
     // the method does not expire. The one live figure refreshes itself.
     publishedAt: "2026-09-16T09:00:00-04:00",
-    updatedAt: "2026-09-16T09:00:00-04:00",
+    // 2026-11-13: the dynasty lesson links the rookie draft guide.
+    updatedAt: "2026-11-13T21:00:00-05:00",
     priority: 0.8,
   },
   {
@@ -133,8 +135,9 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     // No year in the slug, for the same reason as the other strategy guides:
     // the method does not expire. The one live figure refreshes itself.
     publishedAt: "2026-09-18T09:00:00-04:00",
-    // 2026-11-13: the rookie pick lesson links the new rookie draft guide.
-    updatedAt: "2026-11-13T18:00:00-05:00",
+    // 2026-11-13: the rookie pick lesson links the new rookie draft guide, and
+    // the last hit-rate row is named round three, as the study names it.
+    updatedAt: "2026-11-13T21:00:00-05:00",
     priority: 0.8,
   },
   {

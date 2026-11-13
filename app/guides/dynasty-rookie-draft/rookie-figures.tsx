@@ -84,7 +84,7 @@ export function KeyFigures({ facts }: { facts: RookieDraftFacts | null }) {
     { value: `${pct("101")}%`, label: "Hit rate at the 1.01", note: "Dynasty Nerds, rookie drafts 2018 to 2023." },
     {
       value: `${pct("300")}%`,
-      label: "Hit rate in round 3 and later",
+      label: "Hit rate in round 3",
       note: "Same study. Most late picks never start for you.",
     },
   ];
@@ -519,12 +519,17 @@ export function PriceHistoryFigure({ market, history }: { market: PickMarket; hi
   const first = history.points[0];
   const last = history.points[history.points.length - 1];
   const reading = historyReading(history);
+  // A source that changed how it prices picks would draw its own change as a
+  // market move, so the line starts after the last such change and says so.
+  const since = history.methodChangedOn
+    ? `from the week after ${market.sourceName} last changed how it prices picks (${weekDate(history.methodChangedOn, true)})`
+    : "from the first week we recorded it";
 
   return (
     <ChartFigure
       titleLevel={3}
       title={`A ${history.season} rookie pick, week by week`}
-      description={`Live, not invented. ${market.sourceName}'s ${market.format.displayName} value for a mid first and a mid second in the ${history.season} rookie draft, averaged by week, from the first week we recorded it. The line grows every week.`}
+      description={`Live, not invented. ${market.sourceName}'s ${market.format.displayName} value for a mid first and a mid second in the ${history.season} rookie draft, averaged by week, ${since}. The line grows every week.`}
       summary={`${reading} Recorded from the week of ${weekDate(first.week, true)} to the week of ${weekDate(last.week, true)}.`}
       table={
         <DataTable
@@ -550,7 +555,7 @@ export function PriceHistoryFigure({ market, history }: { market: PickMarket; hi
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Readout
           value={signed(history.changePct)}
-          label="Mid 1st since we began recording"
+          label="Mid 1st since the line began"
           note={`From the week of ${weekDate(history.start.week)}.`}
         />
         <Readout
@@ -601,8 +606,10 @@ export function PriceHistoryFigure({ market, history }: { market: PickMarket; hi
         </li>
       </ul>
       <p className={`mt-3 ${NOTE}`}>
-        {reading} These are one source&apos;s values, so a change in how {market.sourceName} computes a pick shows up
-        here beside a change in what managers will pay.
+        {reading}
+        {history.methodChangedOn
+          ? ` The line starts after ${weekDate(history.methodChangedOn, true)}, when ${market.sourceName} changed how it prices picks. Prices from before that day are left out, because the step between them was the method and not the market.`
+          : ""}
       </p>
     </ChartFigure>
   );

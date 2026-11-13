@@ -226,6 +226,11 @@ export type BoardPosition = (typeof BOARD_POSITIONS)[number];
 export const MIN_DRAFT_RATE = 0.5;
 /** A format needs this many drafts before its board is shown. */
 export const MIN_DRAFTS_FOR_BOARD = 20;
+/**
+ * A class that is still being drafted needs more: its first drafts are the
+ * early birds, and twenty of them move a player several picks either way.
+ */
+export const MIN_DRAFTS_FOR_OPEN_CLASS = 50;
 export const BOARD_SIZE = 24;
 
 export type AdpRow = {
@@ -313,6 +318,11 @@ const SPREAD_BANDS: { label: string; from: number; to: number }[] = [
   { label: "Picks 13 to 24", from: 13, to: 24 },
 ];
 
+/** How many drafts a format needs in a season: more while that class is still being drafted. */
+export function draftsNeeded(season: number, now: Date): number {
+  return season < upcomingRookieClass(now) ? MIN_DRAFTS_FOR_BOARD : MIN_DRAFTS_FOR_OPEN_CLASS;
+}
+
 function mean(values: number[]): number | null {
   return values.length === 0 ? null : values.reduce((a, b) => a + b, 0) / values.length;
 }
@@ -322,7 +332,12 @@ function mean(values: number[]): number | null {
  * best-sampled dynasty format with the same quarterback count) has enough
  * drafts. Null when none does.
  */
-export function buildClassBoard(rows: AdpRow[], formats: FormatMeta[], wantedSlug: string): ClassBoard | null {
+export function buildClassBoard(
+  rows: AdpRow[],
+  formats: FormatMeta[],
+  wantedSlug: string,
+  now: Date,
+): ClassBoard | null {
   const dynasty = formats.filter((f) => f.league_type === "dynasty" && !isBestBall(f.slug));
   const wanted = dynasty.find((f) => f.slug === wantedSlug);
   if (!wanted) return null;
@@ -330,10 +345,11 @@ export function buildClassBoard(rows: AdpRow[], formats: FormatMeta[], wantedSlu
   const seasons = [...new Set(rows.map((r) => r.season))].sort((a, b) => b - a);
   for (const season of seasons) {
     const sampled = (f: FormatMeta) => draftsIn(rows, season, f.slug);
+    const need = draftsNeeded(season, now);
     const format =
-      sampled(wanted) >= MIN_DRAFTS_FOR_BOARD
+      sampled(wanted) >= need
         ? wanted
-        : [...sameCount].sort((a, b) => sampled(b) - sampled(a)).find((f) => sampled(f) >= MIN_DRAFTS_FOR_BOARD);
+        : [...sameCount].sort((a, b) => sampled(b) - sampled(a)).find((f) => sampled(f) >= need);
     if (!format) continue;
     const top = qualifying(rows, season, format.slug).slice(0, BOARD_SIZE);
     if (top.length < 12) continue;
@@ -372,7 +388,7 @@ export function buildClassBoard(rows: AdpRow[], formats: FormatMeta[], wantedSlu
  * Pure. The same rookie quarterbacks in the best-sampled one-quarterback and
  * superflex dynasty formats of the newest season that has both.
  */
-export function buildQbGap(rows: AdpRow[], formats: FormatMeta[]): QbGap | null {
+export function buildQbGap(rows: AdpRow[], formats: FormatMeta[], now: Date): QbGap | null {
   const dynasty = formats.filter((f) => f.league_type === "dynasty" && !isBestBall(f.slug));
   const seasons = [...new Set(rows.map((r) => r.season))].sort((a, b) => b - a);
   for (const season of seasons) {
@@ -380,7 +396,7 @@ export function buildQbGap(rows: AdpRow[], formats: FormatMeta[]): QbGap | null 
       dynasty
         .filter((f) => f.is_superflex === superflex)
         .map((f) => ({ f, drafts: draftsIn(rows, season, f.slug) }))
-        .filter((x) => x.drafts >= MIN_DRAFTS_FOR_BOARD);
+        .filter((x) => x.drafts >= draftsNeeded(season, now));
     // Every pair with enough drafts on both sides. A pair that agrees on tight
     // end premium comes first, so the quarterback count is the only thing
     // that differs between the two columns; then the better-sampled pair.
@@ -564,6 +580,11 @@ export type PriceHistory = {
   changePct: number;
   /** Highest week down to the lowest week after it, in percent, or 0. */
   dropFromHighPct: number;
+  /**
+   * The day the source last changed how it prices picks, YYYY-MM-DD, when
+   * that cut the history short; null when the whole history is one method.
+   */
+  methodChangedOn: string | null;
 };
 
 /** A history shorter than this is a dot, not a line. */
@@ -580,8 +601,41 @@ export function mondayOf(iso: string): string | null {
 
 export type PriceRow = { capturedAt: string; round: number; value: number };
 
-/** Pure. Weekly averages of the mid first and the mid second. */
-export function buildPriceHistory(rows: PriceRow[], season: number): PriceHistory | null {
+/**
+ * A pick does not move this much in a day because managers changed their
+ * minds. The largest day-to-day move in a year of market prices on file is
+ * under 1 percent; a move past this is the source changing its own method (a
+ * new multiplier, a new formula), and prices on either side of it cannot be
+ * drawn as one line.
+ */
+export const METHOD_BREAK_PCT = 5;
+
+/**
+ * Pure. The capture time of the last method change in a series of mid-first
+ * captures, or null when there is none.
+ */
+export function lastMethodBreak(rows: PriceRow[]): string | null {
+  const firsts = rows
+    .filter((r) => r.round === 1 && r.value > 0)
+    .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+  let at: string | null = null;
+  for (let i = 1; i < firsts.length; i++) {
+    const move = (100 * Math.abs(firsts[i].value - firsts[i - 1].value)) / firsts[i - 1].value;
+    if (move > METHOD_BREAK_PCT) at = firsts[i].capturedAt;
+  }
+  return at;
+}
+
+/**
+ * Pure. Weekly averages of the mid first and the mid second, starting the
+ * week after the source last changed its method, so the line is one method
+ * from end to end. The week of the change itself is dropped whole, because
+ * it holds captures from both sides.
+ */
+export function buildPriceHistory(allRows: PriceRow[], season: number): PriceHistory | null {
+  const breakAt = lastMethodBreak(allRows);
+  const breakWeek = breakAt ? mondayOf(breakAt) : null;
+  const rows = breakWeek ? allRows.filter((r) => (mondayOf(r.capturedAt) ?? "") > breakWeek) : allRows;
   const weeks = new Map<string, { first: number[]; second: number[] }>();
   for (const r of rows) {
     const week = mondayOf(r.capturedAt);
@@ -621,6 +675,7 @@ export function buildPriceHistory(rows: PriceRow[], season: number): PriceHistor
     latest: pt(latest),
     changePct: Math.round((1000 * (latest.first - start.first)) / start.first) / 10,
     dropFromHighPct: Math.round((1000 * (high.first - lowAfterHigh.first)) / high.first) / 10,
+    methodChangedOn: breakAt ? breakAt.slice(0, 10) : null,
   };
 }
 
@@ -718,8 +773,8 @@ export async function loadRookieGuideData(
 
   return {
     drafts,
-    board: adpRows && format ? buildClassBoard(adpRows, formats, format.slug) : null,
-    qbGap: adpRows ? buildQbGap(adpRows, formats) : null,
+    board: adpRows && format ? buildClassBoard(adpRows, formats, format.slug, new Date()) : null,
+    qbGap: adpRows ? buildQbGap(adpRows, formats, new Date()) : null,
     market,
   };
 }

@@ -493,7 +493,7 @@ export default async function DynastyRookieDraftGuide({
               pick in rookie drafts from 2018 to 2023 by what the player went on to do. The 1.01 hit{" "}
               {hit("101")} percent of the time. Picks 1.02 to 1.04 hit {hit("102")} percent. Then the odds fall off
               a ledge: picks 1.05 to 1.08 hit {hit("105")} percent, round two about {hit("201")} percent, and round
-              three and later {hit("300")} percent.
+              three {hit("300")} percent.
             </Para>
             <PickOdds />
             <Para>
@@ -598,7 +598,7 @@ export default async function DynastyRookieDraftGuide({
               <>
                 <Para>
                   FF Beacon records the price of every pick slot each night. Below is a mid first and a mid second
-                  in the {market.history.season} rookie draft, from the first week we recorded them. It is one
+                  in the {market.history.season} rookie draft, week by week. It is one
                   class from one value source, so treat it as a running check on the study above, not as proof
                   of it.
                 </Para>

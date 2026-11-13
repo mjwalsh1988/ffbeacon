@@ -48,7 +48,7 @@ export const ROOKIE_PICK_HIT_RATES: PickHitRate[] = [
   { key: "109", slot: "1.09 to 1.12", hit: 45.83, hitOrMid: 62.5 },
   { key: "201", slot: "2.01 to 2.06", hit: 22.22, hitOrMid: 30.56 },
   { key: "207", slot: "2.07 to 2.12", hit: 19.44, hitOrMid: 33.33 },
-  { key: "300", slot: "Round 3 and later", hit: 8.33, hitOrMid: 13.89 },
+  { key: "300", slot: "Round 3", hit: 8.33, hitOrMid: 13.89 },
 ];
 
 /** "About N of every 10" for a percentage: 83 is 8, 37.5 is 4, 8 is 1. */
@@ -258,7 +258,7 @@ export function slotOdds(band: SlotBand): string {
   if (band === "top4") return `Picks 1.01 to 1.04 hit ${pct("102")} to ${pct("101")} percent of the time in the Dynasty Nerds study.`;
   if (band === "mid1") return `Picks 1.05 to 1.08 hit ${pct("105")} percent of the time in the Dynasty Nerds study.`;
   if (band === "late1") return `Picks 1.09 to 1.12 hit ${pct("109")} percent of the time in the Dynasty Nerds study.`;
-  return `Round two hit about ${pct("201")} percent of the time in the Dynasty Nerds study, and round three and later ${pct("300")} percent.`;
+  return `Round two hit about ${pct("201")} percent of the time in the Dynasty Nerds study, and round three ${pct("300")} percent.`;
 }
 
 export function clockCall(lane: Lane, band: SlotBand, tier: TierShape): ClockCall {
@@ -354,7 +354,7 @@ export function buildRookieFaq(facts: RookieFaqFacts): FaqItem[] {
     },
     {
       question: "How often does a rookie pick become a good player?",
-      answer: `Less often than most managers think. In the Dynasty Nerds study of 2018 to 2023 rookie drafts, the 1.01 hit ${top} percent of the time and picks 1.02 to 1.04 hit ${next} percent. The rest of round one was close to a coin flip, round two hit about ${round2} percent, and round three and later ${late} percent.`,
+      answer: `Less often than most managers think. In the Dynasty Nerds study of 2018 to 2023 rookie drafts, the 1.01 hit ${top} percent of the time and picks 1.02 to 1.04 hit ${next} percent. The rest of round one was close to a coin flip, round two hit about ${round2} percent, and round three ${late} percent.`,
     },
     {
       question: "When is the best time to trade rookie picks?",

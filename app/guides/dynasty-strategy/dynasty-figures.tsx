@@ -638,7 +638,7 @@ export function HitRateFigure() {
       titleLevel={3}
       title="How often a rookie pick becomes a player"
       description="Hit rates by rookie draft slot from Dynasty Nerds' study of 2018 to 2023 rookie drafts (Mychal Warno, March 2025). A hit is one top-tier season or several second-tier ones. Published figures, not ours."
-      summary="In the Dynasty Nerds study, the 1.01 hit 83 percent of the time and picks 1.02 to 1.04 hit 71 percent. After that the odds fall off fast: the middle of round one hit 38 percent, the end of round one 46 percent, round two about 20 percent, and round three and later 8 percent. Past the first four picks, a rookie pick is closer to a coin flip than a sure thing."
+      summary="In the Dynasty Nerds study, the 1.01 hit 83 percent of the time and picks 1.02 to 1.04 hit 71 percent. After that the odds fall off fast: the middle of round one hit 38 percent, the end of round one 46 percent, round two about 20 percent, and round three 8 percent. Past the first four picks, a rookie pick is closer to a coin flip than a sure thing."
       table={
         <DataTable
           caption="Rookie pick hit rates by slot, 2018 to 2023, from Dynasty Nerds."

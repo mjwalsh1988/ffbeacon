@@ -27,6 +27,7 @@ import {
   buildPickLadder,
   buildPriceHistory,
   buildQbGap,
+  lastMethodBreak,
   easternMonth,
   mondayOf,
   summarizeRookieDrafts,
@@ -188,7 +189,7 @@ describe("the FAQ agrees with the page's own figures", () => {
   it("states the same hit rates the meters draw", () => {
     const answer = buildRookieFaq(null).find((q) => q.question.startsWith("How often"))?.answer ?? "";
     expect(answer).toContain("the 1.01 hit 83 percent");
-    expect(answer).toContain("round three and later 8 percent");
+    expect(answer).toContain("round three 8 percent");
   });
 });
 
@@ -287,7 +288,7 @@ describe("the class board", () => {
   const tep = Array.from({ length: 30 }, (_, i) => adp("dynasty-ppr-tep", i + 1, 8));
 
   it("ranks the first 24 by average pick in the reader's format", () => {
-    const board = buildClassBoard(std, FORMATS, "dynasty-ppr-std")!;
+    const board = buildClassBoard(std, FORMATS, "dynasty-ppr-std", NOW)!;
     expect(board.format.displayName).toBe("Dynasty PPR");
     expect(board.drafts).toBe(65);
     expect(board.players).toHaveLength(24);
@@ -300,13 +301,23 @@ describe("the class board", () => {
   });
 
   it("falls back to the best-sampled format with the same quarterback count, and names it", () => {
-    const board = buildClassBoard([...std, ...tep], FORMATS, "dynasty-ppr-tep")!;
+    const board = buildClassBoard([...std, ...tep], FORMATS, "dynasty-ppr-tep", NOW)!;
     expect(board.format.slug).toBe("dynasty-ppr-std");
     expect(board.drafts).toBeGreaterThanOrEqual(MIN_DRAFTS_FOR_BOARD);
   });
 
+  it("waits for fifty drafts before it shows a class that is still being drafted", () => {
+    const next = Array.from({ length: 30 }, (_, i) => adp("dynasty-ppr-std", i + 1, 30, { season: 2027 }));
+    const may = new Date("2027-05-06T12:00:00Z");
+    expect(buildClassBoard([...std, ...next], FORMATS, "dynasty-ppr-std", may)?.season).toBe(2026);
+    const more = next.map((r) => ({ ...r, drafts: 50 }));
+    expect(buildClassBoard([...std, ...more], FORMATS, "dynasty-ppr-std", may)?.season).toBe(2027);
+    // Once the class is finished, twenty is enough again.
+    expect(buildClassBoard([...std, ...next], FORMATS, "dynasty-ppr-std", new Date("2027-09-02T12:00:00Z"))?.season).toBe(2027);
+  });
+
   it("never borrows a board across the quarterback count", () => {
-    expect(buildClassBoard(std, FORMATS, "dynasty-ppr-sflex")).toBeNull();
+    expect(buildClassBoard(std, FORMATS, "dynasty-ppr-sflex", NOW)).toBeNull();
   });
 
   it("leaves out rarely drafted players, defenders and non-dynasty formats", () => {
@@ -315,10 +326,10 @@ describe("the class board", () => {
       adp("dynasty-ppr-std", 0.5, 65, { name: "Stray veteran", draftRate: 0.02 }),
       adp("dynasty-ppr-std", 0.6, 65, { name: "A linebacker", position: "LB" }),
     ];
-    const board = buildClassBoard(noisy, FORMATS, "dynasty-ppr-std")!;
+    const board = buildClassBoard(noisy, FORMATS, "dynasty-ppr-std", NOW)!;
     expect(board.players.map((p) => p.name)).not.toContain("Stray veteran");
     expect(board.players.map((p) => p.name)).not.toContain("A linebacker");
-    expect(buildClassBoard(std, FORMATS, "redraft-ppr-std")).toBeNull();
+    expect(buildClassBoard(std, FORMATS, "redraft-ppr-std", NOW)).toBeNull();
   });
 });
 
@@ -330,7 +341,7 @@ describe("the quarterback gap", () => {
       adp("dynasty-ppr-sflex", 11.4, 94, { name: "Second QB", slug: "second-qb", position: "QB" }),
       adp("dynasty-ppr-std", 2, 65),
     ];
-    const gap = buildQbGap(rows, FORMATS)!;
+    const gap = buildQbGap(rows, FORMATS, NOW)!;
     expect(gap.oneQb.displayName).toBe("Dynasty PPR");
     expect(gap.superflex.drafts).toBe(94);
     // The second quarterback is not drafted often enough in one-quarterback leagues to pair.
@@ -348,11 +359,11 @@ describe("the quarterback gap", () => {
       adp("sf", 4, 94, { position: "QB", slug: "q" }),
       adp("sf-tep", 3, 196, { position: "QB", slug: "q" }),
     ];
-    const gap = buildQbGap(rows, formats)!;
+    const gap = buildQbGap(rows, formats, NOW)!;
     expect(gap.superflex.displayName).toBe("Superflex");
     expect(gap.rows[0].superflex).toBe(4);
     // With no matching pair, the best-sampled one still shows.
-    expect(buildQbGap(rows, formats.filter((x) => x.slug !== "sf"))?.superflex.displayName).toBe("Superflex TEP");
+    expect(buildQbGap(rows, formats.filter((x) => x.slug !== "sf"), NOW)?.superflex.displayName).toBe("Superflex TEP");
   });
 
   it("is null when one side has too few drafts", () => {
@@ -360,7 +371,7 @@ describe("the quarterback gap", () => {
       adp("dynasty-ppr-std", 12, 5, { position: "QB", slug: "q" }),
       adp("dynasty-ppr-sflex", 3, 94, { position: "QB", slug: "q" }),
     ];
-    expect(buildQbGap(rows, FORMATS)).toBeNull();
+    expect(buildQbGap(rows, FORMATS, NOW)).toBeNull();
   });
 });
 
@@ -411,7 +422,8 @@ describe("the price history", () => {
 
   it("averages by week and reads the change, the high and the drop after it", () => {
     const start = Date.UTC(2026, 5, 15);
-    const weekly = [5400, 5500, 5300, 5000, 4800, 4750, 4760, 4800, 4850, 4740];
+    // No step past 5 percent between captures, so the whole series is one method.
+    const weekly = [5400, 5500, 5300, 5100, 4900, 4750, 4760, 4800, 4850, 4740];
     const rows: PriceRow[] = weekly.flatMap((v, w) =>
       [0, 1].flatMap((d) => {
         const capturedAt = new Date(start + (w * 7 + d) * 86_400_000).toISOString();
@@ -429,6 +441,26 @@ describe("the price history", () => {
     expect(h.latest.value).toBe(4740);
     expect(h.changePct).toBe(-12.2);
     expect(h.dropFromHighPct).toBe(13.8);
+  });
+
+  it("starts the line the week after the source changed its method", () => {
+    const day = (n: number) => new Date(Date.UTC(2026, 5, 15) + n * 86_400_000).toISOString();
+    // Two weeks at 5,630, a 13 percent step on day 13, then twelve weeks near 4,880.
+    const rows: PriceRow[] = Array.from({ length: 98 }, (_, n) => ({
+      capturedAt: day(n),
+      round: 1,
+      value: n < 13 ? 5630 : 4880 - (n % 7),
+    }));
+    expect(lastMethodBreak(rows)).toBe(day(13));
+    const h = buildPriceHistory(rows, 2027)!;
+    expect(h.methodChangedOn).toBe("2026-06-28");
+    // The week of the change (June 22) is dropped whole.
+    expect(h.points[0].week).toBe("2026-06-29");
+    expect(Math.abs(h.changePct)).toBeLessThan(1);
+    expect(h.dropFromHighPct).toBeLessThan(1);
+    // A steady series has no break and keeps every week.
+    expect(lastMethodBreak(rows.slice(13))).toBeNull();
+    expect(buildPriceHistory(rows.slice(14), 2027)?.methodChangedOn).toBeNull();
   });
 
   it("is null until there are enough weeks to call it a line", () => {

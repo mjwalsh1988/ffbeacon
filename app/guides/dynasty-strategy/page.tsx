@@ -879,7 +879,7 @@ function PicksSection() {
       <Para>
         Read the table as odds, because that is what it is. The top four picks
         are close to sure things. Everything after them is a coin flip in round
-        one and a long shot in round two. Round three and later hit 8 percent
+        one and a long shot in round two. Round three hit 8 percent
         of the time, which is roughly the odds on a waiver claim, and that is
         how a third-round pick should be priced in a trade. The draft capital a
         player gets from the NFL is the biggest single reason a pick hits,
@@ -1434,7 +1434,7 @@ const SOURCES: { name: string; detail: string; href: string }[] = [
     href: "https://www.4for4.com/2025/preseason/production-curves-positional-breakouts-prime-years-and-falloffs-age",
   },
   {
-    name: "ESPN, When fantasy football players peak and decline",
+    name: "ESPN, Fantasy football: What age do players peak/decline?",
     detail:
       "Tristan H. Cockcroft, July 2023. The running back drop from 28 to 29 and the year-two jumps for receivers and tight ends.",
     href: "https://www.espn.com/fantasy/football/story/_/id/37933720/2023-fantasy-football-players-peak-decline-quarterback-running-back-wide-receiver",

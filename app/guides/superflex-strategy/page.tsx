@@ -835,7 +835,12 @@ function DynastySection() {
         </Link>{" "}
         walks through. When it does not, the pick is worth the best running back
         or receiver in the class, which is less, and the room often forgets to
-        mark it down. Check the class before you price the pick.
+        mark it down. Check the class before you price the pick. The{" "}
+        <Link href="/guides/dynasty-rookie-draft#board-heading" className={LINK_CLASS}>
+          rookie draft guide
+        </Link>{" "}
+        shows where the same rookie quarterbacks went in real superflex and
+        one-quarterback rookie drafts.
       </Para>
       <Para>
         On the roster itself: four quarterbacks. Two starters, a bye cover, and

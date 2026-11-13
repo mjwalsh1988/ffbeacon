@@ -935,7 +935,12 @@ function PicksSection() {
         of thumb, with the usual caveat that a rule of thumb is not a law: buy
         picks in October, sell them in April. A rebuilder who does this every
         year ends up holding more firsts than anyone in the league without ever
-        winning a trade outright.
+        winning a trade outright. The{" "}
+        <Link href="/guides/dynasty-rookie-draft#worth-heading" className={LINK_CLASS}>
+          rookie draft guide
+        </Link>{" "}
+        has what each pick slot costs today and how often each one turns into
+        a player.
       </Para>
       <Para>
         In a trade with picks and players on both sides, grade the two halves
