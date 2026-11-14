@@ -128,6 +128,28 @@ export function positionFromDraftSlot(slot: number, teamCount: number): PickPosi
   return positionFromProjectedFinish(teamCount - slot + 1, teamCount);
 }
 
+/**
+ * True when a pick belongs to a season whose draft has already happened, so the
+ * pick is spent and is neither shown nor priced.
+ *
+ * Sleeper leaves the current season's rookie picks on rosters after the draft
+ * completes. Once the league is past pre_draft the current season's draft is
+ * done (or under way, which spends the picks just the same), and any season
+ * before the league's own is long gone. The league view and the power rankings
+ * both call this, so a pick never counts in one place and vanishes in the other.
+ */
+export function isPickSeasonSpent(
+  pickSeason: number | string | null | undefined,
+  league: { season: number | string | null | undefined; status: string | null | undefined },
+): boolean {
+  if (pickSeason == null || league.season == null || league.season === "") return false;
+  const season = Number(pickSeason);
+  const current = Number(league.season);
+  if (!Number.isFinite(season) || !Number.isFinite(current)) return false;
+  if (season < current) return true;
+  return season === current && league.status != null && league.status !== "pre_draft";
+}
+
 type PulseRow = {
   roster_id: string;
   season: number;
@@ -172,16 +194,22 @@ function positionsForSeason(
  * Build the resolver for one league. A roster read, a Power Pulse read, and the
  * draft-slot index; all are a handful of rows per league, so no paging here.
  *
- * Never throws. A league with no Power Pulse row is the normal case for a league
- * nobody has opened yet, and it must degrade to the blend rather than fail the
- * grade of every trade on the page.
+ * Never throws by default. A league with no Power Pulse row is the normal case
+ * for a league nobody has opened yet, and it must degrade to the blend rather
+ * than fail the grade of every trade on the page.
+ *
+ * `throwOnError` is for callers that write what they compute to a cache (the
+ * power rankings). For them a failed read is not "no ordering": it throws, so a
+ * roster is never stored priced on the blend because a read hiccuped. An empty
+ * Power Pulse table is still the normal case and still resolves to the blend.
  */
 export async function buildPickPositionResolver(
   admin: Client,
   leagueRowId: string,
+  options: { throwOnError?: boolean } = {},
 ): Promise<PickPositionResolver> {
   try {
-    const [{ data: rosters }, { data: pulse }, draftSlots] = await Promise.all([
+    const [rostersRes, pulseRes, draftSlots] = await Promise.all([
       admin.from("rosters").select("id, sleeper_roster_id").eq("league_id", leagueRowId),
       admin
         .from("league_power_pulse_cache")
@@ -189,6 +217,14 @@ export async function buildPickPositionResolver(
         .eq("league_id", leagueRowId),
       loadLeagueDraftSlots(admin, leagueRowId),
     ]);
+    if (options.throwOnError && rostersRes.error) {
+      throw new Error(`rosters read failed: ${rostersRes.error.message}`);
+    }
+    if (options.throwOnError && pulseRes.error) {
+      throw new Error(`league_power_pulse_cache read failed: ${pulseRes.error.message}`);
+    }
+    const rosters = rostersRes.data;
+    const pulse = pulseRes.data;
 
     const sleeperIdByRosterUuid = new Map((rosters ?? []).map((r) => [r.id, r.sleeper_roster_id]));
 
@@ -279,6 +315,7 @@ export async function buildPickPositionResolver(
       },
     };
   } catch (err) {
+    if (options.throwOnError) throw err;
     console.error("[pick-position] resolver build failed", leagueRowId, err);
     return NO_PICK_POSITIONS;
   }

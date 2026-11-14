@@ -8,6 +8,7 @@ import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { BeaconValue } from "@/components/beacon-value-icon";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { TeamStatus } from "@/lib/league-team-status";
+import type { OddsSummary } from "@/components/power-pulse/odds-format";
 
 /** What the sheet's focus trap counts as focusable, form fields included. */
 const FOCUSABLE =
@@ -58,6 +59,11 @@ export type PowerRankingsRowData = {
   /** Contender / Loaded / Bubble / Rebuilder. Null before the first
    * Power Pulse calculation, which is also when powerPulse is null. */
   status: TeamStatus | null;
+  /**
+   * The title line and the playoff line, already worded for the league's phase
+   * and kind (odds, seed, result, or survival). Null before Power Pulse runs.
+   */
+  odds: OddsSummary | null;
 };
 
 export function PowerRankingsRow({
@@ -124,6 +130,27 @@ export function PowerRankingsRow({
           pulseRank={data.pulseRank}
           teamCount={teamCount}
         />
+        {/* Odds beside the Pulse score, at every breakpoint: who wins the title
+            and who makes the playoffs is the next thing a reader looks for
+            after the score. Two labeled lines, real text. */}
+        <td className="px-2 py-2 text-left">
+          {data.odds ? (
+            <span className="block font-mono text-[11px] tabular-nums leading-snug text-ink-muted">
+              <span className="block whitespace-nowrap">
+                {data.odds.primary.label}{" "}
+                <span className="text-sm font-extrabold text-brand-cyan">
+                  {data.odds.primary.text}
+                </span>
+              </span>
+              <span className="block whitespace-nowrap">
+                {data.odds.secondary.label}{" "}
+                <span className="font-bold text-ink">{data.odds.secondary.text}</span>
+              </span>
+            </span>
+          ) : (
+            <span className="text-xs text-ink-subtle">No odds yet</span>
+          )}
+        </td>
         {/* Outlook. Short label here so the column stays narrow; the badge's
             aria-label still carries the full wording and the reasoning. Hidden
             below md alongside the other analysis columns, where the sheet

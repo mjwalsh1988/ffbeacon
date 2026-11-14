@@ -27,19 +27,35 @@
 import Link from "next/link";
 import { ArrowRight, Gauge, ListChecks, Trophy } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
-import { NOT_MEASURED, games, pct, pts, rankWords, record } from "@/components/manager-ledger/format";
+import {
+  NOT_MEASURED,
+  games,
+  ledgerWords,
+  pct,
+  pts,
+  rankWords,
+  record,
+  weeks,
+} from "@/components/manager-ledger/format";
 import type { SeasonLedgerSummary } from "@/lib/league-lineups/season-data";
 
 export function SeasonContextPanel({
   ledger,
   teamName,
   decisionsHref,
+  chopped = false,
+  bestBall = false,
 }: {
   /** Null when the ledger has not been built for this league yet. */
   ledger: SeasonLedgerSummary | null;
   teamName: string;
   decisionsHref: string;
+  /** A chopped league reads weeks against the cut line, not an opponent. */
+  chopped?: boolean;
+  /** Best ball sets its own lineup, so nothing about the lineup is graded. */
+  bestBall?: boolean;
 }) {
+  const words = ledgerWords({ chopped, bestBall, medianGame: false });
   if (!ledger || ledger.weeksGraded === 0) {
     return (
       <Panel
@@ -49,10 +65,7 @@ export function SeasonContextPanel({
         headingLevel={2}
       >
         <p className="text-sm leading-relaxed text-ink-muted">
-          No week of this season has settled yet, so there is no season to put this week
-          into. Once one has, this shows your record, the record your best lineups would
-          have produced, and where you rank on decisions against where your roster ranks on
-          points.
+          No week of this season has settled yet.
         </p>
       </Panel>
     );
@@ -72,41 +85,59 @@ export function SeasonContextPanel({
     >
       <dl className="grid gap-3 sm:grid-cols-3">
         <Figure
-          term="Your record"
+          term={chopped ? words.recordLabel : "Your record"}
           value={record(ledger.actualRecord)}
-          words={`${spokenRecord(ledger.actualRecord)}, as they stand`}
+          words={
+            chopped
+              ? `${ledger.actualRecord.wins} weeks above the cut line, ${ledger.actualRecord.losses} below it`
+              : `${spokenRecord(ledger.actualRecord)}, as they stand`
+          }
           icon={<Trophy aria-hidden="true" className="h-4 w-4" />}
           emphasis
         />
-        <Figure
-          term="Best lineups"
-          value={record(ledger.bestLineupRecord)}
-          words={`${spokenRecord(ledger.bestLineupRecord)} from your best legal lineups, against the same opponents`}
-          icon={<ListChecks aria-hidden="true" className="h-4 w-4" />}
-        />
-        <Figure
-          term="Lineup efficiency"
-          value={pct(ledger.efficiency)}
-          words="of your own roster's points started across the season"
-          icon={<Gauge aria-hidden="true" className="h-4 w-4" />}
-        />
+        {words.gradesLineups && (
+          <Figure
+            term={chopped ? words.bestRecordLabel : "Best lineups"}
+            value={record(ledger.bestLineupRecord)}
+            words={
+              chopped
+                ? `${ledger.bestLineupRecord.wins} weeks above the cut line from your best legal lineups`
+                : `${spokenRecord(ledger.bestLineupRecord)} from your best legal lineups, against the same opponents`
+            }
+            icon={<ListChecks aria-hidden="true" className="h-4 w-4" />}
+          />
+        )}
+        {words.gradesLineups && (
+          <Figure
+            term="Lineup efficiency"
+            value={pct(ledger.efficiency)}
+            words="of your own roster's points started across the season"
+            icon={<Gauge aria-hidden="true" className="h-4 w-4" />}
+          />
+        )}
       </dl>
 
-      {ledger.winsLeftOnBench > 0 && (
+      {!words.gradesLineups && (
+        <p className="mt-3 text-sm text-ink-muted">Best ball sets your lineup, so it is not graded.</p>
+      )}
+
+      {words.gradesLineups && ledger.winsLeftOnBench > 0 && (
         <p className="mt-3 rounded-card border border-brand-purple/40 bg-brand-purple/5 px-3 py-2.5 text-sm leading-relaxed text-ink">
           <span className="font-semibold">
-            {games(ledger.winsLeftOnBench)} left on the bench this season.
-          </span>{" "}
-          <span className="text-ink-muted">
-            That many losses would have been wins from the best legal lineup out of the same
-            roster, against the score the opponent actually put up.
+            {chopped
+              ? `${weeks(ledger.winsLeftOnBench)} below the cut your bench would have survived.`
+              : `${games(ledger.winsLeftOnBench)} left on the bench this season.`}
           </span>
         </p>
       )}
 
       <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-        {teamName} has left {pts(ledger.pointsLeft)} points on the bench in total.{" "}
-        {ledger.scoringRank !== null && ledger.efficiencyRank !== null ? (
+        {words.gradesLineups && (
+          <>{teamName} has left {pts(ledger.pointsLeft)} points on the bench in total. </>
+        )}
+        {!words.gradesLineups && ledger.scoringRank !== null ? (
+          <>The roster ranks {rankWords(ledger.scoringRank, ledger.teamCount)} on points scored.</>
+        ) : ledger.scoringRank !== null && ledger.efficiencyRank !== null ? (
           <>
             The roster ranks {rankWords(ledger.scoringRank, ledger.teamCount)} on points
             scored, and the manager ranks {rankWords(ledger.efficiencyRank, ledger.teamCount)}{" "}
@@ -186,10 +217,9 @@ function Figure({
           }`}
         >
           {value}
-          {/* The dash these formatters return for a missing figure is swallowed
-              at a screen reader's default punctuation level, so without this the
-              value announces as nothing and the words after it begin mid-air. */}
-          <span className="sr-only">{value === "--" ? NOT_MEASURED : `, ${words}`}</span>
+          {/* A missing figure already reads "Not measured" in words; the
+              meaning is appended only to a real number. */}
+          {value !== NOT_MEASURED && <span className="sr-only">{`, ${words}`}</span>}
         </span>
       </dd>
     </div>

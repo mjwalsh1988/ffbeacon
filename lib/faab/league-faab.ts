@@ -374,6 +374,10 @@ export async function calculateLeagueFaab(
 
   const nflState = await getNflState();
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  // Unknown week: no projection against a guess (LPI-T02).
+  if (currentWeek === null) {
+    return { ok: false, error: "Sleeper did not tell us the current week. Try again shortly." };
+  }
   const choppedFinal = resolveFinalWeek(currentWeek, aliveIds.length, choppedPerWeek);
   const lastRegularWeek = chopped
     ? Math.max(currentWeek, choppedFinal.finalWeek)

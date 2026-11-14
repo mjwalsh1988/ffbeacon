@@ -524,7 +524,9 @@ async function PowerPulseBody({
               helper={
                 view.chopped
                   ? "Ranked by expected performance. This league has no playoffs, so the score is built from scoring, depth and form, and the columns report survival instead of a record."
-                  : "Ranked by expected performance. The value column compares that to each team's trade-value rank."
+                  : view.playoffPhase === "complete"
+                    ? "Ranked by expected performance. The season is over, so the result column shows where each team finished."
+                    : "Ranked by expected performance. The value column compares that to each team's trade-value rank."
               }
               bodyClassName="p-0"
               glow
@@ -584,16 +586,30 @@ async function PowerPulseBody({
                     question asked twice, so the title says what the table
                     actually is. */}
             <Panel
-              eyebrow="Where this ends up"
+              eyebrow={
+                view.playoffPhase === "complete"
+                  ? "How it ended"
+                  : view.playoffPhase === "playoffs"
+                    ? "The bracket"
+                    : "Where this ends up"
+              }
               title={
                 view.chopped
                   ? "Projected survival order"
-                  : "Projected final regular season standings"
+                  : view.playoffPhase === "complete"
+                    ? "Final order"
+                    : view.playoffPhase === "playoffs"
+                      ? "Playoff seeds"
+                      : "Projected final regular season standings"
               }
               helper={
                 view.chopped
                   ? "Ordered by the chance of being the last team standing. One team is chopped every week, so there is no cut line and no bracket."
-                  : `Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`
+                  : view.playoffPhase === "complete"
+                    ? "Ordered by where each team finished after the title game."
+                    : view.playoffPhase === "playoffs"
+                      ? "Ordered by playoff seed, with the bracket odds of each team."
+                      : `Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`
               }
               bodyClassName="p-0"
             >
@@ -733,15 +749,17 @@ function PowerPulseEmptyState({
     const seasonOver =
       detail?.startsWith("no regular season games remaining") ?? false;
     if (seasonOver) {
+      // A league that finished while Power Pulse was watching keeps its stored
+      // result and never reaches this branch. This is a league that finished
+      // before there was a result to keep.
       return (
         <Panel
           eyebrow="Season complete"
-          title="The regular season is over"
-          helper="There is nothing left to project."
+          title="No Power Pulse result was saved"
+          helper="This league finished before Power Pulse had scored it."
         >
           <p className="text-sm text-ink-muted">
-            Every regular season game for this league has been played, so Power
-            Pulse has no remaining schedule to score.
+            The season is over, and there is no saved result to show.
           </p>
         </Panel>
       );

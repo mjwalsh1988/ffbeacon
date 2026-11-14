@@ -9,6 +9,7 @@ import { evaluateProposedTrade } from "@/app/actions/trade-impact";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
 import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
 import type { BuildAsset, TradeImpact } from "@/lib/trade-impact/types";
+import type { TradeStrategy } from "@/lib/trade-finder/types";
 
 /**
  * The full evaluation of the suggestion currently on screen.
@@ -73,7 +74,16 @@ export function SuggestionEvaluation({
   theirTeamLabel,
   grade,
   positionalWarByPlayer,
+  strategy,
+  onImpact,
 }: {
+  /**
+   * Compete or Rebuild, as the toggle above reads now. Part of the cache key,
+   * because the same deal is judged differently in the two modes.
+   */
+  strategy?: TradeStrategy | null;
+  /** Told each evaluation as it lands, so the card can show its figures. */
+  onImpact?: (suggestionKey: string, impact: TradeImpact) => void;
   /** The deal's fingerprint. Identity for the cache and the settle timer. */
   suggestionKey: string;
   sleeperLeagueId: string;
@@ -101,6 +111,10 @@ export function SuggestionEvaluation({
   positionalWarByPlayer?: Map<string, PositionalWarContext>;
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
+  // The cache and the race guard key on the deal AND the mode.
+  const cacheKey = `${suggestionKey}|${strategy ?? ""}`;
+  const onImpactRef = useRef(onImpact);
+  onImpactRef.current = onImpact;
 
   /**
    * Answers already paid for, by suggestion key, for this visit.
@@ -119,7 +133,7 @@ export function SuggestionEvaluation({
    * evaluation of a trade they had already navigated away from, under the card
    * for a different deal, with nothing on screen saying so.
    */
-  const latest = useRef(suggestionKey);
+  const latest = useRef(cacheKey);
 
   /**
    * The proposal to send, read at call time rather than closed over.
@@ -132,6 +146,7 @@ export function SuggestionEvaluation({
    * fix, and that requires the request to come from somewhere stable.
    */
   const current = useRef({
+    cacheKey,
     suggestionKey,
     sleeperLeagueId,
     myRosterId,
@@ -140,8 +155,10 @@ export function SuggestionEvaluation({
     outgoing,
     searchedUsername,
     source,
+    strategy,
   });
   current.current = {
+    cacheKey,
     suggestionKey,
     sleeperLeagueId,
     myRosterId,
@@ -150,11 +167,12 @@ export function SuggestionEvaluation({
     outgoing,
     searchedUsername,
     source,
+    strategy,
   };
 
   const run = useCallback(async () => {
     const now = current.current;
-    const key = now.suggestionKey;
+    const key = now.cacheKey;
     latest.current = key;
     setState({ kind: "loading" });
 
@@ -166,6 +184,7 @@ export function SuggestionEvaluation({
       outgoing: now.outgoing,
       username: now.searchedUsername,
       source: now.source,
+      strategy: now.strategy ?? null,
     }).catch(() => null);
 
     if (latest.current !== key) return;
@@ -181,6 +200,7 @@ export function SuggestionEvaluation({
       return;
     }
     cache.current.set(key, res.impact);
+    onImpactRef.current?.(now.suggestionKey, res.impact);
     setState({ kind: "ready", impact: res.impact });
   }, []);
 
@@ -191,9 +211,9 @@ export function SuggestionEvaluation({
     // made only inside `run`, the guard would still be holding the OLD key, the
     // stale response would pass it, and a full evaluation of the trade the
     // reader just moved past would render under the one they moved to.
-    latest.current = suggestionKey;
+    latest.current = cacheKey;
 
-    const cached = cache.current.get(suggestionKey);
+    const cached = cache.current.get(cacheKey);
     if (cached) {
       setState({ kind: "ready", impact: cached });
       return;
@@ -208,11 +228,12 @@ export function SuggestionEvaluation({
     // The fingerprint alone. `run` is stable, and everything else it needs is
     // read from the ref above at call time; see the note there for why listing
     // the asset arrays here would not terminate.
-  }, [run, suggestionKey]);
+  }, [run, cacheKey]);
 
   if (state.kind === "ready") {
     return (
       <TradeVerdict
+        showStrategyReason={false}
         impact={state.impact}
         myTeamLabel={myTeamLabel}
         theirTeamLabel={theirTeamLabel}

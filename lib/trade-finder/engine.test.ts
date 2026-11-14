@@ -1390,10 +1390,19 @@ describe("redraft leagues, where everybody is competing", () => {
       ),
     );
     // th-te2 is 23 and startable, so a dynasty contender is offered him as a
-    // stash. A redraft team is not, unless he is genuine bench surplus.
+    // stash. A redraft team is not, unless he is genuine bench surplus. Since
+    // value is read on the consolidation curve (LPI-T06), redraft can surface a
+    // different bench piece than dynasty does; what it must never surface on
+    // its own is a young starter, which is the age argument this guards.
     expect(dynastyIds.size).toBeGreaterThan(0);
     expect(redraftIds.size).toBeGreaterThan(0);
-    for (const id of redraftIds) expect(dynastyIds.has(id)).toBe(true);
+    const fixture = new Map(league().flatMap((t) => t.players.map((p) => [p.playerId, p])));
+    for (const id of redraftIds) {
+      if (dynastyIds.has(id)) continue;
+      const p = fixture.get(id);
+      const youngStarter = p !== undefined && p.age !== null && p.age < 25 && (p.projPoints ?? 0) >= 10;
+      expect(youngStarter, `${id} offered in redraft only`).toBe(false);
+    }
   });
 });
 
@@ -1463,10 +1472,10 @@ describe("the dynasty strategy toggle", () => {
 
   it("says which question it answered, in the reader's own terms", () => {
     expect(dynasty("contender").suggestions[0].rationale).toContain(
-      "asked for contender deals",
+      "In Compete mode",
     );
     expect(dynasty("value").suggestions[0].rationale).toContain(
-      "asked for value deals",
+      "In Rebuild mode",
     );
   });
 

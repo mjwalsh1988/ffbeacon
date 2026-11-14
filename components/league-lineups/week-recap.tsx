@@ -97,7 +97,7 @@ export function WeekRecapPanel({
               {tone.icon}
               {tone.label}
             </span>
-            <span className="font-mono text-2xl font-extrabold tabular-nums text-ink sm:text-3xl">
+            <span className="font-mono text-4xl font-black leading-none tabular-nums text-ink sm:text-5xl">
               {fmtPoints(recap.scored ?? 0)}
               <span className="sr-only"> points, your team,</span>
             </span>
@@ -105,7 +105,7 @@ export function WeekRecapPanel({
                 pointer landing on it back to the whole paragraph. It also reads
                 correctly between the two sr-only clauses. */}
             <span className="text-sm text-ink-subtle">to</span>
-            <span className="font-mono text-2xl font-bold tabular-nums text-ink-muted sm:text-3xl">
+            <span className="font-mono text-2xl font-black tabular-nums text-ink-muted">
               {fmtPoints(opponent.actual ?? 0)}
               <span className="sr-only"> points, {opponent.teamName}</span>
             </span>
@@ -113,6 +113,11 @@ export function WeekRecapPanel({
           {/* A SENTENCE, and the opponent named once. The line above already
               says who they are, so repeating the name here left a fragment
               ("against Team B, by 17.8 points") standing on its own. */}
+          {recap.roundScored !== null && recap.roundOpponent !== null && (
+            <p className="mt-2 font-mono text-sm tabular-nums text-ink">
+              Both legs: {fmtPoints(recap.roundScored)} to {fmtPoints(recap.roundOpponent)}
+            </p>
+          )}
           <p className="mt-1 text-xs text-ink-muted">
             {recap.margin === null
               ? `Played ${opponent.teamName}.`
@@ -142,8 +147,8 @@ export function WeekRecapPanel({
             <span className="text-ink-muted">
               The best legal lineup out of the same players scored{" "}
               {fmtPoints(recap.bestPossible ?? 0)}, against their{" "}
-              {fmtPoints(opponent?.actual ?? 0)}. Their lineup is left exactly as they set
-              it: this is a comparison you could have controlled.
+              {fmtPoints(opponent?.actual ?? 0)}.
+              {recap.roundScored !== null ? " Counted over both legs of the round." : ""}
             </span>
           </p>
         </div>

@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { buildFingerprint, isFresh, staleOrFailed, type FingerprintInput } from "./cache";
+import {
+  buildFingerprint,
+  hashRosters,
+  isFresh,
+  staleOrFailed,
+  type FingerprintInput,
+  type RosterShapeRow,
+} from "./cache";
 import type { BlueprintView } from "./types";
 import { BLUEPRINT_MODEL_VERSION } from "./types";
 
 const base: FingerprintInput = {
   playerIds: ["b", "a", "c"],
+  rostersHash: "h1",
   powerRankingsAt: "2026-10-29T10:00:00Z",
   pulseAt: "2026-10-29T09:00:00Z",
   warAt: null,
@@ -22,6 +30,7 @@ describe("buildFingerprint", () => {
 
   it.each([
     ["playerIds", ["a", "b"]],
+    ["rostersHash", "another"],
     ["powerRankingsAt", "2026-10-30T10:00:00Z"],
     ["pulseAt", null],
     ["warAt", "2026-10-29T11:00:00Z"],
@@ -32,6 +41,38 @@ describe("buildFingerprint", () => {
     ["modelVersion", BLUEPRINT_MODEL_VERSION + 1],
   ] as const)("changes when %s changes", (key, value) => {
     expect(buildFingerprint({ ...base, [key]: value })).not.toBe(buildFingerprint(base));
+  });
+});
+
+describe("hashRosters", () => {
+  const roster = (id: number, over: Partial<RosterShapeRow> = {}): RosterShapeRow => ({
+    sleeper_roster_id: id,
+    player_ids: ["p1", "p2"],
+    reserve_ids: [],
+    taxi_ids: [],
+    draft_pick_assets: [{ season: "2027", round: 1, original_roster_id: id, current_roster_id: id }],
+    starters: ["p1", "0"],
+    ...over,
+  });
+  const league = [roster(1), roster(2, { player_ids: ["p3"] })];
+
+  it("ignores row order and player order", () => {
+    expect(hashRosters([...league].reverse())).toBe(hashRosters(league));
+    expect(hashRosters([roster(1, { player_ids: ["p2", "p1"] }), league[1]])).toBe(hashRosters(league));
+  });
+
+  it("changes on a move on ANY roster: players, starters, reserve, taxi or picks", () => {
+    const h = hashRosters(league);
+    expect(hashRosters([league[0], roster(2, { player_ids: ["p4"] })])).not.toBe(h);
+    expect(hashRosters([roster(1, { starters: ["0", "p1"] }), league[1]])).not.toBe(h);
+    expect(hashRosters([roster(1, { reserve_ids: ["p2"] }), league[1]])).not.toBe(h);
+    expect(hashRosters([roster(1, { taxi_ids: ["p2"] }), league[1]])).not.toBe(h);
+    expect(
+      hashRosters([
+        roster(1, { draft_pick_assets: [{ season: "2027", round: 1, original_roster_id: 1, current_roster_id: 2 }] }),
+        league[1],
+      ]),
+    ).not.toBe(h);
   });
 });
 

@@ -126,7 +126,9 @@ export function regularSeasonThroughWeek(
 export async function resolveFromWeek(
   season: number,
   playoffWeekStart: number | null,
-): Promise<number> {
+): Promise<number | null> {
+  // Null when Sleeper's NFL state did not answer: the week is unknown, and a
+  // board built against a guess would be cached (LPI-T02).
   if (season > Number(currentNflSeason())) return 1;
   const state = await cachedNflState();
   // Same guard as regularSeasonThroughWeek: a zero here would ask
@@ -218,6 +220,7 @@ async function resolveContext(
       season,
       cache.draft.playoffWeekStart,
     );
+    if (fromWeek === null) return null;
     const scoringEstimated =
       Object.keys(cache.draft.scoringSettings).length === 0;
 

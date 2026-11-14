@@ -24,7 +24,18 @@ import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
-import { PulseDetail, ordinal, pct } from "./pulse-detail";
+import type { PlayoffPhase } from "@/lib/power-pulse/playoffs";
+import { PulseDetail, pct } from "./pulse-detail";
+import {
+  ordinal,
+  pctOdds,
+  phaseLine,
+  playedRecordText,
+  playoffFigure,
+  playoffIsOdds,
+  projectedRecordText,
+  titleFigure,
+} from "./odds-format";
 import type { LeagueEmphasis } from "@/lib/league-emphasis";
 
 /** Color ramp for the headline score. Always paired with the number itself. */
@@ -50,7 +61,7 @@ function scoreTone(score: number): {
 
 function DivergenceChip({ team }: { team: PulseTeam }) {
   if (team.valueRank === null || team.rankDivergence === null) {
-    return <span className="text-xs text-ink-subtle">--</span>;
+    return <span className="text-xs text-ink-subtle">No value rank</span>;
   }
   const d = team.rankDivergence;
   const even = d === 0;
@@ -106,6 +117,10 @@ export function PulseRankingsTable({
   // of going out this week. Read off the rows rather than passed down, so the
   // header can never describe a column the cells beneath it are not filling.
   const chopped = teams.some((t) => t.chopped);
+  // Before, during or after the playoffs. It changes what the Title and
+  // Playoffs columns say: odds, then alive or out, then the final place.
+  const phase = teams.find((t) => t.playoff)?.playoff?.phase ?? null;
+  const regular = phase === null || phase === "regular";
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sheetTeam, setSheetTeam] = useState<PulseTeam | null>(null);
   const sheetHeadingId = useId();
@@ -144,8 +159,10 @@ export function PulseRankingsTable({
             rebuilding), {emphasis.winsFirst ? "leverage" : "value"} rank with
             the difference between the two rankings,{" "}
             {chopped
-              ? "weeks expected to last, chance of being chopped this week,"
-              : "projected record, playoff odds,"}{" "}
+              ? "weeks expected to last, chance of being chopped this week, chance of being the last team standing,"
+              : regular
+                ? "projected record, title odds, playoff odds,"
+                : "record, result, seed,"}{" "}
             and lineup efficiency. Activate a team to open its full breakdown.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
@@ -179,13 +196,29 @@ export function PulseRankingsTable({
                 scope="col"
                 className="hidden px-3 py-3 text-center lg:table-cell"
               >
-                {chopped ? "Weeks left" : "Proj."}
+                {chopped ? "Weeks left" : regular ? "Proj." : "Record"}
               </th>
               <th
                 scope="col"
                 className="hidden px-3 py-3 text-center md:table-cell"
               >
-                {chopped ? "Chop risk" : "Playoffs"}
+                {chopped
+                  ? "Chop risk"
+                  : regular
+                    ? "Playoffs"
+                    : "Seed"}
+              </th>
+              <th
+                scope="col"
+                className="hidden px-3 py-3 text-center md:table-cell"
+              >
+                {chopped
+                  ? "Last standing"
+                  : phase === "complete"
+                    ? "Result"
+                    : phase === "playoffs"
+                      ? "Bracket odds"
+                      : "Title"}
               </th>
               <th
                 scope="col"
@@ -207,7 +240,7 @@ export function PulseRankingsTable({
                 <Fragment key={team.rosterRowId}>
                   <tr className="hover:bg-surface">
                     <td className="w-px whitespace-nowrap px-2 py-2.5 text-center font-mono text-sm font-bold tabular-nums text-ink-muted">
-                      {team.pulseRank ?? "--"}
+                      {team.pulseRank ?? "Unranked"}
                     </td>
 
                     <td className="px-3 py-2.5">
@@ -219,7 +252,10 @@ export function PulseRankingsTable({
                         aria-label={`Open the Power Pulse breakdown for ${team.teamName}, ranked ${team.pulseRank ?? "unranked"} of ${teamCount} with a Power Pulse of ${team.powerPulse}`}
                         className="flex w-full min-h-11 items-center gap-2.5 text-left transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan md:hidden"
                       >
-                        <TeamIdentity team={team} />
+                        <TeamIdentity
+                          team={team}
+                          oddsLine={mobileOddsLine(team, phase)}
+                        />
                       </button>
                       <Link
                         href={hrefFor(team)}
@@ -248,7 +284,7 @@ export function PulseRankingsTable({
                           compact
                         />
                       ) : (
-                        <span className="text-xs text-ink-subtle">--</span>
+                        <span className="text-xs text-ink-subtle">No outlook</span>
                       )}
                     </td>
 
@@ -260,23 +296,34 @@ export function PulseRankingsTable({
                       {chopped
                         ? team.expectedWeeksAlive !== null
                           ? team.expectedWeeksAlive.toFixed(1)
-                          : "--"
-                        : team.projectedWins !== null
-                          ? `${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)}`
-                          : "--"}
+                          : "No projection"
+                        : regular
+                          ? projectedRecordText(team.projectedRecord)
+                          : playedRecordText(team.record)}
                     </td>
 
                     <td className="hidden px-3 py-2.5 text-center md:table-cell">
                       {chopped ? (
                         <ChopRiskCell odds={team.chopOddsThisWeek} />
                       ) : (
-                        <PlayoffCell odds={team.playoffOdds} />
+                        <PlayoffCell
+                          text={playoffFigure(team, phase)}
+                          odds={playoffIsOdds(team, phase) ? team.playoffOdds : null}
+                        />
                       )}
+                    </td>
+
+                    <td className="hidden px-3 py-2.5 text-center md:table-cell">
+                      <TitleCell
+                        text={titleFigure(team, phase)}
+                        odds={chopped ? team.surviveAllOdds : team.titleOdds}
+                        asOdds={chopped || phase === null || phase === "regular" || team.playoff?.status === "alive"}
+                      />
                     </td>
 
                     <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink-muted lg:table-cell">
                       {team.lineupEfficiency === null
-                        ? "--"
+                        ? "No lineup data"
                         : pct(team.lineupEfficiency)}
                     </td>
 
@@ -301,7 +348,7 @@ export function PulseRankingsTable({
                   {isOpen && (
                     <tr className="hidden md:table-row">
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         id={detailId}
                         className="bg-base/40 px-5 py-5"
                       >
@@ -320,6 +367,41 @@ export function PulseRankingsTable({
           </tbody>
         </table>
       </div>
+
+      <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+        {phaseLine(phase, chopped)}
+      </p>
+      <details className="mt-2 rounded-card border border-line bg-base/40 px-3 py-2">
+        <summary className="min-h-11 cursor-pointer py-2 text-xs font-semibold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
+          What the columns mean
+        </summary>
+        <dl className="space-y-2 pb-2 text-xs leading-relaxed text-ink-muted">
+          <div>
+            <dt className="inline font-semibold text-ink">Pulse: </dt>
+            <dd className="inline">
+              A score from 1 to 99 for how well the team is expected to play from here.
+            </dd>
+          </div>
+          <div>
+            <dt className="inline font-semibold text-ink">Proj.: </dt>
+            <dd className="inline">
+              The final record averaged over simulated seasons, so it lands on fractions.
+            </dd>
+          </div>
+          <div>
+            <dt className="inline font-semibold text-ink">Lineup: </dt>
+            <dd className="inline">
+              The share of the best possible lineup&apos;s points the set lineup earns.
+            </dd>
+          </div>
+          <div>
+            <dt className="inline font-semibold text-ink">Starter reliability: </dt>
+            <dd className="inline">
+              How far its starters run above or below their projections (in the team breakdown).
+            </dd>
+          </div>
+        </dl>
+      </details>
 
       <BottomSheet
         open={sheetTeam !== null}
@@ -411,7 +493,28 @@ export function PulseRankingsTable({
   );
 }
 
-function TeamIdentity({ team }: { team: PulseTeam }) {
+/**
+ * The odds a phone reader sees without opening the sheet. Below md the Title and
+ * Playoffs columns are hidden, so the same two figures ride under the team.
+ */
+function mobileOddsLine(team: PulseTeam, phase: PlayoffPhase | null): string {
+  if (team.chopped) {
+    return `Last standing ${titleFigure(team, phase)}, chopped this week ${pctOdds(team.chopOddsThisWeek)}`;
+  }
+  if (phase === "playoffs" || phase === "complete") {
+    return `${playoffFigure(team, phase)}. ${titleFigure(team, phase)}`;
+  }
+  return `Title ${titleFigure(team, phase)}, playoffs ${playoffFigure(team, phase)}`;
+}
+
+function TeamIdentity({
+  team,
+  oddsLine,
+}: {
+  team: PulseTeam;
+  /** A short line of odds under the name. Shown only where the odds columns are not. */
+  oddsLine?: string;
+}) {
   return (
     <>
       <SleeperAvatar
@@ -429,13 +532,21 @@ function TeamIdentity({ team }: { team: PulseTeam }) {
             {ownerLine(team.teamName, team.ownerHandle)}
           </span>
         )}
+        {oddsLine && (
+          <span className="block font-mono text-[11px] tabular-nums text-ink-muted">
+            {oddsLine}
+          </span>
+        )}
       </span>
     </>
   );
 }
 
-function PlayoffCell({ odds }: { odds: number | null }) {
-  if (odds === null) return <span className="text-xs text-ink-subtle">--</span>;
+/** The Playoffs column: odds with a bar before the bracket, words after. */
+function PlayoffCell({ text, odds }: { text: string; odds: number | null }) {
+  if (odds === null) {
+    return <span className="text-xs font-semibold text-ink-muted">{text}</span>;
+  }
   const percent = Math.round(odds * 100);
   const tone =
     percent >= 60
@@ -446,7 +557,7 @@ function PlayoffCell({ odds }: { odds: number | null }) {
   return (
     <span className="inline-flex flex-col items-center gap-1">
       <span className={`font-mono text-xs font-bold tabular-nums ${tone}`}>
-        {percent}%
+        {text}
       </span>
       <span
         aria-hidden="true"
@@ -454,6 +565,41 @@ function PlayoffCell({ odds }: { odds: number | null }) {
       >
         <span
           className="block h-full rounded-full bg-beacon"
+          style={{ width: `${Math.max(2, percent)}%` }}
+        />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The Title column, a row figure: odds with a bar while a title is still
+ * possible, and a word (champion, eliminated, final place) once it is not.
+ */
+function TitleCell({
+  text,
+  odds,
+  asOdds,
+}: {
+  text: string;
+  odds: number | null;
+  asOdds: boolean;
+}) {
+  if (!asOdds || odds === null) {
+    return <span className="text-xs font-semibold text-ink-muted">{text}</span>;
+  }
+  const percent = Math.round(odds * 100);
+  return (
+    <span className="inline-flex flex-col items-center gap-1">
+      <span className="font-mono text-base font-extrabold tabular-nums text-brand-cyan">
+        {text}
+      </span>
+      <span
+        aria-hidden="true"
+        className="h-1 w-12 overflow-hidden rounded-full bg-base"
+      >
+        <span
+          className="block h-full rounded-full bg-brand-purple"
           style={{ width: `${Math.max(2, percent)}%` }}
         />
       </span>
@@ -470,7 +616,7 @@ function PlayoffCell({ odds }: { odds: number | null }) {
  * number is the number, and the column header says which question it answers.
  */
 function ChopRiskCell({ odds }: { odds: number | null }) {
-  if (odds === null) return <span className="text-xs text-ink-subtle">--</span>;
+  if (odds === null) return <span className="text-xs text-ink-subtle">No odds yet</span>;
   const percent = Math.round(odds * 100);
   const tone =
     percent >= 20
@@ -481,7 +627,7 @@ function ChopRiskCell({ odds }: { odds: number | null }) {
   return (
     <span className="inline-flex flex-col items-center gap-1">
       <span className={`font-mono text-xs font-bold tabular-nums ${tone}`}>
-        {percent}%
+        {pctOdds(odds)}
       </span>
       <span
         aria-hidden="true"

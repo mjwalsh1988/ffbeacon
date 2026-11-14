@@ -12,10 +12,16 @@
 import { ordinal } from "@/lib/league-team-status";
 import { positionNoun } from "@/lib/site";
 import type { TeamDirection } from "@/lib/trade-finder/types";
-import type { ActivityBand, BlueprintGrade, Priority } from "./types";
+import type { ActivityBand, BlueprintGrade, BlueprintLeagueKind, Priority } from "./types";
 
 export type PriorityInput = {
   teamCount: number;
+  /**
+   * The league kind. Age and selling veterans for youth are dynasty and keeper
+   * concerns; in chopped every week is survival, so the lineup upgrade fires
+   * whatever the team's direction. Absent reads as dynasty (the tests).
+   */
+  leagueKind?: BlueprintLeagueKind;
   direction: TeamDirection | null;
   /** The four positional grades. */
   positional: BlueprintGrade[];
@@ -53,8 +59,11 @@ type Candidate = { id: string; weight: number; text: string | null };
 
 export function computePriorities(input: PriorityInput, count: number): Priority[] {
   const T = input.teamCount;
+  const kind = input.leagueKind ?? "dynasty";
+  const chopped = kind === "chopped";
+  const longTerm = kind === "dynasty" || kind === "keeper";
   const winNow = input.direction === "win-now";
-  const rebuild = input.direction === "rebuild";
+  const rebuild = input.direction === "rebuild" && kind === "dynasty";
   const graded = input.positional.filter((g) => g.grade !== null);
   const weakest = [...graded].sort((a, b) => a.grade! - b.grade! || a.key.localeCompare(b.key))[0];
   const strongest = [...graded].sort((a, b) => b.grade! - a.grade! || a.key.localeCompare(b.key))[0];
@@ -72,9 +81,11 @@ export function computePriorities(input: PriorityInput, count: number): Priority
       id: "P2",
       weight: 90,
       text:
-        winNow && input.needs.length > 0
-          ? `Upgrade ${positionNoun(input.needs[0].position)}: the lineup is ${input.needs[0].need.toFixed(1)} points a week short there.`
-          : null,
+        chopped && input.needs.length > 0
+          ? `Shore up ${positionNoun(input.needs[0].position)}: the lineup is ${input.needs[0].need.toFixed(1)} points a week short there, and the lowest score is cut.`
+          : winNow && input.needs.length > 0
+            ? `Upgrade ${positionNoun(input.needs[0].position)}: the lineup is ${input.needs[0].need.toFixed(1)} points a week short there.`
+            : null,
     },
     {
       id: "P3",
@@ -98,7 +109,7 @@ export function computePriorities(input: PriorityInput, count: number): Priority
       id: "P5",
       weight: 75,
       text:
-        winNow && input.bench && input.bench.grade <= 4 && input.bench.rank !== null
+        (winNow || chopped) && input.bench && input.bench.grade <= 4 && input.bench.rank !== null
           ? `Add depth: bench value ranks ${ordinal(input.bench.rank)} of ${T}.`
           : null,
     },
@@ -114,7 +125,7 @@ export function computePriorities(input: PriorityInput, count: number): Priority
       id: "P7",
       weight: 65,
       text:
-        !rebuild && input.ageGap !== null && input.ageGap <= -1.5 && input.mineAge !== null
+        longTerm && !rebuild && input.ageGap !== null && input.ageGap <= -1.5 && input.mineAge !== null
           ? `Get younger: the roster averages ${input.mineAge.toFixed(1)}, ${Math.abs(input.ageGap).toFixed(1)} years older than the league.`
           : null,
     },

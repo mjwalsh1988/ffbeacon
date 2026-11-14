@@ -49,7 +49,14 @@ import type { BlueprintPosition } from "./default-settings";
 export type { BlueprintPosition };
 
 /** Bumped on any formula change; a stale version rebuilds on next view. */
-export const BLUEPRINT_MODEL_VERSION = 5;
+export const BLUEPRINT_MODEL_VERSION = 6;
+
+/**
+ * The kind of league, as the Blueprint reads it (Sleeper settings.type: 0
+ * redraft, 1 keeper, 2 dynasty, 3 chopped). Draft capital is graded in dynasty
+ * and keeper only; chopped reads survival (one roster cut a week), not playoffs.
+ */
+export type BlueprintLeagueKind = "redraft" | "keeper" | "dynasty" | "chopped";
 
 /** The market signal states (lib/market-signals), as the Blueprint reads them. */
 export type MarketSignalState =
@@ -101,7 +108,11 @@ export type BlueprintGrade = {
   key: GradeKey;
   /** "QB", "RB", "WR", "TE", "Bench", "Draft capital". */
   label: string;
-  /** 1 to 10; null only for draft capital in redraft. */
+  /**
+   * 1 to 10. Null is "Not scored": the group has no figure to rank (no value
+   * and no projection), or it is draft capital outside dynasty and keeper. A
+   * null grade is left out of the overall.
+   */
   grade: number | null;
   /** League rank in value (positional, bench or picks value). */
   valueRank: number | null;
@@ -186,10 +197,18 @@ export type BlueprintActivity = {
   score: number;
   band: ActivityBand;
   driver: string;
-  /** Percent of priced players, whole numbers. */
+  /**
+   * Percent of priced players, whole numbers. Sell and Cut are counted apart,
+   * and the four add to exactly 100 (largest remainder) when any player is
+   * priced, 0 each when none is.
+   */
   sellsPct: number;
+  cutsPct: number;
   buildsPct: number;
   holdsPct: number;
+  /** Players called Sell (hard or soft), and players called Cut candidate. */
+  sellCount: number;
+  cutCount: number;
   pricedCount: number;
   buyTargetCount: number;
   buyPositionCount: number;
@@ -316,6 +335,15 @@ export type BlueprintView = {
     isDynasty: boolean;
     isSuperflex: boolean;
     direction: TeamDirection | null;
+    leagueKind: BlueprintLeagueKind;
+    /** Sleeper best ball (settings.best_ball 1): no lineups to set. */
+    isBestBall: boolean;
+    /**
+     * Set for a league from a past season: a frozen snapshot that is never
+     * synced or rebuilt again. The page says so: "Final roster from the 2025
+     * season."
+     */
+    frozenSeasonNote: string | null;
   };
 
   players: Record<string, BlueprintPlayer>;
@@ -325,6 +353,12 @@ export type BlueprintView = {
     status: BlueprintStatus | null;
     valueArchetype: string | null;
     rosterArchetype: string;
+    /**
+     * Starter value over starter plus bench value, a whole percent (73 means
+     * 73%), the figure the roster archetype is read from. Null when the roster
+     * has no priced value.
+     */
+    starterSharePct: number | null;
     outlook: BlueprintOutlook | null;
     /** Redraft outlook sentence, or the "computed once Power Pulse has run" line. */
     outlookNote: string | null;

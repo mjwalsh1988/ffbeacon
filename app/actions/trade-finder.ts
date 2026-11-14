@@ -72,6 +72,7 @@ import { noticeText } from "@/lib/trade-finder/notice";
 import {
   MAX_NAMED_PLAYERS,
   TRADE_POSITIONS,
+  inferStrategy,
   readTradePosition,
   readTradeStrategy,
   type TradePosition,
@@ -373,8 +374,17 @@ export async function findLeagueTrade(input: {
     teams: league.teams,
     startingSlots: league.startingSlots,
     isDynasty: league.isDynasty,
+    leagueKind: league.leagueKind,
     allowPicks: league.allowPicks,
-    strategy: readTradeStrategy(input.strategy) ?? undefined,
+    // The reader's Compete or Rebuild choice, else the mode the page opened on
+    // (inferred from their own team), so a Search press with no choice made
+    // ranks exactly like the first paint.
+    strategy:
+      readTradeStrategy(input.strategy) ??
+      inferStrategy(
+        league.leagueKind,
+        league.teams.find((t) => t.rosterId === league.myRosterId)?.statusKey ?? null,
+      ).strategy,
     targetPlayerIds,
     offerPlayerIds,
     wantPositions: readPositions(input.wantPositions),

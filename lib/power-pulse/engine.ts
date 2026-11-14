@@ -35,13 +35,15 @@ import {
   zScores,
   zToDisplay,
 } from "./math";
-import { simulateSeason, type SimTeam } from "./simulate";
+import { playoffWeekCount, simulateSeason, type SimTeam } from "./simulate";
+import { playoffStates, type TeamPlayoffState } from "./playoffs";
 import { resolveFinalWeek } from "../chopped/league";
 import { simulateSurvival, type SurvivalTeam } from "../chopped/survival";
 import type {
   AccuracyRow,
   DefenseRow,
   LeagueRow,
+  LiveWeekData,
   PlayerRow,
   ProjectionRow,
   RosterRow,
@@ -103,7 +105,17 @@ export type PowerPulseInput = {
    * existed. True: DL, LB, DB and IDP_FLEX slots are filled.
    */
   idpEnabled?: boolean;
+  /**
+   * The live week, once its first game has kicked off (loadLiveWeek). Points a
+   * locked starter has already scored count as scored; only the players whose
+   * game is still to come are projected, into the slots they can still fill.
+   * Absent or null: the week is projected whole, as before kickoff.
+   */
+  live?: LiveWeekData | null;
 };
+
+/** Last fantasy week any league plays. */
+const LAST_FANTASY_WEEK = 18;
 
 /**
  * How much of a team's optimal lineup to actually project them to score.
@@ -223,6 +235,12 @@ export type PowerPulseTeamResult = {
     formUnmeasured?: "unprojected-slots";
     usedLeagueScoring: boolean;
     weeksProjected: number;
+    /**
+     * Where this team stands in the postseason: the phase, its seed once the
+     * regular season is over, alive or out, and the real final place once the
+     * title game is played. Absent in a chopped league, which has no bracket.
+     */
+    playoff?: TeamPlayoffState;
   };
 };
 
@@ -249,6 +267,12 @@ type TeamWork = {
     sigma: number;
     unfilled: number;
   }>;
+  /**
+   * What the simulation draws from, week by week, playoff weeks included. The
+   * same as the lineup totals except in the live week, where points already
+   * scored are fixed and only the unplayed part carries a spread.
+   */
+  simWeeks: Map<number, { mean: number; sigma: number }>;
   meanPoints: number;
   sigma: number;
   lineupEfficiency: number | null;
@@ -296,9 +320,14 @@ export function computePowerPulse(
     chopped && input.aliveRosterIds && input.aliveRosterIds.length > 0
       ? new Set(input.aliveRosterIds)
       : null;
-  const scoringRosters = aliveIds
-    ? rosters.filter((r) => aliveIds.has(r.sleeperRosterId))
-    : rosters;
+  // A roster with no players is not a team, in any kind of league: an orphan
+  // nobody manages, or a slot a shrunk league still carries. Scoring it would
+  // put a zero into every z-score and hand it a bracket seed, so it is left
+  // out of the scoring, the simulation and the bracket alike. Before a draft
+  // every roster is empty and the orchestrator stops before this runs.
+  const scoringRosters = (
+    aliveIds ? rosters.filter((r) => aliveIds.has(r.sleeperRosterId)) : rosters
+  ).filter((r) => r.playerSleeperIds.length > 0);
   if (scoringRosters.length === 0) return [];
 
   // choppedPerWeek teams leave per week (one in most leagues, two in the 32
@@ -323,9 +352,34 @@ export function computePowerPulse(
     projectionsByPlayer.set(row.playerId, byWeek);
   }
 
-  const remainingWeeks: number[] = [];
-  for (let w = currentWeek; w <= lastRegularWeek; w += 1)
-    remainingWeeks.push(w);
+  // The weeks still to play before the bracket. Empty once the regular season
+  // is over, which is what puts a bracket league into its playoff mode.
+  const regularWeeks: number[] = [];
+  const regularEnd = chopped ? lastRegularWeek : league.playoffWeekStart - 1;
+  for (let w = currentWeek; w <= regularEnd; w += 1) regularWeeks.push(w);
+  const regularSeasonOver = !chopped && regularWeeks.length === 0;
+
+  // The weeks the bracket is played in, from the first one still to come.
+  // Their lineups decide the playoff rounds, so a roster built for weeks 15 to
+  // 17 is judged on weeks 15 to 17 rather than on its regular season mean.
+  const playoffWeeks: number[] = [];
+  if (!chopped && league.playoffTeams >= 2) {
+    const fieldSize = Math.min(league.playoffTeams, scoringRosters.length);
+    const lastPlayoffWeek = Math.min(
+      LAST_FANTASY_WEEK,
+      league.playoffWeekStart + playoffWeekCount(fieldSize, league.playoffRoundType) - 1,
+    );
+    for (let w = Math.max(currentWeek, league.playoffWeekStart); w <= lastPlayoffWeek; w += 1) {
+      playoffWeeks.push(w);
+    }
+  }
+
+  // The weeks the team's season-long figures (points per week, spread,
+  // position output) are averaged over: the regular season while it lasts,
+  // then the playoff weeks still to come.
+  const remainingWeeks: number[] =
+    regularWeeks.length > 0 ? regularWeeks : playoffWeeks.length > 0 ? playoffWeeks : [currentWeek];
+  const projectedWeeks = [...new Set([...remainingWeeks, ...playoffWeeks])].sort((a, b) => a - b);
 
   // ---------- pass 1: project every player, build every lineup ----------
 
@@ -389,7 +443,7 @@ export function computePowerPulse(
     const byWeek = new Map<number, Map<string, PlayerWeek>>();
     let usedLeagueScoring = false;
 
-    for (const week of remainingWeeks) {
+    for (const week of projectedWeeks) {
       const weekMap = new Map<string, PlayerWeek>();
       for (const { player, accuracy, reliability } of enriched) {
         const onReserve = reservePlayerIds.has(player.playerId);
@@ -497,6 +551,27 @@ export function computePowerPulse(
         if (player) positionTotals[slot.playedAs ?? player.position] += slot.points;
       }
     }
+
+    // What the simulation draws from: every projected week, playoff weeks
+    // included, with the live week holding its scored points fixed.
+    const simWeeks = new Map<number, { mean: number; sigma: number }>();
+    for (const w of weekLineups) simWeeks.set(w.week, { mean: w.total, sigma: w.sigma });
+    for (const week of projectedWeeks) {
+      if (simWeeks.has(week)) continue;
+      const lineup = buildOptimalLineup(slots, candidatesFor(week), slotMap);
+      simWeeks.set(week, { mean: lineup.total * realism, sigma: lineupSigma(lineup.slots) });
+    }
+    const liveWeek = liveWeekLineup({
+      live: input.live,
+      week: currentWeek,
+      rosterId: roster.sleeperRosterId,
+      rosterPositions: league.rosterPositions,
+      slotMap,
+      players,
+      candidates: candidatesFor(currentWeek),
+      realism,
+    });
+    if (liveWeek) simWeeks.set(currentWeek, liveWeek);
 
     const weekCount = Math.max(1, weekLineups.length);
     for (const position of PULSE_POSITIONS) {
@@ -609,6 +684,7 @@ export function computePowerPulse(
       players: enriched,
       byWeek,
       weekLineups,
+      simWeeks,
       meanPoints,
       sigma,
       lineupEfficiency,
@@ -636,11 +712,24 @@ export function computePowerPulse(
   for (const team of work) {
     meanByRoster.set(team.roster.sleeperRosterId, team.meanPoints);
     sigmaByRoster.set(team.roster.sleeperRosterId, team.sigma);
-    const weekMap = new Map<number, { mean: number; sigma: number }>();
-    for (const w of team.weekLineups)
-      weekMap.set(w.week, { mean: w.total, sigma: w.sigma });
-    weeklyByRoster.set(team.roster.sleeperRosterId, weekMap);
+    weeklyByRoster.set(team.roster.sleeperRosterId, team.simWeeks);
   }
+
+  // Where every team stands in the postseason, from the stored bracket once
+  // the regular season is over. Null in a chopped league.
+  const playoff = chopped
+    ? null
+    : playoffStates(
+        work.map((t) => ({
+          sleeperRosterId: t.roster.sleeperRosterId,
+          wins: t.roster.wins,
+          ties: t.roster.ties,
+          pointsFor: t.roster.pointsFor,
+          division: t.roster.division ?? null,
+        })),
+        league,
+        regularSeasonOver,
+      );
 
   const teamNameByRoster = new Map(
     work.map((t) => [t.roster.sleeperRosterId, t.roster.teamName]),
@@ -664,6 +753,12 @@ export function computePowerPulse(
           w.week >= currentWeek &&
           w.week < league.playoffWeekStart,
       );
+  // The weekly preview. In the playoffs it is the bracket's own games, which
+  // Sleeper publishes as ordinary pairings for the teams still playing; they
+  // never feed the record or the seeding.
+  const previewSchedule: ScheduleWeek[] = regularSeasonOver
+    ? input.schedule.filter((w) => !w.isFinal && w.week >= currentWeek)
+    : upcomingSchedule;
 
   const simTeams: SimTeam[] = work.map((team) => ({
     sleeperRosterId: team.roster.sleeperRosterId,
@@ -674,8 +769,13 @@ export function computePowerPulse(
     weeks: weeklyByRoster.get(team.roster.sleeperRosterId) ?? new Map(),
     mean: team.meanPoints,
     sigma: team.sigma,
+    division: team.roster.division ?? null,
   }));
 
+  // Once the regular season is over the bracket is the stored one: games it
+  // has settled are never redrawn, a team that lost one stays out, and the
+  // field is the bracket's own when it names all of it.
+  const bracket = playoff && playoff.phase !== "regular" ? playoff.facts : null;
   const simResults: Map<number, SimulationResult> = chopped
     ? new Map()
     : simulateSeason(simTeams, upcomingSchedule, {
@@ -685,6 +785,15 @@ export function computePowerPulse(
         playoffWeekStart: league.playoffWeekStart,
         playoffRoundType: league.playoffRoundType,
         medianMatch: league.medianMatch,
+        playoffSeedType: league.playoffSeedType,
+        divisions: league.divisions,
+        ...(bracket
+          ? {
+              playedPlayoffGames: bracket.played,
+              eliminatedFromTitle: bracket.eliminated,
+              playoffField: bracket.field,
+            }
+          : {}),
       });
 
   // The chopped answer, over the alive teams only. Same seeded generator and
@@ -711,7 +820,7 @@ export function computePowerPulse(
     const detail: PowerPulseTeamResult["weekly"] = [];
     const opponentMeans: number[] = [];
 
-    for (const week of upcomingSchedule) {
+    for (const week of previewSchedule) {
       const opponentId = week.opponents.get(rosterId) ?? null;
       const mine = weeklyByRoster.get(rosterId)?.get(week.week);
       const theirs =
@@ -864,6 +973,16 @@ export function computePowerPulse(
     const survival = survivalResults?.get(rosterId) ?? null;
     const games = gamesTotal(team);
     const expectedWins = sim?.expectedWins ?? 0;
+    const playoffState = playoff?.states.get(rosterId);
+    // Once the title game is played the odds are the result: the champion is
+    // certain, everyone else is out, and the field is the field.
+    const complete = playoff?.phase === "complete";
+    const titleOdds = complete
+      ? playoffState?.status === "champion" ? 1 : 0
+      : (sim?.titleOdds ?? 0);
+    const playoffOdds = complete
+      ? playoffState?.seed !== null && playoffState?.seed !== undefined ? 1 : 0
+      : (sim?.playoffOdds ?? 0);
 
     const positionRanks: Record<string, number | null> = {};
     const positionPoints: Record<string, number> = {};
@@ -895,9 +1014,9 @@ export function computePowerPulse(
         ? null
         : round(Math.max(0, games - expectedWins), 1),
       projectedTies: chopped ? null : 0,
-      playoffOdds: chopped ? null : round(sim?.playoffOdds ?? 0, 4),
+      playoffOdds: chopped ? null : round(playoffOdds, 4),
       byeOdds: chopped ? null : round(sim?.byeOdds ?? 0, 4),
-      titleOdds: chopped ? null : round(sim?.titleOdds ?? 0, 4),
+      titleOdds: chopped ? null : round(titleOdds, 4),
       lastPlaceOdds: chopped ? null : round(sim?.lastPlaceOdds ?? 0, 4),
       sosPoints: chopped ? null : round(sosByRoster.get(rosterId) ?? 0, 2),
       sosRank: chopped ? null : sosRanks[i],
@@ -927,12 +1046,83 @@ export function computePowerPulse(
         ...(team.formUnmeasured ? { formUnmeasured: "unprojected-slots" as const } : {}),
         usedLeagueScoring: team.usedLeagueScoring,
         weeksProjected: team.weekLineups.length,
+        ...(playoffState ? { playoff: playoffState } : {}),
       },
     };
 
     result.drivers = buildDrivers(result, work.length);
     return result;
   });
+}
+
+/**
+ * The live week for one roster: what its locked starters have already scored,
+ * plus the best lineup its unplayed players can still put in the open slots.
+ *
+ * Sleeper's starters array is positional over the league's starting tokens,
+ * so starter i sits in the i-th starting token. A starter whose NFL game has
+ * kicked off (or who has no team, and so no game to come) is locked: his
+ * points so far count, his slot is spent, and nothing about him is projected.
+ * Every other slot is filled from the players whose game is still to come,
+ * the bench included, because those are the moves a manager can still make.
+ * Only that unplayed part carries a spread.
+ *
+ * Null when there is no live data for this roster or this week, which leaves
+ * the week projected whole. Exported for the tests.
+ */
+export function liveWeekLineup(args: {
+  live: LiveWeekData | null | undefined;
+  week: number;
+  rosterId: number;
+  rosterPositions: string[];
+  slotMap: Record<string, PulsePosition[]>;
+  /** Keyed by Sleeper player id. */
+  players: Map<string, PlayerRow>;
+  candidates: LineupCandidate[];
+  realism: number;
+}): { mean: number; sigma: number } | null {
+  const { live, week } = args;
+  if (!live || live.week !== week) return null;
+  const set = live.rosters.get(args.rosterId);
+  if (!set) return null;
+
+  const isLocked = (sleeperId: string): boolean => {
+    const team = args.players.get(sleeperId)?.team ?? null;
+    return team === null || live.startedTeams.has(team);
+  };
+
+  let scored = 0;
+  const openSlots: string[] = [];
+  const spent = new Set<string>();
+  let starterIndex = 0;
+  for (const token of args.rosterPositions) {
+    if (NON_STARTING_SLOTS.has(token)) continue;
+    const sid = set.starters[starterIndex] ?? "";
+    starterIndex += 1;
+    // A slot this model cannot fill (a defensive slot with the IDP switch
+    // off) is outside the projection on both sides, so it stays out here too.
+    if (!args.slotMap[token]?.length) continue;
+    if (sid && sid !== "0" && isLocked(sid)) {
+      scored += set.points.get(sid) ?? 0;
+      spent.add(sid);
+    } else {
+      openSlots.push(token);
+    }
+  }
+
+  // Players still to play, by FF Beacon id. A benched player whose game has
+  // started cannot be moved in, so he is not a candidate.
+  const playable = new Set<string>();
+  for (const [sid, player] of args.players) {
+    if (spent.has(sid) || isLocked(sid)) continue;
+    playable.add(player.playerId);
+  }
+  const lineup = buildOptimalLineup(
+    openSlots,
+    args.candidates.filter((c) => playable.has(c.playerId)),
+    args.slotMap,
+  );
+  return { mean: scored + lineup.total * args.realism, sigma: lineupSigma(lineup.slots) };
 }
 
 /**

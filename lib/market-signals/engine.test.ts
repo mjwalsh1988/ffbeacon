@@ -32,7 +32,7 @@ function deps(parts: PlannedPartition[], costMs: number, failIdx: number[] = [])
       const i = Number(p.formatConfigId.slice(1));
       if (failIdx.includes(i)) throw new Error(`read failed ${i}`);
       ran.push(p.formatSlug);
-      return { partition: p, asOfDay: "2026-10-28", rowsWritten: 10, changesWritten: 1, durationMs: costMs, tooThin: false };
+      return { partition: p, asOfDay: "2026-10-28", rowsWritten: 10, changesWritten: 1, durationMs: costMs, tooThin: false, partial: false };
     },
     prune: async () => {
       pruned += 1;

@@ -55,6 +55,8 @@ const requestSchema = z.object({
   submittedRosterId: z.number().int().min(0).max(1000),
   searchedUsername: z.string().trim().min(1).max(64).nullable(),
   focusedRosterId: z.number().int().min(0).max(1000).nullable(),
+  // A free agent unless the reader asks for a trade target.
+  targetKind: z.enum(["free-agent", "trade"]).optional(),
 });
 
 export type UpgradeWhatIfRequestInput = z.infer<typeof requestSchema>;
@@ -141,5 +143,6 @@ export async function requestUpgradeWhatIf(raw: unknown): Promise<UpgradeWhatIfO
     sleeperLeagueId: input.sleeperLeagueId,
     position: input.position,
     rosterId: viewer.rosterId,
+    targetKind: input.targetKind ?? "free-agent",
   });
 }

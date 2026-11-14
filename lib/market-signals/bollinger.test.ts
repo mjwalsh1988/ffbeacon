@@ -4,13 +4,14 @@ import {
   collapseToDays,
   computeBands,
   computeSignal,
+  isBandTooNarrow,
   isLoggedChange,
   marketValueOf,
   rollingBands,
   signalSince,
   type Bands,
 } from "./bollinger";
-import { DEFAULT_MARKET_SIGNAL_SETTINGS as S } from "./default-settings";
+import { DEFAULT_MARKET_SIGNAL_SETTINGS as S, MIN_POINTS_FOR_BANDS, sourceRules } from "./default-settings";
 import { END_DAY, breakoutSeries, gappySeries, steadySeries } from "./__fixtures__/series";
 
 const bandsAround = (mean: number, halfWidth: number): Bands => ({
@@ -99,6 +100,43 @@ describe("classifySignal", () => {
 
   it("does not hold a sell from a non-sell previous state", () => {
     expect(classifySignal({ ...base, prev: "hold", latest: 1085, bands: b })).toBe("hold");
+  });
+
+  it("holds when the band is narrower than the minimum width, prior sell included", () => {
+    const narrow = bandsAround(1000, 15); // width 30, 3% of the mean
+    expect(isBandTooNarrow(narrow, S.minBandwidth)).toBe(true);
+    expect(classifySignal({ ...base, latest: 1020, bands: narrow })).toBe("hold");
+    expect(classifySignal({ ...base, prev: "sell", latest: 1020, bands: narrow })).toBe("hold");
+    expect(classifySignal({ ...base, latest: 980, bands: narrow })).toBe("hold");
+    // At 4% exactly the band carries a call.
+    const edge = bandsAround(1000, 20);
+    expect(classifySignal({ ...base, latest: 1020, bands: edge })).toBe("sell");
+    // Off when the setting is 0.
+    expect(classifySignal({ ...base, latest: 1020, bands: narrow, settings: { ...S, minBandwidth: 0 } })).toBe("sell");
+  });
+});
+
+describe("sourceRules", () => {
+  it("reads the settings as written for a daily source", () => {
+    expect(sourceRules(S, "ktc")).toEqual({
+      cadenceDays: 1,
+      windowDays: 30,
+      lookbackDays: 45,
+      minPoints: 24,
+      minBandPoints: MIN_POINTS_FOR_BANDS,
+      staleDays: 3,
+    });
+  });
+
+  it("gives a weekly source a twelve-update window, scaled points and a longer stale window", () => {
+    expect(sourceRules(S, "dynastyprocess")).toEqual({
+      cadenceDays: 7,
+      windowDays: 84,
+      lookbackDays: 99,
+      minPoints: 10,
+      minBandPoints: 4,
+      staleDays: 9,
+    });
   });
 });
 

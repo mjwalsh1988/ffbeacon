@@ -53,7 +53,6 @@ import type {
   PlayerRow,
   ProjectionRow,
 } from "@/lib/power-pulse/load";
-import { winProbability } from "@/lib/power-pulse/math";
 import {
   projectPlayerWeek,
   reliabilityMultiplier,
@@ -65,6 +64,7 @@ import { slotEligibility } from "@/lib/power-pulse/types";
 // about whether a Sunday is under way.
 import { hasLivePoints } from "@/lib/league-lineups/status";
 import type { SetLineupEntry } from "./lineups";
+import { gameClock, liveWinChance, sideState } from "./win-chance";
 import type {
   BenchUpgrade,
   MatchupSide,
@@ -152,6 +152,13 @@ export type BuildMatchupInput = {
    * flags on `slots`, which the same loader built from the same switch.
    */
   idpEnabled?: boolean;
+  /**
+   * Kickoff per NFL team code for this week, and the clock to read it against.
+   * The win chance banks the points of games already under way. Optional: with
+   * neither, a starter counts as playing once he has points on the board.
+   */
+  kickoffByTeam?: Map<string, string | null> | null;
+  nowMs?: number | null;
 };
 
 /** A proposed swap, before the greedy pass thins the list out. */
@@ -582,6 +589,26 @@ function buildSide(
   };
 }
 
+/** One side's set lineup as the win chance reads it: banked, then to come. */
+export function liveSideState(input: Pick<BuildMatchupInput, "kickoffByTeam" | "nowMs">, side: MatchupSide) {
+  return sideState(
+    side.slots
+      .filter((entry) => entry.player !== null)
+      .map((entry) => {
+        const player = entry.player as SchedulePlayer;
+        const kickoff = player.team
+          ? (input.kickoffByTeam?.get(player.team.toUpperCase()) ?? null)
+          : null;
+        return {
+          projected: player.projected,
+          sigma: player.sigma,
+          actual: player.actual,
+          ...gameClock(kickoff, input.nowMs ?? null, player.actual),
+        };
+      }),
+  );
+}
+
 /** Build the whole matchup, both sides, from plain data. */
 export function buildMatchupView(input: BuildMatchupInput): MatchupView {
   // A settled week always shows results. An unsettled one shows them the moment
@@ -601,20 +628,13 @@ export function buildMatchupView(input: BuildMatchupInput): MatchupView {
   // a forecast, it is a distraction. An unpaired roster has nobody to beat. And
   // in a chopped league nobody is playing the person they were drawn against,
   // whatever the bracket-shaped page says.
+  //
+  // ONE WIN CHANCE (./win-chance.ts): the set lineups, with every point already
+  // scored banked, so it moves as games finish. The board and the Lineups
+  // what-if use the same function.
   let homeWinProb: number | null = null;
-  if (
-    !input.chopped &&
-    !input.isFinal &&
-    away !== null &&
-    home.projectedTotal !== null &&
-    away.projectedTotal !== null
-  ) {
-    homeWinProb = winProbability(
-      home.projectedTotal,
-      home.sigma ?? 0,
-      away.projectedTotal,
-      away.sigma ?? 0,
-    );
+  if (!input.chopped && !input.isFinal && away !== null) {
+    homeWinProb = liveWinChance(liveSideState(input, home), liveSideState(input, away));
   }
 
   return {

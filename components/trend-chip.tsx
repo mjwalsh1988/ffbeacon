@@ -34,10 +34,12 @@ function describe(direction: TrendChipProps["direction"]): string {
 }
 
 export function TrendChip({ direction, delta, deltaPct, windowLabel, cadence }: TrendChipProps) {
-  if (direction === null || delta === null) return null;
+  // A move with no value change (delta null) still shows its percent.
+  if (direction === null || (delta === null && deltaPct === null)) return null;
   const tone = TONE_CLASS_BY_DIRECTION[direction];
   const arrow = ARROW_BY_DIRECTION[direction];
-  const deltaText = delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
+  const deltaText =
+    delta === null ? null : delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
   const pctText =
     deltaPct === null ? null : `${deltaPct > 0 ? "+" : ""}${deltaPct.toFixed(1)}%`;
   // The figure is the visible text itself; only the words the eye gets from the
@@ -52,8 +54,7 @@ export function TrendChip({ direction, delta, deltaPct, windowLabel, cadence }: 
       <span aria-hidden="true">{arrow}</span>
       <span>
         <span className="sr-only">Value trend {describe(direction)}: </span>
-        {deltaText}
-        {pctText ? ` (${pctText})` : ""} {windowLabel}
+        {deltaText === null ? pctText : `${deltaText}${pctText ? ` (${pctText})` : ""}`} {windowLabel}
         {cadence === "weekly" && <span className="sr-only">, updated weekly</span>}
       </span>
     </p>

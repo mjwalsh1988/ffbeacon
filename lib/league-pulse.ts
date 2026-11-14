@@ -32,13 +32,17 @@ import {
   LEAGUE_FETCH_FAILED_ERROR,
 } from "@/lib/league-removal";
 import { deriveFormatSlug } from "@/lib/sleeper-to-format";
-import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
+import {
+  calculateLeaguePowerRankings,
+  POWER_RANKINGS_MODEL_VERSION,
+} from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
 import { refreshPositionalWar } from "@/lib/league-positional-war";
 import { refreshManagerLedger } from "@/lib/league-manager-ledger";
 import { coalesce } from "@/lib/request-coalesce";
 import { captureLeagueDraftSelections } from "@/lib/league-draft-selections";
 import { normalizeDraftPicks } from "@/lib/sleeper-draft-picks";
+import { chooseDraftPerSeason, MAX_DRAFT_ROUNDS, type LeagueDraftRow } from "@/lib/league-drafts";
 import {
   captureLeagueSnapshot,
   recordLeagueChanges,
@@ -118,7 +122,7 @@ export type LeaguePulseFailure = {
  * this list lacks, widen this list and the select beside it, once.
  */
 export const LEAGUE_CORE_COLUMNS =
-  "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, pulse_status, pulse_error, format_config_id, roster_positions, scoring_settings, metadata";
+  "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, pulse_status, pulse_error, format_config_id, roster_positions, scoring_settings, metadata, frozen_at";
 
 /** Nullability matches the schema exactly. Do not loosen it to make a cast fit. */
 export type LeagueCoreRow = {
@@ -135,7 +139,20 @@ export type LeagueCoreRow = {
   roster_positions: Json;
   scoring_settings: Json;
   metadata: Json;
+  /** Set once a past season is captured in full. See isPastSeason. */
+  frozen_at: string | null;
 };
+
+/**
+ * A season before the current one (lib/nfl-season.ts rolls over in March, so
+ * this is a season that has ended). Such a league gets one last full capture
+ * and is then frozen: leagues.frozen_at is stamped, no Sleeper request is made
+ * for it again, its rows are never rewritten, and pages read what is stored.
+ * Frozen beats force, because there is nothing left on Sleeper to refresh.
+ */
+export function isPastSeason(season: number, current: number = Number(currentNflSeason())): boolean {
+  return Number.isFinite(season) && season > 0 && season < current;
+}
 
 /**
  * What the deep view needs before it can draw anything: the league itself, its
@@ -255,13 +272,15 @@ export async function powerRankingsAreStale(
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("league_power_rankings_cache")
-    .select("generated_at")
+    .select("generated_at, model_version:positional_breakdowns->PICKS->>model_version")
     .eq("league_id", leagueRowId)
     .order("generated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error || !data?.generated_at) return true;
   if (seasonComplete) return false;
+  // Rows written by older ranking math rebuild on the next view (LPI-T03).
+  if (data.model_version !== POWER_RANKINGS_MODEL_VERSION) return true;
   if (changedSince(rostersChangedAt, data.generated_at)) return true;
   return Date.now() - new Date(data.generated_at).getTime() >= LEAGUE_POWER_RANKINGS_TTL_MS;
 }
@@ -386,7 +405,9 @@ export async function pulseLeagueCore(
       .eq("sleeper_league_id", sleeperLeagueId)
       .maybeSingle();
 
-    if (!force && existing && isLeaguePulseFresh(existing)) {
+    // A frozen past season answers from the stored copy whatever the caller
+    // asked for, force included: no Sleeper request is ever made for it again.
+    if (existing && (existing.frozen_at || (!force && isLeaguePulseFresh(existing)))) {
       // Cache hit: league, roster, and member rows are fresh enough that we do
       // not re-hit Sleeper at all. On this branch the whole function is meant
       // to be one round trip, so the two counts run only when asked for.
@@ -623,11 +644,47 @@ export async function pulseLeagueCore(
     const users = userResult as SleeperLeagueUser[];
     const tradedPicks = tradedPickResult as SleeperTradedPick[];
 
-    const [nextShapes] = await Promise.all([
-      upsertRosters(supabase, leagueRowId, rosters, tradedPicks, draftDetails),
-      upsertLeagueUsers(supabase, leagueRowId, users),
-      upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
-    ]);
+    // A child write that fails must not leave the league saying "syncing":
+    // that marker reads as live work until the maintenance cron gives up on it
+    // half an hour later. The league is marked `error` instead, so the next
+    // view retries, and a page still renders whatever is stored.
+    let nextShapes: RosterShape[];
+    try {
+      [nextShapes] = await Promise.all([
+        upsertRosters(supabase, leagueRowId, rosters, tradedPicks, draftDetails, league),
+        upsertLeagueUsers(supabase, leagueRowId, users),
+        upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
+      ]);
+    } catch (err) {
+      const writeFailed = `Saving the league failed: ${(err as Error).message}`;
+      await supabase
+        .from("leagues")
+        .update({
+          pulse_status: "error",
+          pulse_error: writeFailed,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", leagueRowId);
+      console.warn(`[pulseLeague] core ${sleeperLeagueId}: ${writeFailed}`);
+      if (!existing) {
+        return { ok: false as const, error: writeFailed, sleeperLeagueId, reason: "error" as const };
+      }
+      return {
+        ok: true as const,
+        leagueRowId,
+        sleeperLeagueId,
+        season,
+        cached: true,
+        counts: { rosters: 0, users: 0 },
+        league: {
+          ...(upserted as unknown as LeagueCoreRow),
+          last_pulsed_at: existing.last_pulsed_at,
+          pulse_status: "error",
+          pulse_error: writeFailed,
+        },
+        syncFailed: writeFailed,
+      };
+    }
 
     // Did the rosters move? Stamped BEFORE the pulse stamp below, so a derived
     // pass that starts the moment the league reads fresh already sees it. A
@@ -915,7 +972,7 @@ async function runSharedDerivedPass(
         // to captureLeagueRawData as `meta` below, so a real resync does not
         // pay for a second primary-key select of the same row for the same
         // fields.
-        "id, sleeper_league_id, season, status, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
+        "id, sleeper_league_id, season, status, frozen_at, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
       )
       .eq("id", leagueRowId)
       .maybeSingle(),
@@ -955,7 +1012,8 @@ async function runSharedDerivedPass(
   // table while the sync was still filling it.
   await Promise.all([
     (async () => {
-      if (syncs) {
+      // A frozen league never goes back to Sleeper; its stored rows are final.
+      if (syncs && !league.frozen_at) {
         await timed("capture-set", () =>
           captureLeagueRawData(
             supabase,
@@ -970,6 +1028,7 @@ async function runSharedDerivedPass(
                 leg: legValue,
                 playoffWeekStart: Number(league.playoff_week_start),
                 lastScoredLeg: Number(league.last_scored_leg),
+                frozenAt: league.frozen_at ?? null,
               },
             },
             { force, includeMatchups: false },
@@ -1006,7 +1065,8 @@ async function runSharedDerivedPass(
     // the core recorded. A failure is non-fatal; the cache row can be
     // backfilled by npm run calculate:power-rankings.
     (async () => {
-      const seasonComplete = (league.status ?? "").toLowerCase() === "complete";
+      const seasonComplete =
+        Boolean(league.frozen_at) || (league.status ?? "").toLowerCase() === "complete";
       if (
         !force &&
         !(await powerRankingsAreStale(supabase, leagueRowId, seasonComplete, rostersChangedAt))
@@ -1085,6 +1145,8 @@ export type CaptureRawLeagueMeta = {
   leg: number;
   playoffWeekStart: number;
   lastScoredLeg: number;
+  /** leagues.frozen_at. A frozen league's capture makes no request at all. */
+  frozenAt: string | null;
 };
 
 /**
@@ -1127,24 +1189,52 @@ export async function captureLeagueRawData(
   let leg: number;
   let playoffWeekStart: number;
   let lastScoredLeg: number;
+  let frozenAt: string | null;
   if (league.meta) {
-    ({ status, leg, playoffWeekStart, lastScoredLeg } = league.meta);
+    ({ status, leg, playoffWeekStart, lastScoredLeg, frozenAt } = league.meta);
   } else {
     // One read for everything the stages need to decide applicability, for a
     // caller that did not already have this row.
-    const { data: row } = await supabase
+    const { data: row, error: rowErr } = await supabase
       .from("leagues")
       .select(
-        "status, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
+        "status, frozen_at, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
       )
       .eq("id", leagueRowId)
       .maybeSingle();
+    if (rowErr) {
+      // Without the row we cannot tell a frozen league from a live one, so
+      // nothing is fetched and nothing is stamped. The caller retries.
+      console.warn(`[captureLeagueRawData] league read failed for ${leagueRowId}: ${rowErr.message}`);
+      return result;
+    }
     status = row?.status ?? null;
     leg = Number(row?.leg);
     playoffWeekStart = Number(row?.playoff_week_start);
     lastScoredLeg = Number(row?.last_scored_leg);
+    frozenAt = row?.frozen_at ?? null;
   }
-  const seasonComplete = status === "complete" || season < Number(currentNflSeason());
+
+  // A frozen league is a finished snapshot: no Sleeper request, no write.
+  if (frozenAt) {
+    return {
+      transactions: "ok",
+      brackets: "not_applicable",
+      draftSelections: "ok",
+      matchups: "skipped",
+      complete: true,
+    };
+  }
+
+  // THE LAST CAPTURE OF A PAST SEASON. Everything is fetched in full (every
+  // transaction week from week 0, the whole matchup slate, every completed
+  // draft), and if all of it lands the league is frozen below. A stage that
+  // fails leaves it unfrozen and the next capture tries again.
+  const finalCapture = isPastSeason(season);
+  const force = options.force || finalCapture;
+  const includeMatchups = options.includeMatchups || finalCapture;
+
+  const seasonComplete = status === "complete" || finalCapture;
   // A league with `playoff_week_start` 0 or missing runs no bracket at all
   // (chopped leagues, playoffs switched off). Reading 0 as a real week made
   // `leg >= 0` true from week 1, so the bracket stage ran, found nothing,
@@ -1162,7 +1252,7 @@ export async function captureLeagueRawData(
       leagueRowId,
       sleeperLeagueId,
       season,
-      options.force,
+      force,
       lastScoredLeg,
       seasonComplete,
     );
@@ -1177,33 +1267,45 @@ export async function captureLeagueRawData(
   }
 
   try {
-    const captured = await captureLeagueDraftSelections(supabase, leagueRowId);
+    // The final capture takes every outstanding draft at once: there is no
+    // later sync to pick up the remainder.
+    const captured = await captureLeagueDraftSelections(
+      supabase,
+      leagueRowId,
+      finalCapture ? { maxDrafts: Number.POSITIVE_INFINITY } : {},
+    );
     result.draftSelections = captured.fetchFailures > 0 ? "failed" : "ok";
   } catch (err) {
     console.warn(`[captureLeagueRawData] draft selections failed for ${leagueRowId}:`, (err as Error).message);
   }
 
-  if (options.includeMatchups) {
+  if (includeMatchups) {
     // Wrapped so the function's own "never throws" contract holds regardless
     // of who calls it, rather than resting on the fact that the derived path
     // (the only caller today whose Promise.all a throw here would take down)
     // happens to pass includeMatchups: false. A page must still render if
     // this throws, the same reasoning that wraps every stage above it.
     try {
-      const nflState = await getNflState();
       // With no bracket the regular season is the whole season, so the week
       // the postseason clamps to is past the last matchup week, not week 15
       // (and not 0, which resolveCurrentWeek floors to week 1 and would read
       // as "nothing played yet").
-      const currentWeek = resolveCurrentWeek(
-        nflState,
-        season,
-        bracketStartWeek ?? MAX_MATCHUP_WEEK + 1,
-      );
-      const sync = await syncLeagueMatchups(supabase, leagueRowId, sleeperLeagueId, season, currentWeek, {
-        force: options.force,
-      });
-      result.matchups = sync.ok && sync.failedWeeks.length === 0 ? "ok" : "failed";
+      //
+      // A past season needs no NFL state at all: every week of it is played.
+      // Otherwise a null state (Sleeper did not answer) means the week is
+      // unknown, and the slate is not synced against a guess. It counts as a
+      // failed stage so the capture is retried rather than stamped.
+      const currentWeek = finalCapture
+        ? MAX_MATCHUP_WEEK + 1
+        : resolveCurrentWeek(await getNflState(), season, bracketStartWeek ?? MAX_MATCHUP_WEEK + 1);
+      if (currentWeek === null) {
+        result.matchups = "failed";
+      } else {
+        const sync = await syncLeagueMatchups(supabase, leagueRowId, sleeperLeagueId, season, currentWeek, {
+          force,
+        });
+        result.matchups = sync.ok && sync.failedWeeks.length === 0 ? "ok" : "failed";
+      }
     } catch (err) {
       console.warn(`[captureLeagueRawData] matchups failed for ${leagueRowId}:`, (err as Error).message);
       result.matchups = "failed";
@@ -1243,7 +1345,13 @@ export async function captureLeagueRawData(
     .from("leagues")
     .update(
       result.complete
-        ? { capture_completed_at: now, capture_error: null, updated_at: now }
+        ? {
+            capture_completed_at: now,
+            capture_error: null,
+            updated_at: now,
+            // The past season's last capture landed in full: freeze it.
+            ...(finalCapture ? { frozen_at: now } : {}),
+          }
         : {
             capture_error: `incomplete: ${Object.entries(result)
               .filter(([k, v]) => k !== "complete" && v === "failed")
@@ -1473,13 +1581,24 @@ async function syncTransactions(
   // in any Sleeper league), so walking to 25 there is seven wasted requests
   // per such league. An unsettled league missing last_scored_leg (early in a
   // season, or metadata not yet populated) keeps the wider 25-week ceiling.
-  const maxWeek = Number.isFinite(lastScoredLeg) && lastScoredLeg > 0
-    ? lastScoredLeg + 1
-    : seasonSettled
-      ? 18
-      : 25;
-  const transactions = await getAllSleeperTransactions(sleeperLeagueId, maxWeek, 3, fromWeek);
+  const hasScoredLeg = Number.isFinite(lastScoredLeg) && lastScoredLeg > 0;
+  const maxWeek = hasScoredLeg ? lastScoredLeg + 1 : seasonSettled ? 18 : 25;
+  // A known far end means every week up to it is read: a run of quiet weeks
+  // is not the end of a league's history, and stopping on one (with the resume
+  // point parked just before it) froze 130 leagues weeks behind. Only the
+  // unbounded 25-week guess still stops on three empty weeks.
+  const emptyStop = transactionWalkEmptyStop(hasScoredLeg, seasonSettled);
+  const transactions = await getAllSleeperTransactions(sleeperLeagueId, maxWeek, emptyStop, fromWeek);
   await upsertTransactions(supabase, leagueRowId, transactions, season);
+}
+
+/**
+ * How many consecutive empty weeks end the transaction walk. Infinity (read
+ * every week to the bound) whenever the bound is real: the league's last scored
+ * week, or week 18 for a settled season. Exported for its test.
+ */
+export function transactionWalkEmptyStop(hasScoredLeg: boolean, seasonSettled: boolean): number {
+  return hasScoredLeg || seasonSettled ? Number.POSITIVE_INFINITY : 3;
 }
 
 /**
@@ -1621,36 +1740,14 @@ async function upsertRosters(
   rosters: SleeperRoster[],
   tradedPicks: SleeperTradedPick[],
   draftDetails: SleeperDraft[],
+  league: Pick<SleeperLeague, "season" | "settings">,
 ): Promise<RosterShape[]> {
   if (rosters.length === 0) return [];
 
-  // Build a map of current pick ownership by (season, round, original_roster_id).
-  // Sleeper's /traded_picks returns the CURRENT state per traded pick (one row
-  // per pick, not one per hop). The `roster_id` field is the IMMUTABLE original
-  // owner. Index baseline by original_roster_id, and update only by that key,
-  // using `previous_owner_id` would mis-attribute multi-hop trades (A→B→C would
-  // leave the pick on A's roster AND add a phantom entry on B's roster).
-  const baselinePicks = buildBaselinePicks(rosters);
-  for (const traded of tradedPicks) {
-    const key = pickKey(Number(traded.season), traded.round, traded.roster_id);
-    baselinePicks.set(key, {
-      season: Number(traded.season),
-      round: traded.round,
-      original_roster_id: traded.roster_id,
-      current_roster_id: traded.owner_id,
-    });
-  }
-
-  // Build season → rosterId → slot map from each season's draft detail so we
-  // can stamp `pick_label` (e.g. "1.04") onto picks for completed/scheduled drafts.
-  const rosterSlotBySeason = buildRosterSlotMap(draftDetails);
-
   const picksByOwner = new Map<number, PickAsset[]>();
-  for (const pick of baselinePicks.values()) {
-    const slot = rosterSlotBySeason.get(pick.season)?.get(pick.original_roster_id) ?? null;
-    const pickLabel = slot != null ? `${pick.round}.${String(slot).padStart(2, "0")}` : null;
+  for (const pick of buildRosterPicks(rosters, tradedPicks, draftDetails, league)) {
     const arr = picksByOwner.get(pick.current_roster_id) ?? [];
-    arr.push({ ...pick, slot, pick_label: pickLabel });
+    arr.push(pick);
     picksByOwner.set(pick.current_roster_id, arr);
   }
 
@@ -1805,7 +1902,7 @@ async function upsertTransactions(
 
 // ---------- helpers ----------
 
-type PickAsset = {
+export type PickAsset = {
   season: number;
   round: number;
   original_roster_id: number;
@@ -1822,30 +1919,159 @@ function pickKey(season: number, round: number, originalRosterId: number): strin
 }
 
 /**
- * Index draft details by season → originalRosterId → slot. Sleeper's
- * `slot_to_roster_id` maps slot number → roster_id; we invert it so the
- * read path can look up a slot from the pick's original owner.
+ * The draft each season's picks are read against, chosen by the same rule the
+ * read path uses (lib/league-drafts.ts chooseDraftPerSeason), so the slot and
+ * label stamped here agree with what a page computes. A season with a deleted
+ * and recreated draft used to take whichever detail Sleeper listed last.
  */
-function buildRosterSlotMap(
-  details: SleeperDraft[],
-): Map<number, Map<number, number>> {
-  const out = new Map<number, Map<number, number>>();
+export function chooseSleeperDraftPerSeason(details: SleeperDraft[]): Map<number, SleeperDraft> {
+  const byId = new Map<string, SleeperDraft>();
+  const rows: LeagueDraftRow[] = [];
   for (const d of details) {
-    const season =
-      typeof d.season === "string" ? parseInt(d.season, 10) : Number(d.season);
-    if (!Number.isFinite(season)) continue;
-    const mapping = d.slot_to_roster_id;
-    if (!mapping || typeof mapping !== "object") continue;
-    const rosterToSlot = new Map<number, number>();
-    for (const [slotStr, rosterId] of Object.entries(mapping)) {
-      const slot = parseInt(slotStr, 10);
-      const rid = Number(rosterId);
-      if (!Number.isFinite(slot) || !Number.isFinite(rid)) continue;
-      rosterToSlot.set(rid, slot);
-    }
-    if (rosterToSlot.size > 0) out.set(season, rosterToSlot);
+    const season = Number.parseInt(String(d.season), 10);
+    if (!Number.isFinite(season) || !d.draft_id) continue;
+    byId.set(d.draft_id, d);
+    const start = Number(d.start_time);
+    // Only the fields preferLaterDraft reads are meaningful here.
+    rows.push({
+      sleeperDraftId: d.draft_id,
+      season,
+      status: d.status ?? null,
+      isComplete: (d.status ?? "").toLowerCase() === "complete",
+      type: d.type ?? null,
+      rounds: 0,
+      teams: 0,
+      shape: undefined as unknown as LeagueDraftRow["shape"],
+      rosterToSeat: new Map(),
+      startedAtMs: Number.isFinite(start) && start > 0 ? start : null,
+      lastPickedAtMs: null,
+    });
+  }
+  const out = new Map<number, SleeperDraft>();
+  for (const [season, row] of chooseDraftPerSeason(rows)) {
+    const draft = byId.get(row.sleeperDraftId);
+    if (draft) out.set(season, draft);
   }
   return out;
+}
+
+/**
+ * Original roster id to draft slot for one draft, once its order is known.
+ * `slot_to_roster_id` first; `draft_order` (user id to slot) fills any roster
+ * it does not place, through each roster's owner.
+ */
+export function rosterSlotsForDraft(
+  draft: Pick<SleeperDraft, "slot_to_roster_id" | "draft_order">,
+  rosters: Array<Pick<SleeperRoster, "roster_id" | "owner_id">>,
+): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [slotStr, rosterId] of Object.entries(draft.slot_to_roster_id ?? {})) {
+    const slot = Number.parseInt(slotStr, 10);
+    const rid = Number(rosterId);
+    // Sleeper writes null for a slot nobody holds yet; Number(null) is 0.
+    if (Number.isInteger(slot) && slot > 0 && Number.isInteger(rid) && rid > 0) {
+      out.set(rid, slot);
+    }
+  }
+  const order = draft.draft_order ?? {};
+  for (const r of rosters) {
+    if (out.has(r.roster_id) || !r.owner_id) continue;
+    const slot = Number(order[r.owner_id]);
+    if (Number.isInteger(slot) && slot > 0) out.set(r.roster_id, slot);
+  }
+  return out;
+}
+
+/** Sleeper league types that hold no future rookie picks: 0 redraft, 3 chopped. */
+const PICKLESS_LEAGUE_TYPES = new Set([0, 3]);
+
+/** Rounds planted per season when the league does not say. */
+const DEFAULT_DRAFT_ROUNDS = 4;
+
+/** How many seasons of picks are planted, starting with the league's own. */
+const PICK_SEASONS = 4;
+
+/**
+ * Every pick each roster holds, ready to store on `rosters.draft_pick_assets`.
+ *
+ * A baseline (every roster owns its own pick in every round of every season)
+ * with Sleeper's traded picks laid over it. /traded_picks returns the CURRENT
+ * state per traded pick, one row per pick, and its `roster_id` is the immutable
+ * original owner, so the baseline is indexed and overwritten by that key only.
+ * Using `previous_owner_id` would mis-attribute multi-hop trades (A to B to C
+ * would leave the pick on A's roster AND add a phantom entry on B's).
+ *
+ * The rules, each a past bug:
+ * - Rounds come from the league's `settings.draft_rounds`, not a flat 4.
+ * - Redraft and chopped leagues hold no picks at all.
+ * - A season whose draft is complete is dropped, traded picks included: those
+ *   picks are spent, and Sleeper leaves them on rosters after the draft.
+ * - When a season's draft order is known, each pick carries its real slot and
+ *   a "R.SS" label, read from the draft chooseSleeperDraftPerSeason picks.
+ *
+ * Exported for its test.
+ */
+export function buildRosterPicks(
+  rosters: Array<Pick<SleeperRoster, "roster_id" | "owner_id">>,
+  tradedPicks: SleeperTradedPick[],
+  draftDetails: SleeperDraft[],
+  league: Pick<SleeperLeague, "season" | "settings">,
+): PickAsset[] {
+  const settings = league.settings ?? {};
+  if (PICKLESS_LEAGUE_TYPES.has(Number(settings.type ?? 0))) return [];
+
+  const leagueSeason = Number.parseInt(String(league.season), 10);
+  if (!Number.isFinite(leagueSeason)) return [];
+  const declaredRounds = Number(settings.draft_rounds);
+  const rounds =
+    Number.isInteger(declaredRounds) && declaredRounds > 0
+      ? Math.min(declaredRounds, MAX_DRAFT_ROUNDS)
+      : DEFAULT_DRAFT_ROUNDS;
+
+  const draftBySeason = chooseSleeperDraftPerSeason(draftDetails);
+  const spent = (season: number) =>
+    season < leagueSeason ||
+    (draftBySeason.get(season)?.status ?? "").toLowerCase() === "complete";
+
+  const picks = new Map<string, PickAsset>();
+  for (let season = leagueSeason; season < leagueSeason + PICK_SEASONS; season += 1) {
+    if (spent(season)) continue;
+    for (let round = 1; round <= rounds; round += 1) {
+      for (const r of rosters) {
+        picks.set(pickKey(season, round, r.roster_id), {
+          season,
+          round,
+          original_roster_id: r.roster_id,
+          current_roster_id: r.roster_id,
+        });
+      }
+    }
+  }
+  for (const traded of tradedPicks) {
+    const season = Number(traded.season);
+    if (!Number.isFinite(season) || spent(season)) continue;
+    picks.set(pickKey(season, traded.round, traded.roster_id), {
+      season,
+      round: traded.round,
+      original_roster_id: traded.roster_id,
+      current_roster_id: traded.owner_id,
+    });
+  }
+
+  const slotsBySeason = new Map<number, Map<number, number>>();
+  for (const [season, draft] of draftBySeason) {
+    const slots = rosterSlotsForDraft(draft, rosters);
+    if (slots.size > 0) slotsBySeason.set(season, slots);
+  }
+
+  return [...picks.values()].map((pick) => {
+    const slot = slotsBySeason.get(pick.season)?.get(pick.original_roster_id) ?? null;
+    return {
+      ...pick,
+      slot,
+      pick_label: slot != null ? `${pick.round}.${String(slot).padStart(2, "0")}` : null,
+    };
+  });
 }
 
 async function upsertLeagueDrafts(
@@ -1897,38 +2123,6 @@ async function upsertLeagueDrafts(
     leagueRowId,
     deduped.map((d) => d.sleeper_draft_id),
   );
-}
-
-/**
- * For each (season, round, roster) baseline, default current owner = original.
- * We use the current league rosters as the set of roster_ids and assume 4
- * future seasons starting from the league's season+0..+3. Sleeper doesn't
- * publish "all my picks", we synthesize the baseline and traded_picks
- * mutates ownership.
- */
-function buildBaselinePicks(rosters: SleeperRoster[]): Map<string, PickAsset> {
-  const map = new Map<string, PickAsset>();
-  // Use current calendar year +0..+3 as the pick horizon (Sleeper traded_picks
-  // returns seasons beyond the current one; we plant a baseline for each).
-  // Round count = 4 (Sleeper rookie drafts are typically 3-5 rounds; 4 is a
-  // safe middle ground for dynasty pick visualization).
-  const currentYear = new Date().getFullYear();
-  const seasons = [currentYear, currentYear + 1, currentYear + 2, currentYear + 3];
-  const rounds = [1, 2, 3, 4];
-  for (const season of seasons) {
-    for (const round of rounds) {
-      for (const r of rosters) {
-        const key = pickKey(season, round, r.roster_id);
-        map.set(key, {
-          season,
-          round,
-          original_roster_id: r.roster_id,
-          current_roster_id: r.roster_id,
-        });
-      }
-    }
-  }
-  return map;
 }
 
 function validPlayerId(id: string | null | undefined): id is string {

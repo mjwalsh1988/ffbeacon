@@ -17949,3 +17949,68 @@ T746 | completed | Rookie draft guide follow-up: the five items the review left 
      | depends on: T745
      | design: (1) the weekly pick price line starts the week after the source last changed its method, found as a one-day move past 5 percent in the mid first. FF Beacon pick values equaled the market price until the pick multiplier setting shipped on 2026-06-28, so the chart had drawn that setting as a 16 percent market drop; it now reads -3.3 percent from June 29 and names the date. (2) The last Dynasty Nerds row is named Round 3, as the study names it, in both guides. (3) A class still being drafted needs 50 drafts in a format before the class board or the quarterback figure shows it; a finished class still needs 20. (4) The ESPN article is cited by its real title in the dynasty guide. (5) The superflex guide and the trade guide link to the rookie draft guide
      | verified: yes (typecheck, lint 0/0, npm test green, build; the corrected chart viewed locally on the FF Beacon source)
+
+## League Pulse integrity fixes
+
+Specs and live state: handoff.md. Audit of 2026-11-13, all 20 items approved by the owner.
+
+LPI-T01 | completed | Every server-side database read retries at 200, 600 and 1500 ms when the connection drops or the gateway answers 502, 503 or 504, across the whole site
+     | files: lib/supabase/retrying-fetch.ts, lib/supabase/retrying-fetch.test.ts, lib/supabase/server.ts
+     | depends on: none
+     | design: one fetch wrapper on the three server clients; reads only (GET, HEAD), since a write or rpc that timed out may already have happened; a 4xx is returned at once
+     | verified: targeted tests pass; full gate runs in LPI-T12
+LPI-T02 | completed | Sync foundation: past-season leagues get one last full capture and are frozen, a failed NFL week check no longer means week 1, playoff weeks are never rewritten as unplayed, the transaction walk reads every week, picks follow the league's draft rounds
+     | files: supabase/migrations/0379_league_frozen_at.sql, lib/database.types.ts, lib/league-pulse.ts, lib/sleeper.ts, lib/league-matchups.ts, lib/league-draft-selections.ts, lib/league-on-demand-sync.ts, lib/league-maintenance.ts, lib/league-bulk-sync.ts, scripts/backfill-league-final-capture.ts, one-line null-week skips in callers, tests
+     | depends on: none
+     | design: leagues.frozen_at marks a snapshot; a frozen league never contacts Sleeper again, even with force; resolveCurrentWeek returns null on a missing NFL state and week 19 in the NFL postseason; is_final is never downgraded; redraft and chopped leagues get no rookie picks; the 250 ms sleep is gone; a Sleeper timeout reads as a temporary failure
+     | verified: 1,214 related tests, guard tests and lint pass; migration 0379 applied through the MCP; the one-time backfill froze 513 of 514 past-season leagues; full gate runs in LPI-T12
+LPI-T03 | completed | Team totals price picks correctly (used seasons dropped, real slot first, pick source for sources without pick values, dynasty only) and the league format match weighs TE premium and best ball
+     | files: lib/league-power-rankings.ts, lib/league-format-resolution.ts, lib/league-format-resolution.test.ts, lib/sleeper-to-format.ts, lib/league-pick-position.ts, their tests, small edits in lib/league-view-data.ts, lib/league-pulse.ts, lib/league-pulse.test.ts
+     | depends on: none
+     | design: isPickSeasonSpent is the one rule for a used season; slot order is real slot, stored early/mid/late, projected slot, then the round average; keeper, redraft and chopped leagues carry no pick value; a near format match reports fallback so the banner shows; POWER_RANKINGS_MODEL_VERSION 2 rebuilds stored rows on next view, frozen leagues excepted
+     | verified: targeted tests (87) pass; full gate runs in LPI-T12
+LPI-T04 | completed | Power Pulse engine: empty rosters are not teams, a playoff mode simulates from the real bracket and keeps the champion, division and seeding rules, live-week points count, settings changes rebuild the cache
+     | files: lib/power-pulse/engine.ts, simulate.ts, load.ts, default-settings.ts, playoffs.ts (new), legacy-rows.ts (new), lib/league-power-pulse.ts, lib/league-power-pulse-data.ts, tests, three goldens
+     | depends on: none
+     | design: playoffs are simulated from leagues.metadata.brackets with each playoff week's own projected lineup; played games are never redrawn; the final result is kept, never cleared; cache version carries a league settings fingerprint and the projection sync stamp; model pp-12; read errors throw
+     | verified: power-pulse tests (267) pass, lint clean, verify:idp-invariant identical; full gate runs in LPI-T12
+LPI-T05 | completed | Blueprint engine and Market Signals: no figure is 'Not scored' instead of 1 of 10, empty rosters are not teams, league kinds get fitting grades, the cache notices any roster or pick change, narrow price bands read hold
+     | files: lib/league-blueprint/** (league-kind.ts new), lib/market-signals/**, admin market signals form, small edits in lib/league-view-data.ts, lib/trade-finder-data.ts, components/player-profile/overview-tab.tsx
+     | depends on: none
+     | design: null grades stay out of the overall; an empty roster returns failed with reason empty-roster and is never cached; draft capital graded in dynasty and keeper only; chopped reads survival; fingerprint hashes every roster and its picks; minBandwidth 0.04; cadenceDays gives DynastyProcess an 84-day window; a downtier sends a player worth TIER_JUMP times the best return; activity rounds to 100 with cuts apart. Open: cadenceDays has no admin field; the profile band chart still uses the daily window for DynastyProcess
+     | verified: targeted tests (433) and tsc clean on its files; full gate runs in LPI-T12
+LPI-T06 | completed | Trade ideas fit the league kind and the team: redraft ranks on projected wins, chopped on survival odds, dynasty on Compete or Rebuild with the default taken from the team's status; one deal shows one set of figures
+     | files: lib/trade-finder/**, lib/trade-finder-*.ts, lib/trade-impact/**, lib/trade-analyzer.ts, app/leagues/[league_id]/trade-ideas/**, components/trade-ideas/**, components/trade-finder-card.tsx, components/trade-builder.tsx, app/actions/trade-finder.ts, app/actions/trade-impact.ts, tests
+     | depends on: none
+     | design: the existing strategy setting is relabeled Compete and Rebuild; card and evaluation share one lineup method, window and injury map and start from Power Pulse's cache; one value percent, |A-B|/(A+B); the two-for-one curve applies in ranking and the call; unpriced assets stay out of the margin and the call rests on wins; three-team trades get no verdict; round 5 and later picks read No market value
+     | verified: targeted tests (478) and guard tests pass, tsc and eslint clean; full gate runs in LPI-T12
+LPI-T07 | completed | Transactions and activity: past trades always say they are graded at today's values, a truncated activity list no longer disables categories, facet counts skip failed claims, filters announce the result count, 44 px targets
+     | files: lib/league-activity/load.ts, lib/league-activity/load.test.ts, lib/league-transactions-data.ts, lib/league-transactions-data.test.ts, components/league-activity/activity-filters.tsx, components/transaction-filters.tsx, components/signal-check-trade-card.tsx, app/leagues/[league_id]/transactions/page.tsx
+     | depends on: none
+     | design: availableCategoriesFor(events, truncated) returns every category when the list was cut; a failed facet read throws. Left open: the feed still lists failed claims, so the Waiver facet count can be lower than the feed total
+     | verified: targeted tests (135) and tsc clean; full gate runs in LPI-T12
+LPI-T08 | completed | Manager Ledger and Positional WAR: the ledger fits best ball, chopped and median-game leagues and counts regular season weeks only; WAR upgrades default to the best free agent and the last result is kept after the season; heroes, plain definitions and chart tables on both pages
+     | files: lib/manager-ledger/** (rules.ts new), lib/league-manager-ledger.ts and -data.ts, lib/positional-war/upgrade.ts and tiers.ts, lib/league-positional-war.ts and -data.ts, components/manager-ledger/**, components/league-war/**, the decisions page, positional-war/actions.ts, tests
+     | depends on: none
+     | design: a claim's points end at the next drop; trade net uses started points; chopped weeks are graded against the cut line; fingerprint adds IR and taxi ids, official points and league rules (ledger-7); roster room uses rosterIsFull; the Starter floor is the 10th percentile; read errors throw so a good cache is cleared only after a successful empty read
+     | verified: targeted tests (470) pass, tsc clean across the project at that point, eslint clean on its files, verify:idp-invariant identical; full gate runs in LPI-T12
+LPI-T09 | completed | Matchups, Lineups and Leaderboards fit the league kind: chopped reads the cut line with no head-to-head, best ball has no start/sit advice, one win chance everywhere that moves as games finish, lineup help stays after Thursday
+     | files: lib/league-schedule/** (win-chance.ts, playoff-legs.ts new), lib/league-lineups/** (cut-line new), lib/league-leaderboards/**, lib/league-season/phase.ts, components/league-schedule/**, components/league-lineups/**, components/league-leaderboards/**, components/league-season/**, the matchups, lineups and leaderboards pages, tests
+     | depends on: none
+     | design: win chance is set lineup against set lineup with scored points banked; Projected means the set lineup and later weeks are labeled Best lineup; two-week playoff rounds add both legs; locked players keep their points and only open slots are optimized; luck counts regular season weeks; read errors throw and a failed view is not cached. Future weeks show no win chance
+     | verified: targeted tests (371) pass, tsc and eslint clean on its files, verify:idp-invariant identical; full gate runs in LPI-T12
+LPI-T10 | completed | Power Pulse and overview display: every team's title and playoff odds on its row, pages read right before, during and after the playoffs, chopped shows survival, nulls in words
+     | files: components/power-pulse/odds-format.ts (new, with test), projected-champion.tsx, projected-standings.tsx, pulse-rankings-table.tsx, pulse-detail.tsx, components/power-rankings-row.tsx, app/leagues/[league_id]/power-pulse/page.tsx, app/leagues/[league_id]/page.tsx
+     | depends on: LPI-T04
+     | design: Title and Playoffs columns from md, an odds line under the team name below md, an Odds column on the overview; phases regular, playoffs and complete change the titles and helper lines; under 1% instead of 0%; column meanings in one disclosure. Open: the rail favorite card has no phase yet
+     | verified: targeted tests and guard tests pass, eslint clean on its files; full gate runs in LPI-T12
+LPI-T11 | completed | Blueprint display: what to do comes first (Standing, The plan, Buy sell hold, Trade strategy, Grades, then reference), plain labels, Not scored and No pick values in words, sections that do not fit the league kind left out
+     | files: app/leagues/[league_id]/blueprint/page.tsx, components/league-blueprint/** (twelve files), components/trend-chip.tsx, app/api/og/blueprint/[league_id]/[roster_id]/card.tsx and share/route.tsx, lib/league-blueprint/gauge-geometry.ts
+     | depends on: LPI-T05
+     | design: sections numbered in order with draft capital only in dynasty and keeper; gauge reads Recommended trade activity with its cut points and takes the admin bands on the share image too; a Cuts figure beside Sells; starter share printed with Roster shape. Open: the share image infers No pick values from a zero total; no best ball wording on the lineup section
+     | verified: targeted tests (151) pass, tsc clean on its files; full gate runs in LPI-T12
+LPI-T12 | completed | Close out: full gate, one reviewer sub-agent, its findings fixed
+     | files: components/league-rail/pulse-favorite-card.tsx, lib/league-pulse-favorite.ts, lib/league-power-pulse.ts, components/league-lineups/season-context.tsx, app/leagues/[league_id]/lineups/page.tsx, lib/league-blueprint/share.ts, the Blueprint share card, lib/supabase/retrying-fetch.ts, both matchups pages, tests
+     | depends on: LPI-T01 to LPI-T11
+     | design: the rail card shows the champion after the title game and bracket odds during the playoffs at hero size; the old chopped row purge runs before any early return; season context fits chopped and best ball; the share image uses the real unpriced pick count; the retry looks up fetch per call; week lookups run alongside the derived sync
+     | verified: yes (typecheck, lint 0/0, npm test green with 8,347 tests, build; verify:idp-invariant identical; migration 0379 policies confirmed; one reviewer sub-agent, findings fixed except the items listed for the owner in handoff.md)

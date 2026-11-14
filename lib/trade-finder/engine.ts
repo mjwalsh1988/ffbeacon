@@ -131,6 +131,7 @@ import {
   sliceFor,
 } from "./tendency";
 import { suggestionKey } from "./fingerprint";
+import { consolidatedTotals } from "./value-margin";
 import {
   readTradePosition,
   resolveStrategy,
@@ -246,6 +247,10 @@ function toSuggestionAsset(asset: AssetRef): SuggestionAsset {
       season: asset.pick.season,
       round: asset.pick.round,
       value: asset.pick.value,
+      // Carried so Signal Check grades the slot this card priced, not a
+      // generic mid-round pick.
+      pickPosition: asset.pick.pickPosition,
+      positionEstimated: asset.pick.positionEstimated,
     };
   }
   const p = asset.player;
@@ -765,7 +770,15 @@ function collect(
       return null;
     }
 
-    const myImpact = measureImpact(mine, slots, incoming, outgoing);
+    // Value on the consolidation curve Signal Check grades with, worked out
+    // once and read from both seats, so a two-for-one is not ranked as level
+    // when Signal Check would call it a step down.
+    const valueTotals = consolidatedTotals(
+      incoming.map(assetValue),
+      outgoing.map(assetValue),
+      quality,
+    );
+    const myImpact = measureImpact(mine, slots, incoming, outgoing, { valueTotals });
 
     // BOTH GATES THAT READ ONLY THE READER'S SIDE RUN HERE, before the other
     // team's ledger is measured. That ordering buys most of the cost of a
@@ -823,7 +836,9 @@ function collect(
     // The other team's ledger is this one reversed: what the reader sends is
     // what they receive. Nothing above reads it, which is why it waits until
     // here.
-    const theirImpact = measureImpact(theirs, slots, outgoing, incoming);
+    const theirImpact = measureImpact(theirs, slots, outgoing, incoming, {
+      valueTotals: { valueIn: valueTotals.valueOut, valueOut: valueTotals.valueIn },
+    });
 
     const gap = valueGapOf(incoming, outgoing);
     const qualityRatio = qualityRatioOf(incoming, outgoing, quality);
@@ -870,6 +885,12 @@ function collect(
       mine: myImpact,
       theirs: theirImpact,
       valueGap: gap,
+      valueTotals: { valueIn: valueTotals.valueIn, valueOut: valueTotals.valueOut },
+      myBefore: {
+        projectedWins: mine.team.pulse?.projectedWins ?? null,
+        survival:
+          typeof mine.team.pulse?.chopOdds === "number" ? 1 - mine.team.pulse.chopOdds : null,
+      },
       qualityRatio,
       acceptance,
       score,
@@ -893,6 +914,7 @@ function collect(
         // says nothing about why the ranking put THIS deal in front of THIS team.
         myDirection: mine.direction,
         isDynasty: input.isDynasty,
+        leagueKind: input.leagueKind,
         strategy,
         asked: askedPhrases,
         mine: myImpact,

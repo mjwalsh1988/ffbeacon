@@ -3,7 +3,8 @@
  *
  * A stored view is FRESH when its fingerprint matches and it is inside the
  * TTL. The fingerprint is a hash of everything a rebuild would read that can
- * change: the roster's player ids, the generated_at of every cache the build
+ * change: the roster's player ids, a hash of every roster in the league
+ * (players, starters, reserve, taxi, picks), the generated_at of every cache the build
  * reads (power rankings for this format and source, Power Pulse, Positional
  * WAR, the Manager Ledger), the newest market signal for this format and
  * source, the Power Pulse week, the settings version and the model version.
@@ -25,6 +26,13 @@ type Client = SupabaseClient<Database>;
 
 export type FingerprintInput = {
   playerIds: string[];
+  /**
+   * sha1 of every roster in the league: players, Sleeper's starters, injured
+   * reserve, taxi and pick ownership. The view reads all of them (buy targets,
+   * partners, ranks, the lineup), so a trade or waiver claim anywhere in the
+   * league, or a lineup change on this roster, makes the stored view stale.
+   */
+  rostersHash: string;
   powerRankingsAt: string | null;
   pulseAt: string | null;
   warAt: string | null;
@@ -39,6 +47,7 @@ export type FingerprintInput = {
 export function buildFingerprint(input: FingerprintInput): string {
   const payload = JSON.stringify([
     [...input.playerIds].sort(),
+    input.rostersHash,
     input.powerRankingsAt,
     input.pulseAt,
     input.warAt,
@@ -79,7 +88,49 @@ function asIds(value: Json | null | undefined): string[] {
 
 const first = <T>(data: T[] | null | undefined): T | null => (data && data.length > 0 ? data[0] : null);
 
-/** The six small reads behind the fingerprint. No engine, no Sleeper call. */
+export type RosterShapeRow = {
+  sleeper_roster_id: number;
+  player_ids: Json | null;
+  reserve_ids: Json | null;
+  taxi_ids: Json | null;
+  draft_pick_assets: Json | null;
+  /** Sleeper's raw starters (rosters.metadata->starters), "0" kept for an empty slot. */
+  starters: Json | null;
+};
+
+/**
+ * Pure: one hash for every roster in the league. Ids are sorted where order
+ * means nothing (players, reserve, taxi, picks) and kept in order where it is
+ * the slot (starters).
+ */
+export function hashRosters(rows: readonly RosterShapeRow[]): string {
+  const sortedIds = (v: Json | null) => asIds(v).sort();
+  const starters = (v: Json | null) => (Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : "")) : []);
+  const picks = (v: Json | null) =>
+    Array.isArray(v) ? v.map((p) => JSON.stringify(p ?? null)).sort() : [];
+  const shape = [...rows]
+    .sort((a, b) => a.sleeper_roster_id - b.sleeper_roster_id)
+    .map((r) => [
+      r.sleeper_roster_id,
+      sortedIds(r.player_ids),
+      sortedIds(r.reserve_ids),
+      sortedIds(r.taxi_ids),
+      picks(r.draft_pick_assets),
+      starters(r.starters),
+    ]);
+  return createHash("sha1").update(JSON.stringify(shape)).digest("hex");
+}
+
+function must<T extends { error: { message: string } | null }>(res: T, what: string): T {
+  if (res.error) throw new Error(`${what}: ${res.error.message}`);
+  return res;
+}
+
+/**
+ * The small reads behind the fingerprint. No engine, no Sleeper call. A read
+ * error throws: a fingerprint built on a failed read could match a stored view
+ * that no longer describes the league.
+ */
 export async function loadFingerprintInput(
   admin: Client,
   args: {
@@ -92,13 +143,12 @@ export async function loadFingerprintInput(
   },
 ): Promise<FingerprintInput> {
   const seasonNum = Number(args.season);
-  const [roster, rankings, pulse, war, ledger, signalsAt] = await Promise.all([
+  const [rosters, rankings, pulse, war, ledger, signalsAt] = await Promise.all([
     admin
       .from("rosters")
-      .select("player_ids")
+      .select("sleeper_roster_id, player_ids, reserve_ids, taxi_ids, draft_pick_assets, starters:metadata->starters")
       .eq("league_id", args.leagueRowId)
-      .eq("sleeper_roster_id", args.rosterId)
-      .maybeSingle(),
+      .order("sleeper_roster_id", { ascending: true }),
     admin
       .from("league_power_rankings_cache")
       .select("generated_at")
@@ -130,9 +180,17 @@ export async function loadFingerprintInput(
       .limit(1),
     latestSignalComputedAt(admin, args.formatConfigId, args.source),
   ]);
+  must(rosters, "rosters");
+  must(rankings, "league_power_rankings_cache");
+  must(pulse, "league_power_pulse_cache");
+  must(war, "league_positional_war_cache");
+  must(ledger, "league_manager_ledger_cache");
+  const rosterRows = (rosters.data ?? []) as unknown as RosterShapeRow[];
+  const mine = rosterRows.find((r) => r.sleeper_roster_id === args.rosterId) ?? null;
   const p = first(pulse.data);
   return {
-    playerIds: asIds(roster.data?.player_ids),
+    playerIds: asIds(mine?.player_ids),
+    rostersHash: hashRosters(rosterRows),
     powerRankingsAt: first(rankings.data)?.generated_at ?? null,
     pulseAt: p?.generated_at ?? null,
     warAt: first(war.data)?.generated_at ?? null,

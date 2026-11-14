@@ -28,7 +28,7 @@
  * Pure. No React, no database.
  */
 
-import type { ResolvedAsset, TeamImpact } from "./types";
+import { isPriced, type ResolvedAsset, type TeamImpact } from "./types";
 
 /**
  * Share of its own side an asset needs to be the piece the deal is about.
@@ -313,12 +313,14 @@ export function readAsset(
  * against the next without reading.
  */
 export function assetFigures(asset: ResolvedAsset): string[] {
-  const figures = [`${fmtValue(asset.value)} value`];
+  // An unpriced asset (a defender, a pick past the priced rounds) says so in
+  // words. A printed 0 reads as a valuation nobody made.
+  const figures = [isPriced(asset) ? `${fmtValue(asset.value)} value` : "No market value"];
   if (asset.kind === "player") {
     figures.push(
       asset.projPoints !== null
         ? `${asset.projPoints.toFixed(1)} pts/wk`
-        : "no projection",
+        : "No projection",
     );
     if (asset.age !== null) figures.push(`age ${asset.age.toFixed(1)}`);
   }

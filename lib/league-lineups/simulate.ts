@@ -26,13 +26,12 @@
  * the optimizer. A version that re-ran the fill per candidate would burn the
  * work to arrive at the identical number.
  *
- * THE COMPARISON IS THE LINEUP AS SET, ON BOTH SIDES. The Schedules page shows
- * a win probability built from each team's BEST lineup, which is a different
- * question and a different number. This one is built from the lineup a reader
- * actually has, because "what happens if I make this change" is meaningless
- * against a baseline that already assumes the change. The panel says which
- * basis it is on rather than leaving two win probabilities on the site with no
- * explanation for the gap.
+ * THE COMPARISON IS THE LINEUP AS SET, ON BOTH SIDES, with points already
+ * scored banked. It is the one win chance the site quotes for a game
+ * (lib/league-schedule/win-chance.ts): the Schedule board and the matchup page
+ * show the same number for the same matchup. During a live week the set total
+ * already banks the locked starters' points, so the spread here counts only
+ * the starters still to play, and the opponent arrives the same way.
  *
  * A SETTLED WEEK IS NOT SIMULATED. Nothing here is offered once a week is
  * final: the lineup cannot be changed and grading a hypothetical against
@@ -149,8 +148,12 @@ export function countSwapCandidates(
 export function isLockedAt(player: LineupPlayer, liveNowMs: number | null): boolean {
   if (liveNowMs === null) return false;
   const kickoff = player.environment?.kickoffAt ? Date.parse(player.environment.kickoffAt) : NaN;
-  if (!Number.isFinite(kickoff)) return true;
-  return kickoff <= liveNowMs;
+  if (Number.isFinite(kickoff)) return kickoff <= liveNowMs;
+  // No kickoff on record. A player with no projection and no points has no
+  // game this week (a bye): nothing locks him, and the optimizer may bench him.
+  const scored = player.actual !== null && player.actual !== 0;
+  if (player.projected === null && !scored) return false;
+  return true;
 }
 
 /** The week's numbers a simulation is measured against. */
@@ -162,12 +165,11 @@ export type LineupBaseline = {
   /** Combined spread of the set lineup, over the same starters that made setTotal. */
   sigma: number;
   /**
-   * The opponent's projected mean and spread for this week, when we hold them.
-   *
-   * From `league_power_pulse_cache.weekly`, which is their BEST lineup. It is
-   * the same figure the Schedules board uses for the same matchup, so the two
-   * pages cannot disagree about the opponent. Null before a slate exists,
-   * after a week settles, or for a roster Sleeper left unpaired.
+   * The opponent's SET lineup for this week: expected final total (points
+   * already scored plus what is still to come) and the spread of what is
+   * still to come. The same figures the Schedule board uses for the same
+   * matchup. Null before a slate exists, after a week settles, or for a roster
+   * Sleeper left unpaired.
    */
   opponent: { mean: number; sigma: number } | null;
 };
@@ -179,12 +181,14 @@ export type LineupBaseline = {
  * projection contributed no points and contributes no variance either.
  * Variances add, per lib/power-pulse/lineup.ts lineupSigma.
  */
-export function baselineSigma(groups: LineupGroup[]): number {
+export function baselineSigma(groups: LineupGroup[], liveNowMs: number | null = null): number {
   let variance = 0;
   for (const group of groups) {
     for (const entry of group.entries) {
       const player = entry.player;
       if (!player || player.projected === null) continue;
+      // A locked starter's points are banked, so they carry no spread.
+      if (isLockedAt(player, liveNowMs)) continue;
       const sigma = player.sigma ?? 0;
       variance += sigma * sigma;
     }

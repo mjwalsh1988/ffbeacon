@@ -54,6 +54,15 @@ describe("classifyShape", () => {
     expect(classifyShape(sug("p3", [pl("a", "WR", 5000)], [pl("b", "WR", 5100)]), 0.12)).toBeNull();
   });
 
+  it("a downtier sends one player worth TIER_JUMP times the best asset back", () => {
+    // 8000 against a best incoming 7000 is a lateral two-for-one, not a downtier.
+    expect(classifyShape(sug("d2", [pl("a", "WR", 8000)], [pl("b", "RB", 7000), pl("c", "TE", 1000)]), 0.12)).toBeNull();
+    // A pick out is not one star out.
+    const pickOut = sug("d3", [pl("a", "WR", 8000)], [pl("b", "RB", 4000), pl("c", "TE", 4000)]);
+    pickOut.outgoing = [{ ...pickOut.outgoing[0], kind: "pick", key: "k", label: "2027 1st" } as never];
+    expect(classifyShape(pickOut, 0.12)).toBeNull();
+  });
+
   it("keeps the highest score per shape", () => {
     const best = bestByShape(
       [

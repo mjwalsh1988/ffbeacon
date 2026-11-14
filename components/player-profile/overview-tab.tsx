@@ -168,7 +168,7 @@ export async function OverviewTab({
   const [marketSignal, marketSignalChanges] =
     signalFormat && signalSource && !isDefender(player.position)
       ? await Promise.all([
-          loadPlayerSignal(supabase, player.id, signalFormat, signalSource, marketSettings.staleDays),
+          loadPlayerSignal(supabase, player.id, signalFormat, signalSource, marketSettings),
           loadSignalChanges(supabase, player.id, signalFormat, signalSource),
         ])
       : [null, []];

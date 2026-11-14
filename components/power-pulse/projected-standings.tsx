@@ -20,6 +20,13 @@ import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
 import { compareProjectedFinish } from "@/lib/power-pulse/projected-order";
+import {
+  pctOdds,
+  playedRecordText,
+  playoffFigure,
+  projectedRecordText,
+  titleFigure,
+} from "./odds-format";
 
 export function ProjectedStandings({
   teams,
@@ -32,15 +39,11 @@ export function ProjectedStandings({
   // row and the two must not drift. See lib/power-pulse/projected-order.ts.
   // The roster id goes in so a dead-level tie settles the same way on both.
   const chopped = teams.some((t) => t.chopped);
-  const ordered = chopped
-    ? [...teams].sort(
-        (a, b) =>
-          (b.surviveAllOdds ?? 0) - (a.surviveAllOdds ?? 0) ||
-          (a.chopOddsThisWeek ?? 1) - (b.chopOddsThisWeek ?? 1) ||
-          (b.expectedPointsPerWeek ?? 0) - (a.expectedPointsPerWeek ?? 0) ||
-          a.rosterRowId.localeCompare(b.rosterRowId),
-      )
-    : [...teams].sort((a, b) =>
+  // Before the playoffs this is a projection. Once the bracket is set the seeds
+  // are real, and after the title game the order is the final result.
+  const phase = teams.find((t) => t.playoff)?.playoff?.phase ?? null;
+  const regular = phase === null || phase === "regular";
+  const byProjection = (a: PulseTeam, b: PulseTeam) =>
     compareProjectedFinish(
       {
         projectedWins: a.projectedWins,
@@ -52,8 +55,28 @@ export function ProjectedStandings({
         expectedPointsPerWeek: b.expectedPointsPerWeek,
         rosterId: b.rosterRowId,
       },
-    ),
-  );
+    );
+  const ordered = !chopped && phase === "complete"
+    ? [...teams].sort(
+        (a, b) =>
+          (a.playoff?.finalPlace ?? Number.MAX_SAFE_INTEGER) -
+            (b.playoff?.finalPlace ?? Number.MAX_SAFE_INTEGER) || byProjection(a, b),
+      )
+    : !chopped && phase === "playoffs"
+      ? [...teams].sort(
+          (a, b) =>
+            (a.playoff?.seed ?? Number.MAX_SAFE_INTEGER) -
+              (b.playoff?.seed ?? Number.MAX_SAFE_INTEGER) || byProjection(a, b),
+        )
+      : chopped
+    ? [...teams].sort(
+        (a, b) =>
+          (b.surviveAllOdds ?? 0) - (a.surviveAllOdds ?? 0) ||
+          (a.chopOddsThisWeek ?? 1) - (b.chopOddsThisWeek ?? 1) ||
+          (b.expectedPointsPerWeek ?? 0) - (a.expectedPointsPerWeek ?? 0) ||
+          a.rosterRowId.localeCompare(b.rosterRowId),
+      )
+    : [...teams].sort(byProjection);
 
   return (
     <div className="overflow-x-auto">
@@ -61,12 +84,16 @@ export function ProjectedStandings({
         <caption className="sr-only">
           {chopped
             ? "Projected survival order, ordered by the chance of being the last team standing. There are no playoffs in a chopped league: the lowest score each week is eliminated. Columns: position, team, chance of being chopped this week, chance of being last standing, and points per week."
-            : `Projected final regular season standings, ordered by expected wins. The top ${playoffTeams} teams make the playoffs. Columns: projected seed, team, projected record, playoff odds, and points per week.`}
+            : phase === "complete"
+              ? "Final order of the season, from the title game and the consolation games. Columns: final place, team, regular season record, seed, result, and points per week."
+              : phase === "playoffs"
+                ? `The playoff field by seed. Columns: seed, team, regular season record, seed status, bracket odds, and points per week.`
+                : `Projected final regular season standings, ordered by expected wins. The top ${playoffTeams} teams make the playoffs. Columns: projected seed, team, projected record, playoff odds, title odds, and points per week.`}
         </caption>
         <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
           <tr>
             <th scope="col" className="w-px whitespace-nowrap px-3 py-2.5 text-center">
-              {chopped ? "Pos." : "Seed"}
+              {chopped ? "Pos." : phase === "complete" ? "Place" : "Seed"}
             </th>
             <th scope="col" className="px-3 py-2.5">
               Team
@@ -75,8 +102,13 @@ export function ProjectedStandings({
               {chopped ? "Chop risk" : "Record"}
             </th>
             <th scope="col" className="px-3 py-2.5 text-center">
-              {chopped ? "Last standing" : "Playoffs"}
+              {chopped ? "Last standing" : regular ? "Playoffs" : "Seed"}
             </th>
+            {!chopped && (
+              <th scope="col" className="px-3 py-2.5 text-center">
+                {phase === "complete" ? "Result" : phase === "playoffs" ? "Bracket odds" : "Title"}
+              </th>
+            )}
             <th scope="col" className="hidden px-3 py-2.5 text-right sm:table-cell">
               Pts / wk
             </th>
@@ -84,13 +116,24 @@ export function ProjectedStandings({
         </thead>
         <tbody className="divide-y divide-line">
           {ordered.map((team, i) => {
-            const seed = i + 1;
+            // The number in the first column: a projected seed, a real seed
+            // once the bracket is set, or the final place after the title game.
+            const seed =
+              phase === "complete"
+                ? team.playoff?.finalPlace ?? i + 1
+                : phase === "playoffs"
+                  ? team.playoff?.seed ?? i + 1
+                  : i + 1;
             // No bracket in a chopped league, so nobody is in or out of one and
             // there is no line to draw.
-            const inPlayoffs = !chopped && seed <= playoffTeams;
+            const inPlayoffs = chopped
+              ? false
+              : regular
+                ? seed <= playoffTeams
+                : team.playoff?.status !== "missed";
             // The cut line renders as a heavier border under the last qualifier,
             // and is also stated in the caption for non-visual readers.
-            const isCutLine = !chopped && seed === playoffTeams;
+            const isCutLine = !chopped && regular && seed === playoffTeams;
             return (
               <tr
                 key={team.rosterRowId}
@@ -109,9 +152,13 @@ export function ProjectedStandings({
                   <span className="sr-only">
                     {chopped
                       ? ", by chance of being the last team standing"
-                      : inPlayoffs
-                        ? ", projected to make the playoffs"
-                        : ", projected to miss the playoffs"}
+                      : !regular
+                        ? inPlayoffs
+                          ? ", made the playoffs"
+                          : ", missed the playoffs"
+                        : inPlayoffs
+                          ? ", projected to make the playoffs"
+                          : ", projected to miss the playoffs"}
                   </span>
                 </td>
                 <td className="px-3 py-2">
@@ -139,12 +186,10 @@ export function ProjectedStandings({
                 </td>
                 <td className="px-3 py-2 text-center font-mono text-xs tabular-nums text-ink-muted">
                   {chopped
-                    ? team.chopOddsThisWeek === null
-                      ? "--"
-                      : `${Math.round(team.chopOddsThisWeek * 100)}%`
-                    : team.projectedWins !== null
-                      ? `${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)}`
-                      : "--"}
+                    ? pctOdds(team.chopOddsThisWeek)
+                    : regular
+                      ? projectedRecordText(team.projectedRecord)
+                      : playedRecordText(team.record)}
                   {/* Points per week has its own column from sm up. Below that
                       it rides under the record, so a phone keeps every figure
                       the desktop table shows. */}
@@ -153,23 +198,20 @@ export function ProjectedStandings({
                     {team.expectedPointsPerWeek !== null && team.expectedPointsPerWeek !== undefined ? (
                       <>{team.expectedPointsPerWeek.toFixed(1)} pts a week</>
                     ) : (
-                      <>
-                        --<span className="sr-only"> no points per week projected</span>
-                      </>
+                      <>No projection</>
                     )}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-center font-mono text-xs font-semibold tabular-nums text-ink">
-                  {chopped
-                    ? team.surviveAllOdds === null
-                      ? "--"
-                      : `${Math.round(team.surviveAllOdds * 100)}%`
-                    : team.playoffOdds === null
-                      ? "--"
-                      : `${Math.round(team.playoffOdds * 100)}%`}
+                  {chopped ? pctOdds(team.surviveAllOdds) : playoffFigure(team, phase)}
                 </td>
+                {!chopped && (
+                  <td className="px-3 py-2 text-center font-mono text-xs font-semibold tabular-nums text-brand-cyan">
+                    {titleFigure(team, phase)}
+                  </td>
+                )}
                 <td className="hidden px-3 py-2 text-right font-mono text-xs tabular-nums text-ink-muted sm:table-cell">
-                  {team.expectedPointsPerWeek?.toFixed(1) ?? "--"}
+                  {team.expectedPointsPerWeek?.toFixed(1) ?? "No projection"}
                 </td>
               </tr>
             );
@@ -191,8 +233,11 @@ export function ProjectedStandings({
           </>
         ) : (
           <>
-            Top {playoffTeams} make the playoffs. Records average every
-            simulated season, so they land on fractions.{" "}
+            {regular
+              ? `Top ${playoffTeams} make the playoffs. Records average every simulated season, so they land on fractions.`
+              : phase === "playoffs"
+                ? "Seeds are set. Teams out of the bracket say so in the result column."
+                : "The title game is played. Place comes from the bracket."}{" "}
             <Link
               href="/guides/fantasy-football-playoffs#odds-heading"
               className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-cyan/80"

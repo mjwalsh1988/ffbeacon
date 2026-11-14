@@ -8,23 +8,43 @@
 import { ChartFigure, DataTable, SERIES_A, SERIES_B, SeriesLegend, Td, Th } from "@/components/chart-kit";
 import { positionHeading } from "@/lib/site";
 import { ageChart } from "@/lib/league-blueprint/age-geometry";
+import type { AgeBar } from "@/lib/league-blueprint/age-geometry";
 import type { BlueprintAge } from "@/lib/league-blueprint/types";
 import { SheetSection } from "./sheet";
 
 const WIDTH = 480;
+const CHART_LABEL = "Bar chart of value-weighted age by position, this team against the league, with each age printed at the bar end.";
 /**
  * Below sm the body is about 260px wide, so a 480 viewBox would shrink the
  * axis labels to under five pixels. The phone copy is drawn at its own width.
  */
 const PHONE_WIDTH = 280;
 
-function AgeBars({ rows, width, className }: { rows: BlueprintAge["rows"]; width: number; className: string }) {
+/** The age printed at the bar's end; inside the end when the bar runs to the edge. */
+function BarAge({ bar, width }: { bar: AgeBar; width: number }) {
+  const inside = bar.x + bar.width > width - 28;
+  return (
+    <text
+      x={inside ? bar.x + bar.width - 4 : bar.x + bar.width + 4}
+      y={bar.y + bar.height - 2.5}
+      fontSize="10"
+      fontWeight="700"
+      textAnchor={inside ? "end" : "start"}
+      fill={inside ? "#07070D" : "#F4F4F8"}
+    >
+      {bar.value.toFixed(1)}
+    </text>
+  );
+}
+
+function AgeBars({ rows, width, className, label }: { rows: BlueprintAge["rows"]; width: number; className: string; label: string }) {
   const chart = ageChart(rows, { width, labelWidth: 44, barHeight: 12, pairGap: 3, rowGap: 14 });
   return (
     <svg
       viewBox={`0 0 ${width} ${chart.height + 18}`}
       className={`pointer-events-none mt-2 h-auto w-full ${className}`}
-      aria-hidden="true"
+      role="img"
+      aria-label={label}
     >
       {chart.ticks.map((t) => (
         <g key={t.value}>
@@ -40,6 +60,7 @@ function AgeBars({ rows, width, className }: { rows: BlueprintAge["rows"]; width
             {r.position}
           </text>
           {r.mine && <rect x={r.mine.x} y={r.mine.y} width={r.mine.width} height={r.mine.height} rx={3} fill={SERIES_A} />}
+          {r.mine && <BarAge bar={r.mine} width={width} />}
           {r.league && (
             <rect
               x={r.league.x}
@@ -51,6 +72,7 @@ function AgeBars({ rows, width, className }: { rows: BlueprintAge["rows"]; width
               fillOpacity={0.55}
             />
           )}
+          {r.league && <BarAge bar={r.league} width={width} />}
         </g>
       ))}
     </svg>
@@ -111,8 +133,8 @@ export function AgeChart({ age, number }: { age: BlueprintAge; number: string })
         }
       >
         <SeriesLegend aName="This team" bName="League" />
-        <AgeBars rows={age.rows} width={PHONE_WIDTH} className="sm:hidden" />
-        <AgeBars rows={age.rows} width={WIDTH} className="hidden sm:block" />
+        <AgeBars rows={age.rows} width={PHONE_WIDTH} className="sm:hidden" label={CHART_LABEL} />
+        <AgeBars rows={age.rows} width={WIDTH} className="hidden sm:block" label={CHART_LABEL} />
       </ChartFigure>
       </div>
     </SheetSection>

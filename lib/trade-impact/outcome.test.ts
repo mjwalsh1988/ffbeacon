@@ -283,3 +283,85 @@ describe("the summary sentence", () => {
     expect(o.summary).toContain("give up 40% more value");
   });
 });
+
+describe("the call fits the league kind and the mode (LPI-T06)", () => {
+  // Wins up a full win, value down 30%: the two measures disagree hard.
+  const winsUpValueDown = () =>
+    team({
+      statusKey: "rebuilder",
+      incoming: [playerAsset(3500)],
+      outgoing: [playerAsset(6500, "p2")],
+      projectedWinsBefore: 6,
+      projectedWinsAfter: 7,
+      lineupDelta: 3,
+    });
+
+  it("redraft leans on wins whatever the standing says", () => {
+    const o = buildTradeOutcome(winsUpValueDown(), NO_GAPS, { leagueKind: "redraft" });
+    expect(o.lens).toBe("wins");
+    expect(o.call).toBe("lean-yes");
+  });
+
+  it("dynasty Rebuild leans on value", () => {
+    const o = buildTradeOutcome(winsUpValueDown(), NO_GAPS, {
+      leagueKind: "dynasty",
+      strategy: "value",
+    });
+    expect(o.lens).toBe("value");
+    expect(o.call).toBe("lean-no");
+  });
+
+  it("dynasty Compete leans on wins", () => {
+    const o = buildTradeOutcome(winsUpValueDown(), NO_GAPS, {
+      leagueKind: "dynasty",
+      strategy: "contender",
+    });
+    expect(o.call).toBe("lean-yes");
+  });
+
+  it("chopped reads survival odds this week", () => {
+    const o = buildTradeOutcome(
+      team({
+        incoming: [playerAsset(3000)],
+        outgoing: [playerAsset(3000, "p2")],
+        projectedWinsBefore: null,
+        projectedWinsAfter: null,
+        survivalBefore: 0.7,
+        survivalAfter: 0.8,
+      }),
+      { ...NO_GAPS, simulation: true, simulationCause: "chopped" },
+      { leagueKind: "chopped" },
+    );
+    expect(o.survivalDeltaPp).toBeCloseTo(10, 5);
+    expect(o.call).toBe("take");
+    expect(o.summary).toContain("surviving this week");
+  });
+
+  it("leaves an unpriced asset out of the margin and rests the call on wins", () => {
+    const defender = { ...playerAsset(0, "idp"), position: "LB", priced: false } as ResolvedAsset;
+    const o = buildTradeOutcome(
+      team({
+        incoming: [defender],
+        outgoing: [playerAsset(2000, "p2")],
+        projectedWinsBefore: 6,
+        projectedWinsAfter: 6.5,
+      }),
+      NO_GAPS,
+      { leagueKind: "dynasty", strategy: "value" },
+    );
+    expect(o.hasUnpriced).toBe(true);
+    expect(o.valueIn).toBe(0);
+    expect(o.lens).toBe("wins");
+    expect(o.call).toBe("take");
+  });
+
+  it("reads the consolidated value when the evaluation supplies it", () => {
+    const o = buildTradeOutcome(
+      team({ incoming: [playerAsset(5000)], outgoing: [playerAsset(3000, "a"), playerAsset(2000, "b")] }),
+      NO_GAPS,
+      { value: { valueIn: 6000, valueOut: 5000 } },
+    );
+    expect(o.valueIn).toBe(6000);
+    expect(o.valueFavors).toBe("you");
+  });
+});

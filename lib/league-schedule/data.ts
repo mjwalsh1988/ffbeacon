@@ -16,12 +16,23 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
 import { idpReadsFor, scoringKeysArg } from "@/lib/power-pulse/idp-reads";
 import { closestScoringBase } from "@/lib/league-scoring";
-import { winProbability } from "@/lib/power-pulse/math";
+import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { MAX_MATCHUP_WEEK, resolveCurrentWeek } from "@/lib/league-matchups";
 import { getNflHomeAwayMap, getNflState } from "@/lib/sleeper";
+import { loadGameEnvironment } from "@/lib/nfl-game-environment";
 import { alignedStartingSlots } from "./slots";
+import {
+  expectedTotal,
+  gameClock,
+  liveWinChance,
+  sideState,
+  type SideState,
+  type StarterState,
+} from "./win-chance";
+import { otherLegWeek, playoffLeg, type PlayoffShape } from "./playoff-legs";
+import { currentWeekFromStored } from "./stored-week";
 import {
   readRosteredPlayerPoints,
   readSetLineup,
@@ -55,11 +66,11 @@ import type {
  *   one week, which is a fraction of what `pulseLeagueDerived` already does on
  *   the same visit, and it only ever runs on a URL somebody navigated to.
  *
- * The board deliberately shows the OPTIMAL lineup projection as its headline
- * number, because that is what Power Pulse ranks on and two different answers to
- * "what will this team score" on adjacent tabs is worse than either answer being
- * slightly off. The detail page adds the as-set number beside it, which is where
- * the difference between the two belongs.
+ * "PROJECTED" MEANS THE SET LINEUP EVERYWHERE. For the week in play the board
+ * projects every roster's set lineup and quotes one win chance, the same one
+ * the matchup page and the Lineups what-if quote (./win-chance.ts). Every other
+ * unplayed week has no lineup set yet, so it shows the Power Pulse best-lineup
+ * figure, labeled as the best lineup and never as "Projected".
  */
 
 type ServiceClient = SupabaseClient<Database>;
@@ -88,27 +99,158 @@ export type ScheduleBoardParams = {
   season: number;
   /** Sleeper's playoff_week_start for this league. */
   playoffWeekStart: number;
-  /** Passed in so a page that already resolved it does not pay for it twice. */
-  currentWeek: number;
+  /**
+   * Passed in so a page that already resolved it does not pay for it twice.
+   * Null when Sleeper's NFL state could not be read: the board then shows what
+   * is stored, with the first week not yet final as the one in play.
+   */
+  currentWeek: number | null;
 };
+
+/** One roster's row for the week in play, as the live win chance reads it. */
+export type LiveWeekRow = {
+  sleeper_roster_id: number;
+  starter_ids: Json;
+  starter_points: Json;
+  player_points: Json;
+  metadata: Json;
+};
+
+/**
+ * Every roster's SET lineup for one week, projected and conditioned on what is
+ * already scored (lib/league-schedule/win-chance.ts). One week, the starters
+ * only: about ten players per roster, through the same projectPlayerWeek the
+ * matchup page uses, so the board and the matchup page quote one win chance.
+ */
+export async function loadSetLineupStates(
+  admin: ServiceClient,
+  league: NonNullable<Awaited<ReturnType<typeof loadLeague>>>,
+  season: number,
+  week: number,
+  currentWeek: number,
+  rows: LiveWeekRow[],
+  nowMs: number,
+): Promise<Map<number, SideState>> {
+  const out = new Map<number, SideState>();
+  if (rows.length === 0) return out;
+  const settings = await loadPowerPulseSettings(admin);
+  const scoringBase = closestScoringBase(league.scoringSettings);
+  const idpReads = idpReadsFor(idpEnabledFrom(settings), league.rosterPositions, scoringBase);
+  const slots = alignedStartingSlots(league.rosterPositions, idpReads.slotMap);
+
+  const lineups = rows.map((row) => {
+    const raw: RawMatchupRow = {
+      starter_ids: row.starter_ids,
+      starter_points: row.starter_points,
+      player_ids: null,
+      player_points: row.player_points,
+      metadata: row.metadata,
+    };
+    return {
+      rosterId: Number(row.sleeper_roster_id),
+      lineup: readSetLineup(raw, slots),
+      points: readRosteredPlayerPoints(raw),
+    };
+  });
+  const sleeperIds = Array.from(
+    new Set(
+      lineups.flatMap((l) =>
+        l.lineup.map((e) => e.sleeperId).filter((id): id is string => id !== null),
+      ),
+    ),
+  );
+  const players = await loadPlayers(admin, sleeperIds, { positions: NAMING_POSITIONS });
+  const playerIds = projectablePlayerIds(players, idpReads.loadsDefenders);
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase: admin,
+    season,
+    fromWeek: week,
+    toWeek: week,
+    settings: settings.beaconProjections,
+  });
+  const defenseSeasons = defenseSeasonsFor(season);
+  const [projectionRows, accuracy, defense, environment] = await Promise.all([
+    loadProjections(admin, playerIds, season, week, week, projectionSource),
+    loadAccuracy(admin, playerIds, scoringKeysArg(idpReads), projectionSource),
+    loadDefenseSplits(admin, scoringKeysArg(idpReads), defenseSeasons),
+    loadGameEnvironment(admin, season, week),
+  ]);
+  const projections = new Map<string, ProjectionRow>();
+  for (const row of projectionRows) projections.set(row.playerId, row);
+
+  for (const { rosterId, lineup, points } of lineups) {
+    const starters: StarterState[] = [];
+    for (const entry of lineup) {
+      if (!entry.sleeperId) continue;
+      const row = players.get(entry.sleeperId);
+      const actual = points.get(entry.sleeperId) ?? entry.actualPoints ?? null;
+      let projected: number | null = null;
+      let sigma: number | null = null;
+      if (row && entry.slot.projectable && playerIds.includes(row.playerId)) {
+        const acc = accuracy.get(row.playerId) ?? null;
+        const result = projectPlayerWeek({
+          projection: projections.get(row.playerId),
+          subject: { position: row.position, injuryStatus: row.injuryStatus },
+          accuracy: acc,
+          reliability: reliabilityMultiplier(acc, settings),
+          scoringSettings: league.scoringSettings,
+          defense,
+          defenseSeasons,
+          week,
+          currentWeek,
+          settings,
+        });
+        projected = result ? result.points : null;
+        sigma = result ? result.sigma : null;
+      }
+      const kickoff = row?.team
+        ? (environment.byTeam.get(row.team.toUpperCase())?.kickoffAt ?? null)
+        : null;
+      starters.push({ projected, sigma, actual, ...gameClock(kickoff, nowMs, actual) });
+    }
+    out.set(rosterId, sideState(starters));
+  }
+  return out;
+}
+
+/** Throw a read error rather than letting it read as an empty league. */
+function readOrThrow<T>(label: string, res: { data: T | null; error: { message: string } | null }): T {
+  if (res.error) throw new Error(`schedule board: ${label} read failed: ${res.error.message}`);
+  return (res.data ?? ([] as unknown)) as T;
+}
 
 /**
  * Everything the week view and the team view render from.
  *
  * Four queries: matchups, rosters, members, and the Power Pulse cache. The cache
  * read carries the per-week means, the strength of schedule, and the lineup
- * efficiency, so there is no fifth.
+ * efficiency. On top of that, for the week in play only, every roster's set
+ * lineup is projected so the board can quote the same win chance the matchup
+ * page does.
+ *
+ * A READ ERROR THROWS. An empty answer from a failed read used to render as
+ * "Sleeper has published no slate", which is a claim about the league that a
+ * network blip has no business making.
  */
 export async function loadScheduleBoard(
   supabase: AnyClient,
   params: ScheduleBoardParams,
+  /**
+   * The service client for the league row and the set-lineup projections.
+   * Optional so a caller already holding one as `supabase` need not pass it
+   * twice (the relay jobs pass the service client first).
+   */
+  adminClient?: ServiceClient,
 ): Promise<ScheduleBoard> {
-  const { leagueRowId, season, playoffWeekStart, currentWeek } = params;
+  const { leagueRowId, season, playoffWeekStart } = params;
+  const admin = adminClient ?? (supabase as ServiceClient);
 
-  const [matchupsRes, rostersRes, usersRes, cacheRes] = await Promise.all([
+  const [matchupsRes, rostersRes, usersRes, cacheRes, league] = await Promise.all([
     supabase
       .from("league_matchups")
-      .select("week, sleeper_roster_id, matchup_id, points, is_final")
+      .select(
+        "week, sleeper_roster_id, matchup_id, points, is_final, starter_ids, starter_points, player_points, metadata",
+      )
       .eq("league_id", leagueRowId)
       .eq("season", season)
       .order("week", { ascending: true }),
@@ -130,22 +272,43 @@ export async function loadScheduleBoard(
       )
       .eq("league_id", leagueRowId)
       .eq("season", season),
+    loadLeague(admin, leagueRowId),
   ]);
 
-  const usersById = new Map(
-    (usersRes.data ?? []).map((u) => [u.sleeper_user_id, u] as const),
-  );
+  const matchupRows = readOrThrow("matchups", matchupsRes) as unknown as Array<
+    BoardMatchupRow & LiveWeekRow
+  >;
+  const rosterRows = readOrThrow("rosters", rostersRes);
+  const userRows = readOrThrow("league users", usersRes);
+  const cacheRows = readOrThrow("power pulse cache", cacheRes);
 
-  const cacheByRosterRow = new Map(
-    (cacheRes.data ?? []).map((row) => [row.roster_id, row] as const),
-  );
+  const weekFromStored = params.currentWeek === null;
+  const currentWeek =
+    params.currentWeek ??
+    currentWeekFromStored(
+      [...new Set(matchupRows.map((r) => Number(r.week)))].map((week) => ({
+        week,
+        isFinal: matchupRows.some((r) => Number(r.week) === week && r.is_final),
+      })),
+    );
+
+  const usersById = new Map(userRows.map((u) => [u.sleeper_user_id, u] as const));
+
+  const cacheByRosterRow = new Map(cacheRows.map((row) => [row.roster_id, row] as const));
 
   // Read off the stored rows rather than the league's Sleeper settings, so the
   // board and the model that produced its numbers can never disagree about
-  // which game this league is playing.
-  const chopped = (cacheRes.data ?? []).some((row) => row.chopped === true);
+  // which game this league is playing. The league row is the fallback for a
+  // league whose Power Pulse has never been built.
+  const chopped = cacheRows.some((row) => row.chopped === true) || league?.chopped === true;
 
-  const teams: ScheduleTeam[] = (rostersRes.data ?? []).map((r) => {
+  const legShape: PlayoffShape = {
+    playoffWeekStart: chopped ? null : playoffWeekStart,
+    playoffRoundType: league?.playoffRoundType ?? 0,
+    playoffTeams: league?.playoffTeams ?? 6,
+  };
+
+  const teams: ScheduleTeam[] = rosterRows.map((r) => {
     const user = r.owner_user_id ? usersById.get(r.owner_user_id) : null;
     const cache = cacheByRosterRow.get(r.id);
     return {
@@ -171,27 +334,20 @@ export async function loadScheduleBoard(
     };
   });
 
-  const teamByRoster = new Map(
-    teams.map((t) => [t.sleeperRosterId, t] as const),
-  );
+  const teamByRoster = new Map(teams.map((t) => [t.sleeperRosterId, t] as const));
 
   // Per-week projected mean and spread, keyed `${sleeperRosterId}|${week}`.
-  const projectedByRosterWeek = new Map<
-    string,
-    { mean: number; sigma: number }
-  >();
+  const projectedByRosterWeek = new Map<string, { mean: number; sigma: number }>();
   const benchLossByRoster = new Map<number, number | null>();
-  for (const row of cacheRes.data ?? []) {
-    const roster = (rostersRes.data ?? []).find((r) => r.id === row.roster_id);
+  for (const row of cacheRows) {
+    const roster = rosterRows.find((r) => r.id === row.roster_id);
     if (!roster) continue;
     const rosterId = Number(roster.sleeper_roster_id);
     benchLossByRoster.set(
       rosterId,
       row.lineup_points_lost == null ? null : Number(row.lineup_points_lost),
     );
-    const weekly = Array.isArray(row.weekly)
-      ? (row.weekly as CachedWeeklyEntry[])
-      : [];
+    const weekly = Array.isArray(row.weekly) ? (row.weekly as CachedWeeklyEntry[]) : [];
     for (const entry of weekly) {
       const week = finiteOrNull(entry?.week);
       const mean = finiteOrNull(entry?.mean);
@@ -203,17 +359,50 @@ export async function loadScheduleBoard(
     }
   }
 
-  const rows = (matchupsRes.data ?? []) as unknown as BoardMatchupRow[];
-
   // Group by week, then pair within the week on matchup_id. The opponent is
   // derived rather than stored, matching how migration 0162 models it.
-  const byWeek = new Map<number, BoardMatchupRow[]>();
-  for (const row of rows) {
+  const byWeek = new Map<number, Array<BoardMatchupRow & LiveWeekRow>>();
+  for (const row of matchupRows) {
     const week = Number(row.week);
     const list = byWeek.get(week) ?? [];
     list.push(row);
     byWeek.set(week, list);
   }
+
+  // THE WEEK IN PLAY, AND ONLY IT, gets a set-lineup projection and a win
+  // chance. No other week has a lineup set yet, and a settled one has a score.
+  const liveRows = (byWeek.get(currentWeek) ?? []).filter((r) => !r.is_final);
+  const liveStates =
+    league && liveRows.length > 0
+      ? await loadSetLineupStates(admin, league, season, currentWeek, currentWeek, liveRows, Date.now())
+      : new Map<number, SideState>();
+
+  const pointsOf = (week: number, rosterId: number): number | null => {
+    const row = (byWeek.get(week) ?? []).find((r) => Number(r.sleeper_roster_id) === rosterId);
+    return row && row.is_final ? Number(row.points ?? 0) : null;
+  };
+  const opponentOf = (week: number, rosterId: number): number | null => {
+    const rows = byWeek.get(week) ?? [];
+    const own = rows.find((r) => Number(r.sleeper_roster_id) === rosterId);
+    if (!own || own.matchup_id === null || own.matchup_id === undefined) return null;
+    const other = rows.find(
+      (r) => r.matchup_id === own.matchup_id && Number(r.sleeper_roster_id) !== rosterId,
+    );
+    return other ? Number(other.sleeper_roster_id) : null;
+  };
+
+  /**
+   * Both legs added, for leg 2 of a two-week round, once it is final and the
+   * same two teams met in leg 1. Null otherwise.
+   */
+  const roundTotalOf = (week: number, rosterId: number, opponentId: number | null): number | null => {
+    if (playoffLeg(week, legShape) !== 2 || opponentId === null) return null;
+    const first = otherLegWeek(week, legShape);
+    if (first === null || opponentOf(first, rosterId) !== opponentId) return null;
+    const legOne = pointsOf(first, rosterId);
+    const legTwo = pointsOf(week, rosterId);
+    return legOne === null || legTwo === null ? null : legOne + legTwo;
+  };
 
   const sideOf = (
     row: BoardMatchupRow,
@@ -222,9 +411,21 @@ export async function loadScheduleBoard(
     const rosterId = Number(row.sleeper_roster_id);
     const team = teamByRoster.get(rosterId);
     const weekOfRow = Number(row.week);
-    const projected =
-      projectedByRosterWeek.get(`${rosterId}|${weekOfRow}`) ?? null;
+    const projected = projectedByRosterWeek.get(`${rosterId}|${weekOfRow}`) ?? null;
     const points = Number(row.points ?? 0);
+    const live = !row.is_final && weekOfRow === currentWeek ? liveStates.get(rosterId) : undefined;
+    const opponentId = opponent ? Number(opponent.sleeper_roster_id) : null;
+    const roundTotal = roundTotalOf(weekOfRow, rosterId, opponentId);
+    const opponentRoundTotal =
+      opponentId === null ? null : roundTotalOf(weekOfRow, opponentId, rosterId);
+    const leg = playoffLeg(weekOfRow, legShape);
+    let won = false;
+    if (!chopped && row.is_final && opponent && leg !== 1) {
+      won =
+        leg === 2
+          ? roundTotal !== null && opponentRoundTotal !== null && roundTotal > opponentRoundTotal
+          : points > Number(opponent.points ?? 0);
+    }
     return {
       sleeperRosterId: rosterId,
       teamName: team?.teamName ?? `Team ${rosterId}`,
@@ -233,40 +434,25 @@ export async function loadScheduleBoard(
       record: team?.record ?? { wins: 0, losses: 0, ties: 0 },
       pulseRank: team?.pulseRank ?? null,
       actual: row.is_final ? points : null,
+      projectedSet: live ? expectedTotal(live) : null,
+      liveScore: live && live.banked !== 0 ? Number(row.points ?? live.banked) : null,
       projectedOptimal: row.is_final ? null : (projected?.mean ?? null),
       sigma: row.is_final ? null : (projected?.sigma ?? null),
+      roundTotal,
       /**
        * The current week, and no other.
        *
        * `league_power_pulse_cache.lineup_points_lost` is ONE number per team,
-       * graded against the lineup that is set right now: see
-       * lib/power-pulse/engine.ts, where candidatesFor only compares set to
-       * optimal at currentWeek. Stamping it onto every unplayed week claimed
-       * that a manager was leaving the same 12.4 points on the bench in weeks 8
-       * through 14, for lineups nobody has touched yet and rosters that will
-       * not exist by then. Null is the honest answer for those weeks.
-       *
-       * A final week is null too, which makes the "Left" arm in
-       * components/league-schedule/matchup-row.tsx unreachable. That branch is
-       * dead by this contract, not by accident: a retrospective for a settled
-       * week has to be graded on actual points, and this cache holds
-       * projections. lib/league-schedule/matchup.ts answers that question on
-       * the detail page, where the per-player results are loaded.
+       * graded against the lineup that is set right now (lib/power-pulse/
+       * engine.ts compares set to optimal at currentWeek only), so it says
+       * nothing about an unplayed week or a settled one. The detail page grades
+       * a settled week on actual points.
        */
       pointsLeftOnBench:
         row.is_final || weekOfRow !== currentWeek
           ? null
           : (benchLossByRoster.get(rosterId) ?? null),
-      /**
-       * A win, and only a win. An unpaired roster gets `won: false` on the one
-       * side that exists, which is true (it beat nobody) but is NOT a tie. The
-       * absence of an opponent is carried by `ScheduleMatchup.away === null`,
-       * and any reader deriving an outcome label has to check that before it
-       * falls through to "Tied".
-       */
-      won: Boolean(
-        row.is_final && opponent && points > Number(opponent.points ?? 0),
-      ),
+      won,
     };
   };
 
@@ -278,6 +464,7 @@ export async function loadScheduleBoard(
     const isFinal = weekRows.some((r) => r.is_final);
     const seen = new Set<number>();
     const matchups: ScheduleMatchup[] = [];
+    const leg = playoffLeg(week, legShape);
 
     for (const row of weekRows) {
       const rosterId = Number(row.sleeper_roster_id);
@@ -297,6 +484,8 @@ export async function loadScheduleBoard(
 
       const home = sideOf(row, partner);
       const away = partner ? sideOf(partner, row) : null;
+      const homeLive = liveStates.get(rosterId);
+      const awayLive = partner ? liveStates.get(Number(partner.sleeper_roster_id)) : undefined;
 
       matchups.push({
         matchupId: row.matchup_id ?? null,
@@ -304,23 +493,14 @@ export async function loadScheduleBoard(
         isFinal: Boolean(row.is_final),
         home,
         away,
-        // No win probability in a chopped league. Both projected totals below
-        // are real and stay on the board; what is not real is the contest
-        // between them, because nothing follows from one of these two teams
-        // outscoring the other.
+        // One win chance: set lineup against set lineup, scored points banked.
+        // None in a chopped league, where nothing follows from one of these two
+        // teams outscoring the other, and none for a week with no lineup set.
         homeWinProb:
-          chopped ||
-          row.is_final ||
-          !away ||
-          home.projectedOptimal === null ||
-          away.projectedOptimal === null
+          chopped || row.is_final || !away || week !== currentWeek || !homeLive || !awayLive
             ? null
-            : winProbability(
-                home.projectedOptimal,
-                home.sigma ?? 0,
-                away.projectedOptimal,
-                away.sigma ?? 0,
-              ),
+            : liveWinChance(homeLive, awayLive),
+        leg,
       });
     }
 
@@ -353,6 +533,7 @@ export async function loadScheduleBoard(
     missingWeeks,
     noScheduleYet: weeks.length === 0,
     projectionsUnavailable: projectedByRosterWeek.size === 0,
+    weekFromStored,
     chopped,
   };
 }
@@ -362,7 +543,8 @@ export type MatchupDetailParams = {
   season: number;
   week: number;
   sleeperRosterId: number;
-  currentWeek: number;
+  /** Null when Sleeper's NFL state could not be read; the stored week decides. */
+  currentWeek: number | null;
 };
 
 export type MatchupDetailResult =
@@ -380,7 +562,7 @@ export async function loadMatchupDetail(
   admin: ServiceClient,
   params: MatchupDetailParams,
 ): Promise<MatchupDetailResult> {
-  const { leagueRowId, season, week, sleeperRosterId, currentWeek } = params;
+  const { leagueRowId, season, week, sleeperRosterId } = params;
 
   // One wave for everything that depends only on (league, season, week):
   // the league row, the week's rows, the rosters, the settings and the Pulse
@@ -413,13 +595,18 @@ export async function loadMatchupDetail(
   ]);
   if (!league) return { ok: false, reason: "no-data" };
   const { data: weekRows, error } = weekRes;
-  if (error || !weekRows || weekRows.length === 0)
-    return { ok: false, reason: "not-found" };
+  // A failed read is a failure, not a matchup that does not exist.
+  if (error) throw new Error(`matchup detail: week read failed: ${error.message}`);
+  if (!weekRows || weekRows.length === 0) return { ok: false, reason: "not-found" };
 
   const homeRow = weekRows.find(
     (r) => Number(r.sleeper_roster_id) === sleeperRosterId,
   );
   if (!homeRow) return { ok: false, reason: "not-found" };
+
+  // With no NFL state, the stored week decides: a settled week is behind the
+  // one in play, an unsettled one is the one in play.
+  const currentWeek = params.currentWeek ?? (homeRow.is_final ? week + 1 : week);
 
   const awayRow =
     homeRow.matchup_id === null || homeRow.matchup_id === undefined
@@ -509,7 +696,7 @@ export async function loadMatchupDetail(
     settings: settings.beaconProjections,
   });
 
-  const [projectionRows, accuracy, defense, homeAwayByTeamWeek] = await Promise.all([
+  const [projectionRows, accuracy, defense, homeAwayByTeamWeek, environment] = await Promise.all([
     // One week only, and the ceiling belongs in the query rather than in a loop
     // underneath it. Both bounds are `week`, so Postgres returns the sixty rows
     // this page renders instead of the rest of the season for the same sixty
@@ -527,6 +714,8 @@ export async function loadMatchupDetail(
     // rather than one per matchup view. A null means the venue reads as unknown
     // and the lineup says nothing about it, which is the honest fallback.
     getNflHomeAwayMap(season),
+    // Kickoffs, so the win chance banks the points of games already played.
+    loadGameEnvironment(admin, season, week),
   ]);
 
   const projections = new Map<string, ProjectionRow>();
@@ -589,6 +778,10 @@ export async function loadMatchupDetail(
       chopped: league.chopped,
       homeAwayByTeamWeek,
       idpEnabled: idpReads.idpEnabled,
+      kickoffByTeam: new Map(
+        [...environment.byTeam].map(([team, env]) => [team, env.kickoffAt] as const),
+      ),
+      nowMs: Date.now(),
     }),
   };
 }
@@ -598,11 +791,16 @@ export async function loadMatchupDetail(
  *
  * Wrapped here so a page resolves it once and hands it to both loaders, rather
  * than each of them making its own network call to Sleeper's state endpoint.
+ *
+ * NULL WHEN THE STATE REQUEST FAILED. A failed request is not week 1; every
+ * caller shows what is stored instead (./stored-week.ts).
  */
 export async function resolveScheduleWeek(
   season: number,
   playoffWeekStart: number,
-): Promise<number> {
+): Promise<number | null> {
   const state = await getNflState();
-  return resolveCurrentWeek(state, season, playoffWeekStart);
+  if (!state) return null;
+  const week: number | null = resolveCurrentWeek(state, season, playoffWeekStart);
+  return week;
 }

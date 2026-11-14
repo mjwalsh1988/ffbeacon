@@ -33,6 +33,9 @@ vi.mock("@/lib/power-pulse/load", () => ({
   loadDefenseSplits: vi.fn(),
   loadSchedule: vi.fn(),
   loadCompletedResults: vi.fn(),
+  // Before kickoff, and no projection sync on record: both resolve null.
+  loadLiveWeek: vi.fn(async () => null),
+  loadProjectionStamp: vi.fn(async () => null),
 }));
 
 vi.mock("@/lib/power-pulse/settings", () => ({
@@ -45,6 +48,8 @@ vi.mock("@/lib/power-pulse/engine", () => ({
 
 import {
   classifyPowerPulseResult,
+  leagueResultFingerprint,
+  powerPulseCacheModelVersion,
   powerPulseIsStale,
   refreshPowerPulse,
   POWER_PULSE_RETRY_MS,
@@ -358,6 +363,19 @@ describe("classifyPowerPulseResult", () => {
         season: 2026,
         currentWeek: 12,
         skipped: "chopped league has no weeks left to decide from week 12",
+      },
+      "settled",
+    ],
+    [
+      // The title game is played and the rows hold the result. Nothing will
+      // change it, so it waits for the week to move rather than a timer.
+      "season complete, final result kept",
+      {
+        ok: true,
+        teams: 12,
+        season: 2026,
+        currentWeek: 18,
+        skipped: "season complete, final result kept",
       },
       "settled",
     ],
@@ -839,5 +857,57 @@ describe("the IDP switch (plan IDP-301)", () => {
     const opts = vi.mocked(loadPlayers).mock.calls[0]?.[2] as { positions: readonly string[] };
     expect(opts.positions).not.toContain("LB");
     expect(typeof vi.mocked(loadAccuracy).mock.calls[0]?.[2]).toBe("string");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* LPI-T04: the cache version carries league settings and the sync stamp   */
+/* ---------------------------------------------------------------------- */
+
+describe("the Power Pulse cache version", () => {
+  it("keeps the two-part form when there is no fingerprint or stamp", () => {
+    expect(powerPulseCacheModelVersion("pp-12", "sleeper")).toBe("pp-12:sleeper");
+  });
+
+  it("appends the league fingerprint and the projection stamp", () => {
+    expect(powerPulseCacheModelVersion("pp-12", "sleeper", "abc", "k1")).toBe("pp-12:sleeper:abc@k1");
+  });
+
+  it("moves when a setting that changes the result moves, and only then", () => {
+    const base = fakeLeague() as never;
+    const same = leagueResultFingerprint(base);
+    expect(leagueResultFingerprint({ ...(fakeLeague() as object) } as never)).toBe(same);
+    for (const change of [
+      { playoffTeams: 6 },
+      { scoringSettings: { rec: 0.5 } },
+      { rosterPositions: ["QB", "RB"] },
+      { divisions: 2 },
+      { playoffSeedType: 1 },
+    ]) {
+      expect(leagueResultFingerprint(fakeLeague(change) as never)).not.toBe(same);
+    }
+    // Key order in the scoring document is not a change.
+    expect(
+      leagueResultFingerprint(fakeLeague({ scoringSettings: { a: 1, b: 2 } }) as never),
+    ).toBe(leagueResultFingerprint(fakeLeague({ scoringSettings: { b: 2, a: 1 } }) as never));
+  });
+});
+
+describe("a failed matchup sync read", () => {
+  it("is an error that writes nothing, not an empty slate", async () => {
+    wireOkPipeline();
+    vi.mocked(syncLeagueMatchups).mockResolvedValue({
+      ok: false,
+      weeksFetched: [],
+      rowsWritten: 0,
+      failedWeeks: [],
+      noScheduleYet: false,
+      error: "connection reset",
+    } as never);
+    const { client, calls, leagueUpdates } = makeFakeClient();
+    await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
+    expect(calls).not.toContain("cache.upsert");
+    expect(calls).not.toContain("cache.delete");
+    expect(leagueUpdates.some((u) => u.power_pulse_status === "error")).toBe(true);
   });
 });

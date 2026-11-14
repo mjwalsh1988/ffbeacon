@@ -75,6 +75,33 @@ export type PulseSnapshot = {
    * without ever saying it out loud.
    */
   remainingGames: number;
+  /**
+   * Power Pulse's own season figures for this team, read from its cache.
+   *
+   * These are the "before" every trade surface prints, so a card and the full
+   * evaluation under it start from the same number Power Pulse shows. A trade
+   * only ever supplies the change. Null where the cache holds none (a chopped
+   * league has no playoff or title odds).
+   */
+  projectedWins?: number | null;
+  playoffOdds?: number | null;
+  titleOdds?: number | null;
+  /**
+   * Chopped leagues only: this week's field, for the survival math below.
+   *
+   * `own` is this team's expected score and spread for the week, `others` every
+   * other team still alive. Null outside a chopped league, or when the week has
+   * no projections.
+   */
+  chopWeek?: ChopWeek | null;
+  /** Chopped only: Power Pulse's chance this team is cut this week. */
+  chopOdds?: number | null;
+};
+
+/** One chopped week's field, from one team's side. */
+export type ChopWeek = {
+  own: { mean: number; sigma: number };
+  others: Array<{ mean: number; sigma: number }>;
 };
 
 /** The standard normal density. */
@@ -197,7 +224,109 @@ export function pulseSnapshotFor(
   return { winsPerPoint: winsPerPoint(matchups), remainingGames: scheduled };
 }
 
+/**
+ * The smallest weekly spread one team is given in the chop math. Same reason
+ * as MIN_COMBINED_SIGMA: a zero is Power Pulse having no spread yet, not a team
+ * that scores the same every week. Twelve combined over two teams is about
+ * 8.5 each.
+ */
+const MIN_TEAM_SIGMA = 8.5;
+
+/** Grid points across the integral. Enough that the answer is stable to 0.1%. */
+const CHOP_GRID = 241;
+
+/**
+ * Chance this team posts the lowest score of the week, and so is cut.
+ *
+ * Every team's score is an independent normal, as the Power Pulse simulation
+ * draws it. P(lowest) is the integral over x of this team's density at x times
+ * the chance every other team scores above x, worked out on a fixed grid.
+ * `shift` moves this team's mean, which is how a trade's lineup change is
+ * priced. Null when there is no field to be lowest in.
+ */
+export function chopProbability(week: ChopWeek, shift = 0): number | null {
+  if (week.others.length === 0) return null;
+  const mean = week.own.mean + shift;
+  if (!Number.isFinite(mean)) return null;
+  const sigma = Math.max(Number.isFinite(week.own.sigma) ? week.own.sigma : 0, MIN_TEAM_SIGMA);
+  const others = week.others
+    .filter((o) => Number.isFinite(o.mean))
+    .map((o) => ({
+      mean: o.mean,
+      sigma: Math.max(Number.isFinite(o.sigma) ? o.sigma : 0, MIN_TEAM_SIGMA),
+    }));
+  if (others.length === 0) return null;
+
+  const lo = mean - 6 * sigma;
+  const hi = mean + 6 * sigma;
+  const step = (hi - lo) / (CHOP_GRID - 1);
+  let total = 0;
+  for (let i = 0; i < CHOP_GRID; i += 1) {
+    const x = lo + i * step;
+    let aboveAll = 1;
+    for (const o of others) aboveAll *= 1 - normalCdf((x - o.mean) / o.sigma);
+    const weight = i === 0 || i === CHOP_GRID - 1 ? 0.5 : 1;
+    total += weight * (normalDensity((x - mean) / sigma) / sigma) * aboveAll;
+  }
+  return Math.min(Math.max(total * step, 0), 1);
+}
+
+/**
+ * What a lineup change does to this week's survival odds in a chopped league,
+ * as a change in probability (0.05 is five percentage points).
+ *
+ * Exact for the shift rather than a slope, because the field is small and the
+ * cut is a tail event where a straight line is a poor guess. Null outside a
+ * chopped league, or when there is no lineup change to price.
+ */
+export function survivalDeltaFor(
+  lineupDelta: number | null,
+  pulse: PulseSnapshot | null | undefined,
+): number | null {
+  if (lineupDelta === null || !Number.isFinite(lineupDelta)) return null;
+  const week = pulse?.chopWeek ?? null;
+  if (!week) return null;
+  const before = chopProbability(week, 0);
+  const after = chopProbability(week, lineupDelta);
+  if (before === null || after === null) return null;
+  return before - after;
+}
+
+/** The standard normal CDF (Abramowitz and Stegun 7.1.26). */
+function normalCdf(z: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(z / Math.SQRT2));
+  const poly =
+    t *
+    (0.254829592 +
+      t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const erf = 1 - poly * Math.exp(-(z * z) / 2);
+  return z >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf);
+}
+
+/**
+ * One chopped team's field for the first remaining week, from the whole
+ * league's weekly rows. Null when this team has no row for that week or nobody
+ * else does.
+ */
+export function chopWeekFor(
+  rosterId: number,
+  weeklyByRoster: ReadonlyMap<number, ReadonlyMap<number, { mean: number; sigma: number }>>,
+): ChopWeek | null {
+  const own = weeklyByRoster.get(rosterId);
+  if (!own || own.size === 0) return null;
+  const week = Math.min(...own.keys());
+  const mine = own.get(week);
+  if (!mine) return null;
+  const others: ChopWeek["others"] = [];
+  for (const [otherId, byWeek] of weeklyByRoster) {
+    if (otherId === rosterId) continue;
+    const row = byWeek.get(week);
+    if (row) others.push(row);
+  }
+  return others.length > 0 ? { own: mine, others } : null;
+}
+
 /** Below this, a projected-wins change is not worth a sentence. */
 export const NAMEABLE_WINS = 0.05;
 
-export const PULSE_LIMITS = { MIN_COMBINED_SIGMA, NAMEABLE_WINS };
+export const PULSE_LIMITS = { MIN_COMBINED_SIGMA, NAMEABLE_WINS, MIN_TEAM_SIGMA };

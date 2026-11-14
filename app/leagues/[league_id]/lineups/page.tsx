@@ -17,6 +17,8 @@ import type { LeagueMastheadProps } from "@/components/league-shell";
 import { Panel } from "@/components/dashboard-panel";
 import { formatRelative } from "@/lib/datetime";
 import { resolveScheduleWeek } from "@/lib/league-schedule/data";
+import { currentWeekFromStored } from "@/lib/league-schedule/stored-week";
+import { CutLinePanel } from "@/components/league-lineups/cut-line-panel";
 import { loadLineupView } from "@/lib/league-lineups/data";
 import { loadLeagueValueContext } from "@/lib/faab/league-load";
 import { buildWeekOptions, clampWeek } from "@/lib/league-lineups/weeks";
@@ -413,7 +415,7 @@ async function LineupBody({
   // the metadata alone gets a dynasty league with missing or zero Sleeper
   // settings wrong in the one direction that matters: the cut guard stands
   // down and the panel offers a valuable dynasty asset as droppable.
-  const [currentWeek, storedWeeks, rosterId, valueContext] = await Promise.all([
+  const [resolvedWeek, storedWeeks, rosterId, valueContext] = await Promise.all([
     resolveScheduleWeek(season, playoffWeekStart),
     loadStoredWeeks(supabase, leagueRowId, season),
     resolveRosterId(
@@ -426,6 +428,8 @@ async function LineupBody({
     loadLeagueValueContext(adminClient, leagueRowId),
   ]);
 
+  // A failed NFL state request is not week 1: show what is stored.
+  const currentWeek = resolvedWeek ?? currentWeekFromStored(storedWeeks);
   const weekOptions = buildWeekOptions(storedWeeks, currentWeek, playoffWeekStart);
   const week = clampWeek(weekOptions, requestedWeek, currentWeek);
 
@@ -516,7 +520,11 @@ async function LineupBody({
       {/* THE REPORT, and only when there is one. Above the board, because on a
           settled week the result is what a reader came for and the roster is
           the evidence for it. */}
-      {view.recap && (
+      {/* A CHOPPED WEEK has no opponent, so its report is the cut line: your
+          score, the lowest, the margin and your chance to stay above it. */}
+      {view.chop && <CutLinePanel chop={view.chop} week={view.week} isFinal={view.isFinal} />}
+
+      {view.recap && !view.chopped && (
         <WeekRecapPanel
           recap={view.recap}
           opponent={view.opponent}
@@ -559,11 +567,19 @@ async function LineupBody({
                 unprojectedSlotCount={view.unprojectedSlotCount}
                 idpEnabled={view.idpEnabled}
                 nowIso={new Date().toISOString()}
+                bestBall={view.bestBall}
               />
             </div>
           </Panel>
 
-          {view.weekStatus.showsAdvice && (
+          {/* BEST BALL sets the lineup itself, so there is no start or sit call to make. */}
+          {view.bestBall && (
+            <p className="rounded-card border border-line bg-base/40 px-4 py-3 text-sm text-ink-muted">
+              This is a best ball league: Sleeper sets your lineup itself, picking your top scorers each week.
+            </p>
+          )}
+
+          {view.weekStatus.showsAdvice && !view.bestBall && (
             <StartSitBenchLink
               bench={view.bench}
               sleeperLeagueId={sleeperLeagueId}
@@ -578,13 +594,20 @@ async function LineupBody({
               have finished, or on an unsettled past week, where the banner has
               just said there is nothing to grade and the panel would follow it
               with present-tense advice for a week that has gone. */}
-          {(view.weekStatus.phase === "upcoming" || view.weekStatus.phase === "final") && (
+          {/* LIVE TOO: after Thursday the players still to play can be moved,
+              so the optimizer stays, with every locked player held in place and
+              his points banked. Never in best ball, which sets itself. */}
+          {!view.bestBall &&
+            (view.weekStatus.phase === "upcoming" ||
+              view.weekStatus.phase === "live" ||
+              view.weekStatus.phase === "final") && (
             <OptimizerPanel
               optimization={view.optimization}
               isFinal={view.isFinal}
               week={view.week}
               defenderSlots={ungradedDefenderSlots(view.groups, view.isFinal)}
               idpEnabled={view.idpEnabled}
+              lockedSlotCount={view.optimization.lockedSlotCount ?? 0}
             />
           )}
 
@@ -601,6 +624,8 @@ async function LineupBody({
               teamName={view.teamName}
               teamCount={teams.length}
               decisionsHref={decisionsHref}
+              chopped={view.chopped}
+              bestBall={view.bestBall}
             />
           </Suspense>
         </div>
@@ -610,7 +635,7 @@ async function LineupBody({
             supplementary to. */}
         <aside
           aria-label={
-            view.weekStatus.showsAdvice
+            view.weekStatus.showsAdvice || view.weekStatus.phase === "live"
               ? "Roster moves and how this works"
               : "How this works"
           }
@@ -622,7 +647,7 @@ async function LineupBody({
               November they are answering a question nobody asked, and the
               waiver panel would have to spend its whole body explaining that it
               cannot help. The board, the recap and the season stay. */}
-          {view.weekStatus.showsAdvice && (
+          {(view.weekStatus.showsAdvice || view.weekStatus.phase === "live") && (
             <>
               <WaiverPanel
                 suggestions={view.waivers}
@@ -667,6 +692,8 @@ async function SeasonBody({
   teamName,
   teamCount,
   decisionsHref,
+  chopped,
+  bestBall,
 }: {
   leagueRowId: string;
   season: number;
@@ -676,6 +703,8 @@ async function SeasonBody({
   teamName: string;
   teamCount: number;
   decisionsHref: string;
+  chopped: boolean;
+  bestBall: boolean;
 }) {
   // THE COMPUTE AND THE READ, both inside this boundary. The skeleton above is
   // what a reader looks at while this runs, rather than the empty page they
@@ -697,6 +726,8 @@ async function SeasonBody({
         ledger={seasonView.ledger}
         teamName={teamName}
         decisionsHref={decisionsHref}
+        chopped={chopped}
+        bestBall={bestBall}
       />
       <SeasonCharts
         series={seasonView.series}
@@ -827,12 +858,14 @@ async function loadStoredWeeks(
   leagueRowId: string,
   season: number,
 ): Promise<Array<{ week: number; isFinal: boolean }>> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("league_matchups")
     .select("week, is_final")
     .eq("league_id", leagueRowId)
     .eq("season", season)
     .order("week", { ascending: true });
+  // A failed read is not an empty slate.
+  if (error) throw new Error(`lineups: stored weeks read failed: ${error.message}`);
 
   const byWeek = new Map<number, boolean>();
   for (const row of data ?? []) {

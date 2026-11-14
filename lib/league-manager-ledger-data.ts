@@ -203,6 +203,12 @@ export const loadManagerLedgerView = cache(async function loadManagerLedgerView(
       .eq("league_id", leagueRowId),
   ]);
 
+  // A failed read is a failure, never "no ledger yet": an empty answer here
+  // would tell a reader their league has not been graded when it has.
+  if (ledgerRes.error) throw new Error(`ledger view read failed: ${ledgerRes.error.message}`);
+  if (rostersRes.error) throw new Error(`ledger rosters read failed: ${rostersRes.error.message}`);
+  if (usersRes.error) throw new Error(`ledger users read failed: ${usersRes.error.message}`);
+
   // The column list is joined at runtime, which defeats PostgREST's generated
   // return type, so the row shape is asserted from the table's own generated
   // type. Every name in LEDGER_COLUMNS is a real column on it, so this is a

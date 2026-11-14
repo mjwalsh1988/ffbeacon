@@ -4,7 +4,7 @@ import { DEFAULT_LEAGUE_BLUEPRINT_SETTINGS } from "./default-settings";
 
 const base: GradeInput = {
   teamCount: 12,
-  isDynasty: true,
+  leagueKind: "dynasty",
   isSuperflex: false,
   valueRanks: { QB: 1, RB: 3, WR: 6, TE: 12 },
   pointsRanks: { QB: 1, RB: 5, WR: 6, TE: 12 },
@@ -39,15 +39,46 @@ describe("grades", () => {
     expect(gradeOf(r, "RB").pointsRank).toBeNull();
   });
 
-  it("does not score picks in redraft", () => {
-    const r = computeGrades({ ...base, isDynasty: false });
+  it("does not score picks in redraft or chopped, and does in keeper", () => {
+    const r = computeGrades({ ...base, leagueKind: "redraft" });
     expect(gradeOf(r, "picks").grade).toBeNull();
-    expect(gradeOf(r, "picks").reason).toBe("Not scored in redraft.");
+    expect(gradeOf(r, "picks").reason).toBe("Not scored in redraft leagues.");
+    expect(gradeOf(computeGrades({ ...base, leagueKind: "chopped" }), "picks").grade).toBeNull();
+    expect(gradeOf(computeGrades({ ...base, leagueKind: "keeper" }), "picks").grade).toBe(5);
+  });
+
+  it("leaves a group with no figure ungraded and out of the overall", () => {
+    const r = computeGrades({
+      ...base,
+      valueRanks: { ...base.valueRanks, TE: null },
+      pointsRanks: { ...base.pointsRanks!, TE: null },
+      picksValueRank: null,
+    });
+    expect(gradeOf(r, "TE").grade).toBeNull();
+    expect(gradeOf(r, "TE").reason).toBe("Not scored: no tight end figure yet.");
+    expect(gradeOf(r, "picks").grade).toBeNull();
+    const g = Object.fromEntries(r.grades.map((x) => [x.key, x.grade]));
+    const expected = (g.QB! * 1 + g.RB! * 1 + g.WR! * 1 + g.bench! * 0.5) / 3.5;
+    expect(r.overall).toBe(Math.round(expected * 10) / 10);
+  });
+
+  it("has no overall when nothing is graded", () => {
+    const none = { QB: null, RB: null, WR: null, TE: null };
+    const r = computeGrades({
+      ...base,
+      valueRanks: none,
+      pointsRanks: none,
+      benchValueRank: null,
+      depthRank: null,
+      picksValueRank: null,
+    });
+    expect(r.overall).toBeNull();
+    expect(r.grades.every((x) => x.grade === null)).toBe(true);
   });
 
   it("weights the quarterback up in superflex and returns one decimal", () => {
-    const one = computeGrades(base).overall;
-    const sf = computeGrades({ ...base, isSuperflex: true }).overall;
+    const one = computeGrades(base).overall!;
+    const sf = computeGrades({ ...base, isSuperflex: true }).overall!;
     expect(sf).toBeGreaterThan(one);
     expect(Math.round(one * 10) / 10).toBe(one);
   });

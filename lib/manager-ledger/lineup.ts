@@ -91,6 +91,13 @@ export type WeekInput = {
    * page rather than leaving a reader to discover it.
    */
   ineligibleIds: ReadonlySet<string>;
+  /**
+   * The league median for this week, when the league plays a weekly game
+   * against it (Sleeper's league_average_match). Absent or null otherwise.
+   */
+  medianPoints?: number | null;
+  /** True for a playoff week, which stays out of the record. */
+  playoff?: boolean;
 };
 
 /** The startable slots split into the ones this model can grade and the rest. */
@@ -309,7 +316,26 @@ export function gradeWeek(
     opponentPoints,
   );
 
+  // The median game, one-sided like the head-to-head one: the median stays as
+  // it happened and only this roster's lineup is improved.
+  const median =
+    typeof input.medianPoints === "number" && Number.isFinite(input.medianPoints)
+      ? round2(input.medianPoints)
+      : null;
+  const medianFields =
+    median === null
+      ? {}
+      : {
+          medianPoints: median,
+          medianOutcome: resultOf(input.officialPoints, median) ?? undefined,
+          bestLineupMedianOutcome:
+            resultOf(round2(input.officialPoints + pointsLeft), median) ?? undefined,
+        };
+
   return {
+    // Set only when true, so a league with no playoffs stores what it always did.
+    ...(input.playoff ? { playoff: true } : {}),
+    ...medianFields,
     week: input.week,
     officialPoints: round2(input.officialPoints),
     setPoints: gradedSet,
@@ -373,17 +399,26 @@ export function summarizeLineup(weeks: GradedWeek[]): LineupLedger {
     pointsLeft += week.pointsLeft;
     if (week.ungradedSlots > 0) weeksWithUngradedSlots += 1;
 
-    if (week.outcome === null) continue;
-    tally(actualRecord, week.outcome);
-    if (week.bestLineupOutcome !== null)
-      tally(bestLineupRecord, week.bestLineupOutcome);
+    // The record is the regular season, as the league's own standings count
+    // it. A playoff game is still shown week by week, never tallied here.
+    if (week.playoff) continue;
 
-    // A game that was LOST and that the best legal lineup out of the same
-    // players would have WON. Ties are deliberately excluded at both ends:
-    // turning a draw into a win is half a game, and this figure is a count of
-    // whole games so it stays checkable against the schedule one row at a time.
-    if (week.outcome === "loss" && week.bestLineupOutcome === "win")
-      winsLeftOnBench += 1;
+    // The head-to-head game (or, in a chopped league, the cut line), then the
+    // median game where the league plays one. Each is a whole game.
+    const games: [LedgerOutcome | null, LedgerOutcome | null][] = [
+      [week.outcome, week.bestLineupOutcome],
+      [week.medianOutcome ?? null, week.bestLineupMedianOutcome ?? null],
+    ];
+    for (const [actual, best] of games) {
+      if (actual === null) continue;
+      tally(actualRecord, actual);
+      if (best !== null) tally(bestLineupRecord, best);
+      // A game that was LOST and that the best legal lineup out of the same
+      // players would have WON. Ties are excluded at both ends: turning a draw
+      // into a win is half a game, and this figure counts whole games so it
+      // stays checkable against the schedule one row at a time.
+      if (actual === "loss" && best === "win") winsLeftOnBench += 1;
+    }
   }
 
   return {

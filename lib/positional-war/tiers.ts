@@ -29,7 +29,11 @@
  *   League breaker    top 2% of the league's starting jobs
  *   Elite             top 10%
  *   Strong advantage  top 25%
- *   Starter           at least as valuable as the least valuable starting job
+ *   Starter           at least as valuable as the starting jobs at the 10th
+ *                     percentile (a low percentile, not the minimum: one
+ *                     starter projected near zero for a week would otherwise
+ *                     drag the floor to nothing and call every bench player a
+ *                     starter)
  *
  * That scales the way it has to. More teams means more starting jobs, so the
  * percentiles hold. Superflex adds a dozen quarterback jobs, so quarterbacks
@@ -43,10 +47,15 @@
  * better than the player anybody could pick up", and the curve already carries
  * both numbers to answer it:
  *
- *   Replacement level  positive WAR, but below the league's least valuable
- *                      starting job. Useful depth, not an edge.
+ *   Replacement level  positive WAR, but below the Starter floor. Useful
+ *                      depth, not an edge.
  *   Below replacement  projects for fewer points a week than replacement
  *                      level does. Starting him costs you.
+ *
+ * Replacement level is the best player no team starts that week (see
+ * positionWeekStats in ./replacement.ts), and the reader-facing sentences say
+ * exactly that rather than "freely available", because that player is often
+ * on somebody's bench.
  *
  * WHY "BELOW REPLACEMENT" READS PROJECTED POINTS RATHER THAN WAR. WAR is
  * floored at zero by default (see clampBelowReplacement in
@@ -98,9 +107,9 @@ export const WAR_TIER_MEANING: Record<WarTier, string> = {
   "league-breaker": "Among the two or three most valuable players in this league.",
   elite: "Worth more than nine in ten of the players this league starts.",
   strong: "Worth more than three quarters of the players this league starts.",
-  starter: "Worth as much as the players this league already starts.",
-  replacement: "Useful depth, but no better than a player who is freely available.",
-  below: "Projects for fewer points than a freely available player at the same position.",
+  starter: "Worth as much as most of the players this league starts.",
+  replacement: "Useful depth, no better than the best player no team starts.",
+  below: "Projects for fewer points than the best player no team starts at his position.",
 };
 
 /**
@@ -118,7 +127,7 @@ export type WarTierScale = {
   elite: number;
   /** Top 25%. */
   strong: number;
-  /** The least valuable starting job in the league. */
+  /** The Starter floor: the 10th percentile of starting jobs. */
   starter: number;
   /** How many starting jobs the scale was built from. Named in the legend. */
   starterCount: number;
@@ -131,6 +140,9 @@ export type WarTierScale = {
  * next to the badge.
  */
 const DISPLAY_ZERO = 0.005;
+
+/** Where the Starter tier begins among the league's starting jobs. */
+export const STARTER_FLOOR_PERCENTILE = 0.1;
 
 /**
  * The p-th percentile of an ascending array, by the nearest-rank method.
@@ -170,7 +182,7 @@ export function buildTierScale(curves: readonly PlottableCurve[]): WarTierScale 
     leagueBreaker: percentile(starterWars, 0.98),
     elite: percentile(starterWars, 0.9),
     strong: percentile(starterWars, 0.75),
-    starter: starterWars[0],
+    starter: percentile(starterWars, STARTER_FLOOR_PERCENTILE),
     starterCount: starterWars.length,
   };
 
@@ -217,5 +229,5 @@ export function describeTierScale(scale: WarTierScale | null): string {
   if (!scale) {
     return "Tiers need a calculated curve. Nothing to rank yet.";
   }
-  return `Tiers compare each player against the ${scale.starterCount} starting jobs this league hands out every week.`;
+  return `Tiers compare each player against the ${scale.starterCount} starting jobs this league hands out every week. Positional WAR is per player and does not add up to a team total.`;
 }

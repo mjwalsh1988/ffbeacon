@@ -32,7 +32,15 @@ import { matchViewerRoster } from "@/lib/league-viewer";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatRelative } from "@/lib/datetime";
-import { pct, pts, record } from "@/components/manager-ledger/format";
+import {
+  ledgerWords,
+  pct,
+  pts,
+  record,
+  type LedgerWords,
+} from "@/components/manager-ledger/format";
+import { ledgerRulesFromSettings } from "@/lib/manager-ledger/rules";
+import type { LedgerViewTeam } from "@/lib/league-manager-ledger-data";
 import { ListChecks } from "lucide-react";
 import type { SleeperLeague } from "@/lib/sleeper";
 
@@ -278,6 +286,7 @@ export default async function DecisionsPage({
 
         <Suspense fallback={<LedgerSkeleton />}>
           <LedgerSection
+            words={ledgerWords(ledgerRulesFromSettings(sleeperLeague.settings as Record<string, unknown> | undefined))}
             leagueRowId={league.id}
             season={Number(league.season ?? 0)}
             storedStatus={league.manager_ledger_status}
@@ -328,6 +337,7 @@ async function DerivedWork({
  * the empty state below reads.
  */
 async function LedgerSection({
+  words,
   leagueRowId,
   season,
   storedStatus,
@@ -335,6 +345,8 @@ async function LedgerSection({
   viewerSleeperUserId,
   focusedRosterId,
 }: {
+  /** League-kind wording: chopped, best ball, median game. */
+  words: LedgerWords;
   leagueRowId: string;
   season: number;
   storedStatus: string | null;
@@ -395,15 +407,24 @@ async function LedgerSection({
   const weeksLabel = `${view.gradedWeeks.length} finished week${
     view.gradedWeeks.length === 1 ? "" : "s"
   } of ${view.season}`;
+  // Best ball has no lineup decisions, so its rows follow points rank instead.
+  const tableTeams = words.gradesLineups
+    ? view.teams
+    : [...view.teams].sort(
+        (a, b) =>
+          (a.scoringRank ?? Number.POSITIVE_INFINITY) -
+            (b.scoringRank ?? Number.POSITIVE_INFINITY) ||
+          a.sleeperRosterId - b.sleeperRosterId,
+      );
 
   return (
     <div className="space-y-6">
-      {/* The league at a glance, before any team is named. Three figures a
+      {/* The league at a glance, before any team is named. The figures a
           reader repeats to their league chat, and everything below is the
           evidence for them. */}
-      <LedgerHeadlineTiles headline={headline} teamCount={view.teams.length} />
+      <LedgerHeadlineTiles headline={headline} teamCount={view.teams.length} words={words} />
 
-      {viewer ? <YourLedger team={viewer} total={view.teams.length} /> : null}
+      {viewer ? <YourLedger team={viewer} total={view.teams.length} words={words} /> : null}
 
       <Panel
         eyebrow="Standouts"
@@ -417,26 +438,28 @@ async function LedgerSection({
       <Panel
         eyebrow="The leaderboard"
         title="Manager decisions"
-        helper={`${weeksLabel}. Ordered by the share of their own points each manager started.`}
+        helper={
+          words.gradesLineups
+            ? `${weeksLabel}. Ordered by the share of their own points each manager started.`
+            : `${weeksLabel}. Ordered by points scored.`
+        }
         headingLevel={2}
         action={
-          <span className="hidden items-center gap-1.5 text-xs text-ink-subtle sm:inline-flex">
+          <span className="inline-flex items-center gap-1.5 text-xs text-ink-subtle">
             <ListChecks aria-hidden="true" className="h-3.5 w-3.5" />
-            {view.teams.length} teams
+            {`${view.teams.length} teams`}
           </span>
         }
       >
-        <LedgerTable teams={view.teams} />
+        <LedgerTable teams={tableTeams} words={words} />
         <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-muted">
-          {worstOffender.teamName} has left the most behind:{" "}
-          {pts(worstOffender.pointsLeft)} points
-          {/* Guarded rather than interpolated. The per-week figure is null for a
-              team with no graded weeks, and the formatter returns a dash, which
-              made this sentence read "which is a week". */}
-          {worstOffender.pointsLeftPerWeek === null
-            ? "."
-            : `, ${pts(worstOffender.pointsLeftPerWeek)} a week.`}{" "}
-          Open a manager for their full season.
+          {words.gradesLineups && worstOffender.pointsLeft > 0
+            ? `${worstOffender.teamName} has left the most behind: ${pts(worstOffender.pointsLeft)} points${
+                worstOffender.pointsLeftPerWeek === null
+                  ? "."
+                  : `, ${pts(worstOffender.pointsLeftPerWeek)} a week.`
+              } Open a manager for their full season.`
+            : "Open a manager for their full season."}
         </p>
       </Panel>
 
@@ -455,62 +478,108 @@ async function LedgerSection({
  * Positional WAR overlay uses. Nothing here is unavailable in the table below;
  * it saves a reader scanning twelve rows for their own name.
  */
+const HERO_FIGURE = "font-mono font-black tabular-nums leading-none text-4xl sm:text-5xl";
+const SECONDARY_FIGURE = "font-mono text-2xl font-black tabular-nums";
+
+/** One figure: a label, the number as one text node, and one short line. */
+function YourFigure({
+  label,
+  value,
+  line,
+  hero = false,
+  accent = "text-ink",
+}: {
+  label: string;
+  value: string;
+  line: string;
+  hero?: boolean;
+  accent?: string;
+}) {
+  return (
+    <div className={hero ? "col-span-2 sm:col-span-4" : undefined}>
+      <dt className="text-[11px] uppercase tracking-wide text-ink-subtle">{label}</dt>
+      <dd>
+        <span className={`block ${hero ? HERO_FIGURE : SECONDARY_FIGURE} ${accent}`}>
+          {value}
+        </span>
+        <span className="mt-1 block text-[11px] text-ink-muted">{line}</span>
+      </dd>
+    </div>
+  );
+}
+
 function YourLedger({
   team,
   total,
+  words,
 }: {
-  team: import("@/lib/league-manager-ledger-data").LedgerViewTeam;
+  team: LedgerViewTeam;
   total: number;
+  words: LedgerWords;
 }) {
+  if (!words.gradesLineups) {
+    return (
+      <Panel eyebrow="Your team" title={team.teamName} glow headingLevel={2}>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <YourFigure
+            hero
+            label={words.recordLabel}
+            value={record(team.actualRecord)}
+            line={`${words.recordHint}. Best ball sets the lineup itself.`}
+          />
+          <YourFigure
+            label="Points rank"
+            value={team.scoringRank === null ? "Not ranked" : `${team.scoringRank} of ${total}`}
+            line="regular season points"
+          />
+          <YourFigure
+            label="Waiver points"
+            value={pts(team.waiverPointsStarted)}
+            line="started after a claim"
+          />
+          <YourFigure
+            label="Trade net"
+            value={team.tradeCount === 0 ? "No trades" : pts(team.tradeNet)}
+            line="started points in, minus out"
+          />
+        </dl>
+      </Panel>
+    );
+  }
+
   return (
     <Panel eyebrow="Your team" title={team.teamName} glow headingLevel={2}>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div>
-          <dt className="text-[11px] uppercase tracking-wide text-ink-subtle">Started</dt>
-          <dd className="font-mono text-2xl font-extrabold tabular-nums text-ink">
-            {pct(team.efficiency)}
-            <span className="block font-sans text-[11px] font-normal text-ink-muted">
-              {team.efficiencyRank === null
-                ? "not ranked yet"
-                : `${team.efficiencyRank} of ${total} in the league`}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[11px] uppercase tracking-wide text-ink-subtle">
-            Left behind
-          </dt>
-          <dd className="font-mono text-2xl font-extrabold tabular-nums text-ink">
-            {pts(team.pointsLeft)}
-            <span className="block font-sans text-[11px] font-normal text-ink-muted">
-              {team.pointsLeftPerWeek === null
-                ? "not measured yet"
-                : `${pts(team.pointsLeftPerWeek)} a week`}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[11px] uppercase tracking-wide text-ink-subtle">Record</dt>
-          <dd className="font-mono text-2xl font-extrabold tabular-nums text-ink">
-            {record(team.actualRecord)}
-            <span className="block font-sans text-[11px] font-normal text-ink-muted">
-              {record(team.bestLineupRecord)} at your best
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[11px] uppercase tracking-wide text-ink-subtle">
-            Wins left behind
-          </dt>
-          <dd className="font-mono text-2xl font-extrabold tabular-nums text-brand-purple">
-            {team.winsLeftOnBench}
-            <span className="block font-sans text-[11px] font-normal text-ink-muted">
-              {team.winsLeftOnBench === 0
-                ? "no loss was winnable from your bench"
-                : "losses your bench would have won"}
-            </span>
-          </dd>
-        </div>
+        <YourFigure
+          hero
+          label="Started"
+          value={pct(team.efficiency)}
+          line={
+            team.efficiencyRank === null
+              ? "The share of your roster's points you started. Not ranked yet."
+              : `The share of your roster's points you started, ${team.efficiencyRank} of ${total} here.`
+          }
+        />
+        <YourFigure
+          label="Left behind"
+          value={pts(team.pointsLeft)}
+          line={
+            team.pointsLeftPerWeek === null
+              ? "points your best lineup would have added"
+              : `${pts(team.pointsLeftPerWeek)} a week your best lineup would have added`
+          }
+        />
+        <YourFigure
+          label={words.recordLabel}
+          value={record(team.actualRecord)}
+          line={`${record(team.bestLineupRecord)} at your best, ${words.recordHint}`}
+        />
+        <YourFigure
+          label={words.winsLeftLabel}
+          value={String(team.winsLeftOnBench)}
+          accent="text-brand-purple"
+          line={words.winsLeftHint}
+        />
       </dl>
     </Panel>
   );

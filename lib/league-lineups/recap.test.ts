@@ -218,3 +218,33 @@ describe("buildWeekRecap", () => {
     expect(recap.efficiency).toBe(1);
   });
 });
+
+describe("buildWeekRecap: two-week playoff rounds", () => {
+  it("decides the result on both legs added", () => {
+    // Won this week 110 to 100, but lost leg 1 by 30: the round is lost.
+    const recap = buildWeekRecap({
+      groups: groups([]),
+      optimization: optimization({ optimalTotal: 130, pointsLeftOnBench: 25 }),
+      actualTotal: 110,
+      opponentActual: 100,
+      legs: { ownOther: 90, opponentOther: 120 },
+    });
+    expect(recap.roundScored).toBe(200);
+    expect(recap.roundOpponent).toBe(220);
+    expect(recap.outcome).toBe("loss");
+    expect(recap.margin).toBe(-20);
+    // 135 this week plus 90 is 225, which beats 220: the bench cost the round.
+    expect(recap.costTheGame).toBe(true);
+  });
+
+  it("leaves an ordinary week alone", () => {
+    const recap = buildWeekRecap({
+      groups: groups([]),
+      optimization: optimization({ optimalTotal: 120, pointsLeftOnBench: 0 }),
+      actualTotal: 110,
+      opponentActual: 100,
+    });
+    expect(recap.roundScored).toBeNull();
+    expect(recap.outcome).toBe("win");
+  });
+});

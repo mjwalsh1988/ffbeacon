@@ -86,6 +86,20 @@ describe("computePriorities", () => {
     expect(text({ ...input, direction: "rebuild" }, "P7")).toBeNull();
   });
 
+  it("fits the league kind: chopped reads survival, redraft drops the dynasty items", () => {
+    const need = { ...quiet, needs: [{ position: "RB", need: 3.04 }] };
+    expect(text({ ...need, leagueKind: "chopped" }, "P2")).toBe(
+      "Shore up running back: the lineup is 3.0 points a week short there, and the lowest score is cut.",
+    );
+    expect(text({ ...need, leagueKind: "redraft" }, "P2")).toBeNull();
+    const old = { ...quiet, ageGap: -1.8, mineAge: 27.9 };
+    expect(text({ ...old, leagueKind: "redraft" }, "P7")).toBeNull();
+    expect(text({ ...old, leagueKind: "chopped" }, "P7")).toBeNull();
+    expect(text({ ...old, leagueKind: "keeper" }, "P7")).not.toBeNull();
+    const seller = { ...quiet, direction: "rebuild" as const, sellShare: 0.3, sellNames: ["A", "B"] };
+    expect(text({ ...seller, leagueKind: "redraft" }, "P3")).toBeNull();
+  });
+
   it("P8 fires on a Low band but never beside an action priority", () => {
     expect(text({ ...quiet, activityBand: "Low" }, "P8")).not.toBeNull();
     const withAction = { ...quiet, activityBand: "Low" as const, ageGap: -2, mineAge: 28 };

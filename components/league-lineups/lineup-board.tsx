@@ -137,7 +137,10 @@ export function LineupBoard({
   unprojectedSlotCount,
   idpEnabled = false,
   nowIso = null,
+  bestBall = false,
 }: {
+  /** Best ball sets the lineup itself, so no what-if is offered. */
+  bestBall?: boolean;
   groups: LineupGroup[];
   bench: LineupPlayer[];
   reserve: LineupPlayer[];
@@ -200,13 +203,18 @@ export function LineupBoard({
     () => ({
       setTotal: optimization.setTotal,
       optimalTotal: optimization.optimalTotal,
-      sigma: baselineSigma(groups),
+      // Live week: locked starters' points are banked in setTotal, so only the
+      // starters still to play carry spread. Same rule as the opponent's.
+      sigma: baselineSigma(
+        groups,
+        status.phase === "live" && nowIso ? Date.parse(nowIso) : null,
+      ),
       opponent:
         opponent && opponent.projected !== null
           ? { mean: opponent.projected, sigma: opponent.sigma ?? 0 }
           : null,
     }),
-    [groups, opponent, optimization.optimalTotal, optimization.setTotal],
+    [groups, opponent, optimization.optimalTotal, optimization.setTotal, status.phase, nowIso],
   );
 
   /**
@@ -238,7 +246,9 @@ export function LineupBoard({
   const live = status.phase === "live";
   const liveNowMs = live && nowIso ? Date.parse(nowIso) : null;
   const canSimulate =
-    (status.showsAdvice || (live && liveNowMs !== null)) && optimization.setTotal !== null;
+    !bestBall &&
+    (status.showsAdvice || (live && liveNowMs !== null)) &&
+    optimization.setTotal !== null;
 
   /**
    * How many bench players could hold each slot token, worked out ONCE.

@@ -14,7 +14,128 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { loadPlayerValueMaps } from "./league-power-rankings";
+import {
+  buildCombos,
+  leagueCarriesPickValue,
+  loadPlayerValueMaps,
+  priceDraftPick,
+  type PickValueLookup,
+} from "./league-power-rankings";
+import { NO_PICK_POSITIONS, type PickPositionResolver } from "./league-pick-position";
+
+describe("buildCombos", () => {
+  const sources = [
+    { slug: "ffbeacon", supported_format_slugs: ["dynasty-ppr-sflex"], data_type: ["rankings", "draft_pick_values"] },
+    { slug: "ktc", supported_format_slugs: ["dynasty-ppr-sflex"], data_type: ["rankings", "draft_pick_values"] },
+    { slug: "fantasycalc", supported_format_slugs: ["dynasty-ppr-sflex", "redraft-ppr-std"], data_type: ["rankings"] },
+    { slug: "dynastyprocess", supported_format_slugs: ["dynasty-ppr-sflex"], data_type: ["rankings"] },
+  ];
+  const formats = [
+    { id: "f-sf", slug: "dynasty-ppr-sflex" },
+    { id: "f-rd", slug: "redraft-ppr-std" },
+  ];
+
+  it("lets a source that publishes picks price its own", () => {
+    const combos = buildCombos(sources, formats);
+    expect(combos.find((c) => c.source === "ktc")?.pickSource).toBe("ktc");
+    expect(combos.find((c) => c.source === "ffbeacon")?.pickSource).toBe("ffbeacon");
+  });
+
+  it("prices FantasyCalc and DynastyProcess picks from the top pick source", () => {
+    const combos = buildCombos(sources, formats);
+    for (const c of combos.filter((x) => x.source === "fantasycalc" || x.source === "dynastyprocess")) {
+      expect(c.pickSource).toBe("ffbeacon");
+    }
+  });
+
+  it("only pairs a source with formats it supports", () => {
+    const combos = buildCombos(sources, formats);
+    expect(combos.filter((c) => c.format_config_id === "f-rd").map((c) => c.source)).toEqual(["fantasycalc"]);
+  });
+
+  it("leaves pickSource null when nothing publishes picks", () => {
+    const combos = buildCombos([sources[2]], formats);
+    expect(combos.every((c) => c.pickSource === null)).toBe(true);
+  });
+});
+
+describe("leagueCarriesPickValue", () => {
+  it("prices picks in dynasty and best ball dynasty leagues", () => {
+    expect(leagueCarriesPickValue({ settings: { type: 2 } })).toBe(true);
+    expect(leagueCarriesPickValue({ settings: { type: 2, best_ball: 1 } })).toBe(true);
+  });
+
+  it("gives redraft, keeper and chopped leagues no pick value", () => {
+    expect(leagueCarriesPickValue({ settings: { type: 0 } })).toBe(false);
+    expect(leagueCarriesPickValue({ settings: { type: 1 } })).toBe(false);
+    expect(leagueCarriesPickValue({ settings: { type: 3 } })).toBe(false);
+    expect(leagueCarriesPickValue({ settings: { type: 0, best_ball: 1 } })).toBe(false);
+  });
+
+  it("treats a missing league object as carrying none", () => {
+    expect(leagueCarriesPickValue(null)).toBe(false);
+  });
+});
+
+describe("priceDraftPick", () => {
+  const lookup: PickValueLookup = {
+    values: new Map([
+      ["2027|1|early", 6000],
+      ["2027|1|mid", 5000],
+      ["2027|1|late", 4000],
+      ["2028|2|mid", 1500],
+    ]),
+  };
+  const ctx = { teamCount: 12, positions: NO_PICK_POSITIONS };
+
+  it("prices a pick by its real slot", () => {
+    expect(priceDraftPick({ season: 2027, round: 1, slot: 2, original_roster_id: 5 }, lookup, ctx)).toEqual({
+      value: 6000,
+      position: "early",
+      basis: "slot",
+    });
+    expect(priceDraftPick({ season: 2027, round: 1, slot: 11, original_roster_id: 5 }, lookup, ctx).value).toBe(4000);
+  });
+
+  it("falls to the projected slot when the pick carries none", () => {
+    const projected: PickPositionResolver = {
+      ready: true,
+      resolve: (roster, season) => (roster === 5 && season === 2027 ? { position: "late", estimated: true } : null),
+    };
+    expect(
+      priceDraftPick({ season: 2027, round: 1, original_roster_id: 5 }, lookup, { teamCount: 12, positions: projected }),
+    ).toEqual({ value: 4000, position: "late", basis: "projected" });
+  });
+
+  it("prices an unplaced pick at the round's blend, never a blanket mid", () => {
+    const skewed: PickValueLookup = {
+      values: new Map([
+        ["2027|1|early", 7000],
+        ["2027|1|mid", 5000],
+        ["2027|1|late", 4000],
+      ]),
+    };
+    const priced = priceDraftPick({ season: 2027, round: 1, original_roster_id: 9 }, skewed, ctx);
+    expect(priced.basis).toBe("blend");
+    expect(priced.value).toBeCloseTo(16000 / 3, 6);
+  });
+
+  it("blends when the placed bucket is not published", () => {
+    expect(priceDraftPick({ season: 2028, round: 2, slot: 1, original_roster_id: 1 }, lookup, ctx)).toEqual({
+      value: 1500,
+      position: null,
+      basis: "blend",
+    });
+  });
+
+  it("returns no price for a season and round with nothing published", () => {
+    expect(priceDraftPick({ season: 2030, round: 1, slot: 1 }, lookup, ctx).value).toBeNull();
+  });
+
+  it("reads string seasons the way Sleeper sometimes stores them", () => {
+    expect(priceDraftPick({ season: "2027", round: 1, slot: 6 }, lookup, ctx).value).toBe(5000);
+  });
+});
 
 type Row = {
   id: string;

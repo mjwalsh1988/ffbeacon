@@ -224,6 +224,7 @@ export async function findCrossLeagueTrade(
       teams: league.teams,
       startingSlots: league.startingSlots,
       isDynasty: league.isDynasty,
+      leagueKind: league.leagueKind,
       allowPicks: league.allowPicks,
       strategy: params.strategy,
       targetPlayerIds: [],

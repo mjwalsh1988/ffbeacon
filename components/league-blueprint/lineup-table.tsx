@@ -35,7 +35,12 @@ export function LineupTable({ view, number }: { view: BlueprintView; number: str
       helper={`This week's starters as set on Sleeper. ${priced} of ${view.lineup.length} slots hold a priced player; the bar under each value is drawn to the top starter.`}
       bodyClassName="-mx-5 sm:mx-0"
     >
-      <div className="overflow-x-auto">
+      <div
+        role="region"
+        aria-label="Starting lineup table, scrolls sideways on a narrow screen"
+        tabIndex={0}
+        className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">
             Starting lineup for {view.header.teamName}: slot, player, value, position rank and call
@@ -119,14 +124,20 @@ export function LineupTable({ view, number }: { view: BlueprintView; number: str
                     ) : (
                       <span className="font-mono text-xs text-ink-subtle">None</span>
                     )}
-                    {call && (
+                    {call ? (
                       <span className="mt-1 block">
                         <CallTag call={call} />
                       </span>
+                    ) : (
+                      p && <span className="mt-1 block text-[11px] font-medium text-ink-subtle">No call</span>
                     )}
                   </td>
                   <td className="hidden px-3 py-2.5 align-middle sm:table-cell">
-                    {call ? <CallTag call={call} /> : p ? <NoMarketValue /> : null}
+                    {call ? (
+                      <CallTag call={call} />
+                    ) : p ? (
+                      <span className="text-[11px] font-medium text-ink-subtle">No call</span>
+                    ) : null}
                     {call?.note && <p className="mt-1 max-w-[16rem] text-[11px] leading-snug text-ink-muted">{call.note}</p>}
                   </td>
                 </tr>

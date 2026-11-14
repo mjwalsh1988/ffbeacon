@@ -347,7 +347,10 @@ async function IntroChips({
   if (board.noScheduleYet) return null;
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
-      <Chip label={`Week ${board.currentWeek}`} accent />
+      <Chip
+        label={board.weekFromStored ? `Week ${board.currentWeek}, from stored games` : `Week ${board.currentWeek}`}
+        accent
+      />
       <Chip label={`${board.teams.length} teams`} />
       <Chip label={`Playoffs start week ${board.playoffWeekStart}`} />
     </div>
@@ -417,6 +420,7 @@ async function ScheduleBody({
   const insightWeeks: InsightWeek[] = board.weeks.map((week) => ({
     week: week.week,
     isFinal: week.isFinal,
+    isPlayoffWeek: week.isPlayoffWeek,
     matchups: week.matchups,
   }));
 
@@ -529,6 +533,7 @@ async function ScheduleBody({
               week={weekView}
               sleeperLeagueId={sleeperLeagueId}
               linkUsername={linkUsername}
+              chopped={board.chopped}
             />
           )}
         </div>
@@ -541,13 +546,17 @@ async function ScheduleBody({
           className="min-w-0 space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
         >
           <SosPanel board={board} insightWeeks={insightWeeks} />
-          <LuckPanel board={board} insightWeeks={insightWeeks} />
-          <SpotlightPanel
-            board={board}
-            insightWeeks={insightWeeks}
-            sleeperLeagueId={sleeperLeagueId}
-            linkUsername={linkUsername}
-          />
+          {/* No head-to-head in a chopped league, so no record to be lucky
+              about and no game to spotlight. */}
+          {!board.chopped && <LuckPanel board={board} insightWeeks={insightWeeks} />}
+          {!board.chopped && (
+            <SpotlightPanel
+              board={board}
+              insightWeeks={insightWeeks}
+              sleeperLeagueId={sleeperLeagueId}
+              linkUsername={linkUsername}
+            />
+          )}
           <SourcesPanel season={board.season} fromWeek={board.currentWeek} />
         </aside>
       </div>
@@ -571,18 +580,22 @@ const getScheduleData = cache(
     resynced: boolean,
   ): Promise<ScheduleBoard> => {
     // includePositionalWar: false. The schedule renders no curve.
-    await pulseLeagueDerived(createAdminClient(), leagueRowId, {
-      resynced,
-      includePositionalWar: false,
-    });
+    // The week is resolved alongside the derived pulse, not after it.
+    // Null when Sleeper's NFL state could not be read; the board then shows
+    // what is stored rather than guessing week 1.
+    const [, currentWeek] = await Promise.all([
+      pulseLeagueDerived(createAdminClient(), leagueRowId, {
+        resynced,
+        includePositionalWar: false,
+      }),
+      resolveScheduleWeek(season, playoffWeekStart),
+    ]);
     const supabase = await createClient();
-    const currentWeek = await resolveScheduleWeek(season, playoffWeekStart);
-    return loadScheduleBoard(supabase, {
-      leagueRowId,
-      season,
-      playoffWeekStart,
-      currentWeek,
-    });
+    return loadScheduleBoard(
+      supabase,
+      { leagueRowId, season, playoffWeekStart, currentWeek },
+      createAdminClient(),
+    );
   },
 );
 
@@ -730,7 +743,7 @@ function LuckPanel({
     <Panel
       eyebrow="Record against results"
       title="Luck index"
-      helper="Real record against playing everyone every week."
+      helper="Luck is your real record minus the record you would have from playing every team every week, regular season only."
     >
       {ranked.length === 0 ? (
         <p className="text-sm leading-relaxed text-ink-muted">
@@ -1113,6 +1126,7 @@ function buildSeasonRows(
     matchup:
       week.matchups.find((m) => sidesFor(m, sleeperRosterId).self !== null) ??
       null,
+    chopped: board.chopped,
   }));
 }
 

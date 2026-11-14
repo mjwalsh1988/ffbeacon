@@ -71,18 +71,25 @@ export function PulseFavoriteCard({
   // with it. Calling that team the "title favorite" would be naming a prize
   // its league does not award.
   const chopped = favorite.chopped;
-  const title = pct(chopped ? favorite.surviveAllOdds : favorite.titleOdds);
+  // After the title game the card names the champion; during the playoffs
+  // the odds are what is left of the bracket.
+  const champion = !chopped && favorite.playoffPhase === "complete" && favorite.isChampion;
+  const inPlayoffs = !chopped && favorite.playoffPhase === "playoffs";
+  const title = champion ? null : pct(chopped ? favorite.surviveAllOdds : favorite.titleOdds);
   const playoff = pct(favorite.playoffOdds);
   const chopRisk = pct(favorite.chopOddsThisWeek);
   const projected = record(favorite.projectedWins, favorite.projectedLosses);
 
-  // The headline claim, stated once, in words. The percentage below it is the
-  // evidence; this sentence is what the percentage means.
-  const claim = title
-    ? chopped
-      ? `Is the last team standing ${title} of the time across every simulated season.`
-      : `Wins this league ${title} of the time across every simulated season.`
-    : `Ranks first in this league on expected performance.`;
+  // The headline claim, stated once, in words.
+  const claim = champion
+    ? "Won the title game."
+    : title
+      ? chopped
+        ? `Last team standing in ${title} of simulated seasons.`
+        : inPlayoffs
+          ? `Wins the rest of the bracket in ${title} of simulations.`
+          : `Wins this league in ${title} of simulated seasons.`
+      : `Ranks first in this league on expected performance.`;
 
   const tieNote =
     favorite.tiedWith > 0
@@ -92,6 +99,15 @@ export function PulseFavoriteCard({
   const stats: Array<{ label: string; value: string }> = [];
   if (chopped) {
     if (chopRisk) stats.push({ label: "Chopped this week", value: chopRisk });
+  } else if (champion || inPlayoffs) {
+    if (favorite.seed !== null) stats.push({ label: "Seed", value: String(favorite.seed) });
+    // The regular season is over, so the record is played games: whole numbers.
+    if (favorite.projectedWins !== null && favorite.projectedLosses !== null) {
+      stats.push({
+        label: "Record",
+        value: `${Math.round(favorite.projectedWins)}-${Math.round(favorite.projectedLosses)}`,
+      });
+    }
   } else {
     if (projected) stats.push({ label: "Projected", value: projected });
     if (playoff) stats.push({ label: "Playoffs", value: playoff });
@@ -101,7 +117,11 @@ export function PulseFavoriteCard({
   }
 
   return (
-    <Panel eyebrow="Projected" title="Who wins this league" bodyClassName="px-4 py-4 sm:px-5">
+    <Panel
+      eyebrow={champion ? "Final" : "Projected"}
+      title={champion ? "League champion" : "Who wins this league"}
+      bodyClassName="px-4 py-4 sm:px-5"
+    >
       <div className="flex items-start gap-3">
         <span className="shrink-0">
           <SleeperAvatar avatarId={favorite.avatarId} title={favorite.label} size={40} />
@@ -111,18 +131,17 @@ export function PulseFavoriteCard({
             {/* Decorative: the words "Title favorite" beside it carry the
                 meaning, so the icon adds recognition rather than information. */}
             <Trophy aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            {chopped ? "Survival favorite" : "Title favorite"}
+            {champion ? "Champion" : chopped ? "Survival favorite" : "Title favorite"}
           </p>
           <p className="mt-0.5 truncate text-sm font-semibold text-ink" title={favorite.label}>
             {favorite.label}
           </p>
-          {/* The big number, right where the eye lands, with its own label
-              beneath rather than beside it so a narrow rail never wraps the
-              two apart. */}
+          {/* The hero figure, right where the eye lands, with its label after
+              it so a narrow rail never wraps the two apart. */}
           {title && (
-            <p className="mt-1.5 flex items-baseline gap-1.5">
+            <p className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
               <span
-                className="text-2xl font-semibold tabular-nums leading-none text-transparent"
+                className="font-mono text-4xl font-black tabular-nums leading-none text-transparent sm:text-5xl"
                 style={{
                   backgroundImage: "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)",
                   WebkitBackgroundClip: "text",
@@ -132,7 +151,7 @@ export function PulseFavoriteCard({
                 {title}
               </span>
               <span className="text-[11px] font-medium text-ink-muted">
-                {chopped ? "to outlast them all" : "to win it all"}
+                {chopped ? "to outlast them all" : inPlayoffs ? "to win the title" : "to win it all"}
               </span>
             </p>
           )}

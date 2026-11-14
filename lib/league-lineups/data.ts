@@ -45,9 +45,22 @@ import {
 } from "./build";
 import { buildDropOptions, buildWaiverSuggestions, type DropResult, type WaiverCandidate } from "./advice";
 import { claimLineupWaiverSlot } from "./rate-limit";
-import type { LineupOpponent, LineupTeamOption, LineupView, WaiverState } from "./types";
+import type {
+  ChopWeek,
+  LineupOpponent,
+  LineupTeamOption,
+  LineupView,
+  RoundLegs,
+  WaiverState,
+} from "./types";
 import { hasLivePoints, weekStatus } from "./status";
 import { buildWeekRecap } from "./recap";
+import { isLockedAt } from "./simulate";
+import { loadSetLineupStates, type LiveWeekRow } from "@/lib/league-schedule/data";
+import { expectedTotal, type SideState } from "@/lib/league-schedule/win-chance";
+import { otherLegWeek, playoffLeg, type PlayoffShape } from "@/lib/league-schedule/playoff-legs";
+import { buildCutLineWeek } from "@/lib/chopped/cut-line";
+import { eliminatedWeek } from "@/lib/chopped/league";
 
 /**
  * The read layer for the Lineups section.
@@ -268,6 +281,9 @@ export async function loadLineupView(
     }),
   ]);
 
+  // A failed read is a failure. Reading it as "no row" would show the roster's
+  // current starters as this week's lineup and say nothing about why.
+  if (matchupRes.error) throw new Error(`lineups: matchup read failed: ${matchupRes.error.message}`);
   const matchupRow = matchupRes.data ?? null;
   const isFinal = Boolean(matchupRow?.is_final);
 
@@ -320,30 +336,65 @@ export async function loadLineupView(
   // resolved before the big wave below, because that wave is where the
   // opponent's own Power Pulse row is read, and running it afterwards spent a
   // whole round trip on four small columns.
-  const [players, weekMatchupsRes] = await Promise.all([
+  // A CHOPPED LEAGUE HAS NO OPPONENT. The lowest score in the league goes out,
+  // so the whole week's rows are read and the pairing is never used.
+  const chopped = league.chopped;
+  const bestBall = league.bestBall === true;
+  const legShape: PlayoffShape = {
+    playoffWeekStart: chopped ? null : playoffWeekStart,
+    playoffRoundType: league.playoffRoundType,
+    playoffTeams: league.playoffTeams,
+  };
+  const firstLeg = isFinal && playoffLeg(week, legShape) === 2 ? otherLegWeek(week, legShape) : null;
+
+  const [players, weekMatchupsRes, firstLegRes, choppedRostersRes] = await Promise.all([
     // Every defender is NAMED (plan IDP-122); see projectablePlayerIds below
     // for which of them are also projected.
     loadPlayers(admin, sleeperIds, { positions: NAMING_POSITIONS }),
-    matchupRow?.matchup_id === null || matchupRow?.matchup_id === undefined
-      ? Promise.resolve({ data: null })
-      : supabase
+    chopped
+      ? supabase
           .from("league_matchups")
-          .select("sleeper_roster_id, matchup_id, points, is_final")
+          .select("sleeper_roster_id, matchup_id, points, is_final, starter_ids, starter_points, player_points, metadata")
           .eq("league_id", leagueRowId)
           .eq("season", season)
           .eq("week", week)
-          .eq("matchup_id", matchupRow.matchup_id),
+      : matchupRow?.matchup_id === null || matchupRow?.matchup_id === undefined
+        ? Promise.resolve({ data: null, error: null })
+        : supabase
+            .from("league_matchups")
+            .select("sleeper_roster_id, matchup_id, points, is_final, starter_ids, starter_points, player_points, metadata")
+            .eq("league_id", leagueRowId)
+            .eq("season", season)
+            .eq("week", week)
+            .eq("matchup_id", matchupRow.matchup_id),
+    // Leg 1 of a two-week playoff round, so the result is both weeks added.
+    firstLeg === null
+      ? Promise.resolve({ data: null, error: null })
+      : supabase
+          .from("league_matchups")
+          .select("sleeper_roster_id, points, is_final")
+          .eq("league_id", leagueRowId)
+          .eq("season", season)
+          .eq("week", firstLeg),
+    chopped
+      ? supabase.from("rosters").select("sleeper_roster_id, metadata").eq("league_id", leagueRowId)
+      : Promise.resolve({ data: null, error: null }),
   ]);
+  if (weekMatchupsRes.error) {
+    throw new Error(`lineups: week matchups read failed: ${weekMatchupsRes.error.message}`);
+  }
+  if (firstLegRes.error) throw new Error(`lineups: first leg read failed: ${firstLegRes.error.message}`);
+  if (choppedRostersRes.error) {
+    throw new Error(`lineups: chopped rosters read failed: ${choppedRostersRes.error.message}`);
+  }
   const playerIds = projectablePlayerIds(players, idpReads.loadsDefenders);
 
-  const opponentRow = (
-    (weekMatchupsRes.data ?? []) as Array<{
-      sleeper_roster_id: number;
-      matchup_id: number | null;
-      points: number | null;
-      is_final: boolean | null;
-    }>
-  ).find((row) => Number(row.sleeper_roster_id) !== sleeperRosterId);
+  const weekRows = (weekMatchupsRes.data ?? []) as Array<
+    LiveWeekRow & { matchup_id: number | null; points: number | null; is_final: boolean | null }
+  >;
+  const opponentRow = chopped
+    ? undefined
+    : weekRows.find((row) => Number(row.sleeper_roster_id) !== sleeperRosterId);
 
   const opponentRoster = opponentRow
     ? (rosters.find((r) => r.sleeperRosterId === Number(opponentRow.sleeper_roster_id)) ?? null)
@@ -371,9 +422,24 @@ export async function loadLineupView(
   // points once a week is final, so a free agent's projected points would be
   // differenced against a lineup of results and the panel would offer "+4.2"
   // for a week nobody can act on.
-  const waiversApply = phase.showsAdvice;
+  //
+  // A LIVE WEEK KEEPS THEM. After Thursday the players still to play can be
+  // swapped, picked up or cut, so the advice stays; the optimizer below banks
+  // the locked players' points and only works on the slots still open.
+  const waiversApply = phase.showsAdvice || phase.phase === "live";
 
-  const [projectionRows, accuracy, defense, homeAwayByTeamWeek, environment, warView, cacheRes, valueRankRes, restOfSeason, freeAgents, marketValues, opponentPulseRes] =
+  // THE OTHER SIDE OF THE WEEK, projected as SET lineups with points already
+  // scored banked: the opponent in a head-to-head league, every team still
+  // alive in a chopped one. The same function the Schedule board uses, so the
+  // what-if and the board quote one win chance. Skipped on a settled week.
+  const sideRows = isFinal
+    ? []
+    : chopped
+      ? weekRows
+      : weekRows.filter((row) => Number(row.sleeper_roster_id) !== sleeperRosterId);
+  const nowMs = Date.now();
+
+  const [projectionRows, accuracy, defense, homeAwayByTeamWeek, environment, warView, cacheRes, valueRankRes, restOfSeason, freeAgents, marketValues, sideStates] =
     await Promise.all([
       // One week, both bounds equal, so Postgres returns the ~25 rows this page
       // renders rather than the rest of the season for the same players.
@@ -425,22 +491,9 @@ export async function loadLineupView(
       isKeeperLeague
         ? loadPlayerValues(admin, formatConfigId, playerIds)
         : Promise.resolve(new Map<string, number>()),
-      // THE OPPONENT'S PROJECTED WEEK, one row, and only when it can be used.
-      //
-      // `weekly` is a whole season of per-week distributions, so pulling it for
-      // every roster in the league to read one week of one of them is a read
-      // the Schedules board can afford (it renders all of them) and this page
-      // cannot. Skipped outright on a settled week: the result is known, and
-      // the only consumer is the what-if, which a settled week does not offer.
-      opponentRoster && !isFinal
-        ? supabase
-            .from("league_power_pulse_cache")
-            .select("weekly")
-            .eq("league_id", leagueRowId)
-            .eq("season", season)
-            .eq("roster_id", opponentRoster.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
+      sideRows.length > 0
+        ? loadSetLineupStates(admin, league, season, week, currentWeek, sideRows, nowMs)
+        : Promise.resolve(new Map<number, SideState>()),
     ]);
 
   const projections = new Map<string, ProjectionRow>();
@@ -476,7 +529,18 @@ export async function loadLineupView(
     idpEnabled: idpReads.idpEnabled,
   };
 
-  const built = buildLineup(buildInput);
+  // A LIVE WEEK: whoever has kicked off is locked. Decided off the built
+  // players (their kickoff, projection and points) with the same rule the
+  // what-if uses, then the lineup is built again with them held in place.
+  let built = buildLineup(buildInput);
+  if (phase.phase === "live") {
+    const lockedSleeperIds = new Set<string>();
+    for (const [sleeperId, player] of built.bySleeperId) {
+      if (isLockedAt(player, nowMs)) lockedSleeperIds.add(sleeperId);
+    }
+    buildInput.lockedSleeperIds = lockedSleeperIds;
+    built = buildLineup(buildInput);
+  }
 
   const pulseRankByRosterRow = new Map(
     (cacheRes.data ?? []).map(
@@ -491,27 +555,66 @@ export async function loadLineupView(
 
   // WHO THIS TEAM PLAYS, and what they are projected to score.
   //
-  // Assembled from two reads the waves above already made, so it costs nothing
-  // here. Only the what-if uses it, and a week with no published matchup, an
-  // unpaired roster or a league whose Power Pulse has never been built each
-  // leave it null or partly null; the panel names those states rather than
-  // printing a win probability out of nothing.
+  // Their SET lineup, banked points plus what is still to come. A week with no
+  // published matchup or an unpaired roster leaves it null, and a chopped
+  // league never has one; the panel names those states rather than printing a
+  // win probability out of nothing.
   let opponent: LineupOpponent | null = null;
   if (opponentRow) {
-    const weekly = Array.isArray(opponentPulseRes.data?.weekly)
-      ? (opponentPulseRes.data.weekly as Array<Record<string, unknown>>)
-      : [];
-    const entry = weekly.find((row) => Number(row?.week) === week) ?? null;
-    const mean = finiteOrNull(entry?.mean);
-
+    const state = sideStates.get(Number(opponentRow.sleeper_roster_id));
+    const mean = state ? expectedTotal(state) : null;
     opponent = {
       sleeperRosterId: Number(opponentRow.sleeper_roster_id),
       teamName: opponentRoster?.teamName ?? `Team ${opponentRow.sleeper_roster_id}`,
       ownerHandle: opponentRoster?.ownerHandle ?? null,
       projected: mean,
-      sigma: mean === null ? null : (finiteOrNull(entry?.sigma) ?? 0),
+      sigma: mean === null || !state ? null : state.remainingSigma,
       actual: opponentRow.is_final ? finiteOrNull(opponentRow.points) : null,
     };
+  }
+
+  // A CHOPPED WEEK, framed around the cut line: this team's score, the lowest
+  // among everyone else still alive, the margin, and the chance of staying
+  // above it (lib/chopped/cut-line.ts).
+  let chop: ChopWeek | null = null;
+  if (chopped) {
+    const eliminatedByRoster = new Map<number, number | null>();
+    for (const row of (choppedRostersRes.data ?? []) as Array<{ sleeper_roster_id: number; metadata: unknown }>) {
+      const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+      eliminatedByRoster.set(Number(row.sleeper_roster_id), eliminatedWeek(meta.settings ?? null));
+    }
+    const live = phase.phase === "live" || isFinal;
+    chop = buildCutLineWeek({
+      rosterId: sleeperRosterId,
+      week,
+      isFinal,
+      teams: weekRows.map((row) => {
+        const rosterId = Number(row.sleeper_roster_id);
+        const state = sideStates.get(rosterId);
+        const r = rosters.find((x) => x.sleeperRosterId === rosterId);
+        return {
+          rosterId,
+          teamName: r?.teamName ?? `Team ${rosterId}`,
+          score: live ? (finiteOrNull(row.points) ?? 0) : null,
+          expected: state ? expectedTotal(state) : null,
+          sigma: state?.remainingSigma ?? 0,
+          seasonPoints: r?.pointsFor ?? 0,
+          eliminatedWeek: eliminatedByRoster.get(rosterId) ?? null,
+        };
+      }),
+    });
+  }
+
+  // Leg 2 of a two-week playoff round: the other leg for both teams, so the
+  // recap reports the round, not the week.
+  let legs: RoundLegs | null = null;
+  if (firstLeg !== null && opponentRow) {
+    const legRows = (firstLegRes.data ?? []) as Array<{ sleeper_roster_id: number; points: number | null; is_final: boolean | null }>;
+    const ownLeg = legRows.find((r) => Number(r.sleeper_roster_id) === sleeperRosterId);
+    const oppLeg = legRows.find((r) => Number(r.sleeper_roster_id) === Number(opponentRow.sleeper_roster_id));
+    if (ownLeg?.is_final && oppLeg?.is_final) {
+      legs = { ownOther: Number(ownLeg.points ?? 0), opponentOther: Number(oppLeg.points ?? 0) };
+    }
   }
 
   const status = classifyTeamStatus({
@@ -668,10 +771,9 @@ export async function loadLineupView(
     opponent,
     idpEnabled: idpReads.idpEnabled,
     weekStatus: phase,
-    // THE REPORT, and only once there is something to report. A live week has
-    // points but no settled result, so it gets a recap with a null outcome
-    // rather than a fabricated one: `buildWeekRecap` reads `actualTotal`, which
-    // stays null until the week settles.
+    chopped,
+    bestBall,
+    chop,
     // THE REPORT, AND ONLY ON A SETTLED WEEK.
     //
     // `showsResults` is true mid-week too, and building it then is wrong in a
@@ -687,6 +789,7 @@ export async function loadLineupView(
           optimization: built.optimization,
           actualTotal: built.actualTotal,
           opponentActual: opponent?.actual ?? null,
+          legs,
         })
       : null,
   };
@@ -738,6 +841,7 @@ async function buildWaivers(args: {
     args;
 
   if (!freeAgents) return [];
+  const liveNowMs = Date.now();
 
   const shortlist: Array<{ player_id: string; sleeper_id: string | null; overall_rank: number }> =
     freeAgents.players.filter((p) => p.sleeper_id).slice(0, WAIVER_CANDIDATE_POOL);
@@ -809,6 +913,8 @@ async function buildWaivers(args: {
 
     const player = buildLineupPlayer(faInput, sleeperId, "bench", null);
     if (player.projected === null) continue;
+    // A live week: a free agent whose game has started cannot help this week.
+    if (buildInput.lockedSleeperIds && isLockedAt(player, liveNowMs)) continue;
 
     const withHim = buildOptimalLineup(
       projectableTokens,

@@ -20,7 +20,12 @@ import { closestScoringBase } from "@/lib/league-scoring";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { alignedStartingSlots } from "@/lib/league-schedule/slots";
-import { rawStarterIds, type RawMatchupRow } from "@/lib/league-schedule/lineups";
+import {
+  rawStarterIds,
+  readRosteredPlayerPoints,
+  readSetLineup,
+  type RawMatchupRow,
+} from "@/lib/league-schedule/lineups";
 import { MAX_MATCHUP_WEEK } from "@/lib/league-matchups";
 import type { LedgerWeek } from "@/lib/manager-ledger/types";
 import { buildSeasonSeries, projectionAccuracy, type SeasonSeries, type ProjectionAccuracy } from "./season";
@@ -127,7 +132,7 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
       .maybeSingle(),
     supabase
       .from("league_matchups")
-      .select("week, is_final, starter_ids, metadata")
+      .select("week, is_final, starter_ids, starter_points, player_points, metadata")
       .eq("league_id", leagueRowId)
       .eq("season", season)
       .eq("sleeper_roster_id", sleeperRosterId)
@@ -162,12 +167,17 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
     : null;
 
   const projectedByWeek = new Map<number, number>();
+  // What the same projected starters actually scored, so the miss is measured
+  // over one set of players rather than the projectable slots against all.
+  const comparedActualByWeek = new Map<number, number>();
   let projectionSource = "sleeper";
 
   const matchupRows = (matchupsRes.data ?? []) as unknown as Array<{
     week: number;
     is_final: boolean | null;
     starter_ids: Json;
+    starter_points: Json;
+    player_points: Json;
     metadata: Json;
   }>;
 
@@ -183,6 +193,8 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
     const defenseSeasons = defenseSeasonsFor(season);
 
     const startersByWeek = new Map<number, (string | null)[]>();
+    /** Each settled week's per-player points: players_points first, the slot's own figure second. */
+    const actualByWeek = new Map<number, (sleeperId: string, index: number) => number | null>();
     const sleeperIds = new Set<string>();
     let lastWeek = 1;
 
@@ -197,14 +209,17 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
       if (!row.is_final) continue;
       const raw: RawMatchupRow = {
         starter_ids: row.starter_ids,
-        starter_points: null,
+        starter_points: row.starter_points,
         player_ids: null,
-        player_points: null,
+        player_points: row.player_points,
         metadata: row.metadata,
       };
       const ids = rawStarterIds(raw);
       if (ids.length === 0) continue;
       startersByWeek.set(week, ids);
+      const byPlayer = readRosteredPlayerPoints(raw);
+      const bySlot = readSetLineup(raw, slots);
+      actualByWeek.set(week, (sleeperId, index) => byPlayer.get(sleeperId) ?? bySlot[index]?.actualPoints ?? null);
       if (week > lastWeek) lastWeek = week;
       // EVERY WEEK'S OWN STARTERS, not the roster as it stands. A player
       // started in week 2 and traded in week 5 is not on this roster now, and
@@ -247,7 +262,9 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
 
         for (const [week, ids] of startersByWeek) {
           let total = 0;
+          let actualTotal = 0;
           let counted = 0;
+          const actualOf = actualByWeek.get(week);
           // A duplicate id in Sleeper's starters array keeps its FIRST slot, so
           // this total and the board's cannot disagree about a week. Sleeper
           // has produced them, and lib/league-lineups/build.ts guards the same
@@ -279,19 +296,27 @@ export const loadLineupSeason = cache(async function loadLineupSeason(params: {
               settings,
             });
             if (!projected) return;
+            // BOTH NUMBERS OR NEITHER, so projected and actual cover one set of
+            // starters.
+            const actual = actualOf ? actualOf(sleeperId, index) : null;
+            if (actual === null) return;
             total += projected.points;
+            actualTotal += actual;
             counted += 1;
           });
           // A week where nothing resolved is left ABSENT rather than plotted as
           // zero. A zero on this chart reads as "your lineup was projected for
           // nothing", which is a claim, and an absent point reads as what it is.
-          if (counted > 0) projectedByWeek.set(week, total);
+          if (counted > 0) {
+            projectedByWeek.set(week, total);
+            comparedActualByWeek.set(week, actualTotal);
+          }
         }
       }
     }
   }
 
-  const series = buildSeasonSeries({ ledgerWeeks, projectedByWeek, viewedWeek });
+  const series = buildSeasonSeries({ ledgerWeeks, projectedByWeek, comparedActualByWeek, viewedWeek });
 
   return {
     series,

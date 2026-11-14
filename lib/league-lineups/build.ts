@@ -153,6 +153,13 @@ export type BuildLineupInput = {
    * the same switch. Absent or false: the OFF slot map, exactly as before.
    */
   idpEnabled?: boolean;
+  /**
+   * Players whose games have kicked off in a week being played. Sleeper locks a
+   * player at kickoff, so a locked starter keeps his slot and his banked points
+   * and a locked bench player cannot come in: only the unlocked slots are
+   * optimized. Ignored on a final week, which is graded on results throughout.
+   */
+  lockedSleeperIds?: ReadonlySet<string>;
 };
 
 /** Two decimals, the precision fantasy points are quoted at everywhere. */
@@ -448,9 +455,14 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
    * headline total and the sentences under it can never end up graded on
    * different halves of the same week.
    */
+  const locked: ReadonlySet<string> =
+    !input.isFinal && input.lockedSleeperIds ? input.lockedSleeperIds : new Set<string>();
   const grade = (player: LineupPlayer | null): number | null => {
     if (!player) return null;
-    return input.isFinal ? player.actual : player.projected;
+    if (input.isFinal) return player.actual;
+    // A locked player's points are banked: what he has scored is what counts.
+    if (locked.has(player.sleeperId)) return player.actual ?? 0;
+    return player.projected;
   };
 
   /**
@@ -503,7 +515,24 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
   const setTotal = setCount > 0 ? setSum : null;
 
   const projectableIndex = projectableSlotIndex(input.slots);
-  const projectableTokens = projectableIndex.map((i) => input.slots[i].token);
+
+  // A projectable slot held by a LOCKED starter is out of the fill: he stays,
+  // and his banked points are added to both sides of the comparison.
+  let lockedSetGraded = 0;
+  let lockedSlotCount = 0;
+  const lockedSeated = new Set<string>();
+  const fillIndex: number[] = [];
+  for (const i of projectableIndex) {
+    const holder = slotEntries[i].player;
+    if (holder && locked.has(holder.sleeperId)) {
+      lockedSeated.add(holder.sleeperId);
+      lockedSlotCount += 1;
+      if (gradableSleeperIds.has(holder.sleeperId)) lockedSetGraded += grade(holder) ?? 0;
+      continue;
+    }
+    fillIndex.push(i);
+  }
+  const projectableTokens = fillIndex.map((i) => input.slots[i].token);
 
   /**
    * Who is currently in a PROJECTABLE starting slot.
@@ -519,6 +548,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
   for (let i = 0; i < input.slots.length; i += 1) {
     const player = slotEntries[i].player;
     if (!player) continue;
+    if (lockedSeated.has(player.sleeperId)) continue;
     if (input.slots[i].projectable) seatedNow.add(player.sleeperId);
     else inUnprojectableSlot.add(player.sleeperId);
   }
@@ -532,6 +562,8 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
   for (const [sleeperId, player] of bySleeperId) {
     if (player.isInactive) continue;
     if (inUnprojectableSlot.has(sleeperId)) continue;
+    // Locked: his game has started, so he can neither come in nor go out.
+    if (locked.has(sleeperId)) continue;
     if (!gradableSleeperIds.has(sleeperId)) continue;
     const points = grade(player);
     if (points === null) continue;
@@ -568,7 +600,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
     // always zero (an unprojectable slot never receives a projection), but on a
     // settled week an IDP slot DOES carry a real score, and the subtraction
     // below depends on it.
-    optimalTotal = fill.total + unprojectableSetGraded;
+    optimalTotal = fill.total + unprojectableSetGraded + lockedSetGraded;
 
     /**
      * THE DIFF IS ON LINEUP MEMBERSHIP, NOT ON SLOT ASSIGNMENT, and that
@@ -606,11 +638,11 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
       if (!filled.playerId) continue;
       const player = candidateBySleeperId.get(filled.playerId);
       if (!player) continue;
-      seatedOptimal.push({ player, points: filled.points, slotIndex: projectableIndex[i] });
+      seatedOptimal.push({ player, points: filled.points, slotIndex: fillIndex[i] });
     }
 
     const optimalIds = new Set(seatedOptimal.map((s) => s.player.sleeperId));
-    optimalSleeperIds.push(...optimalIds);
+    optimalSleeperIds.push(...optimalIds, ...lockedSeated);
 
     const incoming = seatedOptimal
       .filter((s) => !seatedNow.has(s.player.sleeperId))
@@ -621,6 +653,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
       if (!input.slots[i].projectable) continue;
       const player = slotEntries[i].player;
       if (!player) continue;
+      if (lockedSeated.has(player.sleeperId)) continue;
       if (optimalIds.has(player.sleeperId)) continue;
       // A benched starter we cannot grade contributes an unknown, not a zero.
       // Pairing an incoming player against him would invent a gain out of our
@@ -672,6 +705,13 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
     }
   }
 
+  // Every projectable slot is locked: nothing is left to change, so the best
+  // lineup is the one on the field.
+  if (optimalTotal === null && lockedSlotCount > 0 && projectableTokens.length === 0) {
+    optimalTotal = unprojectableSetGraded + lockedSetGraded;
+    optimalSleeperIds.push(...lockedSeated);
+  }
+
   moves.sort((a, b) => b.pointsGained - a.pointsGained);
 
   // ROUNDED, for the same reason lib/manager-ledger/lineup.ts rounds: summing
@@ -702,6 +742,7 @@ export function buildLineup(input: BuildLineupInput): BuiltLineup {
     unlistedGain: round2(Math.max(0, totalPairedGain - listedGain)),
     ungradedSlotCount,
     unavailable: optimalTotal === null,
+    ...(lockedSlotCount > 0 ? { lockedSlotCount } : {}),
   };
 
   const byProjection = (a: LineupPlayer, b: LineupPlayer): number => {

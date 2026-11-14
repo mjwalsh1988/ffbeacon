@@ -310,8 +310,14 @@ async function buildWarContext(
   ]);
   if (!league) return null;
 
-  const fromWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  const resolvedWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
   const toWeek = league.playoffWeekStart - 1;
+  // Unknown week (Sleeper's NFL state did not answer): a transient skip, so no
+  // compute runs and the stored curve stays (LPI-T02).
+  if (resolvedWeek === null) {
+    return { skipped: "NFL week unknown (Sleeper state did not answer)", season: league.season, fromWeek: 0, toWeek };
+  }
+  const fromWeek = resolvedWeek;
 
   if (toWeek < fromWeek) {
     return {
@@ -723,14 +729,13 @@ export async function calculateLeaguePositionalWar(
 
   if (isSkip(context)) {
     const reason = context.skipped;
-    // Only the empty-window reason is a statement that will not change until
-    // the season or the playoff start date does; that is exactly the one
-    // this module classifies 'settled', and a settled verdict clears any
-    // rows a previous, now-expired window left behind. Every other skip is
-    // transient and leaves the existing cache alone.
-    if (SETTLED_REASON_TESTS.some((t) => t(reason))) {
-      await clearCache(supabase, leagueRowId, context.season);
-    }
+    // No skip clears the cache. The empty-window reason (classified
+    // 'settled') means the regular season is over, and the last curve, built
+    // for the season's final weeks, is kept and shown with those weeks as the
+    // final result (LPI-T08). Clearing it left the page empty from the first
+    // playoff week until next season. Every other skip is transient and
+    // leaves the stored curve alone too. A new season reads a different
+    // season's rows, so nothing stale carries over.
     return {
       ok: true,
       positions: 0,
@@ -821,21 +826,3 @@ export async function calculateLeaguePositionalWar(
   };
 }
 
-/**
- * Drop any cached rows for a league season a settled verdict just decided
- * cannot be scored. Mirrors lib/league-power-pulse.ts clearCache: declining
- * to write a new row is not enough, a curve computed under a previous,
- * now-expired window would keep showing forever otherwise.
- */
-async function clearCache(supabase: ServiceClient, leagueRowId: string, season: number): Promise<void> {
-  const { error } = await supabase
-    .from("league_positional_war_cache")
-    .delete()
-    .eq("league_id", leagueRowId)
-    .eq("season", season);
-  if (error) {
-    console.warn(
-      `[positional-war] could not clear stale cache for league ${leagueRowId}: ${error.message}`,
-    );
-  }
-}

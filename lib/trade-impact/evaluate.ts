@@ -11,7 +11,19 @@ import {
   type WeeklyDistribution,
 } from "@/lib/power-pulse/what-if";
 import { gradeAssetPairs } from "@/lib/trade-finder-grade";
-import type { SuggestionAsset } from "@/lib/trade-finder/types";
+import {
+  inferStrategy,
+  readTradeStrategy,
+  strategyLabel,
+  type SuggestionAsset,
+} from "@/lib/trade-finder/types";
+import { lineupChange } from "@/lib/trade-finder/rank";
+import { lineupTotal } from "@/lib/trade-finder/profile";
+import type { AssetRef } from "@/lib/trade-finder/packages";
+import { survivalDeltaFor } from "@/lib/trade-finder/pulse";
+import { consolidatedTotals } from "@/lib/trade-finder/value-margin";
+import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
+import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 // A pure label map, imported across features on purpose: `SUPER_FLEX` and
 // `WRRB_FLEX` are Sleeper's tokens, not words, and there is one place in this
 // codebase that turns them into something a person would say.
@@ -25,14 +37,15 @@ import {
   type TradeFinderLeague,
 } from "@/lib/trade-finder-data";
 import { MAX_BUILD_ASSETS_PER_SIDE } from "./proposal-url";
-import type {
-  BuildAsset,
-  ImpactGaps,
-  ResolvedAsset,
-  TeamImpact,
-  TradeImpact,
-  TradeProposal,
-  WeekImpact,
+import {
+  isPriced,
+  type BuildAsset,
+  type ImpactGaps,
+  type ResolvedAsset,
+  type TeamImpact,
+  type TradeImpact,
+  type TradeProposal,
+  type WeekImpact,
 } from "./types";
 
 /**
@@ -162,6 +175,9 @@ export function resolveAgainstTeam(
         position: player.position,
         team: player.team,
         value: player.hasValue ? player.value : 0,
+        // An unpriced player (a defender, or anyone with no value row) is left
+        // out of the value margin and reads "No market value", never 0.
+        priced: player.hasValue,
         age: player.age,
         projPoints: player.projPoints,
         isInactive: player.isInactive,
@@ -192,6 +208,7 @@ export function resolveAgainstTeam(
       originalTeamName: pick.originalTeamName,
       positionEstimated: pick.positionEstimated,
       value: pick.hasValue ? pick.value : 0,
+      priced: pick.hasValue,
     });
   }
 
@@ -503,6 +520,8 @@ function toSuggestionAssets(assets: ResolvedAsset[]): SuggestionAsset[] {
           season: a.season,
           round: a.round,
           value: a.value,
+          pickPosition: a.pickPosition,
+          positionEstimated: a.positionEstimated,
         },
   );
 }
@@ -584,6 +603,14 @@ export async function evaluateValidatedTrade(
   supabase: AnyClient,
   admin: ServiceClient,
   validated: ValidatedProposal,
+  opts: {
+    /**
+     * The reader's Compete or Rebuild choice, off the wire. Read only in a
+     * dynasty league; anything else (or nothing) falls back to the mode
+     * inferred from the reader's own team, exactly as the suggestion tab does.
+     */
+    strategy?: string | null;
+  } = {},
 ): Promise<EvaluateResult> {
   const { proposal, incoming, outgoing } = validated;
 
@@ -657,6 +684,43 @@ export async function evaluateValidatedTrade(
 
   const lineupUnavailable = weeks.length === 0 || world.projections.size === 0;
 
+  // ---- the one lineup figure ----------------------------------------------
+  // The headline lineup change is read off the SAME projections, window,
+  // injury discount and fill the suggestion card used (lib/trade-finder-data.ts
+  // and lineupChange in lib/trade-finder/rank.ts), so the card and this
+  // evaluation print one number for one deal. The week-by-week strip and the
+  // simulation below still project every remaining week, because they answer
+  // a different question: which games move, and what that does to the season.
+  const finderSlots = world.finder.startingSlots;
+  const refsFrom = (
+    assets: ResolvedAsset[],
+    holder: typeof mineTeam,
+  ): AssetRef[] => {
+    const byId = new Map(holder.players.map((p) => [p.playerId, p]));
+    const out: AssetRef[] = [];
+    for (const a of assets) {
+      if (a.kind !== "player") continue;
+      const player = byId.get(a.playerId);
+      if (player) out.push({ kind: "player", player });
+    }
+    return out;
+  };
+  const mineLineup = lineupChange(
+    { team: mineTeam, startingTotal: lineupTotal(finderSlots, mineTeam.players) },
+    finderSlots,
+    refsFrom(incoming, theirTeam),
+    refsFrom(outgoing, mineTeam),
+  );
+  const theirLineup = lineupChange(
+    { team: theirTeam, startingTotal: lineupTotal(finderSlots, theirTeam.players) },
+    finderSlots,
+    refsFrom(outgoing, mineTeam),
+    refsFrom(incoming, theirTeam),
+  );
+
+  const leagueKind = world.finder.leagueKind;
+  const chopped = leagueKind === "chopped";
+
   // ---- season simulation ---------------------------------------------------
   // Baseline: every OTHER team from the Power Pulse cache, the two involved
   // teams from our own computation. See lib/trade-impact/load.ts for why.
@@ -677,8 +741,11 @@ export async function evaluateValidatedTrade(
   // Every roster needs a distribution or the simulation is scoring a league it
   // only half knows, which is worse than saying nothing.
   const everyRosterCovered = world.rosters.every((r) => baseline.has(r.sleeperRosterId));
+  // A chopped league has no head to head schedule, so a season simulation of
+  // wins and playoffs would describe a game the league is not playing. Its
+  // season figure is survival this week, worked out below.
   const sim =
-    !lineupUnavailable && everyRosterCovered
+    !chopped && !lineupUnavailable && everyRosterCovered
       ? simulateWithReplacements({
           rosters: world.rosters,
           baseline,
@@ -696,18 +763,20 @@ export async function evaluateValidatedTrade(
       : null;
 
   const gaps: ImpactGaps = {
-    lineup: lineupUnavailable,
+    lineup: mineLineup.delta === null,
     simulation: sim === null,
     simulationCause:
       sim !== null
         ? undefined
-        : weeks.length === 0 || upcoming.length === 0
-          ? "season-over"
-          : !everyRosterCovered
-            ? world.cachedWeeklySourceMismatch
-              ? "engine-switch"
-              : "not-built"
-            : "season-over",
+        : chopped
+          ? "chopped"
+          : weeks.length === 0 || upcoming.length === 0
+            ? "season-over"
+            : !everyRosterCovered
+              ? world.cachedWeeklySourceMismatch
+                ? "engine-switch"
+                : "not-built"
+              : "season-over",
     picks: !world.finder.allowPicks,
   };
 
@@ -748,6 +817,60 @@ export async function evaluateValidatedTrade(
 
   const statusOf = (team: typeof mineTeam) => team.statusLabel ?? null;
 
+  /**
+   * Season figures, anchored on Power Pulse's cache.
+   *
+   * "Before" is the figure Power Pulse shows for this team, so the evaluation,
+   * the card and the Power Pulse page all start from one number. The simulation
+   * supplies only the CHANGE (its after minus its own before), because its own
+   * before is a fresh Monte Carlo run that lands a little off the cached one,
+   * and printing it would put two "projected wins" for one team on the site.
+   * Where the cache holds no figure the simulation's own before stands in.
+   */
+  const anchored = (
+    cached: number | null | undefined,
+    simBefore: number | undefined,
+    simAfter: number | undefined,
+    probability: boolean,
+  ): { before: number | null; after: number | null } => {
+    if (simBefore === undefined || simAfter === undefined) return { before: null, after: null };
+    const before = typeof cached === "number" && Number.isFinite(cached) ? cached : simBefore;
+    const raw = before + (simAfter - simBefore);
+    return { before, after: probability ? Math.min(Math.max(raw, 0), 1) : raw };
+  };
+  const seasonFor = (team: typeof mineTeam, rosterId: number) => {
+    const b = sim?.before.get(rosterId);
+    const a = sim?.after.get(rosterId);
+    return {
+      wins: anchored(team.pulse?.projectedWins, b?.expectedWins, a?.expectedWins, false),
+      playoff: anchored(team.pulse?.playoffOdds, b?.playoffOdds, a?.playoffOdds, true),
+      title: anchored(team.pulse?.titleOdds, b?.titleOdds, a?.titleOdds, true),
+    };
+  };
+  /**
+   * Chopped: the chance of surviving this week's cut, before (Power Pulse's
+   * figure) and after, priced with the same lineup change and the same math the
+   * card used (survivalDeltaFor in lib/trade-finder/pulse.ts).
+   */
+  const survivalFor = (
+    team: typeof mineTeam,
+    lineupDelta: number | null,
+  ): { before: number | null; after: number | null } => {
+    if (!chopped) return { before: null, after: null };
+    const chop = team.pulse?.chopOdds;
+    if (typeof chop !== "number" || !Number.isFinite(chop)) return { before: null, after: null };
+    const before = 1 - chop;
+    const delta = survivalDeltaFor(lineupDelta, team.pulse);
+    return {
+      before,
+      after: delta === null ? null : Math.min(Math.max(before + delta, 0), 1),
+    };
+  };
+  const mineSeason = seasonFor(mineTeam, proposal.myRosterId);
+  const theirSeason = seasonFor(theirTeam, proposal.theirRosterId);
+  const mineSurvival = survivalFor(mineTeam, mineLineup.delta);
+  const theirSurvival = survivalFor(theirTeam, theirLineup.delta);
+
   const mineImpact: TeamImpact = {
     rosterId: proposal.myRosterId,
     teamName: mineTeam.teamName,
@@ -759,20 +882,22 @@ export async function evaluateValidatedTrade(
     valueDelta: sumValue(incoming) - sumValue(outgoing),
     ageDelta: ageDeltaOf(incoming, outgoing),
     pickCountDelta: pickCount(incoming) - pickCount(outgoing),
-    lineupBefore: lineupUnavailable ? null : mineSwap.meanBefore,
-    lineupAfter: lineupUnavailable ? null : mineSwap.meanAfter,
-    lineupDelta: lineupUnavailable ? null : mineSwap.delta,
+    lineupBefore: mineLineup.before,
+    lineupAfter: mineLineup.after,
+    lineupDelta: mineLineup.delta,
     weeks: lineupUnavailable ? [] : buildWeeks(mineSwap, proposal.myRosterId),
     weeksImproved: mineSwap.weeksImproved,
     weeksWorsened: mineSwap.weeksWorsened,
     incomingStartWeeks: mineSwap.incomingStartWeeks,
     outgoingStartWeeks: mineSwap.outgoingStartWeeks,
-    projectedWinsBefore: sim?.before.get(proposal.myRosterId)?.expectedWins ?? null,
-    projectedWinsAfter: sim?.after.get(proposal.myRosterId)?.expectedWins ?? null,
-    playoffOddsBefore: sim?.before.get(proposal.myRosterId)?.playoffOdds ?? null,
-    playoffOddsAfter: sim?.after.get(proposal.myRosterId)?.playoffOdds ?? null,
-    titleOddsBefore: sim?.before.get(proposal.myRosterId)?.titleOdds ?? null,
-    titleOddsAfter: sim?.after.get(proposal.myRosterId)?.titleOdds ?? null,
+    projectedWinsBefore: mineSeason.wins.before,
+    projectedWinsAfter: mineSeason.wins.after,
+    playoffOddsBefore: mineSeason.playoff.before,
+    playoffOddsAfter: mineSeason.playoff.after,
+    titleOddsBefore: mineSeason.title.before,
+    titleOddsAfter: mineSeason.title.after,
+    survivalBefore: mineSurvival.before,
+    survivalAfter: mineSurvival.after,
     positionBefore: positionPointsFrom(mineBefore, weeks),
     positionAfter: positionPointsFrom(mineAfter, weeks),
     incoming,
@@ -791,20 +916,22 @@ export async function evaluateValidatedTrade(
     valueDelta: sumValue(outgoing) - sumValue(incoming),
     ageDelta: ageDeltaOf(outgoing, incoming),
     pickCountDelta: pickCount(outgoing) - pickCount(incoming),
-    lineupBefore: lineupUnavailable ? null : theirSwap.meanBefore,
-    lineupAfter: lineupUnavailable ? null : theirSwap.meanAfter,
-    lineupDelta: lineupUnavailable ? null : theirSwap.delta,
+    lineupBefore: theirLineup.before,
+    lineupAfter: theirLineup.after,
+    lineupDelta: theirLineup.delta,
     weeks: lineupUnavailable ? [] : buildWeeks(theirSwap, proposal.theirRosterId),
     weeksImproved: theirSwap.weeksImproved,
     weeksWorsened: theirSwap.weeksWorsened,
     incomingStartWeeks: theirSwap.incomingStartWeeks,
     outgoingStartWeeks: theirSwap.outgoingStartWeeks,
-    projectedWinsBefore: sim?.before.get(proposal.theirRosterId)?.expectedWins ?? null,
-    projectedWinsAfter: sim?.after.get(proposal.theirRosterId)?.expectedWins ?? null,
-    playoffOddsBefore: sim?.before.get(proposal.theirRosterId)?.playoffOdds ?? null,
-    playoffOddsAfter: sim?.after.get(proposal.theirRosterId)?.playoffOdds ?? null,
-    titleOddsBefore: sim?.before.get(proposal.theirRosterId)?.titleOdds ?? null,
-    titleOddsAfter: sim?.after.get(proposal.theirRosterId)?.titleOdds ?? null,
+    projectedWinsBefore: theirSeason.wins.before,
+    projectedWinsAfter: theirSeason.wins.after,
+    playoffOddsBefore: theirSeason.playoff.before,
+    playoffOddsAfter: theirSeason.playoff.after,
+    titleOddsBefore: theirSeason.title.before,
+    titleOddsAfter: theirSeason.title.after,
+    survivalBefore: theirSurvival.before,
+    survivalAfter: theirSurvival.after,
     positionBefore: positionPointsFrom(theirBefore, weeks),
     positionAfter: positionPointsFrom(theirAfter, weeks),
     incoming: outgoing,
@@ -813,14 +940,42 @@ export async function evaluateValidatedTrade(
   theirImpact.valueAfter = theirImpact.valueBefore + theirImpact.valueDelta;
 
   // Signal Check, as a second opinion that decides nothing. A failure here must
-  // not cost the reader the rest of the evaluation.
-  const [grade] = await gradeAssetPairs(admin, world.finder.sleeperLeague, [
+  // not cost the reader the rest of the evaluation. The settings read rides
+  // alongside it: the call's value margin uses the same consolidation curve
+  // Signal Check grades with, and the suggestion engine ranks with.
+  const [[grade], signalCheckSettings] = await Promise.all([
+    gradeAssetPairs(admin, world.finder.sleeperLeague, [
+      {
+        incoming: toSuggestionAssets(incoming),
+        outgoing: toSuggestionAssets(outgoing),
+        counterpartyLabel: theirTeam.teamName,
+      },
+    ]).catch(() => [null]),
+    loadSignalCheckSettings(admin).catch(() => null),
+  ]);
+
+  // Priced assets only: a defender or an unpriced pick is left out of the
+  // margin entirely rather than counted as a zero-value package piece.
+  const value = consolidatedTotals(
+    incoming.filter(isPriced).map((a) => a.value),
+    outgoing.filter(isPriced).map((a) => a.value),
     {
-      incoming: toSuggestionAssets(incoming),
-      outgoing: toSuggestionAssets(outgoing),
-      counterpartyLabel: theirTeam.teamName,
+      config:
+        signalCheckSettings && signalCheckSettings.qualityEnabled
+          ? signalCheckSettings.quality
+          : DEFAULT_TRADE_QUALITY_CONFIG,
+      poolMax: world.finder.poolMax,
     },
-  ]).catch(() => [null]);
+  );
+
+  // Which question the call answers. Redraft and chopped are always win-now;
+  // a dynasty reader's Compete or Rebuild choice wins, and without one the mode
+  // is inferred from their own team, the same rule the suggestion tab opens on.
+  const inferred = inferStrategy(leagueKind, mineTeam.statusKey);
+  const asked = leagueKind === "dynasty" ? readTradeStrategy(opts.strategy) : null;
+  const strategy = asked ?? inferred.strategy;
+  const strategyReason =
+    asked && asked !== inferred.strategy ? `${strategyLabel(asked)}, as you chose.` : inferred.reason;
 
   const reasonInput = {
     mine: mineImpact,
@@ -873,6 +1028,11 @@ export async function evaluateValidatedTrade(
       formatDisplay: world.finder.formatDisplay,
       sourceDisplay: world.finder.sourceDisplay,
       pickSourceDisplay: world.finder.pickSourceDisplay,
+      leagueKind,
+      strategy,
+      strategyReason,
+      value: { valueIn: value.valueIn, valueOut: value.valueOut },
+      lineupWindow: world.finder.lineupWindow,
     },
   };
 }

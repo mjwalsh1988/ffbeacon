@@ -57,6 +57,8 @@ export async function loadFaabDefenders(
     season,
     Number.isFinite(playoffStart) && playoffStart > 0 ? playoffStart : DEFAULT_PLAYOFF_WEEK_START,
   );
+  // Unknown week (Sleeper's NFL state did not answer): a failure, not week 1.
+  if (week === null) throw new Error("FAAB defenders: NFL week unknown, Sleeper state did not answer");
   const source = await resolveProjectionSourceForWindow({
     supabase: admin,
     season,

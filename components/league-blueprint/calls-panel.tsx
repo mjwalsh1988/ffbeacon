@@ -1,7 +1,7 @@
 /**
  * Buy, sell, hold (plan 9.10). Hero: the activity band beside its gauge.
- * Then the split of the roster's priced players into Sell, Build around and
- * Hold, drawn as one stacked bar with the three percentages under it, the
+ * Then the split of the roster's priced players into Sell, Cut, Build around
+ * and Hold, drawn as one stacked bar with the four percentages under it, the
  * buy target count, and the lists: sells (hard first, each with its note),
  * build arounds, holds (noted first), buy targets by position with an "Open
  * in builder" link, and cut candidates. Ruled rows throughout.
@@ -18,7 +18,7 @@ import { positionHeading } from "@/lib/site";
 import type { BlueprintActivity, BlueprintView, PlayerCall } from "@/lib/league-blueprint/types";
 import { BuyTag, CallTag } from "./call-tag";
 import { Gauge } from "./gauge";
-import { builderHref, teamWithHandle, fmtValue, LINK, SECONDARY_FIGURE, SECONDARY_LABEL, SUBLIST_HEADING } from "./bits";
+import { builderHref, teamWithHandle, fmtValue, LINK, ROW_FIGURE, ROW_SUB, SECONDARY_FIGURE, SECONDARY_LABEL, SUBLIST_HEADING } from "./bits";
 import { RULED, SheetSection } from "./sheet";
 
 type Entry = { id: string; call: PlayerCall };
@@ -72,15 +72,17 @@ function CallList({
 }
 
 /**
- * The split as one stacked bar: sells in the warning color, builds in brand
- * purple, holds in muted ink, each segment as wide as its share. The three
- * figures under it are the real text; the bar is decoration of them.
+ * The split as one stacked bar: sells in the warning color, cuts in the
+ * danger color, builds in brand purple, holds in muted ink, each segment as
+ * wide as its share. The four figures under it are the real text; the bar is
+ * decoration of them.
  */
 function SplitBar({ a }: { a: BlueprintActivity }) {
   const parts = [
-    { label: "Sells", pct: a.sellsPct, fill: "bg-signal-warning" },
-    { label: "Builds", pct: a.buildsPct, fill: "bg-brand-purple" },
-    { label: "Holds", pct: a.holdsPct, fill: "bg-ink/35" },
+    { label: "Sells", pct: a.sellsPct, count: a.sellCount, fill: "bg-signal-warning" },
+    { label: "Cuts", pct: a.cutsPct, count: a.cutCount, fill: "bg-signal-danger" },
+    { label: "Builds", pct: a.buildsPct, count: null, fill: "bg-brand-purple" },
+    { label: "Holds", pct: a.holdsPct, count: null, fill: "bg-ink/35" },
   ];
   return (
     <div>
@@ -89,7 +91,7 @@ function SplitBar({ a }: { a: BlueprintActivity }) {
           <span key={p.label} className={`block h-full ${p.fill}`} style={{ width: `${p.pct}%` }} />
         ))}
       </div>
-      <dl className="mt-3 grid grid-cols-3 gap-2">
+      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {parts.map((p) => (
           <div key={p.label} className="min-w-0 border-t border-line pt-2">
             <dt className={`flex items-center gap-1.5 ${SECONDARY_LABEL}`}>
@@ -99,6 +101,9 @@ function SplitBar({ a }: { a: BlueprintActivity }) {
             <dd className={SECONDARY_FIGURE}>
               {p.pct}%<span className="sr-only"> of priced players</span>
             </dd>
+            {p.count !== null && (
+              <dd className={ROW_SUB}>{p.count === 1 ? "1 player" : `${p.count} players`}</dd>
+            )}
           </div>
         ))}
       </dl>
@@ -179,8 +184,9 @@ export function CallsPanel({
               <section key={g.position} aria-labelledby={`bp-buy-${g.position}`} className="min-w-0 border-t border-line pt-3">
                 <h4 id={`bp-buy-${g.position}`} className="text-sm font-semibold text-ink">
                   {positionHeading(g.position, "plural")}
-                  <span className="ml-2 font-mono text-[11px] font-normal tabular-nums text-ink-subtle">
-                    {g.need.toFixed(1)} points a week short
+                  <span className="ml-2 inline-flex items-baseline gap-1.5 whitespace-nowrap">
+                    <span className={ROW_FIGURE}>{g.need.toFixed(1)}</span>
+                    <span className={ROW_SUB}>points a week short</span>
                   </span>
                 </h4>
                 {g.targets.length === 0 ? (

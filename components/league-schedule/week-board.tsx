@@ -56,10 +56,13 @@ export function WeekBoard({
   week,
   sleeperLeagueId,
   linkUsername,
+  chopped = false,
 }: {
   week: ScheduleWeekView;
   sleeperLeagueId: string;
   linkUsername: string | null;
+  /** A chopped league: no head-to-head, so no card says who won. */
+  chopped?: boolean;
 }) {
   return (
     <Panel
@@ -93,6 +96,8 @@ export function WeekBoard({
                 // from the same week, so raising all six would raise none.
                 emphasize={false}
                 headingLevel={3}
+                isPlayoffWeek={week.isPlayoffWeek}
+                chopped={chopped}
               />
             </li>
           ))}

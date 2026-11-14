@@ -36,13 +36,20 @@ export type BlueprintShareCard = {
   valueShare: { pct: number | null; rank: number | null };
   productionShare: { pct: number | null; rank: number | null };
   teamCount: number;
-  activity: { band: string; score: number; sellsPct: number; buildsPct: number; holdsPct: number };
+  activity: { band: string; score: number; sellsPct: number; cutsPct: number; buildsPct: number; holdsPct: number };
   sells: Array<{ name: string; position: string }>;
   buys: Array<{ name: string; position: string }>;
   risers: Array<{ name: string; pct: number }>;
   fallers: Array<{ name: string; pct: number }>;
   moversWindow: string;
-  capital: Array<{ season: number; value: number; rank: number | null }> | null;
+  capital: Array<{
+    season: number;
+    value: number;
+    rank: number | null;
+    /** Picks held that season, and how many of them have no market price. */
+    pickCount: number;
+    unpricedCount: number;
+  }> | null;
   priorities: string[];
   strategy: Array<{ label: string; out: string; in: string; verdict: string | null; empty: string | null }>;
   partners: Array<{ teamName: string; handle: string | null }>;
@@ -115,6 +122,7 @@ export function buildBlueprintShareCard(
       band: view.activity.band,
       score: view.activity.score,
       sellsPct: view.activity.sellsPct,
+      cutsPct: view.activity.cutsPct,
       buildsPct: view.activity.buildsPct,
       holdsPct: view.activity.holdsPct,
     },
@@ -123,7 +131,15 @@ export function buildBlueprintShareCard(
     risers: view.movers.risers.map((m) => ({ name: view.players[m.playerId]?.name ?? "", pct: m.pct })),
     fallers: view.movers.fallers.map((m) => ({ name: view.players[m.playerId]?.name ?? "", pct: m.pct })),
     moversWindow: view.movers.windowLabel,
-    capital: view.capital ? view.capital.seasons.map((s) => ({ season: s.season, value: s.value, rank: s.rank })) : null,
+    capital: view.capital
+      ? view.capital.seasons.map((s) => ({
+          season: s.season,
+          value: s.value,
+          rank: s.rank,
+          pickCount: s.picks.length,
+          unpricedCount: s.unpricedCount,
+        }))
+      : null,
     priorities: view.priorities.map((x) => x.text),
     strategy: view.strategy.map((s) => ({
       label: s.label.split(":")[0],

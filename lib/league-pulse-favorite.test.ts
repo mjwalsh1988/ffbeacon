@@ -89,6 +89,20 @@ describe("pickFavorite", () => {
     expect(picked?.row.roster_id).toBe("b");
   });
 
+  it("names the champion once the title game is played", () => {
+    const picked = pickFavorite([
+      row({ roster_id: "a", title_odds: 0.6, pulse_rank: 1 }),
+      row({
+        roster_id: "b",
+        title_odds: 0,
+        pulse_rank: 4,
+        playoff: { phase: "complete", seed: 4, status: "champion", finalPlace: 1 },
+      }),
+    ]);
+    expect(picked?.row.roster_id).toBe("b");
+    expect(picked?.tiedWith).toBe(0);
+  });
+
   it("does not mutate the rows it was given", () => {
     const rows = [
       row({ roster_id: "a", title_odds: 0.1 }),

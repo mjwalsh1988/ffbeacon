@@ -45,6 +45,7 @@ import type { PlottableCurve } from "@/lib/positional-war/types";
 import { isDefender, OFFENSE_POSITIONS } from "@/lib/site";
 import { matchCurveOwnership, splitUnmatchedOwners } from "./overlay";
 import { buildYourBestLine, selectScarcestAndDeepest } from "./selection";
+import { warHeadingWeeks } from "./summary";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -123,7 +124,9 @@ export async function WarRailSummary({
   // all. An empty finding card is worse than no card, and the Positional WAR
   // page itself carries the honest reason.
   if (!view || view.curves.every((c) => c.curve.length === 0)) return null;
-  if (view.status === "settled" || view.status === "error") return null;
+  // A settled league keeps its last curve (the regular season's final weeks)
+  // and the card says so in its eyebrow; only an error hides it.
+  if (view.status === "error") return null;
 
   const { scarcest, deepest } = selectScarcestAndDeepest(view.curves);
   if (!scarcest) return null;
@@ -180,7 +183,7 @@ export async function WarRailSummary({
     // The heading names the CARD, not the metric, so a reader scanning the
     // heading list can tell it apart from the full panel on the page it links
     // to. The differentiating word lives in the eyebrow.
-    <Panel eyebrow="Scarcity" title="Positional WAR at a glance" bodyClassName="px-4 py-4 sm:px-5">
+    <Panel eyebrow={warHeadingWeeks(view)} title="Positional WAR at a glance" bodyClassName="px-4 py-4 sm:px-5">
       <p className="text-xs leading-relaxed text-ink-muted">{headline}</p>
 
       {/* The condensed curve. Decorative: every value it draws is a cell in the

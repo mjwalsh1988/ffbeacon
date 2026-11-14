@@ -18,7 +18,7 @@
  *    nothing would ever take the second look lib/league-removal.ts requires
  *    before deleting it. This takes that look, for at most
  *    NOT_FOUND_BATCH_SIZE leagues per run, oldest first, through the Sleeper
- *    call budget.
+ *    call budget. Frozen past seasons (leagues.frozen_at) are never rechecked.
  *
  * 3. TEAM BLUEPRINT PRUNES (docs/team-blueprint/team-blueprint-plan.md 7.4).
  *    One DELETE each, by an indexed date column: stored blueprints older than
@@ -124,6 +124,9 @@ export async function recheckNotFoundLeagues(
     .from("leagues")
     .select("id, sleeper_league_id")
     .eq("pulse_error", LEAGUE_NOT_FOUND_ERROR)
+    // A frozen past season makes no Sleeper request ever again, this one
+    // included. Its stored snapshot stays whatever Sleeper later says.
+    .is("frozen_at", null)
     .order("updated_at", { ascending: true })
     .limit(NOT_FOUND_BATCH_SIZE);
   if (error) throw new Error(`not-found league read failed: ${error.message}`);

@@ -56,7 +56,14 @@ function readoutText(row: WarTableRow, ordinal: { index: number; total: number }
   return parts.join(", ") + ".";
 }
 
-export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
+export function WarScatterChart({
+  rows,
+  summary,
+}: {
+  rows: WarTableRow[];
+  /** The chart's one-sentence summary, which names the role="img" drawing. */
+  summary: string;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
@@ -235,7 +242,8 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
         onBlur={() => setActiveId(null)}
       >
         <svg
-          aria-hidden="true"
+          role="img"
+          aria-label={summary}
           viewBox={`0 0 ${box.width} ${box.height}`}
           preserveAspectRatio="xMidYMid meet"
           className="pointer-events-none h-auto w-full"

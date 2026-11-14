@@ -35,11 +35,11 @@ import {
  *
  * WHY A RESULT AND A PROJECTION NEVER LOOK ALIKE
  *   A final week shows what was scored and says "Won" next to the side that won
- *   it, with a filled marker beside the word rather than instead of it. An
- *   unplayed week shows the projected total from Power Pulse, carries a
- *   "Projected" chip so it cannot be misread as a result, and writes BOTH win
- *   probabilities into the sentence under the bar. The bar itself is
- *   aria-hidden, because a bar is a picture of a number that is already there.
+ *   it (never in a chopped league, which has no head-to-head, and never on leg
+ *   1 of a two-week playoff round). "Projected" always means the SET lineup,
+ *   which only the week in play has; a later week shows the Power Pulse best
+ *   lineup under a "Best lineup" chip. The bar is aria-hidden, because a bar is
+ *   a picture of the two percentages already read.
  */
 
 export function MatchupRow({
@@ -49,6 +49,8 @@ export function MatchupRow({
   isCurrent,
   emphasize,
   headingLevel = 3,
+  isPlayoffWeek = false,
+  chopped = false,
 }: {
   matchup: ScheduleMatchup;
   sleeperLeagueId: string;
@@ -70,6 +72,10 @@ export function MatchupRow({
    */
   emphasize?: boolean;
   headingLevel?: 3 | 4;
+  /** An unpaired roster in a playoff week has a bye or is out of the bracket. */
+  isPlayoffWeek?: boolean;
+  /** A chopped league: nobody wins a pairing, so no card says "Won". */
+  chopped?: boolean;
 }) {
   const Heading = (`h${headingLevel}` as const) as "h3" | "h4";
   const { home, away, isFinal, week } = matchup;
@@ -82,6 +88,27 @@ export function MatchupRow({
   const raised = emphasize ?? isCurrent;
 
   const homeProb = matchup.homeWinProb;
+  // What the figure on each side is: a result, a live score, the set lineup's
+  // projection, or the best lineup's. The chip says which, in words.
+  const basis: FigureBasis = isFinal
+    ? "final"
+    : (home.liveScore ?? null) !== null || (away?.liveScore ?? null) !== null
+      ? "live"
+      : (home.projectedSet ?? null) !== null
+        ? "set"
+        : "best";
+  const chip =
+    basis === "final"
+      ? matchup.leg === 1
+        ? "Final, leg 1 of 2"
+        : matchup.leg === 2
+          ? "Final, both legs"
+          : "Final"
+      : basis === "live"
+        ? "In progress"
+        : basis === "set"
+          ? "Projected"
+          : "Best lineup";
 
   return (
     <article
@@ -100,7 +127,7 @@ export function MatchupRow({
             This week
           </span>
         )}
-        <span className={CHIP}>{isFinal ? "Final" : "Projected"}</span>
+        <span className={CHIP}>{chip}</span>
       </div>
 
       <Heading className="mt-2 text-base font-bold tracking-tight text-ink">
@@ -122,19 +149,20 @@ export function MatchupRow({
 
       <ul role="list" className="mt-3 space-y-2">
         <li>
-          <SideRow side={home} isFinal={isFinal} />
+          <SideRow side={home} basis={basis} chopped={chopped} />
         </li>
         {away !== null && (
           <li>
-            <SideRow side={away} isFinal={isFinal} />
+            <SideRow side={away} basis={basis} chopped={chopped} />
           </li>
         )}
       </ul>
 
       {away === null ? (
         <p className="mt-3 text-sm text-ink-muted">
-          No opponent this week. This league has an odd number of teams, so one roster sits
-          out each week.
+          {isPlayoffWeek
+            ? "No playoff game this week: a bye, or out of the bracket."
+            : "No opponent this week."}
         </p>
       ) : (
         !isFinal &&
@@ -180,12 +208,16 @@ export function MatchupRow({
  * flex line with the figure pinned right, so the compaction happens in the
  * middle column by wrapping rather than by dropping anything.
  */
+type FigureBasis = "final" | "live" | "set" | "best";
+
 function SideRow({
   side,
-  isFinal,
+  basis,
+  chopped,
 }: {
   side: ScheduleMatchupSide;
-  isFinal: boolean;
+  basis: FigureBasis;
+  chopped: boolean;
 }) {
   const leavingPoints =
     side.pointsLeftOnBench !== null && side.pointsLeftOnBench >= BENCH_CHIP_THRESHOLD
@@ -224,8 +256,13 @@ function SideRow({
       </div>
 
       <div className="shrink-0 text-right">
-        <ScoreFigure side={side} isFinal={isFinal} />
-        {isFinal && side.won && (
+        <ScoreFigure side={side} basis={basis} />
+        {basis === "final" && side.roundTotal != null && (
+          <p className="mt-1 font-mono text-[11px] tabular-nums text-ink-muted">
+            {fmtPoints(side.roundTotal)} over both legs
+          </p>
+        )}
+        {basis === "final" && !chopped && side.won && (
           <p className="mt-1 flex items-center justify-end gap-1 text-[11px] font-bold text-signal-success">
             <Trophy aria-hidden="true" className="h-3.5 w-3.5" />
             Won
@@ -237,26 +274,48 @@ function SideRow({
 }
 
 /**
- * The number on the right.
+ * The number on the right, the card's hero figure.
  *
- * A final week has an actual score and no projection; an unplayed week has the
- * reverse. Neither ever falls back to 0.0, because a zero on a fantasy
- * scoreboard reads as a real result and would be believed.
+ * A result, a live score (with the set lineup's projected finish under it), the
+ * set lineup's projection, or the best lineup's, never mixed and never 0.0 in
+ * place of a missing number.
  */
-function ScoreFigure({ side, isFinal }: { side: ScheduleMatchupSide; isFinal: boolean }) {
-  const value = isFinal ? side.actual : side.projectedOptimal;
+function ScoreFigure({ side, basis }: { side: ScheduleMatchupSide; basis: FigureBasis }) {
+  const value =
+    basis === "final"
+      ? side.actual
+      : basis === "live"
+        ? (side.liveScore ?? null)
+        : basis === "set"
+          ? (side.projectedSet ?? null)
+          : side.projectedOptimal;
+  const lead =
+    basis === "final"
+      ? "Scored "
+      : basis === "live"
+        ? "Scored so far "
+        : basis === "set"
+          ? "Projected "
+          : "Best lineup ";
   if (value === null) {
     return (
       <p className="text-xs text-ink-subtle">
-        {isFinal ? "Score not available" : "No projection"}
+        {basis === "final" ? "Score not available" : basis === "live" ? "No points yet" : "No projection"}
       </p>
     );
   }
   return (
-    <p className="font-mono text-lg font-extrabold tabular-nums text-ink">
-      <span className="sr-only">{isFinal ? "Scored " : "Projected "}</span>
-      {fmtPoints(value)}
-      <span className="sr-only"> points</span>
-    </p>
+    <>
+      <p className="font-mono text-4xl font-black leading-none tabular-nums text-ink sm:text-5xl">
+        <span className="sr-only">{lead}</span>
+        {fmtPoints(value)}
+        <span className="sr-only"> points</span>
+      </p>
+      {basis === "live" && side.projectedSet != null && (
+        <p className="mt-1 font-mono text-[11px] tabular-nums text-ink-muted">
+          {fmtPoints(side.projectedSet)} projected
+        </p>
+      )}
+    </>
   );
 }

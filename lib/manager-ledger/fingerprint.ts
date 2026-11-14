@@ -15,6 +15,9 @@
  *                        what the optimal lineup is and which slots are gradable
  *   transactionCount     a trade or claim landing changes three of four ledgers
  *   draftPickCount       picks arrive after the draft is captured, once
+ *   ineligibleDigest     IR and taxi ids, which decide who could have started
+ *   officialPointsTotal  a stat correction to a settled week
+ *   rules                league kind, playoff start, median game
  *   modelVersion         a change to the arithmetic
  *
  * WHAT IS DELIBERATELY ABSENT
@@ -40,8 +43,49 @@ export type LedgerFingerprintInput = {
   slots: string[];
   transactionCount: number;
   draftPickCount: number;
+  /**
+   * Digest of every roster's IR and taxi ids (see `ineligibleDigest`). Moving
+   * a player onto or off IR changes who could have started, so it changes the
+   * best legal lineup without changing any count above.
+   */
+  ineligibleDigest: string;
+  /**
+   * Sum of the official points on every settled row, to two decimals. Sleeper
+   * sometimes corrects a settled score (a stat correction) without adding a
+   * row, and the counts above cannot see that.
+   */
+  officialPointsTotal: number;
+  /** League kind, playoff start and median game (./rules.ts ledgerRulesToken). */
+  rules: string;
   modelVersion: string;
 };
+
+/**
+ * One short digest of the IR and taxi ids per roster. Sorted at both levels,
+ * and the "0" placeholder dropped, so the gate (raw rows) and the full read
+ * (RosterRow) produce the same key for the same rosters.
+ */
+export function ineligibleDigest(
+  rosters: { rosterId: number; ids: Iterable<string> }[],
+): string {
+  const parts = rosters
+    .map((r) => {
+      const ids = [...new Set(r.ids)].filter((id) => id.length > 0 && id !== "0").sort();
+      return ids.length > 0 ? `${r.rosterId}:${ids.join(",")}` : null;
+    })
+    .filter((p): p is string => p !== null)
+    .sort();
+  return createHash("sha256").update(parts.join(";")).digest("hex").slice(0, 16);
+}
+
+/** Two-decimal sum, so float order never changes the key. */
+export function officialPointsTotal(points: Iterable<number>): number {
+  let cents = 0;
+  for (const p of points) {
+    if (Number.isFinite(p)) cents += Math.round(p * 100);
+  }
+  return cents / 100;
+}
 
 /** The human-readable inputs, for a diagnostic that is not an opaque hash. */
 export function ledgerInputsDigest(
@@ -63,6 +107,9 @@ export function ledgerFingerprint(input: LedgerFingerprintInput): string {
     `slots=${[...input.slots].sort().join(",")}`,
     `tx=${input.transactionCount}`,
     `picks=${input.draftPickCount}`,
+    `ineligible=${input.ineligibleDigest}`,
+    `official=${input.officialPointsTotal.toFixed(2)}`,
+    `rules=${input.rules}`,
     `model=${input.modelVersion}`,
   ].join("|");
   return createHash("sha256").update(payload).digest("hex");

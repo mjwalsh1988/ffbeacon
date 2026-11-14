@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
+import { isPickSeasonSpent } from "@/lib/league-pick-position";
 import { computeAgeYears } from "@/lib/player-age";
 import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 
@@ -190,6 +191,10 @@ export async function loadLeagueTeamCards(
       : Promise.resolve({ data: [], error: null }),
     loadLeagueDraftSlots(supabase, leagueRowId),
   ]);
+  // A failed read is a failure, never an empty league (LPI-T05).
+  if (rostersRes.error) throw new Error(`rosters: ${rostersRes.error.message}`);
+  if (usersRes.error) throw new Error(`league_users: ${usersRes.error.message}`);
+  if (cacheRes.error) throw new Error(`league_power_rankings_cache: ${cacheRes.error.message}`);
   const rosters = rostersRes.data ?? [];
   const users = usersRes.data ?? [];
   const cache = (cacheRes.data ?? []) as Array<
@@ -208,13 +213,12 @@ export async function loadLeagueTeamCards(
   }
 
   // Sleeper leaves the current-season rookie picks on rosters even after the
-  // draft completes, so drop them once the league is past pre_draft.
-  const stripCurrentSeasonPicks =
-    leagueStatus != null && leagueStatus !== "pre_draft" && !!currentSeason;
+  // draft completes. The shared rule (also used by the power rankings) drops
+  // any pick from a season whose draft is done.
   const filterPicks = (picks: DraftPickAsset[]): DraftPickAsset[] => {
-    const filtered = stripCurrentSeasonPicks
-      ? picks.filter((p) => String(p.season) !== String(currentSeason))
-      : picks;
+    const filtered = picks.filter(
+      (p) => !isPickSeasonSpent(p.season, { season: currentSeason, status: leagueStatus }),
+    );
     // Stamp every emitted pick with its resolved slot + pick_label, even if
     // it was synced before the slot mapping landed. Sort so picks read in
     // chronological order (season → round → slot) which mirrors how DPC
@@ -471,12 +475,13 @@ export async function loadPositionRanks(
   const CHUNK = 300;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("rankings")
       .select("player_id, position_rank")
       .eq("format_config_id", formatConfigId)
       .eq("source", source)
       .in("player_id", chunk);
+    if (error) throw new Error(`rankings: ${error.message}`);
     for (const row of data ?? []) {
       if (row.position_rank != null)
         out[row.player_id] = Number(row.position_rank);
@@ -519,12 +524,13 @@ export async function loadTrends(
   const CHUNK = 300;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("player_value_trends")
       .select(columns)
       .eq("format_config_id", formatConfigId)
       .eq("source", source)
       .in("player_id", chunk);
+    if (error) throw new Error(`player_value_trends: ${error.message}`);
     for (const raw of (data ?? []) as unknown as Array<Record<string, unknown>>) {
       const base: TrendLite = {
         current_value: Number(raw.current_value),

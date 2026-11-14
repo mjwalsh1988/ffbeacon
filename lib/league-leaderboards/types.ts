@@ -109,6 +109,8 @@ export type GameResult = {
   margin: number;
   combined: number;
   winnerId: number | null;
+  /** Leg 2 of a two-week playoff round: the points are both legs added. */
+  twoLegs?: boolean;
 };
 
 /** A season figure per team, already sorted. */
@@ -158,6 +160,8 @@ export type LeaderboardsView = {
   /** Weeks each team posted the league's top score. Season scope only. */
   weeklyHighs: TeamTotal[];
   games: { blowouts: GameResult[]; closest: GameResult[]; shootouts: GameResult[] };
+  /** False in a chopped league, which plays no head-to-head games. */
+  showsGames?: boolean;
   /** True when free agent weeks could be scored (the league's scoring is usable). */
   scoresFreeAgents: boolean;
 };

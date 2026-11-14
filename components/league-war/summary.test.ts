@@ -8,6 +8,8 @@ import {
   buildNoProjectionLine,
   buildOverlayPositionLine,
   buildPastDepthLine,
+  warHeadingWeeks,
+  weeksCoveredLabel,
 } from "./summary";
 import type { PositionCurve, WarCurvePoint } from "@/lib/positional-war/types";
 
@@ -198,5 +200,22 @@ describe("empty state copy", () => {
     expect(buildEmptyStateQuietNote("settled")).toBeNull();
     expect(buildEmptyStateQuietNote("pending")).toBeNull();
     expect(buildEmptyStateQuietNote(null)).toBeNull();
+  });
+});
+
+describe("weeksCoveredLabel and warHeadingWeeks (LPI-T08)", () => {
+  it("names the weeks a curve covers", () => {
+    expect(weeksCoveredLabel(10, 14)).toBe("Weeks 10 to 14");
+    expect(weeksCoveredLabel(14, 14)).toBe("Week 14");
+    expect(weeksCoveredLabel(null, 14)).toBeNull();
+  });
+
+  it("marks the last curve as the final result once the season is over", () => {
+    expect(warHeadingWeeks({ fromWeek: 14, throughWeek: 14, windowClosed: true })).toBe(
+      "Final result, week 14",
+    );
+    expect(warHeadingWeeks({ fromWeek: 10, throughWeek: 14, windowClosed: false })).toBe(
+      "Weeks 10 to 14",
+    );
   });
 });

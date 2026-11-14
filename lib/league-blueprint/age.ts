@@ -55,7 +55,8 @@ export function computeAge(
   for (const p of offense(mine)) {
     if (p.value === null || p.value <= 0 || p.age === null) continue;
     total += p.value;
-    if (p.age <= youngAge) young += p.value;
+    // Whole years, as the setting reads: "aged 25 or under" includes 25.9.
+    if (Math.floor(p.age) <= youngAge) young += p.value;
   }
   return {
     rows,

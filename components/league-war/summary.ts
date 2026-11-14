@@ -172,6 +172,32 @@ export type FootnoteInput = {
   projectionSourceLabel?: string;
 };
 
+/**
+ * The weeks a curve covers, for beside the heading: "Weeks 10 to 14", or
+ * "Week 14" for one. Null when the stored row carries no window.
+ */
+export function weeksCoveredLabel(
+  fromWeek: number | null,
+  throughWeek: number | null,
+): string | null {
+  if (fromWeek === null || throughWeek === null) return null;
+  return fromWeek === throughWeek ? `Week ${fromWeek}` : `Weeks ${fromWeek} to ${throughWeek}`;
+}
+
+/**
+ * The eyebrow over the Positional WAR heading: the weeks covered, marked as
+ * the final result once the regular season is over.
+ */
+export function warHeadingWeeks(view: {
+  fromWeek: number | null;
+  throughWeek: number | null;
+  windowClosed: boolean;
+}): string {
+  const weeks = weeksCoveredLabel(view.fromWeek, view.throughWeek);
+  if (!weeks) return "Scarcity";
+  return view.windowClosed ? `Final result, ${weeks.toLowerCase()}` : weeks;
+}
+
 /** The one footnote line under the chart, per section 11.6 and 8.4. */
 export function buildFootnote(input: FootnoteInput): string {
   const {
@@ -186,12 +212,8 @@ export function buildFootnote(input: FootnoteInput): string {
     projectionSourceLabel = "Sleeper",
   } = input;
 
-  const weekClause =
-    fromWeek !== null && throughWeek !== null
-      ? fromWeek === throughWeek
-        ? `Week ${fromWeek}.`
-        : `Weeks ${fromWeek} to ${throughWeek}.`
-      : null;
+  const weeks = weeksCoveredLabel(fromWeek, throughWeek);
+  const weekClause = weeks ? `${weeks}.` : null;
 
   const parts: string[] = [];
   if (weekClause) parts.push(weekClause);

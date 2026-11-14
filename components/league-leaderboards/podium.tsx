@@ -138,13 +138,13 @@ export function Podium({
 
               <div className="shrink-0 text-right sm:mt-3 sm:text-center">
                 <p
-                  className={`font-mono font-black tabular-nums leading-none ${first ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"} ${first ? PLACE_TEXT[0] : "text-ink"}`}
+                  className={`font-mono font-black tabular-nums leading-none ${first ? "text-4xl sm:text-5xl" : "text-2xl"} ${first ? PLACE_TEXT[0] : "text-ink"}`}
                 >
                   {pts(leader.points)}
                   <span className="sr-only"> points</span>
                 </p>
                 <p className="mt-1 whitespace-nowrap font-mono text-[11px] tabular-nums text-ink-subtle">
-                  {leader.perGame !== null ? pts(leader.perGame) : "0.0"} per game
+                  {leader.perGame !== null ? `${pts(leader.perGame)} per game` : "No games played"}
                 </p>
               </div>
             </div>

@@ -31,7 +31,7 @@ import {
   type HistoryPoint,
   type SignalState,
 } from "./bollinger";
-import { MIN_PARTITION_PLAYERS, type MarketSignalSettings } from "./default-settings";
+import { MIN_PARTITION_PLAYERS, sourceRules, type MarketSignalSettings } from "./default-settings";
 import type { Partition } from "./partitions";
 
 type Client = SupabaseClient<Database>;
@@ -101,7 +101,16 @@ export type PartitionComputation = {
   pricedOnLatestDay: number;
   /** True when the partition had too few priced players to signal. */
   tooThin: boolean;
+  /**
+   * True when the latest day is the run day and still being written: it
+   * prices under PARTIAL_DAY_SHARE of the players the day before did. Nothing is written and the partition is not stamped, so
+   * the catch-up entry (or the next night) reads the finished day.
+   */
+  partial: boolean;
 };
+
+/** A run-day latest day pricing under this share of the previous day is partial. */
+export const PARTIAL_DAY_SHARE = 0.9;
 
 /**
  * Pure: every player's row for one partition from its history and the stored
@@ -130,20 +139,48 @@ export function computePartition(
 
   let top = 0;
   let priced = 0;
+  let previousDay: string | null = null;
   if (asOfDay) {
     for (const s of series.values()) {
+      for (const day of s.keys()) {
+        if (day < asOfDay && (previousDay === null || day > previousDay)) previousDay = day;
+      }
       const v = s.get(asOfDay);
       if (v === undefined) continue;
       priced += 1;
       if (v > top) top = v;
     }
   }
+  const runDay = utcDay(now.toISOString());
+  if (asOfDay !== null && asOfDay >= runDay) {
+    let pricedBefore = 0;
+    if (previousDay) for (const s of series.values()) if (s.has(previousDay)) pricedBefore += 1;
+    // Measured against the day before, so a partition that is always small
+    // (thin, and stamped as thin) is not mistaken for one still loading.
+    if (pricedBefore > 0 && priced < PARTIAL_DAY_SHARE * pricedBefore) {
+      return {
+        asOfDay,
+        signals: [],
+        changes: [],
+        pricedOnLatestDay: priced,
+        tooThin: priced < MIN_PARTITION_PLAYERS,
+        partial: true,
+      };
+    }
+  }
   if (asOfDay === null || priced < MIN_PARTITION_PLAYERS) {
-    return { asOfDay, signals: [], changes: [], pricedOnLatestDay: priced, tooThin: true };
+    return { asOfDay, signals: [], changes: [], pricedOnLatestDay: priced, tooThin: true, partial: false };
   }
 
+  const rules = sourceRules(settings, partition.source);
+  const computeSettings = {
+    ...settings,
+    windowDays: rules.windowDays,
+    minPoints: rules.minPoints,
+    staleDays: rules.staleDays,
+    minBandPoints: rules.minBandPoints,
+  };
   const prevBy = new Map(existing.map((e) => [e.player_id, e]));
-  const runDay = utcDay(now.toISOString());
   const computedAt = now.toISOString();
   const signals: SignalRow[] = [];
   const changes: ChangeRow[] = [];
@@ -155,7 +192,7 @@ export function computePartition(
       runDay,
       prev: prev?.signal ?? null,
       topMarketValue: top,
-      settings,
+      settings: computeSettings,
     });
     if (!row) continue;
     const prevSignal = prev?.signal ?? null;
@@ -192,7 +229,7 @@ export function computePartition(
       });
     }
   }
-  return { asOfDay, signals, changes, pricedOnLatestDay: priced, tooThin: false };
+  return { asOfDay, signals, changes, pricedOnLatestDay: priced, tooThin: false, partial: false };
 }
 
 export type PartitionResult = {
@@ -202,6 +239,8 @@ export type PartitionResult = {
   changesWritten: number;
   durationMs: number;
   tooThin: boolean;
+  /** The latest day was still being written; nothing written, not stamped. */
+  partial: boolean;
 };
 
 /** Run one partition through the injected IO. Throws on any read or write failure. */
@@ -212,7 +251,7 @@ export async function runPartition(
   now: Date = new Date(),
 ): Promise<PartitionResult> {
   const started = Date.now();
-  const sinceDay = addDays(utcDay(now.toISOString()), -settings.lookbackDays);
+  const sinceDay = addDays(utcDay(now.toISOString()), -sourceRules(settings, partition.source).lookbackDays);
   const [history, existing] = await Promise.all([
     io.readHistory(partition, `${sinceDay}T00:00:00.000Z`),
     io.readExisting(partition),
@@ -223,7 +262,9 @@ export async function runPartition(
   await chunkUpsert(computed.changes, WRITE_CHUNK, (chunk) => io.insertChanges(chunk));
 
   const durationMs = Date.now() - started;
-  if (computed.asOfDay) {
+  // A partial latest day is never stamped: a stamp marks the day fresh and the
+  // catch-up entry would skip it with half its players unread.
+  if (computed.asOfDay && !computed.partial) {
     await io.stamp({
       format_config_id: partition.formatConfigId,
       source: partition.source,
@@ -240,6 +281,7 @@ export async function runPartition(
     changesWritten: computed.changes.length,
     durationMs,
     tooThin: computed.tooThin,
+    partial: computed.partial,
   };
 }
 

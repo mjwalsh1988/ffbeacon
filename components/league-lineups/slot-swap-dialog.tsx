@@ -284,7 +284,7 @@ export function SlotSwapDialog({
                       ? "flat"
                       : probabilityDirection(winProbShift / 100)
                   }
-                  missingNote="No win probability for this week yet. It needs a published matchup and a Power Pulse run for your opponent."
+                  missingNote="No win chance for this week yet. It needs a published matchup with a projected lineup on the other side."
                 />
                 <ImpactRow
                   term="Still left on your bench"
@@ -398,10 +398,9 @@ export function SlotSwapDialog({
         <p className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-ink-subtle">
           <Info aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            A preview only. Make the change in Sleeper for it to count. The win probability
-            is your lineup as you have it set against your opponent&apos;s best lineup, so it
-            starts lower than the figure on the Matchups page, which assumes both teams
-            start their best nine.
+            A preview only. Make the change in Sleeper for it to count. The win chance is
+            your set lineup against theirs, with points already scored locked in: the same
+            figure the Matchups page shows.
           </span>
         </p>
       </div>

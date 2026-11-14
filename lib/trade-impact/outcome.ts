@@ -25,23 +25,22 @@
  * Pure. No React, no database, no clock.
  */
 
-import type { ImpactGaps, ResolvedAsset, TeamImpact } from "./types";
+import { isPriced, type ImpactGaps, type ResolvedAsset, type TeamImpact } from "./types";
+import {
+  EVEN_MARGIN_PCT,
+  LOPSIDED_MARGIN_PCT,
+  valueMarginOf,
+} from "@/lib/trade-finder/value-margin";
+import type { TradeLeagueKind, TradeStrategy } from "@/lib/trade-finder/types";
 
 /**
- * Value margin under which the two sides are called even, as a percentage of
- * the combined package.
- *
- * 3 to match Signal Check's `signal_check_neutral_threshold`, so the two tools
- * cannot call the same trade even and not-even. Below this the gap is inside the
- * disagreement between any two value sources and is not worth a verdict.
+ * The value thresholds, Signal Check's, from the shared value helper so the
+ * card, this call and Signal Check cannot disagree about "even".
  */
-export const EVEN_MARGIN_PCT = 3;
+export { EVEN_MARGIN_PCT, LOPSIDED_MARGIN_PCT };
 
-/**
- * Margin at which one side is being run over. Also Signal Check's, also so the
- * two agree.
- */
-export const LOPSIDED_MARGIN_PCT = 20;
+/** Survival odds move, in percentage points, under which a change is noise. */
+const SURVIVAL_NOISE_PP = 1;
 
 /** Projected wins under which a change is noise. A tenth of a win is nothing. */
 const WINS_NOISE = 0.15;
@@ -92,6 +91,18 @@ export type TradeOutcome = {
   winsDelta: number | null;
   /** Change in playoff odds, in percentage points. */
   playoffDeltaPp: number | null;
+  /** Change in title odds, in percentage points. */
+  titleDeltaPp: number | null;
+  /** Chopped only: change in this week's survival odds, in percentage points. */
+  survivalDeltaPp: number | null;
+  /**
+   * Which measure the call leans on. "wins" for redraft, chopped and dynasty
+   * Compete; "value" for dynasty Rebuild; "both" when no mode was given and the
+   * team's own standing breaks a split, the call this module made before modes.
+   */
+  lens: "wins" | "value" | "both";
+  /** True when an unpriced asset is in the deal, so the call rests on wins. */
+  hasUnpriced: boolean;
   /** Change in optimal starting lineup, points per week. */
   lineupDelta: number | null;
   /** Null when nothing about the season could be measured at all. */
@@ -103,10 +114,6 @@ export type TradeOutcome = {
    */
   split: boolean;
 };
-
-function sum(assets: ResolvedAsset[]): number {
-  return assets.reduce((total, asset) => total + asset.value, 0);
-}
 
 function favorsFromDelta(delta: number, noise: number): Favors {
   if (delta > noise) return "you";
@@ -124,23 +131,35 @@ function pct(value: number): string {
   return `${Math.round(value)}%`;
 }
 
+/** "3 percentage points", "1 percentage point", signed in words. */
+function points(pp: number): string {
+  const n = Math.abs(Math.round(pp));
+  return `${n} percentage ${n === 1 ? "point" : "points"}`;
+}
+
 /**
  * Which way the season moves.
  *
- * Projected wins first, because that is what the Performance panel leads with
- * and what a manager is actually playing for. Playoff odds second, because a
- * team already locked in or already out can gain wins without gaining anything.
- * The weekly lineup last, because it is the rawest of the three and the only one
- * that survives when there is no season left to simulate.
+ * Chopped survival first when there is one, because surviving this week is
+ * the whole season in that format. Then projected wins, because that is what
+ * the Performance panel leads with and what a manager is actually playing for.
+ * Playoff odds next, because a team already locked in or already out can gain
+ * wins without gaining anything. The weekly lineup last, because it is the
+ * rawest and the only one that survives when there is no season left.
  *
- * Returns null only when NONE of the three could be measured, which is the
- * honest answer for a league with no projections and no games remaining.
+ * Returns null only when NONE could be measured, which is the honest answer for
+ * a league with no projections and no games remaining.
  */
 function readWins(
+  survivalDeltaPp: number | null,
   winsDelta: number | null,
   playoffDeltaPp: number | null,
   lineupDelta: number | null,
 ): Favors | null {
+  if (survivalDeltaPp !== null) {
+    const call = favorsFromDelta(survivalDeltaPp, SURVIVAL_NOISE_PP);
+    if (call !== "even") return call;
+  }
   if (winsDelta !== null) {
     const call = favorsFromDelta(winsDelta, WINS_NOISE);
     if (call !== "even") return call;
@@ -154,7 +173,7 @@ function readWins(
   }
   // Every measure that existed said "no meaningful change". That is "even",
   // not "unknown", and the two must not be collapsed.
-  if (winsDelta !== null || playoffDeltaPp !== null) return "even";
+  if (survivalDeltaPp !== null || winsDelta !== null || playoffDeltaPp !== null) return "even";
   return null;
 }
 
@@ -169,78 +188,104 @@ const HEADLINE: Record<OutcomeCall, string> = {
 /**
  * The sentence under the headline.
  *
- * Every branch names a figure that is printed somewhere on the same screen, so a
- * reader can check the call against the working rather than taking it on trust.
+ * One sentence, naming the figure the call leaned on. Every figure is printed
+ * somewhere on the same screen, so the call can be checked against the working.
  */
 function buildSummary(o: {
-  call: OutcomeCall;
+  lens: TradeOutcome["lens"];
   split: boolean;
+  hasUnpriced: boolean;
   valueFavors: Favors;
   valueMarginPct: number;
   winsFavors: Favors | null;
+  survivalDeltaPp: number | null;
   winsDelta: number | null;
   playoffDeltaPp: number | null;
   lineupDelta: number | null;
   statusKey: TeamImpact["statusKey"];
-  statusLabel: string | null;
 }): string {
   const valuePart =
     o.valueFavors === "even"
-      ? "The two sides are level on value"
+      ? "the two sides are level on value"
       : o.valueFavors === "you"
-        ? `You come out ${pct(o.valueMarginPct)} ahead on value`
-        : `You give up ${pct(o.valueMarginPct)} more value than you get back`;
+        ? `you come out ${pct(o.valueMarginPct)} ahead on value`
+        : `you give up ${pct(o.valueMarginPct)} more value than you get back`;
 
   const winsPart =
     o.winsFavors === null
       ? null
-      : o.winsDelta !== null && Math.abs(o.winsDelta) >= WINS_NOISE
-        ? `${signed(o.winsDelta)} projected wins`
-        : o.playoffDeltaPp !== null && Math.abs(o.playoffDeltaPp) >= PLAYOFF_NOISE_PP
-          ? `${signed(o.playoffDeltaPp, 0)} points of playoff odds`
-          : o.lineupDelta !== null && Math.abs(o.lineupDelta) >= LINEUP_NOISE
-            ? `${signed(o.lineupDelta)} points a week in your lineup`
-            : "no measurable change to your season";
+      : o.survivalDeltaPp !== null && Math.abs(o.survivalDeltaPp) >= SURVIVAL_NOISE_PP
+        ? `${o.survivalDeltaPp > 0 ? "raises" : "lowers"} your odds of surviving this week by ${points(o.survivalDeltaPp)}`
+        : o.winsDelta !== null && Math.abs(o.winsDelta) >= WINS_NOISE
+          ? `is worth ${signed(o.winsDelta)} projected wins`
+          : o.playoffDeltaPp !== null && Math.abs(o.playoffDeltaPp) >= PLAYOFF_NOISE_PP
+            ? `moves your playoff odds ${o.playoffDeltaPp > 0 ? "up" : "down"} ${points(o.playoffDeltaPp)}`
+            : o.lineupDelta !== null && Math.abs(o.lineupDelta) >= LINEUP_NOISE
+              ? `changes your lineup by ${signed(o.lineupDelta)} points a week`
+              : "makes no measurable change to your season";
 
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  if (winsPart === null) {
+    return `${cap(valuePart)}, and there is no season left to measure.`;
+  }
+  if (o.hasUnpriced) {
+    return `It ${winsPart}, and the call rests on that because part of the deal has no market value.`;
+  }
+  if (o.lens === "wins") {
+    return `It ${winsPart}, and ${valuePart}.`;
+  }
+  if (o.lens === "value") {
+    return `${cap(valuePart)}, and it ${winsPart}.`;
+  }
   if (o.split) {
     const direction =
       o.statusKey === "competitor"
-        ? "You are built to win now, so the lineup is the half that counts"
+        ? "you are built to win now, so the lineup is the half that counts"
         : o.statusKey === "rebuilder"
-          ? "You are not winning now, so the value is the half that counts"
-          : "Neither half outweighs the other for a team still in the picture";
-    return `${valuePart}, and it is worth ${winsPart} to you. ${direction}.`;
+          ? "you are not winning now, so the value is the half that counts"
+          : "neither half outweighs the other";
+    return `${cap(valuePart)} and it ${winsPart}, but ${direction}.`;
   }
-
-  if (winsPart === null) {
-    return `${valuePart}. There is no season left to measure, so value is the whole answer.`;
-  }
-  return `${valuePart}, and it is worth ${winsPart} to you.`;
+  return `${cap(valuePart)}, and it ${winsPart}.`;
 }
 
 /**
- * Turn two agreeing or disagreeing measures into one call.
+ * Turn two measures into one call, leaning on the one the league kind and the
+ * reader's mode say counts.
  *
- * A split is broken by the team's own direction, which is the same rule the
- * direction reason uses: a contender is judged on the lineup and a rebuilder on
- * the value, because those are the two different things they are playing for. A
- * team in the middle gets no tiebreak, because the classifier declined to say
- * which way it is pointing and inventing one here would be a claim the rest of
- * the page does not make.
- *
- * A Loaded team gets no tiebreak either, and that is the honest answer rather
- * than an omission: the band means the two measures already disagree about this
- * roster, so breaking a split with the same disagreement would be circular.
+ *   "wins"  redraft, chopped, dynasty Compete, and any deal holding an unpriced
+ *           asset. The season figure decides; value can soften the call one
+ *           step but never flip it.
+ *   "value" dynasty Rebuild. The mirror image.
+ *   "both"  no mode given. A split is broken by the team's own standing, the
+ *           rule this module used before modes existed.
  */
 function decide(
   valueFavors: Favors,
   winsFavors: Favors | null,
+  lens: TradeOutcome["lens"],
   statusKey: TeamImpact["statusKey"],
 ): { call: OutcomeCall; split: boolean } {
   // Nothing about the season could be measured. Value is the whole answer.
   if (winsFavors === null) {
     if (valueFavors === "you") return { call: "lean-yes", split: false };
     if (valueFavors === "them") return { call: "lean-no", split: false };
+    return { call: "close", split: false };
+  }
+
+  const split =
+    (valueFavors === "you" && winsFavors === "them") ||
+    (valueFavors === "them" && winsFavors === "you");
+
+  if (lens !== "both") {
+    const lead = lens === "wins" ? winsFavors : valueFavors;
+    const other = lens === "wins" ? valueFavors : winsFavors;
+    if (lead === "you") return { call: other === "them" ? "lean-yes" : "take", split };
+    if (lead === "them") return { call: other === "you" ? "lean-no" : "decline", split };
+    // The lead measure is flat: the other one may lean the call, nothing more.
+    if (other === "you") return { call: "lean-yes", split: false };
+    if (other === "them") return { call: "lean-no", split: false };
     return { call: "close", split: false };
   }
 
@@ -267,26 +312,29 @@ function decide(
   return { call: decider === "you" ? "lean-yes" : "lean-no", split: true };
 }
 
+/**
+ * The call for one trade.
+ *
+ * `opts.value` is the consolidated value from the evaluation (priced assets
+ * only, after the Signal Check adjustment). Without it the raw sums of the
+ * priced assets are used. `opts.leagueKind` and `opts.strategy` pick the lens;
+ * without them the call reads the team's standing as it always did.
+ */
 export function buildTradeOutcome(
   mine: TeamImpact,
   gaps: ImpactGaps,
+  opts: {
+    leagueKind?: TradeLeagueKind;
+    strategy?: TradeStrategy;
+    value?: { valueIn: number; valueOut: number };
+  } = {},
 ): TradeOutcome {
-  const valueIn = sum(mine.incoming);
-  const valueOut = sum(mine.outgoing);
-  const combined = valueIn + valueOut;
-
-  // An empty or valueless package splits the bar evenly rather than dividing by
-  // zero. A league with no pick values can genuinely produce this.
-  const yourShare = combined > 0 ? (valueIn / combined) * 100 : 50;
-  const theirShare = 100 - yourShare;
-  const valueMarginPct = Math.abs(yourShare - theirShare);
-
-  const valueFavors: Favors =
-    combined === 0 || valueMarginPct < EVEN_MARGIN_PCT
-      ? "even"
-      : valueIn > valueOut
-        ? "you"
-        : "them";
+  const priced = (assets: ResolvedAsset[]) =>
+    assets.filter(isPriced).reduce((total, a) => total + a.value, 0);
+  const hasUnpriced = [...mine.incoming, ...mine.outgoing].some((a) => !isPriced(a));
+  const valueIn = opts.value?.valueIn ?? priced(mine.incoming);
+  const valueOut = opts.value?.valueOut ?? priced(mine.outgoing);
+  const margin = valueMarginOf(valueIn, valueOut);
 
   const winsDelta =
     gaps.simulation ||
@@ -300,35 +348,64 @@ export function buildTradeOutcome(
       ? null
       : (mine.playoffOddsAfter - mine.playoffOddsBefore) * 100;
 
+  const titleDeltaPp =
+    gaps.simulation || mine.titleOddsBefore === null || mine.titleOddsAfter === null
+      ? null
+      : (mine.titleOddsAfter - mine.titleOddsBefore) * 100;
+
+  const survivalDeltaPp =
+    typeof mine.survivalBefore === "number" && typeof mine.survivalAfter === "number"
+      ? (mine.survivalAfter - mine.survivalBefore) * 100
+      : null;
+
   const lineupDelta = gaps.lineup ? null : mine.lineupDelta;
 
-  const winsFavors = readWins(winsDelta, playoffDeltaPp, lineupDelta);
-  const { call, split } = decide(valueFavors, winsFavors, mine.statusKey);
+  const winsFavors = readWins(survivalDeltaPp, winsDelta, playoffDeltaPp, lineupDelta);
+
+  const lens: TradeOutcome["lens"] =
+    hasUnpriced && winsFavors !== null
+      ? "wins"
+      : opts.leagueKind === "redraft" || opts.leagueKind === "chopped"
+        ? "wins"
+        : opts.strategy === "contender"
+          ? "wins"
+          : opts.strategy === "value"
+            ? "value"
+            : "both";
+
+  // An unpriced piece leaves the value half incomplete, so it does not vote.
+  const valueFavors: Favors = hasUnpriced && winsFavors !== null ? "even" : margin.favors;
+  const { call, split } = decide(valueFavors, winsFavors, lens, mine.statusKey);
 
   return {
     call,
     headline: HEADLINE[call],
     summary: buildSummary({
-      call,
+      lens,
       split,
-      valueFavors,
-      valueMarginPct,
+      hasUnpriced: hasUnpriced && winsFavors !== null,
+      valueFavors: margin.favors,
+      valueMarginPct: margin.marginPct,
       winsFavors,
+      survivalDeltaPp,
       winsDelta,
       playoffDeltaPp,
       lineupDelta,
       statusKey: mine.statusKey,
-      statusLabel: mine.statusLabel,
     }),
     valueIn,
     valueOut,
-    yourShare,
-    theirShare,
-    valueMarginPct,
-    valueFavors,
-    lopsided: valueMarginPct >= LOPSIDED_MARGIN_PCT,
+    yourShare: margin.yourShare,
+    theirShare: 100 - margin.yourShare,
+    valueMarginPct: margin.marginPct,
+    valueFavors: margin.favors,
+    lopsided: margin.lopsided,
     winsDelta,
     playoffDeltaPp,
+    titleDeltaPp,
+    survivalDeltaPp,
+    lens,
+    hasUnpriced,
     lineupDelta,
     winsFavors,
     split,

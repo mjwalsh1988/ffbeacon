@@ -1,28 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { rosterArchetype, twoYearOutlook, valueArchetype } from "./archetype";
+import { outlookNoteFor, rosterArchetype, starterSharePct, twoYearOutlook, valueArchetype } from "./archetype";
 import { DEFAULT_LEAGUE_BLUEPRINT_SETTINGS } from "./default-settings";
 
 const s = DEFAULT_LEAGUE_BLUEPRINT_SETTINGS.archetype;
 
 describe("valueArchetype", () => {
   it("covers every dynasty branch", () => {
-    expect(valueArchetype("competitor", true, 0, 5, s)).toBe("Win now");
-    expect(valueArchetype("loaded", true, 0, 5, s)).toBe("Loaded");
-    expect(valueArchetype("rebuilder", true, 0, 5, s)).toBe("Rebuild");
-    expect(valueArchetype("middle", true, 0.5, 6, s)).toBe("One year reload");
-    expect(valueArchetype("middle", true, 0.4, 6, s)).toBe("Retool");
-    expect(valueArchetype("middle", true, 0.5, 5, s)).toBe("Retool");
+    expect(valueArchetype("competitor", "dynasty", 0, 5, s)).toBe("Win now");
+    expect(valueArchetype("loaded", "dynasty", 0, 5, s)).toBe("Loaded");
+    expect(valueArchetype("rebuilder", "dynasty", 0, 5, s)).toBe("Rebuild");
+    expect(valueArchetype("middle", "dynasty", 0.5, 6, s)).toBe("One year reload");
+    expect(valueArchetype("middle", "dynasty", 0.4, 6, s)).toBe("Retool");
+    expect(valueArchetype("middle", "dynasty", 0.5, 5, s)).toBe("Retool");
   });
 
-  it("uses the redraft words", () => {
-    expect(valueArchetype("competitor", false, 0, null, s)).toBe("Contend");
-    expect(valueArchetype("loaded", false, 0, null, s)).toBe("Contend");
-    expect(valueArchetype("middle", false, 0, null, s)).toBe("In the hunt");
-    expect(valueArchetype("rebuilder", false, 0, null, s)).toBe("Longshot");
+  it("uses the redraft words, in keeper too", () => {
+    expect(valueArchetype("competitor", "redraft", 0, null, s)).toBe("Contend");
+    expect(valueArchetype("loaded", "redraft", 0, null, s)).toBe("Contend");
+    expect(valueArchetype("middle", "redraft", 0, null, s)).toBe("In the hunt");
+    expect(valueArchetype("rebuilder", "redraft", 0, null, s)).toBe("Longshot");
+    expect(valueArchetype("middle", "keeper", 0, 5, s)).toBe("In the hunt");
+  });
+
+  it("reads survival in chopped, not the playoffs", () => {
+    expect(valueArchetype("competitor", "chopped", 0, null, s)).toBe("Safe");
+    expect(valueArchetype("middle", "chopped", 0, null, s)).toBe("On the bubble");
+    expect(valueArchetype("rebuilder", "chopped", 0, null, s)).toBe("In danger");
   });
 
   it("is null without Power Pulse", () => {
-    expect(valueArchetype(null, true, 0, 5, s)).toBeNull();
+    expect(valueArchetype(null, "dynasty", 0, 5, s)).toBeNull();
+  });
+});
+
+describe("outlookNoteFor", () => {
+  it("gives every one-season kind its own sentence and dynasty none", () => {
+    expect(outlookNoteFor("redraft")).toMatch(/redraft/);
+    expect(outlookNoteFor("keeper")).toMatch(/keeper/);
+    expect(outlookNoteFor("chopped")).toMatch(/cut/);
+    expect(outlookNoteFor("dynasty")).toBeNull();
   });
 });
 
@@ -31,6 +47,12 @@ describe("rosterArchetype", () => {
     expect(rosterArchetype(80, 20, s)).toBe("Top heavy");
     expect(rosterArchetype(62, 38, s)).toBe("Deep");
     expect(rosterArchetype(70, 30, s)).toBe("Well rounded");
+  });
+
+  it("keeps the starter share as a whole percent", () => {
+    expect(starterSharePct(80, 20)).toBe(80);
+    expect(starterSharePct(2, 1)).toBe(67);
+    expect(starterSharePct(0, 0)).toBeNull();
   });
 });
 

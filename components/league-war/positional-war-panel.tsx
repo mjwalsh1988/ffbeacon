@@ -75,6 +75,7 @@ import {
   buildOverlayPositionLine,
   buildPastDepthLine,
   buildTruncationNote,
+  warHeadingWeeks,
 } from "./summary";
 import { PositionalWarChart } from "./positional-war-chart";
 import { WarDashboard } from "./war-dashboard";
@@ -306,14 +307,21 @@ export async function PositionalWarPanel({
   const pastDepthLine = buildPastDepthLine(unmatchedSplit.pastDepth.map((p) => p.name));
   const noProjectionLine = buildNoProjectionLine(unmatchedSplit.noProjectionCount);
 
+  // The weeks this curve covers, beside the heading. Once the regular season
+  // is over the last curve is kept and labeled as the final result.
+  const headingWeeks = warHeadingWeeks(view);
+  const closedNote = view.windowClosed
+    ? " The regular season is over, so this is the last result."
+    : "";
+
   if (isDashboard) {
     return (
       <Panel
         id="positional-war"
         title="Positional WAR"
-        eyebrow="Scarcity"
+        eyebrow={headingWeeks}
         headingFocusable
-        helper="Which positions are hard to replace in this league, and who the players are."
+        helper={`Which positions are hard to replace in this league, and who the players are. Positional WAR is per player and does not add up to a team total.${closedNote}`}
         action={<WarAxisToggle mode={axisMode} />}
       >
         {hasDefense ? (
@@ -397,9 +405,9 @@ export async function PositionalWarPanel({
     <Panel
       id="positional-war"
       title="Positional WAR"
-      eyebrow="Scarcity"
+      eyebrow={headingWeeks}
       headingFocusable
-      helper={`How steeply each position drops off in this league. Top ${maxRank} at each.`}
+      helper={`How steeply each position drops off in this league. Top ${maxRank} at each.${closedNote}`}
     >
       {previewGroups.map((group) => {
         const previewRows = group.positions.flatMap((position) =>

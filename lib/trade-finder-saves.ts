@@ -106,6 +106,9 @@ const suggestionAssetSchema = z.union([
       season: z.number().int().min(2000).max(2100),
       round: z.number().int().min(1).max(10),
       value: finiteNumber,
+      // Optional: bookmarks written before the slot rode along lack both.
+      pickPosition: z.enum(["early", "mid", "late", "unknown"]).optional(),
+      positionEstimated: z.boolean().optional(),
     })
     .strict(),
 ]);
@@ -120,6 +123,8 @@ const sideImpactSchema = z
     // Saved tab on the way back in, which is the one thing a bookmark must
     // never do. Filled with null on read, exactly like `rationale`.
     winsDelta: finiteNumber.nullable().optional(),
+    // Chopped leagues only, and optional for the same reason.
+    survivalDelta: finiteNumber.nullable().optional(),
     ageDelta: finiteNumber.nullable(),
     pickCountDelta: finiteNumber,
   })
@@ -148,6 +153,21 @@ export const savedSuggestionSchema = z
     mine: sideImpactSchema,
     theirs: sideImpactSchema,
     valueGap: finiteNumber,
+    // The fields below are optional so older bookmarks still parse. Every one
+    // is a field the engine writes on each suggestion, and `.strict()` rejected
+    // the whole snapshot when one was missing here, which failed the save.
+    valueTotals: z
+      .object({ valueIn: finiteNumber, valueOut: finiteNumber })
+      .strict()
+      .optional(),
+    myBefore: z
+      .object({
+        projectedWins: finiteNumber.nullable(),
+        survival: finiteNumber.nullable(),
+      })
+      .strict()
+      .optional(),
+    tendencyNotes: z.array(z.string().max(MAX_TEXT)).max(6).optional(),
     qualityRatio: finiteNumber,
     acceptance: z.enum(["likely", "worth-asking", "long-shot"]),
     score: finiteNumber,
@@ -218,6 +238,7 @@ export async function loadSavedTrades(supabase: SessionClient): Promise<SavedTra
         suggestion: {
           ...parsed.data,
           rationale: parsed.data.rationale ?? "",
+          tendencyNotes: parsed.data.tendencyNotes ?? [],
           mine: { ...parsed.data.mine, winsDelta: parsed.data.mine.winsDelta ?? null },
           theirs: {
             ...parsed.data.theirs,

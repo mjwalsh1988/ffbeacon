@@ -23,6 +23,7 @@
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import type { TeamStatusKey } from "@/lib/league-team-status";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
+import type { TradeLeagueKind, TradeStrategy } from "@/lib/trade-finder/types";
 
 /** Where a pick sits in its round, as draft_pick_values buckets them. */
 export type PickSlot = "early" | "mid" | "late" | "unknown";
@@ -69,6 +70,12 @@ export type ResolvedAsset =
       position: string;
       team: string | null;
       value: number;
+      /**
+       * False when no value source prices this player (a defender, or no value
+       * row). Such an asset is left out of the value margin and shown as "No
+       * market value". Absent reads as priced, for fixtures written before it.
+       */
+      priced?: boolean;
       age: number | null;
       /** Projected points per week under this league's scoring. Null = unpublished. */
       projPoints: number | null;
@@ -92,7 +99,14 @@ export type ResolvedAsset =
       /** True when the slot is our projection rather than a published order. */
       positionEstimated: boolean;
       value: number;
+      /** False for a pick with no published value (round 5 and later). */
+      priced?: boolean;
     };
+
+/** True when an asset carries a market value that counts in the margin. */
+export function isPriced(asset: ResolvedAsset): boolean {
+  return asset.priced !== false && asset.value > 0;
+}
 
 /** What one remaining week looks like before and after the trade. */
 export type WeekImpact = {
@@ -155,6 +169,12 @@ export type TeamImpact = {
   playoffOddsAfter: number | null;
   titleOddsBefore: number | null;
   titleOddsAfter: number | null;
+  /**
+   * Chopped leagues only: the chance of surviving this week's cut, before
+   * (Power Pulse's figure) and after the trade. Absent or null elsewhere.
+   */
+  survivalBefore?: number | null;
+  survivalAfter?: number | null;
 
   /** Per-position starter output per week, before and after. */
   positionBefore: Record<string, number>;
@@ -219,7 +239,7 @@ export type ImpactGaps = {
    * a short while after the switch flips. "not-built": some team has no cached
    * projection yet. Absent reads as "season-over", the original meaning.
    */
-  simulationCause?: "season-over" | "engine-switch" | "not-built";
+  simulationCause?: "season-over" | "engine-switch" | "not-built" | "chopped";
   /** Redraft, or no pick values published for this source. */
   picks: boolean;
 };
@@ -245,6 +265,22 @@ export type TradeImpact = {
   formatDisplay: string;
   sourceDisplay: string;
   pickSourceDisplay: string | null;
+  /**
+   * Redraft, dynasty or chopped, and which question the call answers. Redraft
+   * and chopped are always "contender" (win now). Optional so fixtures written
+   * before them keep compiling; absent reads as the old status-based call.
+   */
+  leagueKind?: TradeLeagueKind;
+  strategy?: TradeStrategy;
+  /** One line saying which mode was used and why. */
+  strategyReason?: string;
+  /**
+   * Both sides' value from the reader's seat after the consolidation
+   * adjustment, priced assets only. What the call's value margin reads.
+   */
+  value?: { valueIn: number; valueOut: number };
+  /** The weeks the lineup figures are averaged over, shared with the card. */
+  lineupWindow?: { fromWeek: number; toWeek: number };
 };
 
 /** What the server action hands back. */

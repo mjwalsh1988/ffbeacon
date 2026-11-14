@@ -71,7 +71,10 @@ import { categorizeLeague } from "@/lib/league-category";
 import { noticeText } from "@/lib/trade-finder/notice";
 import {
   TRADE_POSITIONS,
+  TRADE_STRATEGIES,
+  inferStrategy,
   readTradePosition,
+  readTradeStrategy,
   type TradePosition,
   type TradeStrategy,
 } from "@/lib/trade-finder/types";
@@ -146,6 +149,9 @@ const loadBuilderLeague = cache(
     const supabase = await createClient();
     const adminClient = createAdminClient();
     await pulseLeagueDerived(adminClient, leagueRowId, { resynced });
+    // A failed read is "failed", never null: null means "no value source
+    // covers this league", and telling a reader that because a query timed out
+    // sends them looking for a problem that is not there.
     return loadTradeFinderLeague(supabase, {
       sleeperLeagueId,
       sourceSlug,
@@ -157,9 +163,22 @@ const loadBuilderLeague = cache(
         username: searchedUsername,
         rosterId: rosterParam,
       },
+    }).catch((err: unknown) => {
+      console.error("[trade-ideas] league read failed", err);
+      return "failed" as const;
     });
   },
 );
+
+/** What a section renders when the league read failed. */
+function LeagueReadFailed() {
+  return (
+    <EvaluationState
+      kind="error"
+      message="We could not read this league just now. Reload the page to try again."
+    />
+  );
+}
 
 export async function generateMetadata({
   params,
@@ -201,6 +220,8 @@ export default async function LeagueTradeFinderPage({
       username?: string;
       roster?: string;
       mode?: string;
+      /** Build mode, dynasty only: "contender" (Compete) or "value" (Rebuild). */
+      strategy?: string;
     } & ProposalParams
   >;
 }) {
@@ -420,6 +441,7 @@ export default async function LeagueTradeFinderPage({
                   linkUsername={linkUsername}
                   rosterParam={rosterParam}
                   proposalParams={{ with: sp.with, in: sp.in, out: sp.out }}
+                  strategyParam={readTradeStrategy(sp.strategy)}
                 />
               </Suspense>
             ) : (
@@ -654,6 +676,7 @@ async function TradeFinderSection({
     rosterParam,
   );
 
+  if (finderLeague === "failed") return <LeagueReadFailed />;
   if (!finderLeague) {
     return (
       <Panel eyebrow="Not ready" title="Nothing to search yet">
@@ -700,28 +723,16 @@ async function TradeFinderSection({
       : DEFAULT_TRADE_QUALITY_CONFIG;
 
   /**
-   * Which side of the toggle this tab opens on.
+   * Which mode this tab opens on, and the one line saying why.
    *
-   * Read off Power Pulse's call on the reader's OWN team, so a dynasty team
-   * that is out of the race opens on Value and one chasing January opens on
-   * Contender. A league with no Power Pulse row has told us nothing, so it opens
-   * on Contender, which is the reading that talks about the season in front of
-   * them rather than the one that assumes they have given up on it.
-   *
-   * In a redraft league it is still passed and still ignored: the toggle is not
-   * rendered, and resolveStrategy overrides whatever arrives with Contender.
-   * Computed unconditionally rather than behind a branch, because the value is
-   * cheap and a branch here would be a second place that has to know what a
-   * redraft league is.
+   * Redraft and chopped leagues are always Compete (win now). A dynasty team
+   * opens on the mode its own Power Pulse standing implies: Rebuild for a
+   * Rebuilder, Compete otherwise. See inferStrategy in lib/trade-finder/types.ts.
    */
   const myStatusKey =
     finderLeague.teams.find((t) => t.rosterId === myRosterId)?.statusKey ?? null;
-  // Only the bottom band opens on the value preset. A Loaded team owns more than
-  // its ranking shows AND is still in the playoff picture, so the deal it wants
-  // is the one that turns some of that into a starter, which is what the
-  // Contender preset looks for.
-  const defaultStrategy: TradeStrategy =
-    finderLeague.isDynasty && myStatusKey === "rebuilder" ? "value" : "contender";
+  const inferred = inferStrategy(finderLeague.leagueKind, myStatusKey);
+  const defaultStrategy: TradeStrategy = inferred.strategy;
 
   // SIGNED-IN READERS ONLY.
   //
@@ -768,6 +779,7 @@ async function TradeFinderSection({
     teams: finderLeague.teams,
     startingSlots: finderLeague.startingSlots,
     isDynasty: finderLeague.isDynasty,
+    leagueKind: finderLeague.leagueKind,
     allowPicks: finderLeague.allowPicks,
     // The same strategy the toggle will open on, so the deal this tab paints on
     // arrival is one its own Search button reproduces. A first paint ranked by a
@@ -854,6 +866,7 @@ async function TradeFinderSection({
       theirPlayers={theirPlayers}
       isDynasty={finderLeague.isDynasty}
       defaultStrategy={defaultStrategy}
+      strategyReason={inferred.reason}
       availablePositions={availablePositions}
       positionalWarByPlayer={positionalWarByPlayer}
       initial={{
@@ -943,6 +956,7 @@ async function BuildSection({
   rosterParam,
   proposalParams,
   emphasis,
+  strategyParam,
 }: {
   sleeperLeagueId: string;
   leagueRowId: string;
@@ -960,6 +974,8 @@ async function BuildSection({
   proposalParams: ProposalParams;
   /** Names the value half for this league. See lib/league-emphasis.ts. */
   emphasis: LeagueEmphasis;
+  /** The reader's Compete or Rebuild choice from the URL, or null. */
+  strategyParam: TradeStrategy | null;
 }) {
   // The cheap outer meter, before any read. Loose enough that no real reader
   // meets it; see lib/trade-impact/rate-limit.ts for why it exists at all.
@@ -986,6 +1002,7 @@ async function BuildSection({
     builderAcceptsDefenders(leagueRowId),
   ]);
 
+  if (finderLeague === "failed") return <LeagueReadFailed />;
   if (!finderLeague) {
     return (
       <Panel eyebrow="Not ready" title="Nothing to price a trade against">
@@ -1039,8 +1056,11 @@ async function BuildSection({
         ...(p.hasValue ? {} : { noValue: true }),
         projPoints: p.projPoints,
       })),
+    // Priced picks, plus round 5 and later: no source publishes a value that
+    // deep, so they join with "No market value" in words rather than being
+    // missing from the builder (a deep league trades them).
     picks: team.picks
-      .filter((p) => p.hasValue)
+      .filter((p) => p.hasValue || p.round >= 5)
       .map((p) => ({
         season: p.season,
         round: p.round,
@@ -1054,7 +1074,8 @@ async function BuildSection({
         originalTeamName: p.originalTeamName,
         positionEstimated: p.positionEstimated,
         label: p.label,
-        value: p.value,
+        value: p.hasValue ? p.value : 0,
+        ...(p.hasValue ? {} : { noValue: true }),
       })),
   }));
 
@@ -1076,6 +1097,22 @@ async function BuildSection({
     return `/leagues/${sleeperLeagueId}/trade-ideas?${qs.toString()}`;
   })();
 
+  /**
+   * Compete or Rebuild, in a dynasty league only. The URL carries the reader's
+   * choice (`strategy=`) so a judged trade stays shareable; without it the
+   * mode is inferred from the reader's own team, as on the suggestion tab.
+   */
+  const myStatusKey =
+    finderLeague.teams.find((t) => t.rosterId === myRosterId)?.statusKey ?? null;
+  const inferredMode = inferStrategy(finderLeague.leagueKind, myStatusKey);
+  const isDynastyKind = finderLeague.leagueKind === "dynasty";
+  const activeStrategy: TradeStrategy =
+    (isDynastyKind ? strategyParam : null) ?? inferredMode.strategy;
+  const strategyQuery = (strategy: TradeStrategy | null) =>
+    isDynastyKind && strategy && strategy !== inferredMode.strategy
+      ? `&strategy=${strategy}`
+      : "";
+
   /** This exact trade again. What a rate-limited reader presses in a moment. */
   const retryHref =
     decoded.proposal === null
@@ -1086,7 +1123,19 @@ async function BuildSection({
             searchedUsername: linkUsername,
             source: sourceSlug,
           },
-        )}#trade-evaluation`;
+        )}${strategyQuery(activeStrategy)}#trade-evaluation`;
+
+  /** The same trade judged in the other mode. */
+  const modeHref = (strategy: TradeStrategy) =>
+    decoded.proposal === null
+      ? emptyBuilderHref
+      : `/leagues/${sleeperLeagueId}/trade-ideas?${encodeProposalQuery(
+          decoded.proposal,
+          {
+            searchedUsername: linkUsername,
+            source: sourceSlug,
+          },
+        )}${strategyQuery(strategy)}#trade-evaluation`;
 
   return (
     <div className="space-y-6">
@@ -1143,6 +1192,29 @@ async function BuildSection({
             was shared with you.
           </p>
         )}
+        {decoded.proposal !== null && isDynastyKind && (
+          // Links, not a form: each mode is an address, so the choice survives
+          // a reload and a shared link opens judged the same way.
+          <nav aria-label="Judge this trade as" className="mb-3 flex flex-wrap items-center gap-2">
+            {TRADE_STRATEGIES.map((option) => {
+              const active = option.key === activeStrategy;
+              return (
+                <Link
+                  key={option.key}
+                  href={modeHref(option.key)}
+                  aria-current={active ? "true" : undefined}
+                  className={`inline-flex min-h-11 items-center rounded-card border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+                    active
+                      ? "border-brand-cyan/60 bg-brand-cyan/10 text-brand-cyan"
+                      : "border-line text-ink-muted hover:border-brand-cyan/60 hover:text-ink"
+                  }`}
+                >
+                  {option.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
         {decoded.proposal === null ? (
           <EvaluationState kind="empty" />
         ) : (
@@ -1162,6 +1234,7 @@ async function BuildSection({
               retryHref={retryHref}
               builderHref={emptyBuilderHref}
               emphasis={emphasis}
+              strategy={isDynastyKind ? strategyParam : null}
             />
           </Suspense>
         )}
@@ -1193,7 +1266,10 @@ async function ProposalEvaluation({
   retryHref,
   builderHref,
   emphasis,
+  strategy,
 }: {
+  /** The reader's Compete or Rebuild choice, or null to infer it. */
+  strategy: TradeStrategy | null;
   sleeperLeagueId: string;
   leagueRowId: string;
   resynced: boolean;
@@ -1229,6 +1305,7 @@ async function ProposalEvaluation({
     viewerSleeperUserId,
     rosterParam,
   );
+  if (finder === "failed") return <LeagueReadFailed />;
 
   // Gate 2. Ownership re-derived from the database. One league read, and on this
   // path it is a read the page has already made, handed over as `finder`.
@@ -1273,6 +1350,7 @@ async function ProposalEvaluation({
       supabase,
       adminClient,
       validated.validated,
+      { strategy },
     );
   } catch (err) {
     console.error("[trade-ideas] server-rendered evaluation failed", err);
@@ -1350,7 +1428,10 @@ async function YourTeamRail({
     viewerSleeperUserId,
     rosterParam,
   );
-  if (!finderLeague || finderLeague.myRosterId === null) return null;
+  // The builder section beside this already says the read failed.
+  if (finderLeague === "failed" || !finderLeague || finderLeague.myRosterId === null) {
+    return null;
+  }
 
   const me = finderLeague.teams.find(
     (t) => t.rosterId === finderLeague.myRosterId,
@@ -1358,6 +1439,8 @@ async function YourTeamRail({
   if (!me) return null;
 
   const supabase = await createClient();
+  // A failed Power Pulse read drops the rail rather than drawing it with every
+  // figure missing, which would read as a team with no standing.
   const view =
     season === null
       ? null
@@ -1367,7 +1450,11 @@ async function YourTeamRail({
           season,
           formatConfigId,
           sourceSlug,
-        );
+        ).catch((err: unknown) => {
+          console.error("[trade-ideas] power pulse read failed", err);
+          return "failed" as const;
+        });
+  if (view === "failed") return null;
   const pulse =
     view?.teams.find((t) => t.sleeperRosterId === me.rosterId) ?? null;
 

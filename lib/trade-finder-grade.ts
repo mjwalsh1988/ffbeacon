@@ -66,7 +66,24 @@ function toAssetInputs(assets: SuggestionAsset[], allowPicks: boolean): AssetInp
     if (asset.kind === "player") {
       out.push({ kind: "player", playerId: asset.playerId });
     } else if (allowPicks) {
-      out.push({ kind: "pick", season: asset.season, round: asset.round });
+      // The slot the card priced, so Signal Check grades the same pick rather
+      // than a generic one. "unknown" is left off and Signal Check falls back
+      // to its season and round value, which is what an unknown slot means.
+      const position =
+        asset.pickPosition === "early" ||
+        asset.pickPosition === "mid" ||
+        asset.pickPosition === "late"
+          ? asset.pickPosition
+          : undefined;
+      out.push({
+        kind: "pick",
+        season: asset.season,
+        round: asset.round,
+        ...(position ? { pickPosition: position } : {}),
+        ...(position && asset.positionEstimated !== undefined
+          ? { slotEstimated: asset.positionEstimated }
+          : {}),
+      });
     }
   }
   return out;

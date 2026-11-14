@@ -10,11 +10,11 @@
  * would let the three surfaces show three different populations while looking
  * like one view, which is the failure mode a dashboard exists to avoid.
  *
- * THE TABLE IS THE DATA TABLE FOR BOTH CHARTS. Neither <svg> is in the
- * accessibility tree; every figure either chart draws is in the table below
- * them, in more detail, as real rows and cells. That is why neither chart
- * carries its own duplicate <details> table: there would be three copies of
- * the same numbers on one page, and two of them would be shorter.
+ * EACH CHART IS role="img" WITH ITS SUMMARY AS ITS NAME, and the numbers it
+ * draws sit in a short table under a disclosure right below it, per the
+ * site-wide chart rule. The full player table further down stays the place to
+ * sort, search and download; the disclosure tables are just what each picture
+ * plots, so a reader never has to leave the chart to check it.
  *
  * Layout: side by side from xl, stacked below it. Two line charts at half a
  * laptop's width are unreadable, and this is exactly the breakpoint the League
@@ -38,6 +38,7 @@ import type { PulsePosition } from "@/lib/power-pulse/types";
 import { PositionalWarChart } from "./positional-war-chart";
 import { WarScatterChart } from "./war-scatter-chart";
 import { WarPlayerTable } from "./war-player-table";
+import { DataTable, Td, Th } from "@/components/chart-kit";
 import { buildLegendHeadline } from "./summary";
 
 /**
@@ -158,8 +159,6 @@ export function WarDashboard({
                   next player down is nearly as good.
                 </p>
               </figcaption>
-              {/* The conclusion, in reading order, before the graphic it describes. */}
-              <p className="sr-only">{chartSummary}</p>
               <div className="mt-3">
                 <PositionalWarChart
                   curves={plottable}
@@ -168,8 +167,31 @@ export function WarDashboard({
                   visible={visible}
                   onToggleSeries={toggle}
                   legend={false}
+                  summary={chartSummary}
                 />
               </div>
+              <ChartDisclosure label="View the numbers behind this chart">
+                <DataTable
+                  caption="Wins over replacement by position rank, for the positions showing"
+                  head={
+                    <>
+                      <Th>Pos</Th>
+                      <Th numeric>Rank</Th>
+                      <Th>Player</Th>
+                      <Th numeric>Wins over replacement</Th>
+                    </>
+                  }
+                >
+                  {visibleRows.map((row) => (
+                    <tr key={row.playerId}>
+                      <Td>{row.position}</Td>
+                      <Td numeric>{row.positionRank}</Td>
+                      <Td>{row.name}</Td>
+                      <Td numeric>{row.war.toFixed(2)}</Td>
+                    </tr>
+                  ))}
+                </DataTable>
+              </ChartDisclosure>
             </figure>
 
             {isDefense ? (
@@ -187,12 +209,36 @@ export function WarDashboard({
                   {sourceDisplay} at {formatDisplay}.
                 </p>
               </figcaption>
-              <p className="sr-only">
-                {`One dot per player. ${scatterFacts.plotted} plotted. Left to right is trade value, low to high; bottom to top is wins over replacement. A player high and to the left wins games and costs little.`}
-              </p>
               <div className="mt-3">
-                <WarScatterChart rows={visibleRows} />
+                <WarScatterChart
+                  rows={visibleRows}
+                  summary={`One dot per player, ${scatterFacts.plotted} plotted. Left to right is trade value, bottom to top is wins over replacement. A player high and to the left wins games and costs little.`}
+                />
               </div>
+              <ChartDisclosure label="View the numbers behind this chart">
+                <DataTable
+                  caption={`Trade value from ${sourceDisplay} against wins over replacement, for every plotted player`}
+                  head={
+                    <>
+                      <Th>Player</Th>
+                      <Th>Pos</Th>
+                      <Th numeric>Trade value</Th>
+                      <Th numeric>Wins over replacement</Th>
+                    </>
+                  }
+                >
+                  {visibleRows
+                    .filter((row) => row.tradeValue !== null)
+                    .map((row) => (
+                      <tr key={row.playerId}>
+                        <Td>{row.name}</Td>
+                        <Td>{row.position}</Td>
+                        <Td numeric>{Math.round(row.tradeValue as number)}</Td>
+                        <Td numeric>{row.war.toFixed(2)}</Td>
+                      </tr>
+                    ))}
+                </DataTable>
+              </ChartDisclosure>
               {scatterFacts.trend && (
                 <p className="mt-2 text-xs leading-relaxed text-ink-subtle">{scatterFacts.trend}</p>
               )}
@@ -232,5 +278,25 @@ export function WarDashboard({
         </>
       )}
     </div>
+  );
+}
+
+/** A chart's numbers under a native disclosure, with a 44 px summary target. */
+function ChartDisclosure({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <details className="mt-3">
+      <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
+        {label}
+      </summary>
+      {/* Focusable with a name, so a keyboard can scroll it. */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label={`${label}, scrollable`}
+        className="mt-2 max-h-80 overflow-auto rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan"
+      >
+        {children}
+      </div>
+    </details>
   );
 }

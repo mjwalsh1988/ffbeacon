@@ -2,7 +2,34 @@ import { describe, it, expect } from "vitest";
 import {
   positionFromProjectedFinish,
   positionFromDraftSlot,
+  isPickSeasonSpent,
 } from "./league-pick-position";
+
+describe("isPickSeasonSpent", () => {
+  it("keeps the current season's picks before the draft", () => {
+    expect(isPickSeasonSpent(2026, { season: 2026, status: "pre_draft" })).toBe(false);
+  });
+
+  it("drops the current season's picks once the league is past pre_draft", () => {
+    expect(isPickSeasonSpent(2026, { season: 2026, status: "drafting" })).toBe(true);
+    expect(isPickSeasonSpent(2026, { season: "2026", status: "in_season" })).toBe(true);
+    expect(isPickSeasonSpent("2026", { season: 2026, status: "complete" })).toBe(true);
+  });
+
+  it("drops any season before the league's own", () => {
+    expect(isPickSeasonSpent(2025, { season: 2026, status: "pre_draft" })).toBe(true);
+  });
+
+  it("keeps future seasons", () => {
+    expect(isPickSeasonSpent(2027, { season: 2026, status: "in_season" })).toBe(false);
+  });
+
+  it("keeps everything when the league's season or status is unknown", () => {
+    expect(isPickSeasonSpent(2026, { season: null, status: "in_season" })).toBe(false);
+    expect(isPickSeasonSpent(2026, { season: "", status: "in_season" })).toBe(false);
+    expect(isPickSeasonSpent(2026, { season: 2026, status: null })).toBe(false);
+  });
+});
 
 /** Every finish in a league of N, in order. */
 function finishes(teamCount: number): (string | null)[] {

@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
 import { SignalCheckNote } from "@/components/trade-ideas/signal-check-note";
+import { ordinal } from "@/components/league-schedule/format";
+import { valueMarginOf } from "@/lib/trade-finder/value-margin";
+import type { SimulatedFigures } from "@/lib/trade-impact/simulated";
 import {
   POSITION_BADGE,
   POSITION_BADGE_FALLBACK,
@@ -71,28 +74,94 @@ function fmtSigned(value: number, digits = 0): string {
   return `${sign}${Math.abs(value).toFixed(digits)}`;
 }
 
-/** "+2.3 points a week", spelled out for the accessible name. */
-function describeLineup(delta: number | null): string {
-  if (delta === null) return "not available";
-  if (Math.abs(delta) < 0.05) return "no change";
-  return `${fmtSigned(delta, 1)} points a week`;
+/** The value margin, through the one helper the builder's call also uses. */
+function marginOf(suggestion: TradeSuggestion) {
+  const totals = suggestion.valueTotals ?? {
+    valueIn: suggestion.incoming.reduce((s, a) => s + a.value, 0),
+    valueOut: suggestion.outgoing.reduce((s, a) => s + a.value, 0),
+  };
+  return valueMarginOf(totals.valueIn, totals.valueOut);
 }
 
+type Hero = { kind: "survival" | "wins" | "lineup" | "value"; figure: string; caption: string };
+
 /**
- * The same lineup change, in games.
+ * The card's one hero figure: what this league kind plays for.
  *
- * Always says "about". This is a derivative of the Power Pulse season taken
- * against the real remaining schedule, not a rerun of the simulation, and a
- * figure printed to two decimals reads as exact unless the sentence says
- * otherwise. The full simulation is behind "Change a piece".
+ * Win-now (redraft, chopped, dynasty Compete): survival odds this week in a
+ * chopped league, projected wins added otherwise, the lineup when neither can
+ * be measured. Once the full evaluation under the card has run, its figure is
+ * used, so the card and the evaluation show one number for the deal; before
+ * that the card's own estimate shows and the caption says "about".
+ *
+ * Rebuild: the value gained, after the consolidation adjustment.
  */
-function describeWins(delta: number): string {
-  if (Math.abs(delta) < 0.005) return "no meaningful change";
-  const size = Math.abs(delta).toFixed(2);
-  const direction = delta > 0 ? "gains about" : "gives up about";
-  // "1.35 of a projected win" is not a sentence, so the unit switches at one.
-  const unit = Math.abs(delta) < 1 ? "of a win" : "wins";
-  return `${direction} ${size} ${unit} over the games you have left`;
+function heroOf(
+  suggestion: TradeSuggestion,
+  mode: "win-now" | "rebuild",
+  simulated: SimulatedFigures | null,
+): Hero {
+  const mine = suggestion.mine;
+  if (mode === "rebuild") {
+    const gained = suggestion.valueTotals
+      ? suggestion.valueTotals.valueIn - suggestion.valueTotals.valueOut
+      : mine.valueDelta;
+    return {
+      kind: "value",
+      figure: fmtSigned(gained),
+      caption: gained >= 0 ? "trade value you gain" : "trade value you give up",
+    };
+  }
+
+  if (simulated?.survivalBefore != null && simulated.survivalAfter != null) {
+    const pp = (simulated.survivalAfter - simulated.survivalBefore) * 100;
+    return {
+      kind: "survival",
+      figure: fmtSigned(pp, 0),
+      caption: `percentage points of survival odds this week, ${pct(simulated.survivalBefore)} to ${pct(simulated.survivalAfter)}`,
+    };
+  }
+  if (mine.survivalDelta != null) {
+    const before = suggestion.myBefore?.survival ?? null;
+    const pp = mine.survivalDelta * 100;
+    return {
+      kind: "survival",
+      figure: fmtSigned(pp, 0),
+      caption:
+        before === null
+          ? "percentage points of survival odds this week, about"
+          : `percentage points of survival odds this week, about ${pct(before)} to ${pct(Math.min(Math.max(before + mine.survivalDelta, 0), 1))}`,
+    };
+  }
+  if (simulated?.winsBefore != null && simulated.winsAfter != null) {
+    return {
+      kind: "wins",
+      figure: fmtSigned(simulated.winsAfter - simulated.winsBefore, 2),
+      caption: `projected wins added, ${simulated.winsBefore.toFixed(1)} to ${simulated.winsAfter.toFixed(1)}`,
+    };
+  }
+  if (mine.winsDelta !== null) {
+    const before = suggestion.myBefore?.projectedWins ?? null;
+    return {
+      kind: "wins",
+      figure: fmtSigned(mine.winsDelta, 2),
+      caption:
+        before === null
+          ? "projected wins added, about"
+          : `projected wins added, about ${before.toFixed(1)} to ${(before + mine.winsDelta).toFixed(1)}`,
+    };
+  }
+  const lineup = simulated?.lineupDelta ?? mine.lineupDelta;
+  return {
+    kind: "lineup",
+    figure: lineup === null ? "No projection" : fmtSigned(lineup, 1),
+    caption: "lineup points a week",
+  };
+}
+
+function pct(p: number): string {
+  if (p > 0 && p < 0.005) return "under 1%";
+  return `${Math.round(p * 100)}%`;
 }
 
 export function TradeFinderCard({
@@ -104,7 +173,16 @@ export function TradeFinderCard({
   leagueLabel,
   showGrade = true,
   builderHref,
+  mode = "win-now",
+  simulated = null,
 }: {
+  /**
+   * Which figure leads: "win-now" (redraft, chopped, dynasty Compete) or
+   * "rebuild" (dynasty Rebuild). Decides the hero, nothing else.
+   */
+  mode?: "win-now" | "rebuild";
+  /** The full evaluation's season figures for this deal, once it has run. */
+  simulated?: SimulatedFigures | null;
   suggestion: TradeSuggestion;
   grade: SuggestionGrade | null;
   sleeperLeagueId: string;
@@ -173,12 +251,12 @@ export function TradeFinderCard({
             words in a row of chips, and the sentence version is the one that
             matters, which is the one a screen reader now gets. */}
         {suggestion.counterparty.statusLabel && (
-          <span
-            aria-label={`The other team reads as a ${suggestion.counterparty.statusLabel}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted"
-          >
+          // Real text, not an aria-label on a span (which screen readers may
+          // ignore): the words "Them:" are visible, so they name the chip for
+          // everyone.
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted">
             <Users aria-hidden="true" className="h-3 w-3" />
-            <span aria-hidden="true">{suggestion.counterparty.statusLabel}</span>
+            Them: {suggestion.counterparty.statusLabel}
           </span>
         )}
       </div>
@@ -299,67 +377,62 @@ export function TradeFinderCard({
         <Target aria-hidden="true" className="h-3.5 w-3.5" />
         What it does
       </h4>
-      {/* Five tiles when Power Pulse has scored this league, four when it has
-          not. The grid changes rather than the projected-wins tile rendering
-          "Not available" forever: a league with no Power Pulse row is never
-          going to fill it, and a permanently empty readout is clutter a screen
-          reader has to step past on every card.
-
-          Nothing is hidden at any breakpoint. Two columns on a phone, three on
-          a tablet, the full row on a wide screen. */}
-      <dl
-        className={`mt-2 grid grid-cols-2 gap-2 ${
-          suggestion.mine.winsDelta === null
-            ? "sm:grid-cols-4"
-            : "sm:grid-cols-3 lg:grid-cols-5"
-        }`}
-      >
-        <Readout
-          label="Your lineup"
-          value={
-            suggestion.mine.lineupDelta === null
-              ? "Not available"
-              : `${fmtSigned(suggestion.mine.lineupDelta, 1)}/wk`
-          }
-          spoken={`Your starting lineup: ${describeLineup(suggestion.mine.lineupDelta)}`}
-          positive={(suggestion.mine.lineupDelta ?? 0) > 0}
-        />
-        {/* Sits next to the lineup figure because it IS the lineup figure,
-            converted into the unit the reader is actually playing for. Two
-            points a week is worth a different number of games to a team with
-            ten close matchups left than to one with three it has all but won,
-            and that difference is what this tile carries. */}
-        {suggestion.mine.winsDelta !== null && (
-          <Readout
-            label="Projected wins"
-            value={fmtSigned(suggestion.mine.winsDelta, 2)}
-            spoken={`Your projected wins, estimated: your season ${describeWins(suggestion.mine.winsDelta)}`}
-            positive={suggestion.mine.winsDelta > 0}
-          />
-        )}
-        <Readout
-          label="Your value"
-          value={fmtSigned(suggestion.mine.valueDelta)}
-          spoken={`Your trade value: ${fmtSigned(suggestion.mine.valueDelta)} points`}
-          positive={suggestion.mine.valueDelta > 0}
-        />
-        <Readout
-          label="Their lineup"
-          value={
-            suggestion.theirs.lineupDelta === null
-              ? "Not available"
-              : `${fmtSigned(suggestion.theirs.lineupDelta, 1)}/wk`
-          }
-          spoken={`Their starting lineup: ${describeLineup(suggestion.theirs.lineupDelta)}`}
-          positive={(suggestion.theirs.lineupDelta ?? 0) > 0}
-        />
-        <Readout
-          label="Value gap"
-          value={`${Math.round(suggestion.valueGap * 100)}%`}
-          spoken={`Value gap between the two sides: ${Math.round(suggestion.valueGap * 100)} percent`}
-          positive={suggestion.valueGap <= 0.06}
-        />
-      </dl>
+      {/* ONE HERO, then the secondaries. The hero is the figure this league
+          kind plays for (see heroOf), as one text node with its unit in the
+          caption. Nothing is hidden at any breakpoint. */}
+      {(() => {
+        const hero = heroOf(suggestion, mode, simulated);
+        const margin = marginOf(suggestion);
+        const lineupDelta = simulated?.lineupDelta ?? suggestion.mine.lineupDelta;
+        return (
+          <>
+            <div className="mt-2 rounded-card border border-line-accent bg-base/40 px-3 py-3">
+              <p className="font-mono text-4xl font-black leading-none tabular-nums text-ink sm:text-5xl">
+                {hero.figure}
+              </p>
+              <p className="mt-1.5 text-xs text-ink-muted">{hero.caption}</p>
+            </div>
+            <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {hero.kind !== "lineup" && (
+                <Readout
+                  label="Your lineup, points a week"
+                  value={lineupDelta === null ? "No projection" : fmtSigned(lineupDelta, 1)}
+                  positive={(lineupDelta ?? 0) > 0}
+                />
+              )}
+              {hero.kind !== "value" && (
+                <Readout
+                  label={
+                    margin.favors === "even"
+                      ? "Value gap, level"
+                      : margin.favors === "you"
+                        ? "Value gap, you gain"
+                        : "Value gap, they gain"
+                  }
+                  value={`${Math.round(margin.marginPct)}%`}
+                  positive={margin.favors !== "them"}
+                />
+              )}
+              {hero.kind === "value" && suggestion.mine.winsDelta !== null && (
+                <Readout
+                  label="Projected wins, estimated"
+                  value={fmtSigned(suggestion.mine.winsDelta, 2)}
+                  positive={suggestion.mine.winsDelta > 0}
+                />
+              )}
+              <Readout
+                label="Their lineup, points a week"
+                value={
+                  suggestion.theirs.lineupDelta === null
+                    ? "No projection"
+                    : fmtSigned(suggestion.theirs.lineupDelta, 1)
+                }
+                positive={(suggestion.theirs.lineupDelta ?? 0) > 0}
+              />
+            </dl>
+          </>
+        );
+      })()}
 
       <p className="mt-4 text-sm leading-relaxed text-ink">{suggestion.whyYou}</p>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">{suggestion.whyThem}</p>
@@ -509,12 +582,12 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
           aria-hidden="true"
           className={`flex h-10 w-10 shrink-0 items-center justify-center border border-brand-cyan/40 bg-brand-cyan/10 text-[11px] font-extrabold text-brand-cyan ${PLAYER_PHOTO_RADIUS}`}
         >
-          {asset.round === 1 ? "1st" : asset.round === 2 ? "2nd" : `${asset.round}th`}
+          {ordinal(asset.round)}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-bold text-ink">{asset.label}</span>
           <span className="block text-xs text-ink-muted">
-            Draft pick, value {fmtValue(asset.value)}
+            {asset.value > 0 ? `Draft pick, value ${fmtValue(asset.value)}` : "Draft pick, No market value"}
           </span>
         </span>
       </div>
@@ -577,31 +650,20 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
 }
 
 /**
- * One impact figure.
+ * One secondary figure.
  *
- * The visible text is compact ("+2.3/wk") and what gets spoken is not ("Your
- * starting lineup: +2.3 points a week"). A unit a sighted reader infers from the
- * label above the number has to be said out loud for a reader who arrives at the
- * number on its own.
- *
- * THE SPOKEN TEXT IS A REAL ELEMENT, NOT AN aria-label. The first version put
- * aria-label on the <dd>, which does not reliably work: a dd maps to the
- * `definition` role, and naming from the author is not supported there, so
- * several screen readers ignore the attribute and read the raw "+2.3/wk"
- * instead. A visually hidden span always wins, because it is text.
- *
- * The visible figure is then aria-hidden, so the number is announced once rather
- * than twice.
+ * The figure is ONE real text node, read the same by eye and by ear. The unit
+ * lives in the label ("Your lineup, points a week"), so the number needs no
+ * hidden copy. The old build drew an aria-hidden figure beside an sr-only
+ * sentence, which is the double rendering the project rules forbid.
  */
 function Readout({
   label,
   value,
-  spoken,
   positive,
 }: {
   label: string;
   value: string;
-  spoken: string;
   positive: boolean;
 }) {
   return (
@@ -610,12 +672,13 @@ function Readout({
         {label}
       </dt>
       <dd
-        className={`mt-0.5 text-sm font-bold tabular-nums ${
-          positive ? "text-signal-success" : "text-ink"
-        }`}
+        className={`mt-0.5 font-mono font-black tabular-nums ${
+          // A number takes the secondary size; a null in words stays small so
+          // it fits a two-column phone row.
+          /^[+\-0-9]/.test(value) ? "text-2xl" : "text-sm"
+        } ${positive ? "text-signal-success" : "text-ink"}`}
       >
-        <span className="sr-only">{spoken}</span>
-        <span aria-hidden="true">{value}</span>
+        {value}
       </dd>
     </div>
   );

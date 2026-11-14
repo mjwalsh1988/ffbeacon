@@ -7,6 +7,7 @@ import type { StartupPickIndex } from "@/lib/league-startup-picks";
 import { describeUnresolved } from "@/lib/startup-draft";
 import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { largerShareToMarginPct, valueMarginPct } from "@/lib/trade-finder/value-margin";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -33,10 +34,11 @@ type AnySupabase =
  * marked noValue with a reason, never handed back to the rookie table.
  *
  * The verdict thresholds are based on what feels intuitively fair without
- * being too aggressive:
- *   abs(differential) / max(sideA, sideB) ≤ 5%   → "Even trade"
- *   abs(differential) / max(sideA, sideB) ≤ 15%  → "Slight edge to {winner}"
- *   anything larger                              → "{winner} won the trade"
+ * being too aggressive. On the larger side they are 5% ("Even trade") and 15%
+ * ("Slight edge"), anything larger "Won the trade". They are applied on the
+ * shared value percent, |A - B| / (A + B), converted exactly, so the labels
+ * are unchanged; see computeVerdict. A trade among three or more teams gets
+ * "No verdict".
  */
 
 export type TradePlayer = {
@@ -479,20 +481,36 @@ function ensureSide(
   return side;
 }
 
-function computeVerdict(sides: TradeSide[]): TradeVerdict {
+/**
+ * The verdict thresholds, on the shared value percent (|A - B| / (A + B), the
+ * one definition in lib/trade-finder/value-margin.ts). They are the old
+ * larger-side cut points of 5% and 15% converted exactly, so every trade keeps
+ * the label it had; only the printed percent changes to the shared measure.
+ */
+const EVEN_PCT = largerShareToMarginPct(0.05);
+const SLIGHT_EDGE_PCT = largerShareToMarginPct(0.15);
+
+export function computeVerdict(sides: TradeSide[]): TradeVerdict {
   if (sides.length < 2) {
     return { label: "Even trade", winnerRosterId: null, differential: 0, differentialPct: 0 };
+  }
+  // A three-team trade cannot be read off what each side received: one team's
+  // haul is paid for by two others, and comparing the top two receivers says
+  // nothing about who won. Without each roster's in AND out netted (Sleeper's
+  // drops do not say which team each piece went to), the honest answer is no
+  // verdict rather than a wrong one.
+  if (sides.length > 2) {
+    return { label: "No verdict", winnerRosterId: null, differential: 0, differentialPct: 0 };
   }
   const top = sides[0];
   const next = sides[1];
   const differential = round2(top.totalValue - next.totalValue);
-  const ceiling = Math.max(top.totalValue, next.totalValue);
-  const differentialPct = ceiling > 0 ? round2((differential / ceiling) * 100) : 0;
+  const differentialPct = round2(valueMarginPct(top.totalValue, next.totalValue));
 
-  if (differential <= 0 || differentialPct <= 5) {
+  if (differential <= 0 || differentialPct <= EVEN_PCT) {
     return { label: "Even trade", winnerRosterId: null, differential: 0, differentialPct: 0 };
   }
-  if (differentialPct <= 15) {
+  if (differentialPct <= SLIGHT_EDGE_PCT) {
     return { label: "Slight edge", winnerRosterId: top.rosterId, differential, differentialPct };
   }
   return { label: "Won the trade", winnerRosterId: top.rosterId, differential, differentialPct };

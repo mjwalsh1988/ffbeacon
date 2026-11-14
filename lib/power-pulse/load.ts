@@ -22,6 +22,8 @@ import {
   DEFAULT_PLAYOFF_WEEK_START,
 } from "./playoff-defaults";
 import type { PulsePosition, ScheduleWeek } from "./types";
+import type { SleeperBracketMatch } from "@/lib/sleeper";
+import { parseBracket } from "./playoffs";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -117,6 +119,20 @@ export type LeagueRow = {
    * compiling; loadLeague always fills it.
    */
   bestBall?: boolean;
+  /**
+   * Sleeper's playoff_seed_type: 0 a fixed bracket, 1 reseeded every round
+   * (confirmed against stored brackets, see lib/power-pulse/simulate.ts).
+   * Optional so hand-built rows keep compiling; loadLeague always fills it.
+   */
+  playoffSeedType?: number;
+  /** Sleeper's playoff_type: 0 a toilet bowl losers bracket, 1 a consolation one. */
+  playoffType?: number;
+  /** Sleeper's settings.divisions. 0 when the league plays none. */
+  divisions?: number;
+  /** The stored winners bracket (leagues.metadata.brackets.winners). Null until captured. */
+  winnersBracket?: SleeperBracketMatch[] | null;
+  /** The stored losers bracket (leagues.metadata.brackets.losers). Null until captured. */
+  losersBracket?: SleeperBracketMatch[] | null;
 };
 
 export type RosterRow = {
@@ -141,6 +157,11 @@ export type RosterRow = {
   ownerUserId: string | null;
   ownerHandle: string | null;
   ownerAvatarId: string | null;
+  /**
+   * Sleeper's settings.division for this roster, read for division seeding.
+   * Optional so hand-built rows keep compiling; loadRosters always fills it.
+   */
+  division?: number | null;
 };
 
 export type PlayerRow = {
@@ -288,9 +309,15 @@ export async function loadLeague(
     )
     .eq("id", leagueRowId)
     .maybeSingle();
-  if (error || !data) return null;
+  // A failed read is not a missing league: "league row not found" would be a
+  // false answer, so it throws and the caller records an error.
+  if (error) throw new Error(`power pulse league load failed: ${error.message}`);
+  if (!data) return null;
 
-  const meta = (data.metadata ?? {}) as { settings?: Record<string, unknown> };
+  const meta = (data.metadata ?? {}) as {
+    settings?: Record<string, unknown>;
+    brackets?: { winners?: unknown; losers?: unknown };
+  };
   const settings = meta.settings ?? {};
   const eliminated = await loadEliminatedWeeks(supabase, leagueRowId, settings);
 
@@ -314,6 +341,14 @@ export async function loadLeague(
     chopped: isChoppedLeague(settings, eliminated),
     choppedPerWeek: chopsPerWeek(eliminated),
     bestBall: intOrNull(settings.best_ball) === 1,
+    // Zero (a fixed bracket, a toilet bowl, no divisions) is the value
+    // Sleeper writes on most leagues, and the default for the few that carry
+    // no setting at all.
+    playoffSeedType: intOrNull(settings.playoff_seed_type) ?? 0,
+    playoffType: intOrNull(settings.playoff_type) ?? 0,
+    divisions: positiveIntOrNull(settings.divisions) ?? 0,
+    winnersBracket: parseBracket(meta.brackets?.winners),
+    losersBracket: parseBracket(meta.brackets?.losers),
   };
 }
 
@@ -328,10 +363,13 @@ export async function loadEliminatedWeeks(
   settings: Record<string, unknown>,
 ): Promise<Array<number | null>> {
   if (Number(settings.type) !== 3) return [];
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("rosters")
     .select("sleeper_roster_id, metadata")
     .eq("league_id", leagueRowId);
+  // An empty answer here would read a chopped league as an ordinary one and
+  // score it with a bracket.
+  if (error) throw new Error(`power pulse elimination load failed: ${error.message}`);
   return (data ?? []).map((row) => {
     const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
     return eliminatedWeek(meta.settings ?? null);
@@ -354,10 +392,13 @@ export async function loadAliveRosterIds(
   supabase: ServiceClient,
   leagueRowId: string,
 ): Promise<number[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("rosters")
     .select("sleeper_roster_id, metadata")
     .eq("league_id", leagueRowId);
+  // Empty would mean "nobody is alive", which the caller reads as "we do not
+  // know" and scores every chopped roster, the dead ones included.
+  if (error) throw new Error(`power pulse alive rosters load failed: ${error.message}`);
   const out: number[] = [];
   for (const row of data ?? []) {
     const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
@@ -376,7 +417,7 @@ export async function loadRosters(
     supabase
       .from("rosters")
       .select(
-        "id, sleeper_roster_id, owner_user_id, player_ids, starter_ids, reserve_ids, taxi_ids, wins, losses, ties, points_for",
+        "id, sleeper_roster_id, owner_user_id, player_ids, starter_ids, reserve_ids, taxi_ids, wins, losses, ties, points_for, division:metadata->settings->division",
       )
       .eq("league_id", leagueRowId)
       .order("sleeper_roster_id", { ascending: true }),
@@ -385,6 +426,10 @@ export async function loadRosters(
       .select("sleeper_user_id, display_name, team_name, avatar")
       .eq("league_id", leagueRowId),
   ]);
+  // A failed rosters read is not a league with no rosters, and a failed users
+  // read would rename every team "Team 3" in a cached row.
+  if (rostersRes.error) throw new Error(`power pulse rosters load failed: ${rostersRes.error.message}`);
+  if (usersRes.error) throw new Error(`power pulse league users load failed: ${usersRes.error.message}`);
 
   const usersById = new Map(
     (usersRes.data ?? []).map((u) => [u.sleeper_user_id, u]),
@@ -408,6 +453,7 @@ export async function loadRosters(
       ownerUserId: r.owner_user_id ?? null,
       ownerHandle: user?.display_name ?? null,
       ownerAvatarId: user?.avatar ?? null,
+      division: positiveIntOrNull((r as { division?: unknown }).division),
     };
   });
 }
@@ -1018,7 +1064,8 @@ export async function loadCompletedResults(
     .eq("season", season)
     .eq("is_final", true)
     .order("week", { ascending: true });
-  if (error) return out;
+  // Empty would switch the form component off for every team and cache that.
+  if (error) throw new Error(`power pulse results load failed: ${error.message}`);
   for (const row of data ?? []) {
     const rosterId = Number(row.sleeper_roster_id);
     const list = out.get(rosterId) ?? [];
@@ -1026,4 +1073,107 @@ export async function loadCompletedResults(
     out.set(rosterId, list);
   }
   return out;
+}
+
+/**
+ * The live week, once its first game has kicked off: each roster's set
+ * lineup (positional, placeholders kept, the way Sleeper stores it) and the
+ * points its players have scored so far, plus the NFL teams whose game has
+ * started.
+ *
+ * Null when no game of the week has kicked off yet, so the engine projects
+ * the week exactly as before. Kickoffs come from the stored game lines
+ * (nfl_game_odds.kickoff_at), the same source the Lineups page locks players
+ * by. Throws on a failed read: a live week read as "nothing played" would
+ * project points that are already on the board.
+ */
+export async function loadLiveWeek(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  season: number,
+  week: number,
+  nowMs: number = Date.now(),
+): Promise<LiveWeekData | null> {
+  const { data: games, error: gamesErr } = await supabase
+    .from("nfl_game_odds")
+    .select("home_team, away_team, kickoff_at")
+    .eq("season", season)
+    .eq("season_type", "regular")
+    .eq("week", week);
+  if (gamesErr) throw new Error(`power pulse kickoff load failed: ${gamesErr.message}`);
+
+  const kickoffByTeam = new Map<string, number>();
+  for (const g of games ?? []) {
+    const at = g.kickoff_at ? Date.parse(g.kickoff_at) : NaN;
+    if (!Number.isFinite(at)) continue;
+    for (const team of [g.home_team, g.away_team]) {
+      const prior = kickoffByTeam.get(team);
+      if (prior === undefined || at < prior) kickoffByTeam.set(team, at);
+    }
+  }
+  const startedTeams = new Set<string>();
+  for (const [team, at] of kickoffByTeam) if (at <= nowMs) startedTeams.add(team);
+  if (startedTeams.size === 0) return null;
+
+  const { data, error } = await supabase
+    .from("league_matchups")
+    .select("sleeper_roster_id, starter_ids, player_points")
+    .eq("league_id", leagueRowId)
+    .eq("season", season)
+    .eq("week", week);
+  if (error) throw new Error(`power pulse live week load failed: ${error.message}`);
+
+  const rosters = new Map<number, { starters: string[]; points: Map<string, number> }>();
+  for (const row of data ?? []) {
+    const starters = Array.isArray(row.starter_ids)
+      ? (row.starter_ids as unknown[]).map((id) => (typeof id === "string" ? id : ""))
+      : [];
+    const points = new Map<string, number>();
+    const raw = row.player_points;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [sid, value] of Object.entries(raw as Record<string, unknown>)) {
+        const n = Number(value);
+        if (Number.isFinite(n)) points.set(sid, n);
+      }
+    }
+    rosters.set(Number(row.sleeper_roster_id), { starters, points });
+  }
+  return { week, startedTeams, rosters };
+}
+
+/** What loadLiveWeek returns; the engine's `live` input. */
+export type LiveWeekData = {
+  week: number;
+  /** NFL teams whose game this week has kicked off. */
+  startedTeams: Set<string>;
+  /** Per Sleeper roster id: the set lineup and the points scored so far. */
+  rosters: Map<number, { starters: string[]; points: Map<string, number> }>;
+};
+
+/**
+ * When the projection sync last wrote the week a league is scored from, for
+ * the cache version. A new sync changes the numbers every team is built on,
+ * so a row computed before it is stale. Null past the last week.
+ */
+export async function loadProjectionStamp(
+  supabase: ServiceClient,
+  source: string,
+  season: number,
+  week: number,
+): Promise<string | null> {
+  if (week > 18) return null;
+  const { data, error } = await supabase
+    .from("player_weekly_projections")
+    .select("updated_at")
+    .eq("source", source)
+    .eq("season_type", "regular")
+    .eq("season", season)
+    .eq("week", week)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`power pulse projection stamp load failed: ${error.message}`);
+  if (!data?.updated_at) return null;
+  const ms = Date.parse(data.updated_at);
+  return Number.isFinite(ms) ? ms.toString(36) : null;
 }

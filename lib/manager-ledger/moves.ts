@@ -112,10 +112,16 @@ export class LedgerIndex {
    * player who was claimed, dropped, and claimed by someone else contributes
    * to each owner only for the weeks they actually held him.
    */
-  pointsFor(playerId: string, rosterId: number, fromWeek: number): number {
+  pointsFor(
+    playerId: string,
+    rosterId: number,
+    fromWeek: number,
+    /** Last week counted, inclusive. See `holdingEnd`. */
+    toWeek = Number.POSITIVE_INFINITY,
+  ): number {
     let total = 0;
     for (const week of this.weeks) {
-      if (week < fromWeek) continue;
+      if (week < fromWeek || week > toWeek) continue;
       const entry = this.byWeek.get(week)?.get(playerId);
       if (!entry || entry.roster !== rosterId) continue;
       total += entry.points;
@@ -128,11 +134,12 @@ export class LedgerIndex {
     playerId: string,
     rosterId: number,
     fromWeek: number,
+    toWeek = Number.POSITIVE_INFINITY,
   ): { points: number; weeks: number } {
     let points = 0;
     let weeks = 0;
     for (const week of this.weeks) {
-      if (week < fromWeek) continue;
+      if (week < fromWeek || week > toWeek) continue;
       const entry = this.byWeek.get(week)?.get(playerId);
       if (!entry || entry.roster !== rosterId) continue;
       if (!this.startedByWeek.get(week)?.has(`${rosterId}|${playerId}`))
@@ -170,6 +177,32 @@ export type TransactionInput = {
   rosterIds: number[];
 };
 
+/**
+ * The last week one acquisition is credited with, inclusive.
+ *
+ * A claim (or a trade arrival) ends at the roster's next drop of that player.
+ * Without it, a player claimed in week 3, dropped in week 5 and claimed again
+ * in week 8 had weeks 8 onward credited to BOTH claims. The drop week itself
+ * stays in range: whether he played that week for this roster is settled by
+ * the ownership check in the index, which reads who actually held him. A later
+ * re-acquisition by the same roster also closes the window the week before it,
+ * so the two moves never share a week.
+ */
+export function holdingEnd(
+  transactions: TransactionInput[],
+  from: TransactionInput,
+  playerId: string,
+  rosterId: number,
+): number {
+  let end = Number.POSITIVE_INFINITY;
+  for (const tx of transactions) {
+    if (tx.id === from.id || tx.week <= from.week) continue;
+    if (Number(tx.drops[playerId]) === rosterId) end = Math.min(end, tx.week);
+    if (Number(tx.adds[playerId]) === rosterId) end = Math.min(end, tx.week - 1);
+  }
+  return end;
+}
+
 function nameOf(players: Map<string, LedgerPlayer>, id: string): string {
   return players.get(id)?.name ?? `Player ${id}`;
 }
@@ -206,7 +239,8 @@ export function buildWaiverLedger(
     for (const [playerId, toRoster] of Object.entries(tx.adds)) {
       if (Number(toRoster) !== rosterId) continue;
       if (tx.bid !== null) bidByTransaction.set(tx.id, tx.bid);
-      const started = index.pointsStartedFor(playerId, rosterId, tx.week);
+      const end = holdingEnd(transactions, tx, playerId, rosterId);
+      const started = index.pointsStartedFor(playerId, rosterId, tx.week, end);
       moves.push({
         transactionId: tx.id,
         week: tx.week,
@@ -214,7 +248,7 @@ export function buildWaiverLedger(
         name: nameOf(players, playerId),
         position: positionOf(players, playerId),
         bid: tx.bid,
-        pointsOnRoster: index.pointsFor(playerId, rosterId, tx.week),
+        pointsOnRoster: index.pointsFor(playerId, rosterId, tx.week, end),
         pointsStarted: started.points,
         weeksStarted: started.weeks,
       });
@@ -277,16 +311,21 @@ export function buildTradeLedger(
       tx.rosterIds.includes(rosterId);
     if (!touched) continue;
 
+    // STARTED points on both sides, the same basis as the waiver ledger. A
+    // player who sat on a bench added nothing to either team's results, so
+    // counting his bench points would grade a trade on points nobody used.
     let pointsIn = 0;
     for (const playerId of receivedIds) {
-      pointsIn += index.pointsFor(playerId, rosterId, tx.week);
+      const end = holdingEnd(transactions, tx, playerId, rosterId);
+      pointsIn += index.pointsStartedFor(playerId, rosterId, tx.week, end).points;
     }
 
     let pointsOut = 0;
     for (const playerId of sentIds) {
       const newOwner = Number(tx.adds[playerId]);
       if (!Number.isFinite(newOwner)) continue;
-      pointsOut += index.pointsFor(playerId, newOwner, tx.week);
+      const end = holdingEnd(transactions, tx, playerId, newOwner);
+      pointsOut += index.pointsStartedFor(playerId, newOwner, tx.week, end).points;
     }
 
     moves.push({

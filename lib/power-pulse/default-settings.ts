@@ -368,7 +368,13 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   // dropped from every remaining week. He sits out the current week and the
   // next (injury.reserveHoldWeeks), then counts in the weeks his own projection
   // has him back. A starter on short IR used to count zero for the season.
-  modelVersion: "pp-11",
+  //
+  // pp-12 (2026-11-13, LPI-T04): empty rosters are no longer teams; division
+  // winners take the top seeds and a fixed bracket stays fixed
+  // (playoff_seed_type); playoff rounds are played on the playoff weeks' own
+  // lineups; points already scored in the live week count; and a league in its
+  // playoffs is simulated from its stored bracket instead of being cleared.
+  modelVersion: "pp-12",
 
   weights: {
     points: 0.55,

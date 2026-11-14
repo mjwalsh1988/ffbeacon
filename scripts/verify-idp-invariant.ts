@@ -245,6 +245,7 @@ async function runPowerPulse(
   const league = await loadLeague(supabase, leagueRowId);
   if (!league) return { ok: false, skipped: "league row not found" };
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  if (currentWeek === null) return { ok: false, skipped: "NFL week unknown (Sleeper state did not answer)" };
 
   const rosters = await loadRosters(supabase, leagueRowId);
   if (rosters.length === 0) return { ok: false, skipped: "no rosters" };
@@ -335,6 +336,7 @@ async function runPositionalWar(
   const league = await loadLeague(supabase, leagueRowId);
   if (!league) return { ok: false, skipped: "league row not found" };
   const fromWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  if (fromWeek === null) return { ok: false, skipped: "NFL week unknown (Sleeper state did not answer)" };
   const toWeek = league.playoffWeekStart - 1;
   if (toWeek < fromWeek) return { ok: false, skipped: "no regular season weeks remaining" };
 

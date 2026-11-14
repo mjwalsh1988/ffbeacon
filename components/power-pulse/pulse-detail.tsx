@@ -15,6 +15,17 @@
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
 import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import { positionNoun } from "@/lib/site";
+import {
+  ordinal,
+  pctOdds,
+  phaseLine,
+  playedRecordText,
+  playoffFigure,
+  projectedRecordText,
+  titleFigure,
+} from "./odds-format";
+
+export { ordinal };
 
 /**
  * The positional rooms in a fixed order, offense first and then defense.
@@ -29,23 +40,14 @@ function orderedRooms(points: Record<string, number>): Array<[string, number]> {
   return Object.entries(points).sort((a, b) => rank(a[0]) - rank(b[0]));
 }
 
-export function ordinal(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
-  if (mod10 === 1) return `${n}st`;
-  if (mod10 === 2) return `${n}nd`;
-  if (mod10 === 3) return `${n}rd`;
-  return `${n}th`;
-}
-
+/** A plain percentage. Null is said in words, never a dash. */
 export function pct(v: number | null | undefined, digits = 0): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return "--";
+  if (v === null || v === undefined || !Number.isFinite(v)) return "No data";
   return `${(v * 100).toFixed(digits)}%`;
 }
 
 function num(v: number | null | undefined, digits = 1): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return "--";
+  if (v === null || v === undefined || !Number.isFinite(v)) return "No projection";
   return v.toFixed(digits);
 }
 
@@ -76,7 +78,7 @@ function ComponentBar({
       <div className="flex items-baseline justify-between gap-2">
         <dt className="text-xs font-semibold text-ink">{label}</dt>
         <dd className="font-mono text-xs tabular-nums text-ink-muted">
-          <span className="font-bold text-brand-cyan">{score ?? "--"}</span>
+          <span className="font-bold text-brand-cyan">{score ?? "No score"}</span>
           <span className="mx-1 text-ink-subtle">/</span>
           <span>{rankLabel}</span>
         </dd>
@@ -113,6 +115,9 @@ export function PulseDetail({
   handleByRoster?: Map<number, string | null>;
 }) {
   const nextThree = team.weekly.slice(0, 3);
+  // Where the league is in its season, read off the row so the words under
+  // this team can never disagree with the figures beside them.
+  const phase = team.playoff?.phase ?? null;
 
   return (
     <div className="space-y-5">
@@ -222,12 +227,12 @@ export function PulseDetail({
             <>
               <Tile
                 label="Chopped this week"
-                value={pct(team.chopOddsThisWeek)}
+                value={pctOdds(team.chopOddsThisWeek)}
                 accent="purple"
               />
               <Tile
                 label="Last one standing"
-                value={pct(team.surviveAllOdds)}
+                value={pctOdds(team.surviveAllOdds)}
                 accent="cyan"
               />
               <Tile
@@ -244,13 +249,37 @@ export function PulseDetail({
             </>
           ) : (
             <>
+              {phase === "regular" || phase === null ? (
+                <Tile
+                  label="Proj. record"
+                  value={projectedRecordText(team.projectedRecord)}
+                  accent="ink"
+                  sub="Averaged over simulated seasons, so it lands on fractions."
+                />
+              ) : (
+                <Tile
+                  label="Final record"
+                  value={playedRecordText(team.record)}
+                  accent="ink"
+                  sub="The regular season, as played."
+                />
+              )}
               <Tile
-                label="Proj. record"
-                value={`${num(team.projectedWins, 1)}-${num(team.projectedLosses, 1)}`}
-                accent="ink"
+                label={phase === "regular" || phase === null ? "Playoffs" : "Seed"}
+                value={playoffFigure(team, phase)}
+                accent="cyan"
               />
-              <Tile label="Playoffs" value={pct(team.playoffOdds)} accent="cyan" />
-              <Tile label="Title" value={pct(team.titleOdds)} accent="purple" />
+              <Tile
+                label={
+                  phase === "complete"
+                    ? "Result"
+                    : phase === "playoffs"
+                      ? "Bracket odds"
+                      : "Title"
+                }
+                value={titleFigure(team, phase)}
+                accent="purple"
+              />
               <Tile
                 label="Points / wk"
                 value={num(team.expectedPointsPerWeek)}
@@ -259,6 +288,11 @@ export function PulseDetail({
             </>
           )}
         </dl>
+        {!team.chopped && (
+          <p className="mt-2 text-[11px] leading-snug text-ink-subtle">
+            {phaseLine(phase, false)}
+          </p>
+        )}
       </section>
 
       {/* Management quality: lineup efficiency and starter reliability. */}
@@ -269,27 +303,27 @@ export function PulseDetail({
         <dl className="mt-2 grid grid-cols-2 gap-2">
           <Tile
             label="Lineup efficiency"
-            value={team.lineupEfficiency === null ? "--" : pct(team.lineupEfficiency)}
+            value={team.lineupEfficiency === null ? "No lineup data" : pct(team.lineupEfficiency)}
             accent="cyan"
-            sub={
+            sub={`Share of the best lineup's points the set lineup earns. ${
               team.lineupPointsLost !== null && team.lineupPointsLost > 0.05
-                ? `${num(team.lineupPointsLost)} pts on the bench`
-                : "Optimal lineup set"
-            }
+                ? `${num(team.lineupPointsLost)} pts on the bench.`
+                : "Optimal lineup set."
+            }`}
           />
           <Tile
             label="Starter reliability"
             value={
               team.reliabilityScore === null
-                ? "--"
+                ? "No history yet"
                 : `${team.reliabilityScore >= 1 ? "+" : ""}${((team.reliabilityScore - 1) * 100).toFixed(1)}%`
             }
             accent="purple"
-            sub={
+            sub={`How far its starters run above or below their projections.${
               team.reliabilityRank !== null
-                ? `${ordinal(team.reliabilityRank)} of ${teamCount}`
-                : "no history yet"
-            }
+                ? ` ${ordinal(team.reliabilityRank)} of ${teamCount}.`
+                : ""
+            }`}
           />
         </dl>
       </section>
@@ -367,7 +401,7 @@ export function PulseDetail({
                   {team.chopped
                     ? `${num(w.mean)} proj.`
                     : w.winProb === null
-                      ? "--"
+                      ? "No projection"
                       : `${Math.round(w.winProb * 100)}% win`}
                 </span>
               </li>

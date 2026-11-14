@@ -36,6 +36,7 @@ export function ChampionCard({
   season: number | null;
 }) {
   const lastStanding = source === "last_standing";
+  const mostPoints = source === "most_points";
   const record = `${champion.record.wins}-${champion.record.losses}${
     champion.record.ties > 0 ? `-${champion.record.ties}` : ""
   }`;
@@ -43,7 +44,7 @@ export function ChampionCard({
   return (
     <Panel
       eyebrow={season ? `${season} champion` : "Champion"}
-      title={lastStanding ? "Last one standing" : "League champion"}
+      title={lastStanding ? "Last one standing" : mostPoints ? "Most points standing" : "League champion"}
       bodyClassName="px-4 py-4 sm:px-5"
       glow
     >
@@ -89,15 +90,22 @@ export function ChampionCard({
             )}
             <p className="mt-0.5 text-xs text-ink-muted">
               {lastStanding
-                ? "Outlasted the whole league"
-                : `Won the championship at ${record}`}
-              {champion.pointsFor !== null
-                ? `, ${champion.pointsFor.toFixed(1)} points on the season`
-                : ""}
-              .
+                ? "Outlasted the whole league."
+                : mostPoints
+                  ? "Most points among the teams still in when the season ended."
+                  : `Won the championship at ${record}.`}
             </p>
           </div>
         </div>
+        {/* The hero figure: one real text node, the season's points. */}
+        {champion.pointsFor !== null ? (
+          <p className="mt-4 font-mono text-4xl font-black leading-none tabular-nums text-ink sm:text-5xl">
+            {champion.pointsFor.toFixed(1)}
+            <span className="ml-2 font-sans text-sm font-semibold text-ink-muted">points on the season</span>
+          </p>
+        ) : (
+          <p className="mt-4 text-sm text-ink-muted">No season points total stored.</p>
+        )}
       </div>
 
       {runnerUp && (

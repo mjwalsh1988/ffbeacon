@@ -228,3 +228,36 @@ describe("buildLeaderboards", () => {
     ]);
   });
 });
+
+describe("buildLeaderboards: league kinds and two-week rounds", () => {
+  it("lists no head-to-head games in a chopped league", () => {
+    const view = buildLeaderboards(input({ chopped: true, playoffWeekStart: null }));
+    expect(view.showsGames).toBe(false);
+    expect(view.games.blowouts).toEqual([]);
+    expect(view.games.closest).toEqual([]);
+  });
+
+  it("adds both legs of a two-week playoff round into one game, listed on leg 2", () => {
+    // Weeks 1 and 2 are one two-week round: 20 + 5 against 15 + 30.
+    const view = buildLeaderboards(input({ playoffWeekStart: 1, playoffRoundType: 2, playoffTeams: 2 }));
+    expect(view.games.closest).toHaveLength(1);
+    const game = view.games.closest[0];
+    expect(game.week).toBe(2);
+    expect(game.twoLegs).toBe(true);
+    expect(game.homePoints).toBe(25);
+    expect(game.awayPoints).toBe(45);
+    expect(game.winnerId).toBe(20);
+  });
+
+  it("counts a rostered starter's zero as a game once the week is final", () => {
+    const view = buildLeaderboards(
+      input({
+        weeks: [rosterWeek(1, 10, { "1": 20, "3": 0 }, ["1", "3"], 20), rosterWeek(1, 20, { "2": 15 }, ["2"], 10)],
+        statLines: new Map([[1, [{ sleeperId: "1", stats: { rush_yd: 200 } }]]]),
+      }),
+    );
+    const charlie = view.boards.all.find((l) => l.player.sleeperId === "3");
+    expect(charlie?.games).toBe(1);
+    expect(charlie?.points).toBe(0);
+  });
+});

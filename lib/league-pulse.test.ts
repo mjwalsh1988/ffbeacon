@@ -6,6 +6,7 @@ import {
   powerRankingsAreStale,
   transactionWeek,
 } from "./league-pulse";
+import { POWER_RANKINGS_MODEL_VERSION } from "./league-power-rankings";
 
 /**
  * The rule that keeps our copy of a league the same shape as Sleeper's.
@@ -97,7 +98,10 @@ describe("transactionWeek", () => {
  */
 describe("powerRankingsAreStale", () => {
   /** One row's worth of fake PostgREST, for the single query this makes. */
-  function client(generatedAt: string | null) {
+  function client(
+    generatedAt: string | null,
+    modelVersion: string | null = POWER_RANKINGS_MODEL_VERSION,
+  ) {
     const builder = {
       select: () => builder,
       eq: () => builder,
@@ -105,12 +109,21 @@ describe("powerRankingsAreStale", () => {
       limit: () => builder,
       maybeSingle: () =>
         Promise.resolve({
-          data: generatedAt === null ? null : { generated_at: generatedAt },
+          data:
+            generatedAt === null
+              ? null
+              : { generated_at: generatedAt, model_version: modelVersion },
           error: null,
         }),
     };
     return { from: () => builder } as never;
   }
+
+  it("rebuilds an in-season league whose rows came from older ranking math", async () => {
+    expect(await powerRankingsAreStale(client(new Date().toISOString(), null), "league-1", false)).toBe(
+      true,
+    );
+  });
 
   const fresh = new Date().toISOString();
   const old = new Date(Date.now() - LEAGUE_POWER_RANKINGS_TTL_MS - 1000).toISOString();

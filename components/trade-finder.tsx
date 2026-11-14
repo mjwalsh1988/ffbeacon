@@ -34,7 +34,8 @@ import {
 } from "@/app/actions/trade-finder";
 import type { SavedTrade } from "@/lib/trade-finder-saves";
 import { proposalHref } from "@/lib/trade-impact/proposal-url";
-import type { BuildAsset } from "@/lib/trade-impact/types";
+import type { BuildAsset, TradeImpact } from "@/lib/trade-impact/types";
+import { simulatedFrom, type SimulatedFigures } from "@/lib/trade-impact/simulated";
 import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
 import { PositionFilter } from "@/components/trade-ideas/position-filter";
 import { SuggestionEvaluation } from "@/components/trade-ideas/suggestion-evaluation";
@@ -189,6 +190,11 @@ export function TradeFinder(props: {
    */
   defaultStrategy?: TradeStrategy;
   /**
+   * One line saying which mode the page opened on and why ("Rebuild, because
+   * Power Pulse has your team out of the race."). League mode only.
+   */
+  strategyReason?: string;
+  /**
    * The position groups this league actually rosters, in display order.
    *
    * Passed in rather than assumed, so a league with no kicker slot is never
@@ -236,6 +242,12 @@ export function TradeFinder(props: {
   const [strategy, setStrategy] = useState<TradeStrategy>(
     props.isDynasty === false ? "contender" : (props.defaultStrategy ?? "contender"),
   );
+  /**
+   * The mode the suggestions on screen were ranked under. The toggle moves
+   * `strategy` at once, but nothing is re-ranked until Search, so the full
+   * evaluation is judged under this one and matches the deal it sits under.
+   */
+  const [appliedStrategy, setAppliedStrategy] = useState<TradeStrategy>(strategy);
   const [targetPlayerIds, setTargetPlayerIds] = useState<string[]>([]);
   const [offerPlayerIds, setOfferPlayerIds] = useState<string[]>([]);
   const [wantPositions, setWantPositions] = useState<TradePosition[]>([]);
@@ -266,6 +278,15 @@ export function TradeFinder(props: {
   const [sessionExcluded, setSessionExcluded] = useState<string[]>([]);
   /** True once the reader has asked for something, so empty reads as an answer. */
   const [hasSearched, setHasSearched] = useState(Boolean(props.initial));
+  /**
+   * The full evaluation's season figures, by suggestion key, once it has run.
+   * The card reads its season figure from here when present, so a deal never
+   * shows the card's estimate and the evaluation's simulation side by side.
+   */
+  const [simulatedByKey, setSimulatedByKey] = useState<Record<string, SimulatedFigures>>({});
+  const recordImpact = useCallback((key: string, impact: TradeImpact) => {
+    setSimulatedByKey((prev) => ({ ...prev, [key]: simulatedFrom(impact) }));
+  }, []);
 
   const headingId = useId();
   const filtersId = useId();
@@ -334,6 +355,7 @@ export function TradeFinder(props: {
           setSavedKeys(res.savedKeys);
           setIndex(0);
           setMeta(res.meta);
+          setAppliedStrategy(strategy);
           // On an empty result the notice is the ONLY sentence that says
           // anything the reader can act on: which chip to move, or that the
           // package is too big to price. Announcing the generic line instead
@@ -365,6 +387,7 @@ export function TradeFinder(props: {
           setGrades(res.grades);
           setSavedKeys(res.savedKeys);
           setIndex(0);
+          setAppliedStrategy(strategy);
           setCursor(res.cursor);
           setLeaguesLeft(res.remaining);
           setStatus(
@@ -834,10 +857,15 @@ export function TradeFinder(props: {
                       changes as the selection changes, so attaching it to each
                       radio would read the OLD sentence on the press that
                       replaced it. */}
+                  {/* Which mode is on and why, in one line: the inferred
+                      reason while the reader is on the mode the page chose,
+                      their own choice once they move it. */}
                   <p className="mt-1.5 text-xs text-ink-muted">
-                    {strategy === "contender"
-                      ? "Only deals that add points to your starting lineup, ranked by what those points are worth in wins."
-                      : "Ranked by what the pieces are worth in this league's format, including youth and draft capital."}
+                    {props.strategyReason && strategy === (props.defaultStrategy ?? "contender")
+                      ? props.strategyReason
+                      : strategy === "contender"
+                        ? "Compete, as you chose: only deals that add lineup points, ranked by projected wins."
+                        : "Rebuild, as you chose: ranked on value, youth and picks."}
                   </p>
                 </fieldset>
               ) : (
@@ -846,9 +874,8 @@ export function TradeFinder(props: {
                     What the ranking chases
                   </span>
                   <p className="mt-1.5 text-xs text-ink-muted">
-                    This is a one-year league, so every suggestion has to add
-                    points to your starting lineup. Deals that cost you points a
-                    week are left out rather than ranked lower.
+                    {props.strategyReason ??
+                      "One-season league: only deals that add points to your lineup, ranked by projected wins."}
                   </p>
                 </>
               )}
@@ -1105,6 +1132,12 @@ export function TradeFinder(props: {
                 shownSuggestion,
                 leagueIdOf(shownSuggestion, currentSaved?.sleeperLeagueId),
               )}
+              // Once the full evaluation below has run, the card's season
+              // figure is the evaluation's, so one deal shows one number.
+              simulated={simulatedByKey[shownSuggestion.key] ?? null}
+              // Rebuild leads on value; every other mode and league kind on
+              // the season figure.
+              mode={props.isDynasty !== false && appliedStrategy === "value" ? "rebuild" : "win-now"}
             />
           </div>
 
@@ -1224,6 +1257,8 @@ export function TradeFinder(props: {
                 theirTeamLabel={shownSuggestion.counterparty.teamName}
                 grade={shownGrade}
                 positionalWarByPlayer={props.positionalWarByPlayer}
+                strategy={props.isDynasty === false ? null : appliedStrategy}
+                onImpact={recordImpact}
               />
             </section>
           )}

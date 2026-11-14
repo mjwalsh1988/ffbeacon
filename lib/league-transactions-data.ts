@@ -39,7 +39,25 @@ export type TransactionFilter = {
   offset?: number;
 };
 
-export type RosterIdentities = Record<
+/**
+ * Type and week counts for the filter bar. Failed waiver claims are left out,
+ * matching the volume panel (lib/league-transaction-volume.ts): a claim that
+ * never moved a player is not a transaction the league made.
+ */
+export function countTransactionFacets(
+  rows: Array<{ type: string; week: number | null; status: string | null }>,
+): { typeCounts: Map<string, number>; weeks: Set<number> } {
+  const typeCounts = new Map<string, number>();
+  const weeks = new Set<number>();
+  for (const r of rows) {
+    if ((r.status ?? "").toLowerCase() === "failed") continue;
+    typeCounts.set(r.type, (typeCounts.get(r.type) ?? 0) + 1);
+    if (typeof r.week === "number") weeks.add(r.week);
+  }
+  return { typeCounts, weeks };
+}
+
+export type RosterIdentities =Record<
   number,
   { teamName: string; ownerHandle: string | null; avatarId: string | null }
 >;

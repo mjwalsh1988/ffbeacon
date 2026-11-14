@@ -3662,6 +3662,7 @@ export type Database = {
           capture_error: string | null;
           created_at: string;
           format_config_id: string | null;
+          frozen_at: string | null;
           id: string;
           last_pulsed_at: string | null;
           manager_ledger_attempted_at: string | null;
@@ -3696,6 +3697,7 @@ export type Database = {
           capture_error?: string | null;
           created_at?: string;
           format_config_id?: string | null;
+          frozen_at?: string | null;
           id?: string;
           last_pulsed_at?: string | null;
           manager_ledger_attempted_at?: string | null;
@@ -3730,6 +3732,7 @@ export type Database = {
           capture_error?: string | null;
           created_at?: string;
           format_config_id?: string | null;
+          frozen_at?: string | null;
           id?: string;
           last_pulsed_at?: string | null;
           manager_ledger_attempted_at?: string | null;

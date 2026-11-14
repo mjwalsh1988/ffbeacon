@@ -4,6 +4,7 @@ import { teamLabelParts } from "@/lib/team-label";
 import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 import { buildActivityCard } from "./writeup";
 import {
+  ACTIVITY_CATEGORIES,
   ACTIVITY_CATEGORY_OF,
   isActivityCategory,
   type ActivityCard,
@@ -129,6 +130,9 @@ export async function loadLeagueActivity(
     )
     .eq("league_id", query.leagueRowId)
     .order("occurred_at", { ascending: false })
+    // Events share timestamps (a week's results land together), so without a
+    // unique tiebreak the cap can cut a tie differently on each load.
+    .order("id", { ascending: false })
     // One extra, purely to detect that the cap bit. Dropped before rendering.
     .limit(limit + 1);
 
@@ -207,10 +211,26 @@ export async function loadLeagueActivity(
     hasOlder: (olderResult.data?.length ?? 0) > 0,
     truncated,
     nextDays: nextRung(query.days),
-    availableCategories: [...new Set(events.map((e) => e.category))],
+    availableCategories: availableCategoriesFor(events, truncated),
     teams: identities.list,
     oldestShown: events.length > 0 ? events[events.length - 1].occurredAt : null,
   };
+}
+
+/**
+ * The categories a filter chip may treat as non-empty.
+ *
+ * When the row cap cut the list, the loaded rows are only the newest slice, so
+ * a category missing from them may still have events further down. Every
+ * category stays enabled then; a chip is disabled as empty only when the whole
+ * window was loaded.
+ */
+export function availableCategoriesFor(
+  events: Array<{ category: ActivityCategory }>,
+  truncated: boolean,
+): ActivityCategory[] {
+  if (truncated) return [...ACTIVITY_CATEGORIES];
+  return [...new Set(events.map((e) => e.category))];
 }
 
 /** The rung after this one, or null when there is nothing further back to ask for. */

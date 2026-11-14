@@ -34,7 +34,7 @@ function List({
         {title}
       </h3>
       {movers.length === 0 ? (
-        <p className="mt-2 text-sm text-ink-muted">Nothing moved more than the floor.</p>
+        <p className="mt-2 text-sm text-ink-muted">No player moved enough to list.</p>
       ) : (
         <ul role="list" aria-labelledby={id} className={`mt-2 ${RULED}`}>
           {movers.map((m) => {

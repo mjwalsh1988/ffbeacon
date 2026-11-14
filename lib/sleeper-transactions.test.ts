@@ -50,6 +50,22 @@ describe("getAllSleeperTransactions", () => {
     expect(result.map((t) => t.transaction_id)).toEqual(["w0", "w1", "w2", "w3", "w4", "w5"]);
   });
 
+  it("reads past a quiet stretch when the walk is bounded (emptyStop Infinity)", async () => {
+    // A real 2024 league: nothing in weeks 0-7, moves in 8 through 17. The old
+    // three-empty-weeks stop returned none of them.
+    fetchMock.mockImplementation(async (url: string) => {
+      const week = Number(url.split("/transactions/")[1]);
+      return jsonResponse(200, week >= 8 && week <= 17 ? [transaction(`w${week}`)] : []);
+    });
+
+    const bounded = await getAllSleeperTransactions("league1", 18, Number.POSITIVE_INFINITY, 0);
+    expect(bounded).toHaveLength(10);
+    expect(bounded[0].transaction_id).toBe("w8");
+
+    const guessed = await getAllSleeperTransactions("league1", 18, 3, 0);
+    expect(guessed).toHaveLength(0);
+  });
+
   it("throws when a week's request fails, rather than treating it as empty", async () => {
     fetchMock.mockImplementation(async (url: string) => {
       const week = Number(url.split("/transactions/")[1]);

@@ -5,7 +5,7 @@
  * Same shape as lib/league-blueprint/settings.ts. Bounds are plan section
  * 13.2: window 10 to 90, k 1 to 3, watch 0 to 0.2, hold back 0 to 0.3, min
  * points 5 to the window, stale 1 to 7, lookback at least the window, floor 0
- * to 0.2.
+ * to 0.2, minimum band width 0 to 0.5 of the mean, cadence 1 to 14 days.
  */
 
 import { z } from "zod";
@@ -33,6 +33,10 @@ export const marketSignalSettingsSchema = z.object({
   staleDays: z.number().int().min(1).max(7).default(d.staleDays),
   lookbackDays: z.number().int().min(10).max(180).default(d.lookbackDays),
   floorPct: z.number().min(0).max(0.2).default(d.floorPct),
+  minBandwidth: z.number().min(0).max(0.5).default(d.minBandwidth),
+  cadenceDays: z
+    .record(z.string(), z.number().int().min(1).max(14))
+    .default(() => ({ ...d.cadenceDays })),
   enabled: z.boolean().default(d.enabled),
   modelVersion: z.number().int().min(1).max(100_000).default(d.modelVersion),
 });

@@ -147,7 +147,6 @@ export function LineupSummary({ view }: { view: LineupView }) {
           value={headline}
           words={headlineWords}
           icon={<TrendingUp aria-hidden="true" className="h-4 w-4" />}
-          emphasis
         />
         <Figure
           term={bestTerm}
@@ -160,6 +159,8 @@ export function LineupSummary({ view }: { view: LineupView }) {
           value={gap}
           words={gapWords}
           icon={<Flame aria-hidden="true" className="h-4 w-4" />}
+          // The hero of this section: points left on the bench.
+          emphasis
           // A gap of zero is a real, good answer and the only figure here that
           // gets a tone of its own: nothing on the bench beats what is starting.
           tone={gap !== null && gap < 0.05 ? "good" : gap !== null && gap >= 1 ? "warn" : "plain"}
@@ -235,7 +236,7 @@ function Figure({
         ) : (
           <span
             className={`block font-mono tabular-nums ${figureTone} ${
-              emphasis ? "text-3xl font-extrabold sm:text-4xl" : "text-2xl font-bold sm:text-3xl"
+              emphasis ? "text-4xl font-black leading-none sm:text-5xl" : "text-2xl font-black"
             }`}
           >
             {fmtPoints(value)}

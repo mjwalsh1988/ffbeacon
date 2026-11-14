@@ -154,6 +154,8 @@ export type SeasonRow = {
   isCurrent: boolean;
   isPlayoffWeek: boolean;
   matchup: ScheduleMatchup | null;
+  /** A chopped league: no head-to-head result, so no Won, Lost or Tied. */
+  chopped?: boolean;
 };
 
 type Difficulty = "hard" | "even" | "easy" | "unknown";
@@ -441,22 +443,42 @@ function SeasonTableRow({
   // "Tied". Absence of an opponent is unambiguous in the data
   // (`ScheduleMatchup.away` is nullable and `sidesFor` returns null for the
   // opponent), so the answer is to ask that question before the other two.
+  //
+  // A chopped league has no head-to-head, so a settled week is "Final" and
+  // nothing more. Leg 1 of a two-week playoff round decides nothing yet. An
+  // unpaired roster in a playoff week has a bye or is out, not an odd count.
+  // "Projected" is the set lineup (the week in play); any later week has no
+  // lineup set yet and shows the best lineup, named as such.
+  const leg = row.matchup?.leg ?? null;
+  const usesSet = self?.projectedSet !== null && self?.projectedSet !== undefined;
   const outcome = !row.isFinal
-    ? null
-    : opponent === null
-      ? "Bye"
-      : self?.won
-        ? "Won"
-        : opponent.won
-          ? "Lost"
-          : "Tied";
+    ? usesSet
+      ? "Projected"
+      : "Best lineup"
+    : row.chopped
+      ? "Final"
+      : opponent === null
+        ? row.isPlayoffWeek
+          ? "No game"
+          : "Bye"
+        : leg === 1
+          ? "Leg 1 of 2"
+          : self?.won
+            ? "Won"
+            : opponent.won
+              ? "Lost"
+              : "Tied";
 
   const selfFigure = row.isFinal
     ? (self?.actual ?? null)
-    : (self?.projectedOptimal ?? null);
+    : usesSet
+      ? (self?.projectedSet ?? null)
+      : (self?.projectedOptimal ?? null);
   const oppFigure = row.isFinal
     ? (opponent?.actual ?? null)
-    : (opponent?.projectedOptimal ?? null);
+    : usesSet
+      ? (opponent?.projectedSet ?? null)
+      : (opponent?.projectedOptimal ?? null);
 
   const href = withUsername(
     `/leagues/${sleeperLeagueId}/matchups/${row.week}/${team.sleeperRosterId}`,

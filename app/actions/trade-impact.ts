@@ -55,6 +55,10 @@ const assetSchema = z.union([
     season: z.number().int().min(2000).max(2100),
     round: z.number().int().min(1).max(10),
     pickPosition: z.enum(["early", "mid", "late", "unknown"]),
+    // Which team's pick it is. Without it zod strips the field and the
+    // evaluation resolves the first same-round pick the roster holds, which is
+    // a different asset when a roster holds several.
+    originalRosterId: z.number().int().min(0).max(1000).optional(),
   }),
 ]);
 
@@ -71,6 +75,8 @@ const inputSchema = z.object({
   outgoing: z.array(assetSchema).max(MAX_BUILD_ASSETS_PER_SIDE),
   username: z.string().trim().min(1).max(64).nullable().optional(),
   source: z.string().trim().max(64).nullable().optional(),
+  /** Compete or Rebuild, dynasty only. The evaluation ignores it elsewhere. */
+  strategy: z.enum(["contender", "value"]).nullable().optional(),
 });
 
 export async function evaluateProposedTrade(raw: unknown): Promise<EvaluateTradeResponse> {
@@ -134,7 +140,9 @@ export async function evaluateProposedTrade(raw: unknown): Promise<EvaluateTrade
       };
     }
 
-    const result = await evaluateValidatedTrade(supabase, admin, validated.validated);
+    const result = await evaluateValidatedTrade(supabase, admin, validated.validated, {
+      strategy: input.strategy ?? null,
+    });
     if (!result.ok) return { ok: false, error: result.error };
     return { ok: true, impact: result.impact };
   } catch (err) {

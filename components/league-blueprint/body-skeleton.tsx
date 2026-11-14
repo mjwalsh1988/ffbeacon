@@ -1,6 +1,6 @@
 /**
  * The sheet while it loads (plan 9.17, 10.3): the same letterhead shape and
- * the same twelve ruled sections as the real sheet, each with a margin
+ * the same ruled sections in the same order as the real sheet, each with a margin
  * column and a body column from lg, so nothing jumps when the report
  * arrives. The team name, league and season are already known, so the
  * letterhead prints them; only the figures pulse. aria-busy with one status
@@ -12,6 +12,8 @@ const PULSE = "animate-pulse rounded bg-ink/[0.07] motion-reduce:animate-none";
 const SECTIONS: Array<[string, string]> = [
   ["120px", "Standing"],
   ["200px", "The plan"],
+  ["640px", "Buy, sell, hold"],
+  ["480px", "Trade strategy"],
   ["300px", "Grades by position"],
   ["520px", "Starting lineup"],
   ["420px", "Depth"],
@@ -19,12 +21,22 @@ const SECTIONS: Array<[string, string]> = [
   ["300px", "Age by position"],
   ["260px", "Risers and fallers"],
   ["160px", "Spotlight"],
-  ["640px", "Buy, sell, hold"],
-  ["220px", "Draft capital"],
-  ["480px", "Trade strategy"],
 ];
 
-export function SheetSkeleton({ teamName, leagueName, season }: { teamName: string; leagueName: string; season: string }) {
+const CAPITAL_SECTION: [string, string] = ["220px", "Draft capital"];
+
+export function SheetSkeleton({
+  teamName,
+  leagueName,
+  season,
+  showCapital = true,
+}: {
+  teamName: string;
+  leagueName: string;
+  season: string;
+  /** Draft capital is drawn in dynasty and keeper leagues only. */
+  showCapital?: boolean;
+}) {
   return (
     <div
       className="relative mt-6 overflow-hidden rounded-modal border border-line-accent bg-surface/60"
@@ -58,7 +70,7 @@ export function SheetSkeleton({ teamName, leagueName, season }: { teamName: stri
           <div className={`h-40 w-full rounded-card border-2 border-line-accent sm:w-48 ${PULSE}`} />
         </div>
       </div>
-      {SECTIONS.map(([h, title]) => (
+      {(showCapital ? [...SECTIONS, CAPITAL_SECTION] : SECTIONS).map(([h, title]) => (
         <div key={title} className="grid gap-4 border-t border-line px-5 py-6 sm:px-8 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8 lg:py-8">
           <p className="text-sm font-bold uppercase tracking-[0.14em] text-ink-subtle">{title}</p>
           <div className={PULSE} style={{ height: h }} />

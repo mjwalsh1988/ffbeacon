@@ -24,6 +24,7 @@ import type {
   SuggestionAsset,
   TeamDirection,
   TradeGoal,
+  TradeLeagueKind,
   TradePosition,
   TradeStrategy,
 } from "./types";
@@ -85,11 +86,13 @@ const STRATEGY_CLAUSE: Record<TradeStrategy, string> = {
   // long opener is paid for by the sentence at the END, which is the one naming
   // the reader's actual hole. The first drafts ran to 133 and 118, and against
   // a long team name the contender one truncated that sentence mid-word.
-  contender:
-    "You asked for contender deals, so this ranking leads on lineup points and projected wins.",
-  value:
-    "You asked for value deals, so this ranking leads on what the pieces are worth.",
+  contender: "In Compete mode this ranking leads on projected wins and lineup points.",
+  value: "In Rebuild mode this ranking leads on value, youth and picks.",
 };
+
+/** The opener in a chopped league, where winning now means surviving the cut. */
+const CHOPPED_CLAUSE =
+  "This is a chopped league, so the ranking is about surviving this week's cut.";
 
 const STANCE_CLAUSE: Record<TeamDirection, string | null> = {
   // Kept short. Three clauses share a 360 character ceiling, and a team name in
@@ -228,6 +231,8 @@ export function buildRationale(params: {
    * to a reader sitting last would read as a bug.
    */
   isDynasty?: boolean;
+  /** Chopped leagues get their own opener. Absent reads from `isDynasty`. */
+  leagueKind?: TradeLeagueKind;
   /**
    * Which question the ranking was answering. See STRATEGY_CLAUSE.
    *
@@ -274,17 +279,19 @@ export function buildRationale(params: {
     const stance =
       goal !== "balanced"
         ? null
-        : params.isDynasty === false
-          ? REDRAFT_CLAUSE
-          : params.strategy === "contender" || params.strategy === "value"
-            ? // Branched rather than indexed. The value is validated twice
-              // before it gets here, so this is belt and braces, but an object
-              // literal answers "__proto__" with something truthy and that
-              // would put "[object Object]" into a sentence on a card.
-              STRATEGY_CLAUSE[params.strategy]
-            : params.myDirection
-              ? STANCE_CLAUSE[params.myDirection]
-              : null;
+        : params.leagueKind === "chopped"
+          ? CHOPPED_CLAUSE
+          : params.isDynasty === false
+            ? REDRAFT_CLAUSE
+            : params.strategy === "contender" || params.strategy === "value"
+              ? // Branched rather than indexed. The value is validated twice
+                // before it gets here, so this is belt and braces, but an object
+                // literal answers "__proto__" with something truthy and that
+                // would put "[object Object]" into a sentence on a card.
+                STRATEGY_CLAUSE[params.strategy]
+              : params.myDirection
+                ? STANCE_CLAUSE[params.myDirection]
+                : null;
     parts.push(stance ?? GOAL_CLAUSE[goal] ?? GOAL_CLAUSE.balanced);
   }
 
@@ -376,6 +383,21 @@ export function buildWhyYou(
       mine.winsDelta > 0
         ? `Against your remaining schedule that is worth about ${amount}.`
         : `Against your remaining schedule that costs about ${amount}.`,
+    );
+  }
+
+  // Chopped: the same points against this week's cut line.
+  if (
+    mine.survivalDelta !== undefined &&
+    mine.survivalDelta !== null &&
+    Math.abs(mine.survivalDelta) >= 0.005
+  ) {
+    const pp = Math.round(Math.abs(mine.survivalDelta) * 100);
+    const amount = pp < 1 ? "under 1 percentage point" : `${pp} percentage ${pp === 1 ? "point" : "points"}`;
+    parts.push(
+      mine.survivalDelta > 0
+        ? `That raises your odds of surviving this week's cut by ${amount}.`
+        : `That lowers your odds of surviving this week's cut by ${amount}.`,
     );
   }
 

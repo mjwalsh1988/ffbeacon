@@ -39,7 +39,6 @@ import {
 } from "@/lib/positional-war/table";
 import { WAR_TIER_LABEL, WAR_TIER_MEANING, type WarTier } from "@/lib/positional-war/tiers";
 import type { PulsePosition } from "@/lib/power-pulse/types";
-import { isDefender } from "@/lib/site";
 
 /** How long the spoken summary waits for typing to settle. */
 const ANNOUNCE_DELAY_MS = 500;
@@ -295,6 +294,26 @@ export function WarPlayerTable({
         </button>
       </div>
 
+      {/* One short line per term the table uses. */}
+      <dl className="mt-3 grid gap-1 text-xs leading-relaxed text-ink-muted sm:grid-cols-2">
+        <div>
+          <dt className="inline font-semibold text-ink">Pts over repl.: </dt>
+          <dd className="inline">projected points above a replacement player, over the weeks covered.</dd>
+        </div>
+        <div>
+          <dt className="inline font-semibold text-ink">Wins/wk: </dt>
+          <dd className="inline">wins over replacement for each week he is projected.</dd>
+        </div>
+        <div>
+          <dt className="inline font-semibold text-ink">Replacement level: </dt>
+          <dd className="inline">the best player at a position no team starts.</dd>
+        </div>
+        <div>
+          <dt className="inline font-semibold text-ink">Scarcity: </dt>
+          <dd className="inline">how far a position falls from its best player to replacement level.</dd>
+        </div>
+      </dl>
+
       <p aria-hidden="true" className="mt-3 text-xs text-ink-muted">
         {summary}
       </p>
@@ -409,7 +428,7 @@ export function WarPlayerTable({
                   {row.position}
                   {row.positionRank}
                 </td>
-                <td className="px-3 py-2 text-left text-ink-muted">{row.team ?? "-"}</td>
+                <td className="px-3 py-2 text-left text-ink-muted">{row.team ?? "No team"}</td>
                 <td className="px-3 py-2 text-left text-ink-muted">{ownerLabel(row.owner)}</td>
                 <td className="px-3 py-2 text-left">
                   <span
@@ -419,27 +438,29 @@ export function WarPlayerTable({
                     {WAR_TIER_LABEL[row.tier]}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold text-ink">
+                {/* The row figure: the one number the table is about. */}
+                <td className="px-3 py-2 text-right font-mono font-black tabular-nums text-ink">
                   {row.war.toFixed(2)}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-ink-muted">
                   {row.pointsAboveReplacement.toFixed(1)}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-ink-muted">
-                  {row.warPerWeek === null ? "-" : row.warPerWeek.toFixed(3)}
+                  {row.warPerWeek === null ? (
+                    <span className="text-xs text-ink-subtle">Not projected</span>
+                  ) : (
+                    row.warPerWeek.toFixed(3)
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-ink-muted">
                   {row.projectedPointsPerWeek.toFixed(1)}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-ink">
-                  {/* A dash, never a zero: this source publishes no value for
-                      him, which is not the same as saying he is worthless. */}
-                  {row.tradeValue === null && isDefender(row.position) ? (
-                    // Words, never a dash or a zero: no value source prices a
-                    // defender at all (the premium standard, plan section 0).
+                  {/* Words, never a dash or a zero: no value is not the same
+                      as saying he is worthless. A defender is priced by no
+                      source at all (the premium standard, plan section 0). */}
+                  {row.tradeValue === null ? (
                     <span className="text-xs text-ink-subtle">No market value</span>
-                  ) : row.tradeValue === null ? (
-                    <span title={`${sourceDisplay} publishes no value for this player`}>-</span>
                   ) : (
                     Math.round(row.tradeValue)
                   )}

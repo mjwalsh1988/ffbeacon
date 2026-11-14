@@ -37,4 +37,12 @@ describe("computeAge", () => {
     // aged 25 or under: 6000 + 4000 of 12000
     expect(computeAge(mine, league, 25).youngCoreShare).toBeCloseTo(10000 / 12000, 6);
   });
+
+  it("counts a player in whole years: 25.9 is aged 25", () => {
+    const decimal = [
+      { position: "RB", value: 1000, age: 25.9 },
+      { position: "WR", value: 1000, age: 26.0 },
+    ];
+    expect(computeAge(decimal, decimal, 25).youngCoreShare).toBe(0.5);
+  });
 });

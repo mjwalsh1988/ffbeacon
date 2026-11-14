@@ -35,6 +35,11 @@ import { NOT_MEASURED } from "@/components/manager-ledger/format";
 import { rollUpEfficiency } from "@/lib/league-lineups/season";
 import type { ProjectionAccuracy, SeasonSeries, SeasonWeekPoint } from "@/lib/league-lineups/season";
 
+/** What the projected starters actually scored: like with like, falling back to the official total. */
+function comparedActual(p: SeasonWeekPoint): number | null {
+  return p.comparedScored !== undefined ? p.comparedScored : p.scored;
+}
+
 /** Plot geometry. One set of numbers, so the two charts line up under each other. */
 const PLOT = {
   height: 132,
@@ -69,7 +74,8 @@ export function SeasonCharts({
   projectionSourceLabel: string;
 }) {
   const settled = series.points.filter((p) => p.scored !== null);
-  const compared = series.points.filter((p) => p.scored !== null && p.projected !== null);
+  // The same starters on both sides (lib/league-lineups/season.ts comparedScored).
+  const compared = series.points.filter((p) => comparedActual(p) !== null && p.projected !== null);
 
   return (
     <div className="space-y-6">
@@ -293,7 +299,7 @@ function ProjectedAgainstActual({
   // actually wants is the MISS, and asking them to eyeball the distance between
   // two lines is asking them to do the subtraction. Above the line is a week
   // that beat its number; below it is one that did not.
-  const misses = points.map((p) => (p.scored ?? 0) - (p.projected ?? 0));
+  const misses = points.map((p) => (comparedActual(p) ?? 0) - (p.projected ?? 0));
   const reach = Math.max(1, ...misses.map((m) => Math.abs(m)));
   const width = plotWidth(points.length);
   const half = PLOT.height / 2;
@@ -377,13 +383,13 @@ function ProjectedAgainstActual({
       </div>
 
       <ChartTable
-        summary="Every settled week: what your lineup was projected for, what it scored, and the difference."
+        summary="Every settled week: what your projected starters were projected for, what they scored, and the difference."
         label="behind the projected against actual chart, week by week"
         head={["Week", "Projected", "Scored", "Difference"]}
         rows={points.map((p, i) => [
           String(p.week),
           fmtPoints(p.projected ?? 0),
-          fmtPoints(p.scored ?? 0),
+          fmtPoints(comparedActual(p) ?? 0),
           fmtSigned(misses[i]),
         ])}
         viewedRow={points.findIndex((p) => p.week === viewedWeek)}

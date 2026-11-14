@@ -263,7 +263,12 @@ export async function calculateLeagueImpact(
   if (!mine) return { ok: false, error: "We could not find your team in this league." };
 
   const nflState = await getNflState();
-  const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  const resolvedWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  // Unknown week: no projection against a guess (LPI-T02).
+  if (resolvedWeek === null) {
+    return { ok: false, error: "Sleeper did not tell us the current week. Try again shortly." };
+  }
+  const currentWeek: number = resolvedWeek;
   const lastRegularWeek = Math.max(currentWeek, league.playoffWeekStart - 1);
 
   const weeks: number[] = [];

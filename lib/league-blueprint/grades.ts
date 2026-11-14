@@ -6,13 +6,17 @@
  * the league rank in value with the league rank in projected points; without
  * a Power Pulse run it is value only. The overall grade is a weighted mean to
  * one decimal; a superflex league weights the quarterback grade up.
+ *
+ * A group with no figure has no grade (null, "Not scored") and is left out of
+ * the overall; with nothing graded the overall is null too. Draft capital is
+ * graded in dynasty and keeper leagues only.
  */
 
 import { ordinal } from "@/lib/league-team-status";
 import { positionNoun } from "@/lib/site";
 import type { LeagueBlueprintSettings } from "./default-settings";
 import { BLUEPRINT_POSITIONS, type BlueprintPosition } from "./default-settings";
-import type { BlueprintGrade } from "./types";
+import type { BlueprintGrade, BlueprintLeagueKind } from "./types";
 
 export function rankScore(rank: number, teamCount: number): number {
   if (teamCount <= 0) return 0;
@@ -43,7 +47,8 @@ function blend(
 
 export type GradeInput = {
   teamCount: number;
-  isDynasty: boolean;
+  /** The league kind decides whether draft capital is graded (dynasty and keeper only). */
+  leagueKind: BlueprintLeagueKind;
   isSuperflex: boolean;
   /** League value rank per position (cards.positionRanks). */
   valueRanks: Record<BlueprintPosition, number | null>;
@@ -66,22 +71,24 @@ function reasonFor(
   const parts: string[] = [];
   if (valueRank !== null) parts.push(`${ordinal(valueRank)} of ${teamCount} in ${label} value`);
   if (pointsRank !== null) parts.push(`${ordinal(pointsRank)} in ${pointsWord}`);
-  if (parts.length === 0) return `No ${label} figure to grade yet.`;
+  if (parts.length === 0) return `Not scored: no ${label} figure yet.`;
   const s = parts.join(", ");
   return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`;
 }
 
-export function computeGrades(input: GradeInput): { grades: BlueprintGrade[]; overall: number } {
+export function computeGrades(input: GradeInput): { grades: BlueprintGrade[]; overall: number | null } {
   const T = input.teamCount;
   const grades: BlueprintGrade[] = [];
   for (const p of BLUEPRINT_POSITIONS) {
     const valueRank = input.valueRanks[p] ?? null;
     const pointsRank = input.pointsRanks?.[p] ?? null;
     const noun = positionNoun(p);
+    // No figure is no grade: null reads "Not scored" and stays out of the
+    // overall, never a 1 of 10 that looks like a verdict.
     grades.push({
       key: p,
       label: p,
-      grade: blend(valueRank, pointsRank, T, input.settings) ?? 1,
+      grade: blend(valueRank, pointsRank, T, input.settings),
       valueRank,
       pointsRank,
       reason: reasonFor(noun, valueRank, pointsRank, T, `projected ${noun} points`),
@@ -90,25 +97,21 @@ export function computeGrades(input: GradeInput): { grades: BlueprintGrade[]; ov
   grades.push({
     key: "bench",
     label: "Bench",
-    grade: blend(input.benchValueRank, input.depthRank, T, input.settings) ?? 1,
+    grade: blend(input.benchValueRank, input.depthRank, T, input.settings),
     valueRank: input.benchValueRank,
     pointsRank: input.depthRank,
     reason: reasonFor("bench", input.benchValueRank, input.depthRank, T, "projected depth"),
   });
+  const scoresPicks = gradesDraftCapital(input.leagueKind);
   grades.push({
     key: "picks",
     label: "Draft capital",
-    grade:
-      input.isDynasty && input.picksValueRank !== null
-        ? toGrade(rankScore(input.picksValueRank, T))
-        : input.isDynasty
-          ? 1
-          : null,
-    valueRank: input.isDynasty ? input.picksValueRank : null,
+    grade: scoresPicks && input.picksValueRank !== null ? toGrade(rankScore(input.picksValueRank, T)) : null,
+    valueRank: scoresPicks ? input.picksValueRank : null,
     pointsRank: null,
-    reason: input.isDynasty
+    reason: scoresPicks
       ? reasonFor("draft pick", input.picksValueRank, null, T, "")
-      : "Not scored in redraft.",
+      : `Not scored in ${LEAGUE_KIND_NOUN[input.leagueKind]} leagues.`,
   });
 
   const w = input.settings.overall;
@@ -118,7 +121,7 @@ export function computeGrades(input: GradeInput): { grades: BlueprintGrade[]; ov
     WR: w.wr,
     TE: w.te,
     bench: w.bench,
-    picks: input.isDynasty ? w.picks : 0,
+    picks: scoresPicks ? w.picks : 0,
   };
   let sum = 0;
   let weight = 0;
@@ -128,6 +131,18 @@ export function computeGrades(input: GradeInput): { grades: BlueprintGrade[]; ov
     sum += g.grade * wt;
     weight += wt;
   }
-  const overall = weight > 0 ? Math.round((sum / weight) * 10) / 10 : 1;
+  const overall = weight > 0 ? Math.round((sum / weight) * 10) / 10 : null;
   return { grades, overall };
 }
+
+/** Draft capital is graded only where picks carry over: dynasty and keeper. */
+export function gradesDraftCapital(kind: BlueprintLeagueKind): boolean {
+  return kind === "dynasty" || kind === "keeper";
+}
+
+const LEAGUE_KIND_NOUN: Record<BlueprintLeagueKind, string> = {
+  redraft: "redraft",
+  keeper: "keeper",
+  dynasty: "dynasty",
+  chopped: "chopped",
+};

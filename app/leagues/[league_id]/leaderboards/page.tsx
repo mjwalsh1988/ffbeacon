@@ -478,8 +478,9 @@ async function LeaderboardsBody({
         )}
       </div>
 
-      {view.games.blowouts.length > 0 && (
-        <Panel eyebrow="Head to head" title="Games that stood out" helper="Open any game for both lineups.">
+      {/* No head-to-head in a chopped league, so no games to stand out. */}
+      {view.showsGames !== false && view.games.blowouts.length > 0 && (
+        <Panel eyebrow="Head to head" title="Games that stood out" helper="Open any game for both lineups. A two-week playoff round counts as one game.">
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
             {(
               [

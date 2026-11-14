@@ -59,7 +59,16 @@ export function gaugeGeometry(
 /** The gauge as an SVG string for the share image. */
 export function gaugeSvg(
   score: number,
-  opts: { width: number; stroke: number; trackColor: string; fromColor: string; toColor: string; tickColor: string },
+  opts: {
+    width: number;
+    stroke: number;
+    trackColor: string;
+    fromColor: string;
+    toColor: string;
+    tickColor: string;
+    /** The admin's Low and High cut points for the tick marks. */
+    bands?: [number, number];
+  },
 ): string {
   const g = gaugeGeometry(score, opts);
   const fill = g.fill

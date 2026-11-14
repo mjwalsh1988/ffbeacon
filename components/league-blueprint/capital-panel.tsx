@@ -2,7 +2,8 @@
  * Draft capital by season (plan 9.11). One ruled row per season: the season
  * as the row heading, the picks, the summed value as the row figure with
  * the league rank under it, and a bar drawn to the roster's richest season.
- * No hero. Redraft renders one sentence.
+ * No hero. Drawn in dynasty and keeper leagues only (the page leaves it out
+ * elsewhere); a season whose picks are all unpriced reads "No pick values".
  */
 
 import { REDRAFT_CAPITAL } from "@/lib/league-blueprint/capital";
@@ -31,7 +32,9 @@ export function CapitalPanel({ view, number }: { view: BlueprintView; number: st
         <p className="text-sm leading-relaxed text-ink-muted">This roster holds no future picks.</p>
       ) : (
         <ul role="list" className={RULED}>
-          {c.seasons.map((s) => (
+          {c.seasons.map((s) => {
+            const unpriced = s.picks.length > 0 && s.unpricedCount >= s.picks.length;
+            return (
             <li key={s.season} className="py-3">
               <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
                 <div className="min-w-0 flex-1 basis-48">
@@ -46,16 +49,23 @@ export function CapitalPanel({ view, number }: { view: BlueprintView; number: st
                   )}
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-2xl font-black tabular-nums text-ink">
-                    {fmtValue(s.value)}
-                    <span className="sr-only"> value</span>
-                  </p>
-                  <p className={ROW_SUB}>{rankOf(s.rank, T)}</p>
+                  {unpriced ? (
+                    <p className="text-sm font-medium text-ink-subtle">No pick values</p>
+                  ) : (
+                    <>
+                      <p className="font-mono text-2xl font-black tabular-nums text-ink">
+                        {fmtValue(s.value)}
+                        <span className="sr-only"> value</span>
+                      </p>
+                      <p className={ROW_SUB}>{rankOf(s.rank, T)}</p>
+                    </>
+                  )}
                 </div>
               </div>
-              <Bar fraction={top > 0 ? s.value / top : 0} className="mt-2" />
+              <Bar fraction={!unpriced && top > 0 ? s.value / top : 0} className="mt-2" />
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </SheetSection>

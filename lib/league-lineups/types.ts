@@ -36,6 +36,7 @@
  * quantities are `projected`, `pointsGained` and `pointsLeftOnBench`.
  */
 
+import type { CutLineWeek } from "@/lib/chopped/cut-line";
 import type { SchedulePlayer, ScheduleSlot, SlotGroup } from "@/lib/league-schedule/types";
 import type { WeekStatus } from "./status";
 import type { WeekRecap } from "./recap";
@@ -181,6 +182,12 @@ export type LineupOptimization = {
    * is true.
    */
   unavailable: boolean;
+  /**
+   * Starting slots held by a player whose game has kicked off, in a week being
+   * played. Those slots keep their banked points and are left out of the
+   * optimization. Absent when nothing is locked.
+   */
+  lockedSlotCount?: number;
 };
 
 /**
@@ -359,33 +366,50 @@ export type LineupView = {
    * no win probability to report, and says so.
    */
   opponent: LineupOpponent | null;
+  /** A chopped league: no opponent, the week is framed around the cut line. */
+  chopped: boolean;
+  /** Best ball: Sleeper sets the lineup itself, so no start or sit advice and no optimizer. */
+  bestBall: boolean;
+  /** Chopped leagues only. Null otherwise. */
+  chop: ChopWeek | null;
 };
 
 /**
  * The team on the other side of this week's matchup, and what they project to
  * score.
  *
- * `projected` and `sigma` come from `league_power_pulse_cache.weekly`, the same
- * rows lib/league-schedule/data.ts reads for the same matchup, so the Schedules
- * board and the lineup what-if cannot disagree about the opponent. That number
- * is their BEST lineup rather than the one they have set: we do not grade
- * somebody else's bench, and a reader cannot set it anyway.
+ * `projected` and `sigma` are their SET lineup, projected the same way the
+ * Schedule board projects it for the same matchup (lib/league-schedule/data.ts
+ * loadSetLineupStates), with points already scored banked. So the board, the
+ * matchup page and the lineup what-if quote one win chance.
  *
  * Null on the view when Sleeper published no matchup for the week, when the
- * roster is unpaired, or when Power Pulse has not been built for this league.
- * Every one of those is a real state and the panel names it rather than
- * printing a win probability out of nothing.
+ * roster is unpaired, or in a chopped league, which has no opponent.
  */
 export type LineupOpponent = {
   sleeperRosterId: number;
   teamName: string;
   ownerHandle: string | null;
-  /** Their projected points for this week. Null when the cache holds no week. */
+  /** Their expected final total: points scored so far plus what is still to come. */
   projected: number | null;
-  /** The spread around it. Null alongside `projected`. */
+  /** The spread of what is still to come. Null alongside `projected`. */
   sigma: number | null;
   /** What they actually scored. Non-null only on a settled week. */
   actual: number | null;
+};
+
+/**
+ * A chopped league's week, framed around the cut line: the lowest score in the
+ * league goes out, whoever it played. Built by lib/chopped/cut-line.ts.
+ */
+export type ChopWeek = CutLineWeek;
+
+/** Both legs of a two-week playoff round, once leg 2 is final. */
+export type RoundLegs = {
+  /** This team's other leg. */
+  ownOther: number;
+  /** The opponent's other leg. */
+  opponentOther: number;
 };
 
 /** Every team, for the picker. */

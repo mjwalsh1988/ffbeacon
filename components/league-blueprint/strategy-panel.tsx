@@ -67,15 +67,15 @@ function Shape({
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-2">
             <div>
-              <dt className={SECONDARY_LABEL}>Value</dt>
-              <dd className="font-mono text-lg font-black tabular-nums text-ink">
+              <dt className={SECONDARY_LABEL}>Value change</dt>
+              <dd className="font-mono text-2xl font-black tabular-nums text-ink">
                 {fmtSigned(c.valueDelta)}
                 <span className="sr-only"> value for you</span>
               </dd>
             </div>
             <div>
-              <dt className={SECONDARY_LABEL}>Projected wins</dt>
-              <dd className="font-mono text-lg font-black tabular-nums text-ink">
+              <dt className={SECONDARY_LABEL}>Projected wins change</dt>
+              <dd className="font-mono text-2xl font-black tabular-nums text-ink">
                 {c.winsDelta === null ? (
                   <span className="text-sm font-medium text-ink-subtle">No estimate</span>
                 ) : (

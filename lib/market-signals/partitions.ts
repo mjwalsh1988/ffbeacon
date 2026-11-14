@@ -93,7 +93,12 @@ export function isPartitionFresh(latestDay: string | null, stampedDays: Readonly
  */
 export async function planPartitions(
   supabase: Client,
-  opts: { now: Date; staleDays: number },
+  opts: {
+    now: Date;
+    staleDays: number;
+    /** Per-source stale days (a weekly source waits longer); staleDays when absent. */
+    staleDaysFor?: (source: string) => number;
+  },
 ): Promise<PlannedPartition[]> {
   const [formatsRes, sourcesRes] = await Promise.all([
     supabase
@@ -113,7 +118,9 @@ export async function planPartitions(
   );
 
   const runDay = utcDay(opts.now.toISOString());
-  const sinceDay = addDays(runDay, -opts.staleDays);
+  const staleFor = (source: string) => opts.staleDaysFor?.(source) ?? opts.staleDays;
+  const maxStale = partitions.reduce((m, p) => Math.max(m, staleFor(p.source)), opts.staleDays);
+  const sinceDay = addDays(runDay, -maxStale);
   const { data: stamps, error: stampErr } = await supabase
     .from("market_signal_runs")
     .select("format_config_id, source, as_of_day")
@@ -127,9 +134,9 @@ export async function planPartitions(
     stamped.set(key, set);
   }
 
-  const sinceIso = `${sinceDay}T00:00:00.000Z`;
   const planned: PlannedPartition[] = [];
   for (const p of partitions) {
+    const sinceIso = `${addDays(runDay, -staleFor(p.source))}T00:00:00.000Z`;
     const latest = await withRetry(
       async () => {
         const { data, error } = await supabase

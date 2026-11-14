@@ -18,10 +18,19 @@ describe("market signal settings", () => {
         staleDays: 3,
         lookbackDays: 45,
         floorPct: 0.05,
+        minBandwidth: 0.04,
+        cadenceDays: { dynastyprocess: 7 },
         enabled: true,
-        modelVersion: 1,
+        modelVersion: 2,
       },
     });
+  });
+
+  it("keeps a stored cadence map and does not share the default object", () => {
+    const r = validateMarketSignalSettings({ cadenceDays: { somesource: 14 } });
+    expect(r.ok && r.settings.cadenceDays).toEqual({ somesource: 14 });
+    const a = validateMarketSignalSettings({});
+    expect(a.ok && a.settings.cadenceDays).not.toBe(DEFAULT_MARKET_SIGNAL_SETTINGS.cadenceDays);
   });
 
   it.each([
@@ -34,6 +43,9 @@ describe("market signal settings", () => {
     [{ minPoints: 4 }],
     [{ staleDays: 8 }],
     [{ floorPct: 0.25 }],
+    [{ minBandwidth: 0.6 }],
+    [{ cadenceDays: { dynastyprocess: 0 } }],
+    [{ cadenceDays: { dynastyprocess: 15 } }],
   ])("rejects out of bounds %j", (raw) => {
     expect(validateMarketSignalSettings(raw).ok).toBe(false);
   });

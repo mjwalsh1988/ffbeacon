@@ -22,11 +22,18 @@ import { buildTeamProfile, leagueStarterBaselines, type TeamProfile } from "@/li
 import type { FinderTeam } from "@/lib/trade-finder/types";
 import { computeActivity } from "./activity";
 import { computeAge, type AgePlayer } from "./age";
-import { NO_PULSE_STANDING, REDRAFT_OUTLOOK, rosterArchetype, twoYearOutlook, valueArchetype } from "./archetype";
+import {
+  NO_PULSE_STANDING,
+  outlookNoteFor,
+  rosterArchetype,
+  starterSharePct,
+  twoYearOutlook,
+  valueArchetype,
+} from "./archetype";
 import { computeBuyTargets, computeCalls, type CallPlayer } from "./calls";
 import { computeCapital } from "./capital";
 import { BLUEPRINT_POSITIONS, type BlueprintPosition, type LeagueBlueprintSettings } from "./default-settings";
-import { computeGrades } from "./grades";
+import { computeGrades, gradesDraftCapital } from "./grades";
 import { computeMovers, type RosterTrend } from "./movers";
 import { computePartners } from "./partners";
 import { computePriorities } from "./priorities";
@@ -35,6 +42,7 @@ import { computeSpotlight, type SpotlightInput } from "./spotlight";
 import type { StrategyBuild } from "./strategy";
 import {
   BLUEPRINT_MODEL_VERSION,
+  type BlueprintLeagueKind,
   type BlueprintPlayer,
   type BlueprintView,
   type LineupSlot,
@@ -66,6 +74,12 @@ export type BlueprintInputs = {
   generatedAt: string;
   isDynasty: boolean;
   isSuperflex: boolean;
+  leagueKind: BlueprintLeagueKind;
+  isBestBall: boolean;
+  /** "Final roster from the 2025 season." for a frozen past season, else null. */
+  frozenSeasonNote: string | null;
+  /** Market Signals window in days, named in the call notes. */
+  signalWindowDays: number;
   formatTags: FormatTag[];
   formatDisplay: string;
   sourceSlug: string;
@@ -107,10 +121,31 @@ const isPricedPosition = (p: string): p is BlueprintPosition =>
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
+/**
+ * Thrown for a roster with no players (an eliminated chopped team, or an
+ * abandoned roster). The loader shows a worded state and never caches it.
+ */
+export class EmptyRosterError extends Error {
+  constructor(rosterId: number) {
+    super(`Roster ${rosterId} has no players.`);
+    this.name = "EmptyRosterError";
+  }
+}
+
+export const EMPTY_ROSTER_TEXT = "This team has no players left, so there is no blueprint to build.";
+
+/** Teams still holding players: an eliminated chopped roster is not ranked against. */
+export function liveTeamCount(cards: readonly Pick<TeamCardData, "players">[]): number {
+  const live = cards.filter((c) => c.players.length > 0).length;
+  return live > 0 ? live : cards.length;
+}
+
 export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
   const mine = input.cards.find((c) => c.sleeperRosterId === input.rosterId);
   if (!mine) throw new Error(`Roster ${input.rosterId} is not in the league cards.`);
-  const T = mine.teamCount || input.cards.length;
+  if (mine.players.length === 0) throw new EmptyRosterError(input.rosterId);
+  const T = liveTeamCount(input.cards);
+  const kind = input.leagueKind;
   const finderById = new Map(
     input.finderTeams.flatMap((t) => t.players.map((p) => [p.playerId, p] as const)),
   );
@@ -192,6 +227,7 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
     direction: direction ?? "balanced",
     isDynasty: input.isDynasty,
     ageCutoff: input.settings.calls.ageCutoff,
+    windowDays: input.signalWindowDays,
   });
 
   // ---- buy targets -----------------------------------------------------------
@@ -248,7 +284,7 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
     : null;
   const { grades, overall } = computeGrades({
     teamCount: T,
-    isDynasty: input.isDynasty,
+    leagueKind: kind,
     isSuperflex: input.isSuperflex,
     valueRanks: mine.positionRanks,
     pointsRanks,
@@ -257,6 +293,9 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
     picksValueRank: mine.statRanks.picks,
     settings: input.settings.grades,
   });
+  // Nothing graded means the league's value ranks are not built yet; a view
+  // with no overall is not worth storing, so the rebuild fails and retries.
+  if (overall === null) throw new Error(`Roster ${input.rosterId} has no graded figure yet.`);
   const picksGrade = grades.find((g) => g.key === "picks")?.grade ?? null;
   const benchGrade = grades.find((g) => g.key === "bench")!;
 
@@ -277,17 +316,18 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
   const standing = {
     overall,
     status: status ? { key: status.key, label: status.label, phrase: status.phrase, reason: status.reason } : null,
-    valueArchetype: valueArchetype(status?.key ?? null, input.isDynasty, age.gap, picksGrade, input.settings.archetype),
+    valueArchetype: valueArchetype(status?.key ?? null, kind, age.gap, picksGrade, input.settings.archetype),
     rosterArchetype: rosterArchetype(cache?.starter_value ?? 0, cache?.bench_value ?? 0, input.settings.archetype),
+    starterSharePct: starterSharePct(Number(cache?.starter_value ?? 0), Number(cache?.bench_value ?? 0)),
     outlook: twoYearOutlook(
       status?.key ?? null,
-      input.isDynasty,
+      kind === "dynasty",
       age.gap,
       picksGrade,
       age.youngCoreShare,
       input.settings.archetype,
     ),
-    outlookNote: !input.isDynasty ? REDRAFT_OUTLOOK : status === null ? NO_PULSE_STANDING : null,
+    outlookNote: outlookNoteFor(kind) ?? (status === null ? NO_PULSE_STANDING : null),
     standingNote: status === null ? NO_PULSE_STANDING : null,
   };
 
@@ -331,13 +371,13 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
   });
 
   // ---- capital, partners, priorities, spotlight -----------------------------
-  const capital = input.isDynasty
+  const capital = gradesDraftCapital(kind)
     ? computeCapital(input.finderTeams, input.rosterId, input.pickSourceDisplay)
     : null;
   const statusLabels = new Map(
     (input.pulse ?? []).map((p) => [p.rosterId, p.status?.label ?? null] as const),
   );
-  const partners = myProfile ? computePartners(myProfile, others, statusLabels, input.settings.partners) : [];
+  const partners = myProfile ? computePartners(myProfile, others, statusLabels, input.settings.partners, T) : [];
 
   const sellNames = callPlayers
     .filter((p) => calls[p.id]?.call === "sell")
@@ -350,6 +390,7 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
   const priorities = computePriorities(
     {
       teamCount: T,
+      leagueKind: kind,
       direction,
       positional: grades.filter((g) => isPricedPosition(g.key)),
       needs,
@@ -358,7 +399,7 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
       ledger: input.ledger,
       bench: benchGrade.grade !== null ? { grade: benchGrade.grade, rank: benchGrade.valueRank } : null,
       picks:
-        input.isDynasty && picksGrade !== null && capital
+        gradesDraftCapital(kind) && picksGrade !== null && capital
           ? {
               grade: picksGrade,
               rank: mine.statRanks.picks,
@@ -427,6 +468,9 @@ export function buildBlueprintView(input: BlueprintInputs): BlueprintView {
       isDynasty: input.isDynasty,
       isSuperflex: input.isSuperflex,
       direction,
+      leagueKind: kind,
+      isBestBall: input.isBestBall,
+      frozenSeasonNote: input.frozenSeasonNote,
     },
     players,
     standing,

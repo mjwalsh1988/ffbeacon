@@ -32,8 +32,12 @@ import { bracketChampion, type SleeperBracketMatch } from "@/lib/sleeper";
 
 export type LeaguePhase = "pre_draft" | "in_season" | "complete";
 
-/** How we know who won. */
-export type ChampionSource = "bracket" | "last_standing";
+/**
+ * How we know who won. `most_points`: a chopped season that ended on the
+ * calendar with several teams still in, settled on total points the way
+ * lib/chopped/survival.ts settles one.
+ */
+export type ChampionSource = "bracket" | "last_standing" | "most_points";
 
 export type LeagueChampion = {
   sleeperRosterId: number;
@@ -110,6 +114,14 @@ function bracketResult(winnersBracket: unknown): {
   return { championRosterId, runnerUpRosterId };
 }
 
+/** Season points off a roster's Sleeper settings (fpts plus fpts_decimal hundredths). */
+function seasonPoints(settings: Record<string, unknown> | null | undefined): number {
+  if (!settings) return 0;
+  const whole = Number(settings.fpts ?? 0);
+  const decimal = Number(settings.fpts_decimal ?? 0);
+  return (Number.isFinite(whole) ? whole : 0) + (Number.isFinite(decimal) ? decimal / 100 : 0);
+}
+
 /** Every elimination on record, newest first, with ties broken by roster id. */
 function chopEvents(rosters: OutcomeRoster[]): ChopEvent[] {
   const out: ChopEvent[] = [];
@@ -144,13 +156,29 @@ export function resolveLeagueOutcome(
         )?.sleeperRosterId ?? null)
       : null;
 
+  // A chopped season Sleeper calls complete with several teams still alive
+  // ended on the calendar rather than on a chop. lib/chopped/survival.ts
+  // settles that case on total points, and so does this.
+  let mostPoints: number | null = null;
+  if (chopped && lastStanding === null && status === "complete" && aliveCount > 1) {
+    let best: { id: number; points: number } | null = null;
+    for (const roster of input.rosters) {
+      if (eliminatedWeek(roster.settings ?? null) !== null) continue;
+      const points = seasonPoints(roster.settings);
+      if (best === null || points > best.points) best = { id: roster.sleeperRosterId, points };
+    }
+    mostPoints = best?.id ?? null;
+  }
+
   const bracket = chopped ? null : bracketResult(input.winnersBracket);
 
   const champion: LeagueChampion | null = bracket
     ? { sleeperRosterId: bracket.championRosterId, source: "bracket" }
     : lastStanding !== null
       ? { sleeperRosterId: lastStanding, source: "last_standing" }
-      : null;
+      : mostPoints !== null
+        ? { sleeperRosterId: mostPoints, source: "most_points" }
+        : null;
 
   let phase: LeaguePhase;
   if (champion !== null || status === "complete") {

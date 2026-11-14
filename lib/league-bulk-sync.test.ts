@@ -120,6 +120,9 @@ function baseTableHandlers(): Record<string, TableHandler> {
   return {
     league_sync_jobs: (op) => (op === "select" ? { data: [], error: null } : { data: [{ id: "won" }], error: null }),
     manager_pulse_runs: () => ({ data: [], error: null }),
+    // runOneJob reads the league row first (frozen past seasons skip Sleeper).
+    // No row stored: the job runs.
+    leagues: () => ({ data: null, error: null }),
   };
 }
 
@@ -292,6 +295,10 @@ function makeCheckpointPacingAdmin(jobs: LeagueSyncJob[]) {
           },
         };
       }
+      if (table === "leagues") {
+        // runOneJob's frozen check: no stored row, so every job runs.
+        return { select: () => simpleChain(() => ({ data: null, error: null })) };
+      }
       throw new Error(`checkpoint pacing test: no handler for table ${table}`);
     },
     rpc(name: string) {
@@ -419,6 +426,23 @@ describe("runLeagueSyncWorker", () => {
       expect(call.payload.sleeper_calls).toBe(2);
       expect(typeof call.payload.duration_ms).toBe("number");
     }
+  });
+
+  it("settles a frozen past-season league as done without a Sleeper request", async () => {
+    mockLoadSettings.mockResolvedValue(buildSettings({ jobConcurrency: 2, jobsPerClaim: 12, passBudgetSeconds: 60, maxCallsPerPass: 2400 }));
+    const jobs = [makeJob({ sleeper_league_id: "L1" }), makeJob({ sleeper_league_id: "L2", job_kind: "footprint" })];
+    const { admin } = makeFakeAdmin({
+      tableHandlers: {
+        ...baseTableHandlers(),
+        leagues: () => ({ data: { frozen_at: "2026-11-13T00:00:00.000Z" }, error: null }),
+      },
+      rpcHandler: makeRpcHandler({ leaseOk: true, jobs }),
+    });
+
+    const summary = await runLeagueSyncWorker(admin, { holder: "test-holder" });
+
+    expect(summary.done).toBe(2);
+    expect(mockPulseLeagueCore).not.toHaveBeenCalled();
   });
 
   it("stops claiming once a lease renewal returns false", async () => {

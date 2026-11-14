@@ -19,6 +19,8 @@ type TransactionFiltersProps = {
   defaultType: string;
   /** Sentinel written to ?type= to mean "every type". */
   allTypesValue: string;
+  /** What the feed now shows, for example "12 trades". Announced after a filter change. */
+  resultLabel?: string;
 };
 
 /**
@@ -47,6 +49,7 @@ export function TransactionFilters({
   weeks,
   defaultType,
   allTypesValue,
+  resultLabel,
 }: TransactionFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,11 +154,8 @@ export function TransactionFilters({
             </h2>
           </div>
           {hasAnyFilter && (
-            <span
-              className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-brand-cyan"
-              aria-label={`${activeCount} active ${activeCount === 1 ? "filter" : "filters"}`}
-            >
-              {activeCount} active
+            <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-brand-cyan">
+              {activeCount} active {activeCount === 1 ? "filter" : "filters"}
             </span>
           )}
         </div>
@@ -164,7 +164,7 @@ export function TransactionFilters({
             <button
               type="button"
               onClick={clearAll}
-              className="text-xs font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:underline"
+              className="inline-flex min-h-11 items-center px-2 text-xs font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Reset filters
             </button>
@@ -174,7 +174,7 @@ export function TransactionFilters({
             onClick={() => setCollapsed((v) => !v)}
             aria-expanded={!collapsed}
             aria-controls={bodyId}
-            className="inline-flex min-h-8 items-center gap-1 rounded-card border border-line bg-base px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            className="inline-flex min-h-11 items-center gap-1 rounded-card border border-line bg-base px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             {collapsed ? (
               <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
@@ -207,7 +207,7 @@ export function TransactionFilters({
               return (
                 <label
                   key={t.value}
-                  className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-2.5 py-0.5 text-xs leading-tight transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-cyan sm:min-h-8 ${
+                  className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-2.5 py-0.5 text-xs leading-tight transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-cyan ${
                     checked
                       ? "border-brand-purple bg-brand-purple/10 text-brand-purple"
                       : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
@@ -250,7 +250,7 @@ export function TransactionFilters({
               value={selectedWeek ?? ""}
               onChange={(e) => setParam("week", e.target.value || null)}
               aria-label="Filter by week"
-              className="min-h-11 rounded-card border border-line bg-base px-2.5 py-1 text-xs text-ink focus-visible:outline-2 focus-visible:outline-brand-cyan sm:min-h-8"
+              className="min-h-11 rounded-card border border-line bg-base px-2.5 py-1 text-xs text-ink focus-visible:outline-2 focus-visible:outline-brand-cyan"
             >
               <option value="">All weeks</option>
               {weeks.map((w) => (
@@ -287,7 +287,7 @@ export function TransactionFilters({
                 return (
                   <li key={team.rosterId}>
                     <label
-                      className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-2.5 py-0.5 text-xs transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-cyan sm:min-h-8 ${
+                      className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-2.5 py-0.5 text-xs transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-cyan ${
                         checked
                           ? "border-brand-cyan bg-brand-cyan/10 text-brand-cyan"
                           : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
@@ -311,7 +311,7 @@ export function TransactionFilters({
       </div>
 
       <p className="sr-only" aria-live="polite">
-        {pending ? "Loading transactions" : ""}
+        {pending ? "Loading transactions" : (resultLabel ?? "")}
       </p>
     </div>
   );

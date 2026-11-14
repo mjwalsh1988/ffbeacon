@@ -52,7 +52,12 @@ export const MANAGER_LEDGER_RETRY_MS = 15 * 60 * 1000;
 // defensive slots are now graded, so efficiency and points left on the bench
 // change for those leagues and every ledger rebuilds on next view. (The plan
 // named this ledger-5, which IDP-122 had already used.)
-export const MANAGER_LEDGER_MODEL_VERSION = "ledger-6";
+// ledger-7 (2026-11-13, LPI-T08): records, wins left on the bench and the
+// scoring rank count regular season weeks only and include the median game;
+// chopped leagues grade each week against the cut line; best ball leagues get
+// no lineup grading; a claim's points end at the next drop; trade net counts
+// started points, like waivers.
+export const MANAGER_LEDGER_MODEL_VERSION = "ledger-7";
 
 /** How many waiver moves are kept per roster in the stored detail. */
 export const MAX_STORED_WAIVER_MOVES = 12;

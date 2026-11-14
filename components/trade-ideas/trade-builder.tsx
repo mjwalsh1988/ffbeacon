@@ -85,6 +85,8 @@ export type BuilderPick = {
   /** Full plain-text label. Used where there is no room to render the parts. */
   label: string;
   value: number;
+  /** True for a pick no source prices (round 5 and later): "No market value". */
+  noValue?: boolean;
 };
 
 export type BuilderTeam = {
@@ -431,11 +433,17 @@ export function TradeBuilder({
       <dl className="mt-4 grid grid-cols-3 gap-2 rounded-card border border-line bg-base/50 p-3">
         <Total label="You receive" value={fmtValue(valueIn)} accent="cyan" />
         <Total label="You send" value={fmtValue(valueOut)} accent="purple" />
+        {/* The label says who gains, so the figure can be one plain number. */}
         <Total
-          label="Gap"
-          value={`${gap > 0 ? "+" : gap < 0 ? "-" : ""}${fmtValue(Math.abs(gap))}`}
+          label={
+            Math.abs(gap) < 1
+              ? "Value gap, level"
+              : gap > 0
+                ? "Value gap, you gain"
+                : "Value gap, they gain"
+          }
+          value={fmtValue(Math.abs(gap))}
           accent="ink"
-          spoken={totalsSentence(valueIn, valueOut)}
         />
       </dl>
 
@@ -704,7 +712,7 @@ function AssetRow({
         <span className="min-w-0 flex-1">
           <PickTag pick={found} estimated={found.positionEstimated} />
           <span className="mt-0.5 block text-xs text-ink-muted">
-            Draft pick, value {fmtValue(found.value)}
+            {found.noValue ? "Draft pick, No market value" : `Draft pick, value ${fmtValue(found.value)}`}
           </span>
         </span>
         <RemoveButton
@@ -752,12 +760,10 @@ function Total({
   label,
   value,
   accent,
-  spoken,
 }: {
   label: string;
   value: string;
   accent: "cyan" | "purple" | "ink";
-  spoken?: string;
 }) {
   const color =
     accent === "purple"
@@ -775,14 +781,7 @@ function Total({
       <dd
         className={`mt-0.5 font-mono text-sm font-bold tabular-nums sm:text-base ${color}`}
       >
-        {spoken ? (
-          <>
-            <span className="sr-only">{spoken}</span>
-            <span aria-hidden="true">{value}</span>
-          </>
-        ) : (
-          value
-        )}
+        {value}
       </dd>
     </div>
   );
@@ -1010,7 +1009,7 @@ function AssetPickerPanel({
                     >
                       <PickTag pick={pick} estimated={pick.positionEstimated} />
                       <span className="mt-0.5 block text-xs text-ink-muted">
-                        {fmtValue(pick.value)}
+                        {pick.noValue ? "No market value" : fmtValue(pick.value)}
                       </span>
                     </PickerRow>
                   </li>

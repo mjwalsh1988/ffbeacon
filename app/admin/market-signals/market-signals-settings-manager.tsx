@@ -115,6 +115,14 @@ export function MarketSignalsSettingsManager({
           max={0.3}
         />
         <NumberField
+          label="Narrowest band for a call"
+          value={settings.minBandwidth}
+          onChange={(v) => set({ minBandwidth: v })}
+          hint="0 to 0.5 of the player's average value. A narrower band reads Hold."
+          min={0}
+          max={0.5}
+        />
+        <NumberField
           label="Thin market floor"
           value={settings.floorPct}
           onChange={(v) => set({ floorPct: v })}

@@ -274,6 +274,10 @@ export async function loadTradeImpactWorld(
   }
 
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  // Unknown week: no projection against a guess (LPI-T02).
+  if (currentWeek === null) {
+    return { ok: false, error: "Sleeper did not tell us the current week. Try again shortly." };
+  }
 
   // Only the teams whose rosters change get projected. See the header.
   const involved = new Set(params.involvedRosterIds);

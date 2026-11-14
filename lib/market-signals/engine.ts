@@ -24,7 +24,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { addDays, utcDay } from "./bollinger";
-import type { MarketSignalSettings } from "./default-settings";
+import { sourceRules, type MarketSignalSettings } from "./default-settings";
 import { planPartitions, type Partition, type PlannedPartition } from "./partitions";
 import { runPartition, supabasePartitionIO, type PartitionResult } from "./run-partition";
 
@@ -57,6 +57,8 @@ export type MarketSignalsRunResult = {
     changes: number;
     ms: number;
     tooThin: boolean;
+    /** The latest day was still loading; left unstamped for the catch-up entry. */
+    partial: boolean;
   }>;
   failedSteps?: string[];
   pruned: { changesDeleted: number; runsDeleted: number } | null;
@@ -106,6 +108,7 @@ export async function runMarketSignals(
         changes: r.changesWritten,
         ms: r.durationMs,
         tooThin: r.tooThin,
+        partial: r.partial,
       });
       if (r.rowsWritten > 0) result.wroteAny = true;
     } catch (err) {
@@ -143,7 +146,12 @@ export function marketSignalDeps(
   const io = supabasePartitionIO(admin);
   return {
     now,
-    plan: () => planPartitions(admin, { now: new Date(now()), staleDays: settings.staleDays }),
+    plan: () =>
+      planPartitions(admin, {
+        now: new Date(now()),
+        staleDays: settings.staleDays,
+        staleDaysFor: (source) => sourceRules(settings, source).staleDays,
+      }),
     run: (p) => runPartition(io, p, settings, new Date(now())),
     prune: async () => {
       const { changesBefore, runsBefore } = pruneCutoffs(new Date(now()));

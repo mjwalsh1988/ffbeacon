@@ -221,6 +221,9 @@ export async function gatherLeagueFacts(
       ?.playoff_week_start ?? 15,
   );
   const currentWeek = resolveCurrentWeek(nflState, league.season, playoffWeekStart);
+  // Unknown week (Sleeper's NFL state did not answer): nothing is written
+  // against a guess; the next run tries again (LPI-T02).
+  if (currentWeek === null) return null;
 
   return { league, teams, pulseRanks, context, sleeperLeague, playoffWeekStart, currentWeek };
 }
@@ -264,7 +267,9 @@ async function relayOneLeague(
 
   /* ------------------------------------------------------------- 2. facts */
   const facts = await gatherLeagueFacts(admin, core.leagueRowId, row.watermark_at);
-  if (!facts) return `${row.sleeper_league_id}: the league row disappeared mid-run.`;
+  if (!facts) {
+    return `${row.sleeper_league_id}: the league row disappeared mid-run, or Sleeper did not say what week it is.`;
+  }
   const { league, teams, pulseRanks, context, sleeperLeague, playoffWeekStart, currentWeek } =
     facts;
 

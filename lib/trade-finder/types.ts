@@ -68,17 +68,101 @@ export const TRADE_STRATEGIES: {
 }[] = [
   {
     key: "contender",
-    label: "Contender",
+    label: "Compete",
     blurb: "only deals that add points to your lineup, ranked by projected wins",
   },
   {
     key: "value",
-    label: "Value",
-    blurb: "ranks on what the pieces are worth, youth and picks included",
+    label: "Rebuild",
+    blurb: "ranked on value, youth and picks",
   },
 ];
 
 const STRATEGY_KEYS = new Set<string>(TRADE_STRATEGIES.map((s) => s.key));
+
+/** The reader-facing name of a strategy. "Compete" and "Rebuild". */
+export function strategyLabel(strategy: TradeStrategy): string {
+  return strategy === "value" ? "Rebuild" : "Compete";
+}
+
+/**
+ * Which kind of league the ranking is answering for.
+ *
+ * Redraft (keeper and best ball redraft too) and chopped are win-now games:
+ * nothing a trade buys is worth anything after this season. Chopped differs in
+ * what "winning now" means, which is getting past this week's cut rather than
+ * beating one opponent. Dynasty (best ball dynasty too) is the only kind where
+ * the reader chooses between Compete and Rebuild.
+ */
+export type TradeLeagueKind = "redraft" | "dynasty" | "chopped";
+
+/** The trade kind of a league's display bucket (lib/league-category.ts). */
+export function tradeLeagueKindOf(
+  category: "dynasty" | "redraft" | "chopped" | "best-ball-dynasty" | "best-ball-redraft",
+  isDynasty: boolean,
+): TradeLeagueKind {
+  if (category === "chopped") return "chopped";
+  // The value board decides dynasty here, the same answer the engine already
+  // reads, so a league can never be ranked as dynasty with no pick values.
+  return isDynasty ? "dynasty" : "redraft";
+}
+
+/**
+ * The strategy a dynasty team opens on, and the one line that says why.
+ *
+ * Read off Power Pulse's call on the reader's own team (lib/league-team-status.ts),
+ * the same call the Blueprint's archetype starts from. Only a Rebuilder opens on
+ * Rebuild: a Loaded team is still in the race and wants its spare value turned
+ * into starters, and a Bubble team is still playing for this season. A league
+ * Power Pulse has not ranked opens on Compete, the reading that talks about the
+ * season in front of the reader rather than assuming they have given up on it.
+ *
+ * Outside dynasty there is no choice and the reason says what the league is.
+ */
+export function inferStrategy(
+  kind: TradeLeagueKind,
+  statusKey: TeamStatusKey | null,
+): { strategy: TradeStrategy; reason: string } {
+  if (kind === "chopped") {
+    return {
+      strategy: "contender",
+      reason: "Chopped league: deals are ranked on surviving this week's cut.",
+    };
+  }
+  if (kind === "redraft") {
+    return {
+      strategy: "contender",
+      reason: "One-season league: deals are ranked on projected wins.",
+    };
+  }
+  switch (statusKey) {
+    case "rebuilder":
+      return {
+        strategy: "value",
+        reason: "Rebuild, because Power Pulse has your team out of the race.",
+      };
+    case "competitor":
+      return {
+        strategy: "contender",
+        reason: "Compete, because Power Pulse has your team contending.",
+      };
+    case "loaded":
+      return {
+        strategy: "contender",
+        reason: "Compete, because your team is still in the race with value to spend.",
+      };
+    case "middle":
+      return {
+        strategy: "contender",
+        reason: "Compete, because your team is still in the playoff picture.",
+      };
+    default:
+      return {
+        strategy: "contender",
+        reason: "Compete, because Power Pulse has not ranked this league yet.",
+      };
+  }
+}
 
 /**
  * The strategy actually in force, given the league.
@@ -322,6 +406,12 @@ export type TradeFinderInput = {
   /** Startable slot tokens from the league's roster_positions. */
   startingSlots: string[];
   isDynasty: boolean;
+  /**
+   * Redraft, dynasty or chopped. Absent reads as redraft or dynasty from
+   * `isDynasty`. Chopped changes what the win-now ranking measures: survival
+   * odds this week rather than projected wins against one opponent.
+   */
+  leagueKind?: TradeLeagueKind;
   /** False for redraft, where no pick has a published value. */
   allowPicks: boolean;
   /**
@@ -432,6 +522,13 @@ export type SuggestionAsset =
       season: number;
       round: number;
       value: number;
+      /**
+       * Where the pick lands in its round, and whether that is a projection.
+       * Optional because saved suggestions predate both; the grade sends them
+       * to Signal Check so it prices the same slot the card did.
+       */
+      pickPosition?: FinderPick["pickPosition"];
+      positionEstimated?: boolean;
     };
 
 /** How likely the other manager is to engage, as a band rather than a number. */
@@ -461,6 +558,11 @@ export type SideImpact = {
    * one wherever it is shown: the full simulation lives in the trade builder.
    */
   winsDelta: number | null;
+  /**
+   * Chopped leagues only: change in this week's survival odds, as a
+   * probability (0.05 is five percentage points). Null or absent elsewhere.
+   */
+  survivalDelta?: number | null;
   /** Value-weighted change in average age. Negative means younger. */
   ageDelta: number | null;
   /** Draft picks gained (positive) or given up. */
@@ -486,6 +588,19 @@ export type TradeSuggestion = {
   theirs: SideImpact;
   /** |value gap| over the larger side, 0 to 1. Lower is fairer. */
   valueGap: number;
+  /**
+   * Both sides' value from the reader's seat, after the consolidation
+   * adjustment. What the card's value percent is printed from, through the
+   * same helper the builder's call uses (lib/trade-finder/value-margin.ts).
+   * Optional because saved suggestions predate it.
+   */
+  valueTotals?: { valueIn: number; valueOut: number };
+  /**
+   * The reader's season figures before the deal, from Power Pulse's cache:
+   * the "before" the card prints next to the change. Optional because saved
+   * suggestions predate it.
+   */
+  myBefore?: { projectedWins: number | null; survival: number | null };
   /**
    * What the outgoing package is worth against the incoming one in quality
    * terms, where 1 is level. Under 1 means the reader is paying with pieces that

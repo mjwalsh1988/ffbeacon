@@ -357,7 +357,9 @@ export async function runBuildDraftValue(
   // header note on why this file reads rawPoints rather than the adjusted
   // figure), so a single best-effort value for the whole run is enough.
   const nflState = await getNflState();
-  const currentWeek = resolveCurrentWeek(nflState, season, DEFAULT_PLAYOFF_WEEK_START);
+  // Null (Sleeper's NFL state did not answer) falls back to week 1 here and
+  // only here: the value moves no figure this build stores (see above).
+  const currentWeek = resolveCurrentWeek(nflState, season, DEFAULT_PLAYOFF_WEEK_START) ?? 1;
 
   // Which projection engine this board is built from, resolved once for the
   // whole run over the same window pass 2 reads (season, from week 1).

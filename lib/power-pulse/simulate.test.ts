@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { simulateSeason, weekMedian, type SimTeam } from "./simulate";
+import {
+  pairKey,
+  playoffWeekCount,
+  SEED_FIXED,
+  seedIndices,
+  simulateSeason,
+  standardSeedOrder,
+  weekMedian,
+  type SimTeam,
+} from "./simulate";
 import type { ScheduleWeek } from "./types";
 
 /** Build a round-robin-ish schedule pairing roster 1v2, 3v4, and so on. */
@@ -292,5 +301,88 @@ describe("weekMedian", () => {
 
   it("is zero for no scores rather than NaN", () => {
     expect(weekMedian([])).toBe(0);
+  });
+});
+
+describe("bracket shape and seeding (LPI-T04)", () => {
+  it("lays seeds out in the standard bracket order", () => {
+    expect(standardSeedOrder(8)).toEqual([1, 8, 4, 5, 2, 7, 3, 6]);
+    expect(standardSeedOrder(4)).toEqual([1, 4, 2, 3]);
+  });
+
+  it("counts the playoff weeks each round type runs", () => {
+    expect(playoffWeekCount(6, 0)).toBe(3);
+    expect(playoffWeekCount(6, 1)).toBe(6);
+    expect(playoffWeekCount(6, 2)).toBe(4);
+    expect(playoffWeekCount(4, 0)).toBe(2);
+    expect(playoffWeekCount(1, 0)).toBe(0);
+  });
+
+  it("lifts each division's best record to the top seeds, then seeds the rest by record", () => {
+    const wins = [10, 9, 8, 3];
+    const points = [0, 0, 0, 0];
+    expect(seedIndices(4, wins, points, null, 2)).toEqual([0, 1, 2, 3]);
+    expect(seedIndices(4, wins, points, [1, 1, 1, 2], 2)).toEqual([0, 3, 1, 2]);
+  });
+
+  it("seeds division winners into the field even over a better wildcard record", () => {
+    // Four teams, two playoff spots, two divisions. Roster 4 wins division 2
+    // with the worst record and must take a spot from roster 2.
+    const teams = [1, 2, 3, 4].map((id) => ({
+      ...team(id, 100),
+      wins: [10, 9, 8, 3][id - 1],
+      losses: 13 - [10, 9, 8, 3][id - 1],
+      division: id === 4 ? 2 : 1,
+    }));
+    const results = simulateSeason(teams, [], { ...OPTIONS, playoffTeams: 2, divisions: 2 });
+    expect(results.get(4)!.playoffOdds).toBe(1);
+    expect(results.get(2)!.playoffOdds).toBe(0);
+  });
+
+  it("never redraws a playoff game the bracket has already settled", () => {
+    // Regular season over, four team field. The bracket says the weakest team
+    // beat the strongest in the semifinal, so the strongest cannot win it all.
+    const teams = [1, 2, 3, 4].map((id) => ({
+      ...team(id, id === 1 ? 200 : 100, 5),
+      wins: 14 - id,
+      losses: id,
+    }));
+    const results = simulateSeason(teams, [], {
+      ...OPTIONS,
+      playoffTeams: 4,
+      playoffSeedType: SEED_FIXED,
+      playedPlayoffGames: new Map([[pairKey(1, 4), 4]]),
+      eliminatedFromTitle: new Set([1]),
+    });
+    expect(results.get(1)!.titleOdds).toBe(0);
+    expect(results.get(4)!.titleOdds).toBeGreaterThan(0);
+  });
+
+  it("keeps a fixed bracket fixed: seed 1 meets the 4 v 5 winner whoever wins", () => {
+    // Six team fixed bracket, seed 3 far stronger than everyone. Under a fixed
+    // bracket it can meet seed 1 only in the final; reseeded, seed 1 meets the
+    // lowest seed left. The title odds of seed 2 tell the two apart: fixed,
+    // seed 2 always has to go through seed 3 (3 v 6 winner) in the semifinal.
+    const strength = [110, 110, 300, 100, 100, 100];
+    const teams = [1, 2, 3, 4, 5, 6].map((id) => ({
+      ...team(id, strength[id - 1], 5),
+      wins: 20 - id,
+      losses: id,
+    }));
+    const fixed = simulateSeason(teams, [], { ...OPTIONS, playoffSeedType: SEED_FIXED });
+    expect(fixed.get(3)!.titleOdds).toBeGreaterThan(0.99);
+    expect(fixed.get(2)!.titleOdds).toBe(0);
+  });
+
+  it("plays each playoff round on that week's own projection", () => {
+    // Two teams, equal all season, but roster 2 is far better in week 15.
+    const teams = [1, 2].map((id) => {
+      const t = team(id, 100, 5);
+      t.wins = id === 1 ? 10 : 9;
+      t.weeks.set(15, { mean: id === 2 ? 200 : 100, sigma: 5 });
+      return t;
+    });
+    const results = simulateSeason(teams, [], { ...OPTIONS, playoffTeams: 2 });
+    expect(results.get(2)!.titleOdds).toBeGreaterThan(0.99);
   });
 });

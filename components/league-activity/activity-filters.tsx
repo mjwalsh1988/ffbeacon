@@ -21,7 +21,8 @@ import {
  * the page would be describing something that did not happen.
  *
  * A CHIP FOR A CATEGORY WITH NOTHING IN IT IS STILL RENDERED, disabled and
- * labeled as empty. Hiding it would make the filter row change shape as the
+ * labeled as empty (never when the row cap truncated the list; the loader then
+ * reports every category as available). Hiding it would make the filter row change shape as the
  * window widens, which is disorienting, and "there were no trades this
  * fortnight" is itself an answer.
  *
@@ -167,7 +168,7 @@ function TeamChips({
     // heading. Omitting the prop leaves the browser owning the state, which is
     // what a disclosure is for.
     <details {...(state.rosterId !== null ? { open: true } : {})} className="group">
-      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 rounded-full border border-line bg-base/50 px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-[32px]">
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 rounded-full border border-line bg-base/50 px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
         {active ? `Team: ${active.label}` : "Filter by team"}
         <span aria-hidden="true" className="text-ink-subtle transition-transform group-open:rotate-180">
           {"\u25BE"}
@@ -209,7 +210,7 @@ function Chip({
     // that actually reaches the accessibility tree.
     return (
       <span
-        className={`inline-flex min-h-[44px] cursor-default items-center rounded-full border border-line bg-base/30 font-semibold text-ink-subtle/60 sm:min-h-[32px] ${size}`}
+        className={`inline-flex min-h-[44px] cursor-default items-center rounded-full border border-line bg-base/30 font-semibold text-ink-subtle/60 ${size}`}
       >
         {label}
         <span className="sr-only">, nothing in this window</span>
@@ -222,7 +223,7 @@ function Chip({
       href={href}
       aria-label={ariaLabel}
       aria-current={active ? "page" : undefined}
-      className={`inline-flex min-h-[44px] items-center rounded-full border font-semibold transition-colors sm:min-h-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${size} ${
+      className={`inline-flex min-h-[44px] items-center rounded-full border font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${size} ${
         active
           ? // The active chip is not color alone: it also carries the only
             // filled background and the only bright text in the row.

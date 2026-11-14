@@ -60,10 +60,10 @@ function Ring({ grade }: { grade: BlueprintGrade }) {
             aria-hidden. */}
         <span
           className={`pointer-events-none absolute inset-0 flex items-center justify-center font-mono font-black tabular-nums ${
-            grade.grade === null ? "text-sm text-ink-subtle" : "text-2xl text-ink"
+            grade.grade === null ? "px-2 text-center text-[10px] font-semibold leading-tight text-ink-subtle" : "text-2xl text-ink"
           }`}
         >
-          {grade.grade === null ? "n/a" : grade.grade}
+          {grade.grade === null ? "Not scored" : grade.grade}
         </span>
       </div>
       <span className={SECONDARY_LABEL}>{grade.label}</span>
@@ -80,14 +80,19 @@ export function GradeRings({ grades, teamCount, number }: { grades: BlueprintGra
       id="bp-grades"
       number={number}
       title="Grades by position"
-      helper={`League relative: 10 is the best of ${teamCount} teams. Each grade blends value rank and projected points rank.`}
+      helper={`10 is the best of ${teamCount} teams; each grade blends value rank and projected points rank.`}
     >
       <ul role="list" className="grid grid-cols-3 gap-y-4 sm:grid-cols-6">
         {grades.map((g) => (
           <Ring key={g.key} grade={g} />
         ))}
       </ul>
-      <div className="mt-6 overflow-x-auto">
+      <div
+        role="region"
+        aria-label="Grade marks by group, scrolls sideways on a narrow screen"
+        tabIndex={0}
+        className="mt-6 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
         <table className="w-full border-collapse">
           <caption className="sr-only">The marks: grade, value rank, projected rank and the reason for each group</caption>
           <thead className="border-b border-line">

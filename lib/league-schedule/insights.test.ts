@@ -46,7 +46,10 @@ function matchupSide(
     record: { wins: 0, losses: 0, ties: 0 },
     pulseRank: null,
     actual: opts.actual ?? null,
+    projectedSet: null,
+    liveScore: null,
     projectedOptimal: opts.projectedOptimal ?? null,
+    roundTotal: null,
     sigma: null,
     pointsLeftOnBench: null,
     won: opts.won ?? false,
@@ -65,6 +68,7 @@ function finalGame(
     home: matchupSide(home[0], { actual: home[1], won: home[1] > away[1] }),
     away: matchupSide(away[0], { actual: away[1], won: away[1] > home[1] }),
     homeWinProb: null,
+    leg: null,
   };
 }
 
@@ -188,6 +192,7 @@ describe("weekSpotlight", () => {
         home: matchupSide(i * 2 + 1),
         away: matchupSide(i * 2 + 2),
         homeWinProb: p,
+        leg: null,
       })),
     };
   }
@@ -225,6 +230,7 @@ describe("stretches", () => {
           home: matchupSide(1),
           away: matchupSide(2, { projectedOptimal: opponentPoints }),
           homeWinProb: null,
+          leg: null,
         },
       ],
     };
@@ -301,5 +307,20 @@ describe("headToHeadCounts", () => {
 
   it("returns nothing when every opponent is met once", () => {
     expect(headToHeadCounts(1, SEASON, TEAMS)).toEqual([]);
+  });
+});
+
+describe("buildLuckRows: regular season only", () => {
+  it("leaves playoff weeks out of the all-play record, as Sleeper leaves them out of the real one", () => {
+    const withPlayoffs: InsightWeek[] = [
+      ...SEASON,
+      {
+        week: 3,
+        isFinal: true,
+        isPlayoffWeek: true,
+        matchups: [finalGame(3, [4, 200], [1, 10]), finalGame(3, [2, 150], [3, 140])],
+      },
+    ];
+    expect(buildLuckRows(TEAMS, withPlayoffs)).toEqual(buildLuckRows(TEAMS, SEASON));
   });
 });

@@ -20,6 +20,8 @@ import {
 } from "@/lib/league-team-status";
 import { deriveStatusVariant } from "@/lib/sleeper-to-format";
 import type { SleeperLeague } from "@/lib/sleeper";
+import type { PlayoffPhase, TeamPlayoffState } from "@/lib/power-pulse/playoffs";
+import { isLegacyBracketRowForChoppedLeague } from "@/lib/power-pulse/legacy-rows";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -64,6 +66,11 @@ export type PulseTeam = {
   expectedPointsStdev: number | null;
   projectedWins: number | null;
   projectedLosses: number | null;
+  /**
+   * The projected final regular season record, played games included. Null in
+   * a chopped league, which keeps no record that decides anything.
+   */
+  projectedRecord: { wins: number; losses: number; ties: number } | null;
   playoffOdds: number | null;
   byeOdds: number | null;
   titleOdds: number | null;
@@ -103,6 +110,14 @@ export type PulseTeam = {
    */
   formUnmeasured: boolean;
 
+  /**
+   * This team's place in the postseason: phase, seed (once the regular season
+   * is over), alive / eliminated / missed / champion, and the real final place
+   * once the title game is played. Null in a chopped league and on rows
+   * written before the model carried it.
+   */
+  playoff: TeamPlayoffState | null;
+
   weekly: PulseWeek[];
   drivers: PulseDriver[];
 
@@ -138,6 +153,15 @@ export type PowerPulseView = {
    * rescores, and the page must describe the rows it is holding.
    */
   chopped: boolean;
+  /**
+   * Where the league is in its season: "regular" (odds are projections),
+   * "playoffs" (the stored bracket is being played), "complete" (the title
+   * game is played and the odds are the result). Null for a chopped league and
+   * for rows that predate the playoff state.
+   */
+  playoffPhase: PlayoffPhase | null;
+  /** The champion's Sleeper roster id once the title game is played. Null before. */
+  championRosterId: number | null;
 };
 
 function num(v: unknown): number | null {
@@ -190,7 +214,27 @@ export async function loadPowerPulseView(
     supabase.from("leagues").select("metadata").eq("id", leagueRowId).maybeSingle(),
   ]);
 
-  const pulseRows = pulseRes.data ?? [];
+  // A failed read is a failure, not "no rows yet": returning null here would
+  // show the "building" state over a league that has a perfectly good cache.
+  for (const [label, res] of [
+    ["power pulse cache", pulseRes],
+    ["rosters", rostersRes],
+    ["league users", usersRes],
+    ["power rankings cache", valueRes],
+    ["league", leagueRes],
+  ] as const) {
+    if (res.error) throw new Error(`power pulse view: ${label} read failed: ${res.error.message}`);
+  }
+
+  const leagueType = Number(
+    (leagueRes.data?.metadata as { settings?: { type?: unknown } } | null)?.settings?.type,
+  );
+  // Bracket-style rows a chopped league kept from before it had its own model
+  // are never served; without them the page shows its "building" state until
+  // the league rescores.
+  const pulseRows = (pulseRes.data ?? []).filter(
+    (row) => !isLegacyBracketRowForChoppedLeague(row, leagueType),
+  );
   if (pulseRows.length === 0) return null;
 
   const sleeperLeague = (leagueRes.data?.metadata ?? {}) as unknown as SleeperLeague;
@@ -214,7 +258,9 @@ export async function loadPowerPulseView(
   }
   const valueRankByRoster = new Map<string, number>();
   [...valueByRoster.entries()]
-    .sort((a, b) => b[1] - a[1])
+    // Roster id breaks an exact tie, so two equal teams never swap ranks
+    // between reloads on the order the rows came back in.
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .forEach(([rosterId], i) => valueRankByRoster.set(rosterId, i + 1));
 
   const teams: PulseTeam[] = pulseRows.map((row) => {
@@ -226,7 +272,10 @@ export async function loadPowerPulseView(
       starters?: Array<{ playerId: string; name: string; position: string; points: number }>;
       depthDropoffPct?: number;
       formUnmeasured?: string;
+      playoff?: TeamPlayoffState;
     };
+    const projectedWins = num(row.projected_wins);
+    const projectedLosses = num(row.projected_losses);
 
     const pulseRank = row.pulse_rank === null ? null : Number(row.pulse_rank);
     const valueRank = valueRankByRoster.get(row.roster_id) ?? null;
@@ -260,8 +309,12 @@ export async function loadPowerPulseView(
 
       expectedPointsPerWeek: num(row.expected_points_per_week),
       expectedPointsStdev: num(row.expected_points_stdev),
-      projectedWins: num(row.projected_wins),
-      projectedLosses: num(row.projected_losses),
+      projectedWins,
+      projectedLosses,
+      projectedRecord:
+        projectedWins !== null && projectedLosses !== null
+          ? { wins: projectedWins, losses: projectedLosses, ties: num(row.projected_ties) ?? 0 }
+          : null,
       playoffOdds: num(row.playoff_odds),
       byeOdds: num(row.bye_odds),
       titleOdds: num(row.title_odds),
@@ -285,6 +338,7 @@ export async function loadPowerPulseView(
       starters: components.starters ?? [],
       depthDropoffPct: components.depthDropoffPct ?? null,
       formUnmeasured: components.formUnmeasured === "unprojected-slots",
+      playoff: components.playoff ?? null,
 
       weekly: ((row.weekly ?? []) as unknown as PulseWeek[]) ?? [],
       drivers: ((row.drivers ?? []) as unknown as PulseDriver[]) ?? [],
@@ -332,6 +386,9 @@ export async function loadPowerPulseView(
     modelVersion: first.model_version ?? null,
     preseason: throughWeek === 0,
     chopped: teams.some((t) => t.chopped),
+    playoffPhase: teams.find((t) => t.playoff)?.playoff?.phase ?? null,
+    championRosterId:
+      teams.find((t) => t.playoff?.status === "champion")?.sleeperRosterId ?? null,
   };
 }
 

@@ -64,6 +64,10 @@ describe("recheckNotFoundLeagues", () => {
         seen[col] = val;
         return builder;
       },
+      is: (col: string, val: unknown) => {
+        seen[`is:${col}`] = val;
+        return builder;
+      },
       order: () => builder,
       limit: (n: number) => {
         seen.limit = n;
@@ -90,6 +94,8 @@ describe("recheckNotFoundLeagues", () => {
 
     expect(seen.pulse_error).toBe("Sleeper league fetch returned null");
     expect(seen.limit).toBe(NOT_FOUND_BATCH_SIZE);
+    // A frozen past season is never rechecked against Sleeper.
+    expect(seen["is:frozen_at"]).toBeNull();
     expect(out).toMatchObject({
       checked: 4,
       stillThere: 1,

@@ -169,28 +169,42 @@ export async function syncLeagueMatchups(
 ): Promise<MatchupSyncResult> {
   const { force = false } = options;
 
-  const { data: existing, error: existingErr } = await supabase
-    .from("league_matchups")
-    .select("week, is_final, points")
-    .eq("league_id", leagueRowId)
-    .eq("season", season);
-  if (existingErr) {
+  // A frozen league (a past season fully captured; isPastSeason in
+  // lib/league-pulse.ts) is a snapshot: no Sleeper request for it ever again,
+  // whoever asks.
+  const [{ data: existing, error: existingErr }, { data: leagueRow, error: leagueErr }] =
+    await Promise.all([
+      supabase
+        .from("league_matchups")
+        .select("week, sleeper_roster_id, is_final, points")
+        .eq("league_id", leagueRowId)
+        .eq("season", season),
+      supabase.from("leagues").select("frozen_at").eq("id", leagueRowId).maybeSingle(),
+    ]);
+  if (existingErr || leagueErr) {
     return {
       ok: false,
       weeksFetched: [],
       rowsWritten: 0,
       failedWeeks: [],
       noScheduleYet: false,
-      error: existingErr.message,
+      error: (existingErr ?? leagueErr)?.message,
     };
+  }
+  if (leagueRow?.frozen_at) {
+    return { ok: true, weeksFetched: [], rowsWritten: 0, failedWeeks: [], noScheduleYet: false };
   }
 
   // Collapse the per-roster rows into one state per week: settled when every
-  // row for it is final, scored when any roster has points on the board.
+  // row for it is final, scored when any roster has points on the board. The
+  // rows already final are remembered one by one, because a final row is never
+  // written back as unfinished (see the upsert below).
   const stateByWeek = new Map<number, { settled: boolean; scored: boolean }>();
+  const storedFinal = new Set<string>();
   for (const row of existing ?? []) {
     const week = Number(row.week);
     if (!Number.isFinite(week)) continue;
+    if (row.is_final) storedFinal.add(`${week}:${Number(row.sleeper_roster_id)}`);
     const points = Number(row.points ?? 0);
     const prior = stateByWeek.get(week);
     stateByWeek.set(week, {
@@ -279,7 +293,10 @@ export async function syncLeagueMatchups(
         // A past week with points on the board is settled, for every roster in
         // it. A past week with no points anywhere is a league that has not
         // started yet, which stays projectable. See weekHasScoring above.
-        is_final: weekIsFinal,
+        // A row already stored as final stays final: a week settles once, and
+        // a later answer (a stat correction caught mid-week, a currentWeek
+        // that resolved lower than before) never reopens it.
+        is_final: weekIsFinal || storedFinal.has(`${week}:${rosterId}`),
         metadata: m as unknown as Json,
         synced_at: nowIso,
       });
@@ -328,19 +345,30 @@ export async function syncLeagueMatchups(
 }
 
 /**
- * The first week that has not been played yet.
+ * The first week that has not been played yet, or null when it is unknown.
+ *
+ * NULL MEANS "SKIP", NEVER "WEEK 1". A null NFL state is a Sleeper request that
+ * did not come back. Reading it as week 1 told every caller that nothing had
+ * been played: the matchup sync stopped treating past weeks as settled, and the
+ * engines projected a whole season that was half over and cached the result.
+ * A caller that gets null skips its sync and its compute and serves what is
+ * stored.
  *
  * Sleeper's NFL state reports week 0 during the preseason, which would make
  * every projection loop empty, so the preseason and offseason both resolve to
- * week 1. In the postseason we clamp to the league's playoff start so the
- * remaining slate is empty rather than negative.
+ * week 1. In the NFL postseason every fantasy week has been played (no league
+ * runs past week 18), so it resolves past the last matchup week, the same
+ * answer a past season gets.
+ *
+ * `_playoffWeekStart` is no longer read. It stays in the signature so the
+ * callers do not all change at once.
  */
 export function resolveCurrentWeek(
   state: { week?: number; season_type?: string; season?: string } | null,
   season: number,
-  playoffWeekStart: number,
-): number {
-  if (!state) return 1;
+  _playoffWeekStart: number,
+): number | null {
+  if (!state) return null;
   const stateSeason = Number(state.season);
   if (Number.isFinite(stateSeason) && stateSeason !== season) {
     // Looking at a past season: everything is played.
@@ -349,7 +377,7 @@ export function resolveCurrentWeek(
   if (state.season_type === "regular") {
     return Math.max(1, Math.min(MAX_MATCHUP_WEEK, Number(state.week) || 1));
   }
-  if (state.season_type === "post") return Math.max(1, playoffWeekStart);
+  if (state.season_type === "post") return MAX_MATCHUP_WEEK + 1;
   // "pre" and "off" both mean nothing has been played.
   return 1;
 }

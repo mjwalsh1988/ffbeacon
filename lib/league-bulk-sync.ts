@@ -264,7 +264,7 @@ export type WorkerSummary = {
   pendingCount: number;
 };
 
-type JobOutcome = { ok: true; skipped?: "fresh" } | { ok: false; error: string };
+type JobOutcome = { ok: true; skipped?: "fresh" | "frozen" } | { ok: false; error: string };
 
 /**
  * Send a job back to pending with a backoff, or mark it failed once it has had
@@ -534,15 +534,21 @@ async function runOneJob(
   currentSeason: number,
 ): Promise<JobOutcome> {
   try {
-    if (job.job_kind === "footprint") {
-      const { data: league } = await admin
-        .from("leagues")
-        .select("capture_completed_at, status, season")
-        .eq("sleeper_league_id", job.sleeper_league_id)
-        .maybeSingle();
-      if (league && !managerPulseNeedsCapture(league, settings, Date.now(), currentSeason)) {
-        return { ok: true, skipped: "fresh" };
-      }
+    const { data: league, error: leagueErr } = await admin
+      .from("leagues")
+      .select("capture_completed_at, status, season, frozen_at")
+      .eq("sleeper_league_id", job.sleeper_league_id)
+      .maybeSingle();
+    if (leagueErr) return { ok: false, error: `league read failed: ${leagueErr.message}` };
+    // A frozen past season is a stored snapshot: no Sleeper request, whichever
+    // kind of job asked. It settles as done because what is stored is final.
+    if (league?.frozen_at) return { ok: true, skipped: "frozen" };
+    if (
+      job.job_kind === "footprint" &&
+      league &&
+      !managerPulseNeedsCapture(league, settings, Date.now(), currentSeason)
+    ) {
+      return { ok: true, skipped: "fresh" };
     }
     return await syncOneLeague(admin, job);
   } catch (err) {

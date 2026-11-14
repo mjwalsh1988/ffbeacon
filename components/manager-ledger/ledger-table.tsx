@@ -8,6 +8,8 @@
  * own headline: a page about how well a manager has played their roster should
  * rank by exactly that, and letting a reader re-sort by points scored would
  * quietly turn it back into a standings table, which the league already has.
+ * A best ball league has no lineup decisions, so its rows follow points rank
+ * and the lineup columns are left out rather than shown empty.
  *
  * Nothing is hidden by the ordering. Every row carries the team's SCORING rank
  * next to its EFFICIENCY rank, and the gap between them is the most interesting
@@ -20,6 +22,9 @@
  * ledger in a bottom sheet from the team button. Both render the same
  * `LedgerDetail`, so there is one implementation of the numbers and two ways
  * in.
+ *
+ * EVERY FIGURE IS ONE TEXT NODE. A null prints as words, never as a dash with
+ * an sr-only twin.
  */
 
 import { Fragment, useId, useState } from "react";
@@ -28,11 +33,11 @@ import { BottomSheet } from "@/components/bottom-sheet";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { LedgerViewTeam } from "@/lib/league-manager-ledger-data";
 import { LedgerDetail } from "./ledger-detail";
-import { games, pct, pts, record, summarySentence } from "./format";
+import { pct, pts, record, summarySentence, type LedgerWords } from "./format";
 
 /**
  * Color for the efficiency figure. Always paired with the number itself, and
- * with a rank in the accessible name, so color is never the only carrier.
+ * with a rank in the row, so color is never the only carrier.
  */
 function efficiencyTone(value: number | null): string {
   if (value === null) return "text-ink-subtle";
@@ -41,42 +46,42 @@ function efficiencyTone(value: number | null): string {
   return "text-brand-purple";
 }
 
-/** The efficiency rank against the scoring rank, as a word rather than an arrow. */
-function GapCell({ team, total }: { team: LedgerViewTeam; total: number }) {
-  if (team.efficiencyRank === null || team.scoringRank === null) {
-    return (
-      <span className="text-xs text-ink-subtle">
-        <span aria-hidden="true">--</span>
-        <span className="sr-only">Not ranked</span>
-      </span>
-    );
+/** The points rank, and how the decisions rank compares, as words. */
+function GapCell({
+  team,
+  total,
+  gradesLineups,
+}: {
+  team: LedgerViewTeam;
+  total: number;
+  gradesLineups: boolean;
+}) {
+  if (team.scoringRank === null) {
+    return <span className="text-xs text-ink-subtle">Not ranked</span>;
+  }
+  const rank = (
+    <span className="font-mono text-xs tabular-nums text-ink">
+      {`${team.scoringRank} of ${total}`}
+    </span>
+  );
+  if (!gradesLineups || team.efficiencyRank === null) {
+    return <span className="inline-flex flex-col items-end leading-tight">{rank}</span>;
   }
   // Positive means the manager ranks better on decisions than the roster ranks
-  // on production, so they are getting more out of less.
+  // on points, so they are getting more out of less.
   const gap = team.scoringRank - team.efficiencyRank;
   const cls =
     gap === 0 ? "text-ink-muted" : gap > 0 ? "text-signal-success" : "text-signal-danger";
-  const word = gap === 0 ? "even" : gap > 0 ? `up ${gap}` : `down ${Math.abs(gap)}`;
-  // "up 3" on its own says nothing about what moved or in which direction, so
-  // the ear gets the whole claim and the eye gets the shorthand.
-  const spoken =
+  const word =
     gap === 0
-      ? "the same rank on decisions as on points"
+      ? "same on decisions"
       : gap > 0
-        ? `${gap} place${gap === 1 ? "" : "s"} better on decisions than on points`
-        : `${Math.abs(gap)} place${Math.abs(gap) === 1 ? "" : "s"} worse on decisions than on points`;
+        ? `${gap} better on decisions`
+        : `${Math.abs(gap)} worse on decisions`;
   return (
     <span className="inline-flex flex-col items-end leading-tight">
-      <span className="font-mono text-xs tabular-nums text-ink">
-        <span aria-hidden="true">{team.scoringRank}</span>
-        <span className="sr-only">
-          {team.scoringRank} of {total} on points scored
-        </span>
-      </span>
-      <span className={`font-mono text-[10px] font-semibold tabular-nums ${cls}`}>
-        <span aria-hidden="true">{word}</span>
-        <span className="sr-only">{spoken}</span>
-      </span>
+      {rank}
+      <span className={`text-[10px] font-semibold ${cls}`}>{word}</span>
     </span>
   );
 }
@@ -98,50 +103,92 @@ function TeamIdentity({ team }: { team: LedgerViewTeam }) {
   );
 }
 
-export function LedgerTable({ teams }: { teams: LedgerViewTeam[] }) {
+export function LedgerTable({
+  teams,
+  words,
+}: {
+  teams: LedgerViewTeam[];
+  words: LedgerWords;
+}) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [sheetTeam, setSheetTeam] = useState<LedgerViewTeam | null>(null);
   const sheetHeadingId = useId();
   const total = teams.length;
+  const lineups = words.gradesLineups;
+  // Rank, team, points rank, details, plus the lineup columns where they apply.
+  const columnCount = lineups ? 9 : 6;
+
+  const summaryOf = (team: LedgerViewTeam) =>
+    summarySentence({
+      teamName: team.teamName,
+      efficiency: team.efficiency,
+      efficiencyRank: team.efficiencyRank,
+      scoringRank: team.scoringRank,
+      winsLeftOnBench: team.winsLeftOnBench,
+      total,
+      words,
+    });
 
   return (
     <>
+      {lineups ? (
+        <dl className="mb-3 grid gap-1 text-xs leading-relaxed text-ink-muted sm:grid-cols-2">
+          <div>
+            <dt className="inline font-semibold text-ink">Started: </dt>
+            <dd className="inline">the share of their roster&apos;s points they started.</dd>
+          </div>
+          <div>
+            <dt className="inline font-semibold text-ink">Left behind: </dt>
+            <dd className="inline">points their best lineup would have added.</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="mb-3 text-xs leading-relaxed text-ink-muted">
+          Best ball sets every lineup itself, so teams are ordered by points.
+        </p>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">
-            Managers ordered by the share of their own points each one started. Columns:
-            rank, team, share started, points left on the bench, record, the record their
-            best lineup would have produced, losses the bench would have won, and their rank
-            on points scored with the gap between the two ranks. Activate the details button
-            at the end of a row, or the team name on a narrow screen, to open a full
-            ledger.
+            {lineups
+              ? `Managers ordered by the share of their own points each one started. Columns: rank, team, share started, points left on the bench, ${words.recordLabel.toLowerCase()}, the same with their best lineup, ${words.winsLeftLabel.toLowerCase()}, and their rank on points scored. Activate the details button at the end of a row, or the team name on a narrow screen, to open a full ledger.`
+              : `Teams ordered by points scored. Columns: rank, team, ${words.recordLabel.toLowerCase()}, waiver points started, and points rank. Activate the details button at the end of a row, or the team name on a narrow screen, to open a full ledger.`}
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
               <th scope="col" className="w-px whitespace-nowrap px-2 py-3 text-center">
-                {/* "#" is announced as "number sign" or "pound", which is not
-                    what this column is. */}
-                <span aria-hidden="true">#</span>
-                <span className="sr-only">Rank</span>
+                Rank
               </th>
               <th scope="col" className="px-3 py-3">
                 Team
               </th>
-              <th scope="col" className="px-3 py-3 text-center">
-                Started
-              </th>
-              <th scope="col" className="hidden px-3 py-3 text-right md:table-cell">
-                Left behind
-              </th>
+              {lineups ? (
+                <>
+                  <th scope="col" className="px-3 py-3 text-center">
+                    Started
+                  </th>
+                  <th scope="col" className="hidden px-3 py-3 text-right md:table-cell">
+                    Left behind
+                  </th>
+                </>
+              ) : null}
               <th scope="col" className="hidden px-3 py-3 text-center lg:table-cell">
-                Record
+                {words.recordLabel}
               </th>
-              <th scope="col" className="hidden px-3 py-3 text-center lg:table-cell">
-                Best lineup
-              </th>
-              <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
-                Wins left
-              </th>
+              {lineups ? (
+                <>
+                  <th scope="col" className="hidden px-3 py-3 text-center lg:table-cell">
+                    {words.bestRecordLabel}
+                  </th>
+                  <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
+                    {words.winsLeftLabel}
+                  </th>
+                </>
+              ) : (
+                <th scope="col" className="hidden px-3 py-3 text-right md:table-cell">
+                  Waiver points
+                </th>
+              )}
               <th scope="col" className="hidden px-3 py-3 text-right md:table-cell">
                 Points rank
               </th>
@@ -155,57 +202,30 @@ export function LedgerTable({ teams }: { teams: LedgerViewTeam[] }) {
               const isOpen = expanded === team.sleeperRosterId;
               const detailId = `ledger-detail-${team.sleeperRosterId}`;
               const summaryId = `ledger-summary-${team.sleeperRosterId}`;
-              const summary = summarySentence({
-                teamName: team.teamName,
-                efficiency: team.efficiency,
-                efficiencyRank: team.efficiencyRank,
-                scoringRank: team.scoringRank,
-                winsLeftOnBench: team.winsLeftOnBench,
-                total,
-              });
+              const rowRank = lineups ? team.efficiencyRank : team.scoringRank;
 
               return (
                 <Fragment key={team.sleeperRosterId}>
                   <tr className="hover:bg-surface">
                     <td className="w-px whitespace-nowrap px-2 py-2.5 text-center font-mono text-sm font-bold tabular-nums text-ink-muted">
-                      {team.efficiencyRank ?? (
-                        <>
-                          {/* Two hyphens are swallowed at the default
-                              punctuation level, so the cell would announce as
-                              empty. "Not measured" and "nothing there" are the
-                              distinction this whole page exists to keep. */}
-                          <span aria-hidden="true">--</span>
-                          <span className="sr-only">Not ranked</span>
-                        </>
+                      {rowRank === null ? (
+                        <span className="font-sans text-[10px] font-normal">Not ranked</span>
+                      ) : (
+                        rowRank
                       )}
                     </td>
 
                     {/* The row header. Without scope="row" a reader moving
-                        down the "Wins left" column in table navigation mode
-                        hears a number with no team attached to it, and has to
-                        arrow back to column two on every row to find out whose
-                        it is. */}
+                        down a column in table navigation mode hears a number
+                        with no team attached to it. */}
                     <th scope="row" className="px-3 py-2.5 text-left font-normal">
-                      {/* Mobile opens the sheet; desktop toggles the row below.
-                          Both reach the same ledger, so neither width loses a
-                          figure the other has. */}
                       {/* The one-sentence read on this manager, built from the
-                          same figures the row shows. Not painted: sighted
-                          readers have the columns, and repeating them as prose
-                          on every row would bury the table.
-                          
-                          aria-hidden AND sr-only together, which looks
-                          contradictory and is not. sr-only alone left it as
-                          live text in the accessibility tree, so a reader going
-                          down the table in browse mode heard the whole
-                          paragraph, then heard the button announce it AGAIN as
-                          its description: twice per row, twelve times over.
-                          aria-describedby resolves text out of a hidden
-                          element, which is exactly what the attribute is for,
-                          so it is still announced once when a control takes
-                          focus and never as part of the row. */}
+                          same figures the row shows. Hidden from the tree and
+                          used only as the buttons' description, so it is heard
+                          once when a control takes focus and never as part of
+                          the row. */}
                       <span id={summaryId} aria-hidden="true" className="sr-only">
-                        {summary}
+                        {summaryOf(team)}
                       </span>
                       <button
                         type="button"
@@ -222,51 +242,55 @@ export function LedgerTable({ teams }: { teams: LedgerViewTeam[] }) {
                       </span>
                     </th>
 
-                    <td className="px-3 py-2.5 text-center">
-                      <span
-                        className={`font-mono text-base font-extrabold tabular-nums ${efficiencyTone(team.efficiency)}`}
-                      >
-                        {pct(team.efficiency)}
-                      </span>
-                    </td>
+                    {lineups ? (
+                      <>
+                        <td className="px-3 py-2.5 text-center">
+                          <span
+                            className={`font-mono text-base font-extrabold tabular-nums ${efficiencyTone(team.efficiency)}`}
+                          >
+                            {pct(team.efficiency)}
+                          </span>
+                        </td>
 
-                    <td className="hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-muted md:table-cell">
-                      {pts(team.pointsLeft)}
-                      {team.pointsLeftPerWeek === null ? null : (
-                        <span className="block text-[10px] text-ink-subtle">
-                          {pts(team.pointsLeftPerWeek)}
-                          <span aria-hidden="true">/wk</span>
-                          <span className="sr-only"> per week</span>
-                        </span>
-                      )}
-                    </td>
+                        <td className="hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-muted md:table-cell">
+                          {pts(team.pointsLeft)}
+                          {team.pointsLeftPerWeek === null ? null : (
+                            <span className="block text-[10px] text-ink-subtle">
+                              {`${pts(team.pointsLeftPerWeek)} a week`}
+                            </span>
+                          )}
+                        </td>
+                      </>
+                    ) : null}
 
                     <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink-muted lg:table-cell">
                       {record(team.actualRecord)}
                     </td>
 
-                    <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink lg:table-cell">
-                      {record(team.bestLineupRecord)}
-                    </td>
+                    {lineups ? (
+                      <>
+                        <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink lg:table-cell">
+                          {record(team.bestLineupRecord)}
+                        </td>
 
-                    <td className="hidden px-3 py-2.5 text-center md:table-cell">
-                      <span
-                        className={`font-mono text-sm font-bold tabular-nums ${
-                          team.winsLeftOnBench > 0 ? "text-brand-purple" : "text-ink-muted"
-                        }`}
-                      >
-                        {/* The bare number for the eye, the same number inside a
-                            sentence for the ear. Not both to both, or a screen
-                            reader hears "three, three games lost". */}
-                        <span aria-hidden="true">{team.winsLeftOnBench}</span>
-                        <span className="sr-only">
-                          {games(team.winsLeftOnBench)} lost that the bench would have won
-                        </span>
-                      </span>
-                    </td>
+                        <td className="hidden px-3 py-2.5 text-center md:table-cell">
+                          <span
+                            className={`font-mono text-sm font-bold tabular-nums ${
+                              team.winsLeftOnBench > 0 ? "text-brand-purple" : "text-ink-muted"
+                            }`}
+                          >
+                            {team.winsLeftOnBench}
+                          </span>
+                        </td>
+                      </>
+                    ) : (
+                      <td className="hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-muted md:table-cell">
+                        {pts(team.waiverPointsStarted)}
+                      </td>
+                    )}
 
                     <td className="hidden px-3 py-2.5 text-right md:table-cell">
-                      <GapCell team={team} total={total} />
+                      <GapCell team={team} total={total} gradesLineups={lineups} />
                     </td>
 
                     <td className="w-px px-2 py-2.5 text-right">
@@ -296,7 +320,7 @@ export function LedgerTable({ teams }: { teams: LedgerViewTeam[] }) {
                       rather than merely hidden, so a closed ledger costs
                       nothing to render. */}
                   <tr id={detailId} className={isOpen ? "hidden md:table-row" : "hidden"}>
-                    <td colSpan={9} className="border-t border-line-accent bg-surface px-3 pb-4">
+                    <td colSpan={columnCount} className="border-t border-line-accent bg-surface px-3 pb-4">
                       {isOpen ? (
                         <>
                           {/* The h3 the Panel's h2 and the detail's own
@@ -309,6 +333,7 @@ export function LedgerTable({ teams }: { teams: LedgerViewTeam[] }) {
                           <LedgerDetail
                             team={team}
                             teamCount={total}
+                            words={words}
                             headingLevel={4}
                           />
                         </>
@@ -335,17 +360,10 @@ export function LedgerTable({ teams }: { teams: LedgerViewTeam[] }) {
                 {sheetTeam.teamName}
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                {summarySentence({
-                  teamName: sheetTeam.teamName,
-                  efficiency: sheetTeam.efficiency,
-                  efficiencyRank: sheetTeam.efficiencyRank,
-                  scoringRank: sheetTeam.scoringRank,
-                  winsLeftOnBench: sheetTeam.winsLeftOnBench,
-                  total,
-                })}
+                {summaryOf(sheetTeam)}
               </p>
             </div>
-            <LedgerDetail team={sheetTeam} teamCount={total} headingLevel={4} />
+            <LedgerDetail team={sheetTeam} teamCount={total} words={words} headingLevel={4} />
           </div>
         ) : null}
       </BottomSheet>

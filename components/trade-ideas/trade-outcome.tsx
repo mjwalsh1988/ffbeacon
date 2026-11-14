@@ -233,13 +233,7 @@ function Headline({
   icon: LucideIcon;
   accent: string;
 }) {
-  // "Even" has no winner, so the number describes a spread rather than an edge.
-  const marginCaption =
-    outcome.valueFavors === "even"
-      ? "value spread"
-      : outcome.valueFavors === "you"
-        ? "value your way"
-        : "value their way";
+  const hero = heroFigure(outcome);
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -264,21 +258,55 @@ function Headline({
         )}
       </div>
 
-      {/* The number, big. Same gradient treatment Signal Check gives its margin,
-          so a reader who knows one recognizes the other. */}
+      {/* THE ONE HERO FIGURE: the measure this league kind plays for. Wins
+          added in a head to head win-now league, survival odds in a chopped
+          one, the value margin for a dynasty Rebuild. One text node, with the
+          unit spelled out in the caption under it. */}
       <div className="shrink-0 sm:text-right">
         <p
-          className="bg-clip-text font-mono text-4xl font-bold tabular-nums text-transparent sm:text-5xl"
+          className="bg-clip-text font-mono text-4xl font-black leading-none tabular-nums text-transparent sm:text-5xl"
           style={{
             backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
           }}
         >
-          {Math.round(outcome.valueMarginPct)}%
+          {hero.figure}
         </p>
-        <p className="text-[11px] text-ink-subtle">{marginCaption}</p>
+        <p className="mt-1 text-[11px] text-ink-subtle">{hero.caption}</p>
       </div>
     </div>
   );
+}
+
+/**
+ * The hero figure for the call, chosen by what the call leaned on.
+ *
+ * Win-now (redraft, chopped, dynasty Compete): the season figure, survival odds
+ * this week in a chopped league, projected wins added otherwise, falling back to
+ * the lineup when the season could not be simulated. Rebuild and the old
+ * status-based call: the value margin, with a caption saying who gains.
+ */
+function heroFigure(outcome: TradeOutcome): { figure: string; caption: string } {
+  if (outcome.lens === "wins") {
+    if (outcome.survivalDeltaPp !== null) {
+      return {
+        figure: signed(outcome.survivalDeltaPp, 0),
+        caption: "percentage points of survival odds this week",
+      };
+    }
+    if (outcome.winsDelta !== null) {
+      return { figure: signed(outcome.winsDelta, 2), caption: "projected wins added" };
+    }
+    if (outcome.lineupDelta !== null) {
+      return { figure: signed(outcome.lineupDelta, 1), caption: "lineup points a week" };
+    }
+  }
+  const caption =
+    outcome.valueFavors === "even"
+      ? "value gap, the sides are level"
+      : outcome.valueFavors === "you"
+        ? "value gap, you gain"
+        : "value gap, they gain";
+  return { figure: `${Math.round(outcome.valueMarginPct)}%`, caption };
 }
 
 /* ------------------------------------------------------------------ */
@@ -306,30 +334,30 @@ function BalanceBar({
 }) {
   const you = Math.round(outcome.yourShare);
   const them = 100 - you;
-  const spoken =
-    outcome.valueFavors === "even"
-      ? `On value, you receive ${you} percent of what is moving and ${theirTeamLabel} receives ${them} percent. The two sides are level.`
-      : outcome.valueFavors === "you"
-        ? `On value, you receive ${you} percent of what is moving and ${theirTeamLabel} receives ${them} percent, so you come out ${Math.round(outcome.valueMarginPct)} percent ahead.`
-        : `On value, you receive ${you} percent of what is moving and ${theirTeamLabel} receives ${them} percent, so ${theirTeamLabel} comes out ${Math.round(outcome.valueMarginPct)} percent ahead.`;
 
+  // Every figure here is one real text node. The bar itself is the only
+  // drawing, and it is hidden because the two shares beside it already say
+  // the same split in words.
   return (
     <div className="rounded-card border border-line bg-base/50 p-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
         Value balance
       </p>
 
-      <div aria-hidden="true" className="mt-3">
+      <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2 text-xs">
           <span className="min-w-0 truncate font-semibold text-brand-cyan">
-            You {you}%
+            You get {you}%
           </span>
           <span className="min-w-0 truncate text-right font-semibold text-brand-purple">
-            {them}% {theirTeamLabel}
+            {theirTeamLabel} gets {them}%
           </span>
         </div>
 
-        <div className="relative mt-1.5 flex h-3.5 overflow-hidden rounded-full border border-line-accent bg-base">
+        <div
+          aria-hidden="true"
+          className="relative mt-1.5 flex h-3.5 overflow-hidden rounded-full border border-line-accent bg-base"
+        >
           <span
             className="h-full bg-brand-cyan/70 transition-[width]"
             style={{ width: `${you}%` }}
@@ -343,12 +371,16 @@ function BalanceBar({
         </div>
 
         <div className="mt-2 flex items-baseline justify-between gap-2 font-mono text-[11px] tabular-nums text-ink-muted">
-          <span>{fmtValue(outcome.valueIn)} in</span>
-          <span>{fmtValue(outcome.valueOut)} out</span>
+          <span>{fmtValue(outcome.valueIn)} value in</span>
+          <span>{fmtValue(outcome.valueOut)} value out</span>
         </div>
       </div>
 
-      <p className="sr-only">{spoken}</p>
+      {outcome.hasUnpriced && (
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
+          Pieces with no market value are left out of this balance.
+        </p>
+      )}
 
       {outcome.lopsided && (
         <p className="mt-3 rounded-card border border-signal-warning/40 bg-signal-warning/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-signal-warning">
@@ -373,24 +405,49 @@ function BalanceBar({
  * before-and-after is the working.
  */
 function SeasonStrip({ outcome, gaps }: { outcome: TradeOutcome; gaps: ImpactGaps }) {
-  const rows: Array<{ label: string; value: string; delta: number | null }> = [
-    {
-      label: "Projected wins",
-      value: outcome.winsDelta === null ? "n/a" : signed(outcome.winsDelta),
-      delta: outcome.winsDelta,
-    },
-    {
-      label: "Playoff odds",
-      value:
-        outcome.playoffDeltaPp === null ? "n/a" : `${signed(outcome.playoffDeltaPp, 0)}pp`,
-      delta: outcome.playoffDeltaPp,
-    },
-    {
-      label: "Lineup, points a week",
-      value: outcome.lineupDelta === null ? "n/a" : signed(outcome.lineupDelta),
-      delta: outcome.lineupDelta,
-    },
-  ];
+  const NOT_MEASURED = "Not measured";
+  const lineupRow = {
+    label: "Lineup, points a week",
+    value: outcome.lineupDelta === null ? NOT_MEASURED : signed(outcome.lineupDelta),
+    delta: outcome.lineupDelta,
+  };
+  // A chopped league has no wins, playoffs or title to move: its season
+  // figure is surviving the cut, so that row replaces the three.
+  const rows: Array<{ label: string; value: string; delta: number | null }> =
+    gaps.simulationCause === "chopped"
+      ? [
+          {
+            label: "Survival odds this week, percentage points",
+            value:
+              outcome.survivalDeltaPp === null
+                ? NOT_MEASURED
+                : signed(outcome.survivalDeltaPp, 0),
+            delta: outcome.survivalDeltaPp,
+          },
+          lineupRow,
+        ]
+      : [
+          {
+            label: "Projected wins",
+            value: outcome.winsDelta === null ? NOT_MEASURED : signed(outcome.winsDelta),
+            delta: outcome.winsDelta,
+          },
+          {
+            label: "Playoff odds, percentage points",
+            value:
+              outcome.playoffDeltaPp === null
+                ? NOT_MEASURED
+                : signed(outcome.playoffDeltaPp, 0),
+            delta: outcome.playoffDeltaPp,
+          },
+          {
+            label: "Title odds, percentage points",
+            value:
+              outcome.titleDeltaPp === null ? NOT_MEASURED : signed(outcome.titleDeltaPp, 0),
+            delta: outcome.titleDeltaPp,
+          },
+          lineupRow,
+        ];
 
   return (
     <div className="h-full rounded-card border border-line bg-base/50 p-4">
@@ -433,9 +490,9 @@ function SeasonStrip({ outcome, gaps }: { outcome: TradeOutcome; gaps: ImpactGap
           </div>
         ))}
       </dl>
-      {(gaps.simulation || gaps.lineup) && (
+      {((gaps.simulation && gaps.simulationCause !== "chopped") || gaps.lineup) && (
         <p className="mt-3 text-[11px] leading-relaxed text-ink-subtle">
-          {gaps.simulation
+          {gaps.simulation && gaps.simulationCause !== "chopped"
             ? gaps.simulationCause === "engine-switch"
               ? "Projections for this league are being rebuilt on a new projection source, so the odds cannot be measured yet."
               : gaps.simulationCause === "not-built"
@@ -524,7 +581,7 @@ function AssetColumn({
         {heading}
       </h3>
       <p className="mt-0.5 text-xs text-ink-subtle">
-        {teamLabel} &middot; {fmtValue(sideTotal)} total
+        {teamLabel}, {fmtValue(sideTotal)} total value
       </p>
 
       {ordered.length === 0 ? (

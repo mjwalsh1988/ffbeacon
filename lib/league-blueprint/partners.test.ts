@@ -67,6 +67,16 @@ describe("computePartners", () => {
     expect(out[0].fit).toBe(0.15);
   });
 
+  it("gives the Power Pulse rank out of the league size", () => {
+    const flat = prof(1, "balanced", {}, []);
+    const other = prof(9, "balanced", {}, []);
+    other.team.pulseRank = 4;
+    const out = computePartners(flat, [other, prof(5, "balanced", {}, [])], new Map(), s, 12);
+    expect(out.find((p) => p.rosterId === 9)!.reason).toBe(
+      "You are in between and they are in between (4th of 12 in Power Pulse): timelines that trade with each other.",
+    );
+  });
+
   it("names nobody with fewer than two other rosters", () => {
     expect(computePartners(mine, [fits], new Map(), s)).toEqual([]);
     expect(NO_PARTNERS).toBe("Not enough priced rosters to name a partner.");

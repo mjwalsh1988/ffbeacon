@@ -1,6 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const getSleeperMatchups = vi.fn();
+vi.mock("@/lib/sleeper", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/sleeper")>();
+  return { ...actual, getSleeperMatchups: (...args: unknown[]) => getSleeperMatchups(...args) };
+});
+
 import {
+  MAX_MATCHUP_WEEK,
   normalizeIdList,
+  resolveCurrentWeek,
+  syncLeagueMatchups,
   weeksToFetch,
   type StoredWeekState,
 } from "./league-matchups";
@@ -106,5 +116,95 @@ describe("weeksToFetch", () => {
   it("leaves a settled past week alone", () => {
     const stored = Array.from({ length: 18 }, (_, i) => state(i + 1, true, true));
     expect(weeksToFetch(stored, 10, false)).not.toContain(9);
+  });
+});
+
+describe("resolveCurrentWeek", () => {
+  it("returns null, not week 1, when Sleeper's NFL state did not answer", () => {
+    expect(resolveCurrentWeek(null, 2026, 15)).toBeNull();
+  });
+
+  it("treats the NFL postseason as every fantasy week played", () => {
+    expect(resolveCurrentWeek({ season: "2026", season_type: "post", week: 19 }, 2026, 15)).toBe(
+      MAX_MATCHUP_WEEK + 1,
+    );
+  });
+
+  it("reads the regular season week and floors the preseason to week 1", () => {
+    expect(resolveCurrentWeek({ season: "2026", season_type: "regular", week: 9 }, 2026, 15)).toBe(9);
+    expect(resolveCurrentWeek({ season: "2026", season_type: "pre", week: 0 }, 2026, 15)).toBe(1);
+  });
+
+  it("calls a past season fully played", () => {
+    expect(resolveCurrentWeek({ season: "2026", season_type: "regular", week: 3 }, 2025, 15)).toBe(
+      MAX_MATCHUP_WEEK + 1,
+    );
+  });
+});
+
+/** A fake client holding stored matchup rows, a frozen flag, and the upserts it saw. */
+function fakeClient(opts: {
+  stored: Array<{ week: number; sleeper_roster_id: number; is_final: boolean; points: number }>;
+  frozenAt?: string | null;
+}) {
+  const upserts: Array<Record<string, unknown>> = [];
+  const client = {
+    from(table: string) {
+      if (table === "leagues") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { frozen_at: opts.frozenAt ?? null }, error: null }),
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ eq: async () => ({ data: opts.stored, error: null }) }),
+        }),
+        upsert: async (rows: Array<Record<string, unknown>>) => {
+          upserts.push(...rows);
+          return { error: null };
+        },
+      };
+    },
+  };
+  return { client: client as never, upserts };
+}
+
+describe("syncLeagueMatchups", () => {
+  beforeEach(() => {
+    getSleeperMatchups.mockReset();
+  });
+
+  it("makes no Sleeper request for a frozen league", async () => {
+    const { client, upserts } = fakeClient({ stored: [], frozenAt: "2026-11-13T00:00:00Z" });
+    const result = await syncLeagueMatchups(client, "row", "sl", 2025, MAX_MATCHUP_WEEK + 1, {
+      force: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(getSleeperMatchups).not.toHaveBeenCalled();
+    expect(upserts).toHaveLength(0);
+  });
+
+  it("never writes a stored final row back as unfinished", async () => {
+    // Week 9 settled for both rosters. The current week resolved lower than
+    // before (5), so the fresh answer alone would call week 9 unplayed.
+    const stored = Array.from({ length: MAX_MATCHUP_WEEK }, (_, i) => [
+      { week: i + 1, sleeper_roster_id: 1, is_final: i + 1 === 9, points: 100 },
+      { week: i + 1, sleeper_roster_id: 2, is_final: i + 1 === 9, points: 90 },
+    ]).flat();
+    const { client, upserts } = fakeClient({ stored });
+    getSleeperMatchups.mockImplementation(async (_id: string, week: number) => [
+      { roster_id: 1, matchup_id: 1, points: week === 9 ? 101 : 0, starters: [], players: [] },
+      { roster_id: 2, matchup_id: 1, points: week === 9 ? 91 : 0, starters: [], players: [] },
+    ]);
+    await syncLeagueMatchups(client, "row", "sl", 2026, 5, { force: true });
+    const week9 = upserts.filter((r) => r.week === 9);
+    expect(week9).toHaveLength(2);
+    expect(week9.every((r) => r.is_final === true)).toBe(true);
+    // An unplayed future week with nothing stored as final stays open.
+    expect(upserts.filter((r) => r.week === 12).every((r) => r.is_final === false)).toBe(true);
   });
 });

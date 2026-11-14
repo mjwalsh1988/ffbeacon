@@ -130,8 +130,20 @@ export type ClassifyInput = {
   points: number;
   prev: SignalState | null;
   thin: boolean;
-  settings: Pick<MarketSignalSettings, "minPoints" | "watchPct" | "holdBackPct">;
+  settings: Pick<MarketSignalSettings, "minPoints" | "watchPct" | "holdBackPct"> &
+    Partial<Pick<MarketSignalSettings, "minBandwidth">>;
 };
+
+/**
+ * True when the band is too narrow to carry a call: width over the mean under
+ * minBandwidth. A flat month makes a band a few points wide, and a price tick
+ * inside normal noise would otherwise read as a buy or a sell.
+ */
+export function isBandTooNarrow(bands: Pick<Bands, "mean" | "width">, minBandwidth: number | undefined): boolean {
+  if (!minBandwidth || minBandwidth <= 0 || bands.width === null) return false;
+  if (bands.mean <= 0) return true;
+  return bands.width / bands.mean < minBandwidth;
+}
 
 /**
  * The five states, then hysteresis (plan 5.3). Boundaries are inclusive. A
@@ -146,6 +158,9 @@ export function classifySignal(input: ClassifyInput): SignalState {
   const { upper, lower, width } = bands;
   if (upper === null || lower === null || width === null || width === 0) return "baseline";
   if (points < settings.minPoints) return "baseline";
+  // A band under the minimum width is noise, and noise is a hold, with no
+  // hysteresis carry: a sell made on a wider band clears once the band narrows.
+  if (isBandTooNarrow(bands, settings.minBandwidth)) return "hold";
 
   let signal: SignalState;
   if (latest >= upper) signal = "sell";
@@ -197,7 +212,11 @@ export type ComputeSignalInput = {
   settings: Pick<
     MarketSignalSettings,
     "windowDays" | "k" | "watchPct" | "holdBackPct" | "minPoints" | "staleDays" | "floorPct"
-  >;
+  > &
+    Partial<Pick<MarketSignalSettings, "minBandwidth">> & {
+      /** Points before bands are stored; MIN_POINTS_FOR_BANDS when absent (sourceRules). */
+      minBandPoints?: number;
+    };
 };
 
 /**
@@ -218,7 +237,7 @@ export function computeSignal(input: ComputeSignalInput): SignalComputation | nu
   const latest = series.get(latestDay)!;
   const values = windowValues(series, latestDay, settings.windowDays);
   const bands = computeBands(values, settings.k);
-  const storeBands = bands.n >= MIN_POINTS_FOR_BANDS && bands.width !== null;
+  const storeBands = bands.n >= (settings.minBandPoints ?? MIN_POINTS_FOR_BANDS) && bands.width !== null;
   const thin = topMarketValue > 0 && latest < settings.floorPct * topMarketValue;
   const signal = classifySignal({ latest, bands, points: bands.n, prev, thin, settings });
 

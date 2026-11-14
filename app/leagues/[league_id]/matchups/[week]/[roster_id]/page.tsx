@@ -425,13 +425,16 @@ async function MatchupBody({
 }) {
   const admin = createAdminClient();
   // includePositionalWar: false. A matchup page renders no curve.
-  await pulseLeagueDerived(admin, leagueRowId, {
-    resynced,
-    includePositionalWar: false,
-  });
+  // The week is resolved alongside the derived pulse, not after it.
+  const [, currentWeek] = await Promise.all([
+    pulseLeagueDerived(admin, leagueRowId, {
+      resynced,
+      includePositionalWar: false,
+    }),
+    resolveScheduleWeek(season, playoffWeekStart),
+  ]);
 
   const supabase = await createClient();
-  const currentWeek = await resolveScheduleWeek(season, playoffWeekStart);
 
   const [result, board] = await Promise.all([
     loadMatchupDetail(supabase, admin, {
@@ -444,12 +447,11 @@ async function MatchupBody({
     // The rail's two league-wide panels come from the same board the Matchups
     // page renders, which is four queries and no arithmetic. Deriving a season
     // series and a form line from it costs nothing beyond that one read.
-    loadScheduleBoard(supabase, {
-      leagueRowId,
-      season,
-      playoffWeekStart,
-      currentWeek,
-    }),
+    loadScheduleBoard(
+      supabase,
+      { leagueRowId, season, playoffWeekStart, currentWeek },
+      admin,
+    ),
   ]);
 
   if (!result.ok) {
@@ -534,7 +536,11 @@ async function MatchupBody({
           )}
         </nav>
 
-        <MatchupHeader view={view} />
+        <MatchupHeader
+          view={view}
+          chopped={board.chopped}
+          isPlayoffWeek={week >= playoffWeekStart && !board.chopped}
+        />
 
         <ShareStrip
           view={view}
@@ -669,7 +675,17 @@ function ShareStrip({
  * name). Every number here appears as text, including both halves of the win
  * probability, so the bar under it is decoration and nothing else.
  */
-function MatchupHeader({ view }: { view: MatchupView }) {
+function MatchupHeader({
+  view,
+  chopped,
+  isPlayoffWeek,
+}: {
+  view: MatchupView;
+  /** A chopped league: no head-to-head, so no win chance and no leading side. */
+  chopped: boolean;
+  /** An unpaired roster in a playoff week has a bye or is out, not an odd team count. */
+  isPlayoffWeek: boolean;
+}) {
   const { home, away, isFinal, isCurrent, week } = view;
   // The scoreboard leads with real points from the first kickoff, not from the
   // moment Sleeper settles the week. Everything the header says about the week
@@ -732,7 +748,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
           isFinal={isFinal}
           showsResults={showsResults}
           tone="home"
-          leading={leadingSide(homeTotal, awayTotal) === "home"}
+          leading={!chopped && leadingSide(homeTotal, awayTotal) === "home"}
         />
         {away ? (
           <SideSummary
@@ -741,20 +757,23 @@ function MatchupHeader({ view }: { view: MatchupView }) {
             isFinal={isFinal}
             showsResults={showsResults}
             tone="away"
-            leading={leadingSide(homeTotal, awayTotal) === "away"}
+            leading={!chopped && leadingSide(homeTotal, awayTotal) === "away"}
           />
         ) : (
           <div className="rounded-card border border-line bg-base/40 px-3 py-3">
-            <p className="text-sm font-semibold text-ink">No opponent</p>
+            <p className="text-sm font-semibold text-ink">
+              {isPlayoffWeek ? "No playoff game" : "No opponent"}
+            </p>
             <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">
-              This league has an odd number of teams, so one roster sits out
-              each week. The lineup below is the one that is set.
+              {isPlayoffWeek
+                ? "This team has a bye or is out of the bracket this week."
+                : "Sleeper paired this roster with nobody this week."}
             </p>
           </div>
         )}
       </div>
 
-      {away && homeProb !== null && !showsResults && (
+      {away && homeProb !== null && !isFinal && (
         <div className="mt-4 rounded-card border border-line bg-base/40 p-3 sm:p-4">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
             Win chance
@@ -782,12 +801,15 @@ function MatchupHeader({ view }: { view: MatchupView }) {
         </p>
       )}
 
-      {away && showsResults && !isFinal && (
+      {away && homeProb !== null && !isFinal && (
         <p className="mt-3 text-sm text-ink-muted">
-          Games are being played, so the numbers above are live scores rather
-          than projections. The win chance comes back off the board while a week
-          is in progress, because it is built from whole week forecasts and
-          those stop describing a game once it has started.
+          Your set lineup against theirs, with points already scored locked in.
+        </p>
+      )}
+
+      {away && chopped && !isFinal && (
+        <p className="mt-3 text-sm text-ink-muted">
+          A chopped league has no head-to-head: the lowest score in the league goes out.
         </p>
       )}
 
@@ -796,7 +818,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
           at all, so there is no probability to compute. Without this branch that
           reader gets a missing panel and no sentence, which is the exact outcome
           the other two exist to prevent. */}
-      {away && !showsResults && homeProb === null && (
+      {away && !chopped && !isFinal && homeProb === null && (
         <p className="mt-3 text-sm text-ink-muted">
           There is no win chance to report for this matchup. One of the two
           lineups has no projected total, which happens when a roster is empty or
@@ -912,7 +934,7 @@ function SideSummary({
           </p>
         ) : (
           <p
-            className={`mt-0.5 font-mono text-4xl font-extrabold leading-none tabular-nums sm:text-5xl ${accent}`}
+            className={`mt-0.5 font-mono text-4xl font-black leading-none tabular-nums sm:text-5xl ${accent}`}
           >
             {fmtPoints(total)}
             <span className="sr-only"> points</span>

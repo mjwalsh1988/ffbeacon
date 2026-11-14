@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { formatEasternDate } from "@/lib/datetime";
 import type { SignalState } from "./bollinger";
+import { sourceRules, type MarketSignalSettings } from "./default-settings";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -65,6 +66,17 @@ export function isSignalCurrent(asOfDay: string, staleDays: number, now: Date = 
   return asOfDay >= cutoff.toISOString().slice(0, 10);
 }
 
+/**
+ * A reader passes either a plain stale-day count (read as written for every
+ * source) or the whole settings, which gives a weekly source its longer stale
+ * window (sourceRules), so its rows do not expire between updates.
+ */
+export type StaleRule = number | Pick<MarketSignalSettings, "minPoints" | "staleDays" | "cadenceDays">;
+
+export function staleDaysFor(rule: StaleRule, source: string): number {
+  return typeof rule === "number" ? rule : sourceRules(rule, source).staleDays;
+}
+
 function toRow(r: RawSignal): PlayerValueSignalRow {
   return {
     playerId: r.player_id,
@@ -86,7 +98,7 @@ export const loadPlayerSignal = cache(
     playerId: string,
     formatConfigId: string,
     source: string,
-    staleDays: number,
+    staleDays: StaleRule,
   ): Promise<PlayerValueSignalRow | null> => {
     const { data, error } = await supabase
       .from("player_value_signals")
@@ -97,7 +109,7 @@ export const loadPlayerSignal = cache(
       .maybeSingle();
     if (error || !data) return null;
     const row = data as RawSignal;
-    return isSignalCurrent(row.as_of_day, staleDays) ? toRow(row) : null;
+    return isSignalCurrent(row.as_of_day, staleDaysFor(staleDays, source)) ? toRow(row) : null;
   },
 );
 
@@ -107,9 +119,10 @@ export async function loadSignalsFor(
   playerIds: readonly string[],
   formatConfigId: string,
   source: string,
-  staleDays: number,
+  staleRule: StaleRule,
 ): Promise<Map<string, PlayerValueSignalRow>> {
   const out = new Map<string, PlayerValueSignalRow>();
+  const staleDays = staleDaysFor(staleRule, source);
   const ids = [...new Set(playerIds)];
   const CHUNK = 200;
   for (let i = 0; i < ids.length; i += CHUNK) {
@@ -160,13 +173,16 @@ export async function latestSignalComputedAt(
   formatConfigId: string,
   source: string,
 ): Promise<string | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("player_value_signals")
     .select("computed_at")
     .eq("format_config_id", formatConfigId)
     .eq("source", source)
     .order("computed_at", { ascending: false })
     .limit(1);
+  // A failed read is not "no signals": the fingerprint would match a stored
+  // view built before the last run and keep it forever.
+  if (error) throw new Error(`player_value_signals latest: ${error.message}`);
   return data?.[0]?.computed_at ?? null;
 }
 

@@ -21,6 +21,7 @@ import { formatEastern } from "@/lib/datetime";
 import { ordinal } from "@/lib/league-team-status";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { readCachedBlueprint } from "@/lib/league-blueprint/cache";
+import { loadLeagueBlueprintSettings } from "@/lib/league-blueprint/settings";
 import { buildBlueprintShareCard, type BlueprintShareCard } from "@/lib/league-blueprint/share";
 import { SHARE_GAP, SHARE_WIDTH, shareLayout } from "@/lib/league-blueprint/share-layout";
 import { ringRowSvg, ringRowWidth } from "@/lib/league-blueprint/ring-geometry";
@@ -52,9 +53,15 @@ export const SHARE_TAGLINE = "Free fantasy football tools for Sleeper leagues";
 const LINE_ACCENT = "#2A2A47";
 const WARNING = "#F59E0B";
 
+/** The admin's Low and High cut points for the trade activity gauge. */
+export type GaugeBands = [number, number];
+
 export type BlueprintImageLoad =
   | { kind: "response"; response: Response }
-  | { kind: "card"; card: BlueprintShareCard };
+  | { kind: "card"; card: BlueprintShareCard; bands: GaugeBands };
+
+/** What each grade code is called on the picture; "Bench" and "Draft capital" are spelled out. */
+const GRADE_NAME: Record<string, string> = { BN: "Bench", DC: "Draft capital" };
 
 function withStatus(img: ImageResponse, status: number): Response {
   return new Response(img.body, { status, headers: img.headers });
@@ -123,7 +130,12 @@ export async function loadBlueprintImage(
     );
     return { kind: "response", response: img };
   }
-  return { kind: "card", card: buildBlueprintShareCard(cached.view, { leagueName: league.name }) };
+  const settings = await loadLeagueBlueprintSettings(admin);
+  return {
+    kind: "card",
+    card: buildBlueprintShareCard(cached.view, { leagueName: league.name }),
+    bands: [settings.activity.lowBelow, settings.activity.highAbove],
+  };
 }
 
 async function rosterTeamName(
@@ -277,12 +289,21 @@ function Rings({ card, size, gap }: { card: BlueprintShareCard; size: number; ga
               height: size,
               alignItems: "center",
               justifyContent: "center",
-              fontSize: Math.round(size * 0.36),
+              flexDirection: "column",
+              fontSize: g.grade === null ? Math.round(size * 0.19) : Math.round(size * 0.36),
               fontWeight: 900,
+              lineHeight: 1.1,
               color: g.grade === null ? C.inkSubtle : C.ink,
             }}
           >
-            {g.grade === null ? "-" : String(g.grade)}
+            {g.grade === null ? (
+              <>
+                <div style={{ display: "flex" }}>Not</div>
+                <div style={{ display: "flex" }}>scored</div>
+              </>
+            ) : (
+              String(g.grade)
+            )}
           </div>
         ))}
       </div>
@@ -294,14 +315,18 @@ function Rings({ card, size, gap }: { card: BlueprintShareCard; size: number; ga
               display: "flex",
               width: size,
               marginLeft: i === 0 ? 0 : gap,
-              justifyContent: "center",
-              fontSize: 15,
+              flexDirection: "column",
+              alignItems: "center",
+              fontSize: size >= 60 ? 15 : 12,
               fontWeight: 900,
               color: C.inkMuted,
-              letterSpacing: "0.12em",
+              letterSpacing: "0.06em",
+              whiteSpace: "nowrap",
             }}
           >
-            {g.code}
+            {(GRADE_NAME[g.code] ?? g.code).split(" ").map((w) => (
+              <div key={w} style={{ display: "flex" }}>{w}</div>
+            ))}
           </div>
         ))}
       </div>
@@ -330,8 +355,8 @@ function shareSlotLabel(label: string): string {
   return label === "SUPERFLEX" ? "SF" : label;
 }
 
-function pct(v: number | null): string {
-  return v === null ? "None" : `${v.toFixed(1)}%`;
+function pct(v: number | null, none: string): string {
+  return v === null ? none : `${v.toFixed(1)}%`;
 }
 
 function ordinalShort(n: number | null, of: number): string {
@@ -438,7 +463,7 @@ function Section({ label, height, width, children }: { label: string; height: nu
 }
 
 /** Portrait share card, 1080 wide, as tall as its sections (plan 11.3). */
-export async function renderPortrait(card: BlueprintShareCard): Promise<ImageResponse> {
+export async function renderPortrait(card: BlueprintShareCard, bands?: GaugeBands): Promise<ImageResponse> {
   const W = SHARE_WIDTH - PAD * 2;
   const CW = W - LABEL_W;
   const layout = shareLayout({
@@ -455,10 +480,11 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
   const nameW = W - 280;
   const name = fitText(card.teamName, { width: nameW, maxSize: 54, minSize: 34, maxLines: 2 });
   const gaugeW = 260;
-  const gaugeGeo = gaugeGeometry(card.activity.score, { width: gaugeW, stroke: 20 });
+  const gaugeGeo = gaugeGeometry(card.activity.score, { width: gaugeW, stroke: 20, bands });
   const gauge = gaugeSvg(card.activity.score, {
     width: gaugeW,
     stroke: 20,
+    bands,
     trackColor: C.line,
     fromColor: C.purple,
     toColor: C.cyan,
@@ -471,6 +497,14 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
   const moverScale = [...card.risers, ...card.fallers].reduce((m, x) => Math.max(m, Math.abs(x.pct)), 0);
   const topSeason = card.capital ? card.capital.reduce((m, s) => Math.max(m, s.value), 0) : 0;
   const splitW = CW - gaugeW - 40;
+  // Draft capital is drawn for dynasty and keeper leagues only; elsewhere the
+  // section is left out and the card is that much shorter.
+  const cardHeight = layout.height - (card.capital !== null ? 0 : h.capital + SHARE_GAP);
+  // Every pick held is unpriced: the page's rule (capital-panel.tsx), not a zero total.
+  const capitalUnpriced =
+    card.capital !== null &&
+    card.capital.some((s) => s.pickCount > 0) &&
+    card.capital.every((s) => s.unpricedCount >= s.pickCount);
 
   return new ImageResponse(
     (
@@ -500,7 +534,7 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
           <div style={{ display: "flex", alignItems: "flex-start", gap: 36 }}>
             <Rings card={card} size={64} gap={14} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 }}>
-              <div style={{ display: "flex", fontSize: 18, color: C.inkMuted }}>{clip(`Value archetype: ${card.valueArchetype ?? "not computed yet"}`, 32)}</div>
+              <div style={{ display: "flex", fontSize: 18, color: C.inkMuted }}>{clip(`Team direction: ${card.valueArchetype ?? "not computed yet"}`, 32)}</div>
               <div style={{ display: "flex", fontSize: 18, color: C.inkMuted }}>{clip(`Outlook: ${card.outlook ?? "one season"}`, 32)}</div>
               <div style={{ display: "flex", fontSize: 16, color: C.inkSubtle }}>{`10 is the best of ${card.teamCount} teams`}</div>
             </div>
@@ -536,8 +570,8 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
                 )}
                 <div style={{ display: "flex", flex: 1, fontSize: 24, fontWeight: 500 }}>{r.name ? clip(r.name, 24) : "Empty"}</div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", width: 130 }}>
-                  <div style={{ display: "flex", fontSize: 24, fontWeight: 900 }}>
-                    {r.value === null ? (r.name ? "No value" : "") : r.value.toLocaleString("en-US")}
+                  <div style={{ display: "flex", fontSize: r.value === null ? 15 : 24, fontWeight: 900, whiteSpace: "nowrap" }}>
+                    {r.value === null ? (r.name ? "No market value" : "") : r.value.toLocaleString("en-US")}
                   </div>
                   {r.value !== null && <Bar fraction={topStarter > 0 ? r.value / topStarter : 0} width={110} height={4} />}
                 </div>
@@ -556,13 +590,13 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
           <div style={{ display: "flex", gap: 40 }}>
             {(
               [
-                ["Value share", card.valueShare],
-                ["Production share", card.productionShare],
+                ["Value share", card.valueShare, "No market value"],
+                ["Production share", card.productionShare, "No projection"],
               ] as const
-            ).map(([label, f]) => (
+            ).map(([label, f, none]) => (
               <div key={label} style={{ display: "flex", flexDirection: "column", width: (CW - 40) / 2 }}>
                 <Label size={14}>{label}</Label>
-                <div style={{ display: "flex", fontSize: 54, fontWeight: 900, lineHeight: 1.05 }}>{pct(f.pct)}</div>
+                <div style={{ display: "flex", fontSize: f.pct === null ? 30 : 54, fontWeight: 900, lineHeight: f.pct === null ? 1.7 : 1.05 }}>{pct(f.pct, none)}</div>
                 <div style={{ display: "flex", fontSize: 17, color: C.inkSubtle, marginBottom: 10 }}>{ordinalShort(f.rank, card.teamCount)}</div>
                 {f.pct !== null && <Bar fraction={f.pct / shareScale} width={(CW - 40) / 2} height={10} mark={even / shareScale} />}
               </div>
@@ -571,7 +605,7 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
           <div style={{ display: "flex", fontSize: 15, color: C.inkSubtle, marginTop: 10 }}>{`The mark on each bar is an even ${even.toFixed(1)}% share.`}</div>
         </Section>
 
-        <Section label="Trade activity" height={h.calls} width={W}>
+        <Section label="Recommended trade activity" height={h.calls} width={W}>
           <div style={{ display: "flex", gap: 40 }}>
             <div style={{ display: "flex", flexDirection: "column", width: gaugeW }}>
               {/* Satori renders plain img elements only; next/image cannot run here. */}
@@ -581,17 +615,22 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
                 {card.activity.band}
               </div>
               <div style={{ display: "flex", fontSize: 16, color: C.inkSubtle }}>{`${card.activity.score} of 100`}</div>
+              <div style={{ display: "flex", fontSize: 14, color: C.inkSubtle, marginTop: 4 }}>
+                {`Low under ${(bands ?? [34, 66])[0]}, High over ${(bands ?? [34, 66])[1]}`}
+              </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", width: splitW }}>
               <div style={{ display: "flex", width: splitW, height: 14, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.08)", gap: 2 }}>
                 <div style={{ display: "flex", width: Math.round((splitW * card.activity.sellsPct) / 100), height: 14, background: WARNING }} />
+                <div style={{ display: "flex", width: Math.round((splitW * card.activity.cutsPct) / 100), height: 14, background: "#EF4444" }} />
                 <div style={{ display: "flex", width: Math.round((splitW * card.activity.buildsPct) / 100), height: 14, background: C.purple }} />
                 <div style={{ display: "flex", width: Math.round((splitW * card.activity.holdsPct) / 100), height: 14, background: "rgba(244,244,248,0.35)" }} />
               </div>
-              <div style={{ display: "flex", gap: 28, marginTop: 12 }}>
+              <div style={{ display: "flex", gap: 22, marginTop: 12 }}>
                 {(
                   [
                     ["Sells", card.activity.sellsPct, WARNING],
+                    ["Cuts", card.activity.cutsPct, "#EF4444"],
                     ["Builds", card.activity.buildsPct, C.purple],
                     ["Holds", card.activity.holdsPct, "rgba(244,244,248,0.5)"],
                   ] as const
@@ -601,7 +640,7 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
                       <div style={{ display: "flex", width: 10, height: 10, borderRadius: 2, background: color }} />
                       <Label size={13}>{l}</Label>
                     </div>
-                    <div style={{ display: "flex", fontSize: 34, fontWeight: 900 }}>{`${v}%`}</div>
+                    <div style={{ display: "flex", fontSize: 30, fontWeight: 900 }}>{`${v}%`}</div>
                   </div>
                 ))}
               </div>
@@ -642,7 +681,7 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
               <div key={l} style={{ display: "flex", flexDirection: "column", width: (CW - 40) / 2 }}>
                 <Label size={13}>{l}</Label>
                 {list.length === 0 ? (
-                  <div style={{ display: "flex", fontSize: 18, color: C.inkMuted, marginTop: 6 }}>Nothing moved more than the floor.</div>
+                  <div style={{ display: "flex", fontSize: 18, color: C.inkMuted, marginTop: 6 }}>No player moved enough to list.</div>
                 ) : (
                   list.map((m) => (
                     <div key={m.name} style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
@@ -661,11 +700,12 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
           </div>
         </Section>
 
+        {card.capital !== null && (
         <Section label="Draft capital" height={h.capital} width={W}>
-          {card.capital === null ? (
-            <div style={{ display: "flex", fontSize: 20, color: C.inkMuted }}>Redraft leagues hold no future picks.</div>
-          ) : card.capital.length === 0 ? (
+          {card.capital.length === 0 ? (
             <div style={{ display: "flex", fontSize: 20, color: C.inkMuted }}>This roster holds no future picks.</div>
+          ) : capitalUnpriced ? (
+            <div style={{ display: "flex", fontSize: 20, color: C.inkMuted }}>No pick values</div>
           ) : (
             card.capital.map((s) => (
               <div key={s.season} style={{ display: "flex", height: 44, alignItems: "center", gap: 20 }}>
@@ -679,6 +719,7 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
             ))
           )}
         </Section>
+        )}
 
         <Section label="The plan" height={h.priorities} width={W}>
           {card.priorities.map((p, i) => (
@@ -737,6 +778,6 @@ export async function renderPortrait(card: BlueprintShareCard): Promise<ImageRes
         </div>
       </div>
     ),
-    { width: layout.width, height: layout.height, fonts: OG_FONTS, headers: { "Cache-Control": SUCCESS_CACHE } },
+    { width: layout.width, height: cardHeight, fonts: OG_FONTS, headers: { "Cache-Control": SUCCESS_CACHE } },
   );
 }

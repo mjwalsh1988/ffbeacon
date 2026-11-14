@@ -125,6 +125,7 @@ export function PositionalWarChart({
   visible: controlledVisible,
   onToggleSeries,
   legend = true,
+  summary,
 }: {
   curves: WarDashboardPosition[];
   axisMode: WarAxisMode;
@@ -135,6 +136,12 @@ export function PositionalWarChart({
   onToggleSeries?: (position: PulsePosition) => void;
   /** False when the parent renders the legend itself. */
   legend?: boolean;
+  /**
+   * The chart's one-sentence summary. When given, the drawing is role="img"
+   * named by it; when absent (the preview, whose ChartFigure already speaks
+   * the summary) the drawing stays hidden so it is not announced twice.
+   */
+  summary?: string;
 }) {
   const gid = useId().replace(/:/g, "");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -518,7 +525,7 @@ export function PositionalWarChart({
             group and measure through getBoundingClientRect, so none of them
             needs the svg to receive events. */}
         <svg
-          aria-hidden="true"
+          {...(summary ? { role: "img", "aria-label": summary } : { "aria-hidden": true })}
           viewBox={`0 0 ${box.width} ${box.height}`}
           preserveAspectRatio="xMidYMid meet"
           className="pointer-events-none h-auto w-full"

@@ -53,8 +53,8 @@ export const MAX_DRAFTS_CAPTURED_PER_RUN = 5;
  */
 export const MAX_CAPTURE_ATTEMPTS = 3;
 
-/** Pause between Sleeper draft-pick requests so a multi-draft league stays polite. */
-const FETCH_SPACING_MS = 250;
+// No pause between draft-pick requests: every Sleeper call goes through the
+// call budget in lib/sleeper-budget.ts, which is the only rate limit.
 
 export interface CaptureDraftSelectionsResult {
   draftsConsidered: number;
@@ -63,8 +63,6 @@ export interface CaptureDraftSelectionsResult {
   /** How many draft-pick requests failed (the REQUEST failed, not "no picks"). */
   fetchFailures: number;
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Rebuild enough of a Sleeper league object for format derivation. `leagues`
@@ -101,7 +99,13 @@ function leagueShapeFromRow(row: {
 export async function captureLeagueDraftSelections(
   supabase: ServiceClient,
   leagueRowId: string,
+  /**
+   * `maxDrafts` lifts the per-run cap. Only the final capture of a past season
+   * passes it (lib/league-pulse.ts), because no later sync will pick up the rest.
+   */
+  options: { maxDrafts?: number } = {},
 ): Promise<CaptureDraftSelectionsResult> {
+  const maxDrafts = options.maxDrafts ?? MAX_DRAFTS_CAPTURED_PER_RUN;
   const empty: CaptureDraftSelectionsResult = {
     draftsConsidered: 0,
     draftsCaptured: 0,
@@ -110,14 +114,17 @@ export async function captureLeagueDraftSelections(
   };
 
   try {
-    const { data: league } = await supabase
+    // A read error is a failure, never "nothing to capture": reporting it as a
+    // fetch failure keeps the capture set from being stamped complete on it.
+    const { data: league, error: leagueErr } = await supabase
       .from("leagues")
       .select("id, sleeper_league_id, scoring_settings, roster_positions, metadata")
       .eq("id", leagueRowId)
       .maybeSingle();
+    if (leagueErr) return { ...empty, fetchFailures: 1 };
     if (!league) return empty;
 
-    const { data: drafts } = await supabase
+    const { data: drafts, error: draftsErr } = await supabase
       .from("league_drafts")
       .select(
         "sleeper_draft_id, season, status, type, settings, start_time, picks_captured_at, pick_capture_attempts",
@@ -129,6 +136,7 @@ export async function captureLeagueDraftSelections(
       .is("picks_captured_at", null)
       .lt("pick_capture_attempts", MAX_CAPTURE_ATTEMPTS)
       .order("season", { ascending: false });
+    if (draftsErr) return { ...empty, fetchFailures: 1 };
 
     const completed = drafts ?? [];
     if (completed.length === 0) return empty;
@@ -139,7 +147,7 @@ export async function captureLeagueDraftSelections(
     );
     const pending = completed
       .filter((d) => !alreadyCaptured.has(d.sleeper_draft_id))
-      .slice(0, MAX_DRAFTS_CAPTURED_PER_RUN);
+      .slice(0, maxDrafts);
 
     if (pending.length === 0) {
       return { ...empty, draftsConsidered: completed.length };
@@ -155,9 +163,7 @@ export async function captureLeagueDraftSelections(
     let picksWritten = 0;
     let fetchFailures = 0;
 
-    for (const [index, draft] of pending.entries()) {
-      if (index > 0) await sleep(FETCH_SPACING_MS);
-
+    for (const draft of pending) {
       const picks = await getSleeperDraftPicksOrNull(draft.sleeper_draft_id);
 
       // null means the REQUEST failed and we know nothing; [] means Sleeper
@@ -212,7 +218,11 @@ export async function captureLeagueDraftSelections(
           .from("league_drafts")
           .update({ picks_captured_at: new Date().toISOString() })
           .eq("sleeper_draft_id", draft.sleeper_draft_id);
-      } else if (!result.ok) {
+      } else {
+        // Failed, or written with zero rows (every pick filtered out). Either
+        // way it counts as an attempt, so a draft that will always shape to
+        // nothing stops being refetched after MAX_CAPTURE_ATTEMPTS syncs
+        // instead of on every one.
         await supabase
           .from("league_drafts")
           .update({ pick_capture_attempts: (draft.pick_capture_attempts ?? 0) + 1 })

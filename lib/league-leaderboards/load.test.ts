@@ -43,7 +43,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/cache", () => ({ unstable_cache: (fn: () => unknown) => fn }));
 
-import { readWeekLines } from "./load";
+import { isSuspectView, readWeekLines } from "./load";
 
 describe("readWeekLines", () => {
   it("reads every row of a week past the 1000-row cap", async () => {
@@ -60,5 +60,13 @@ describe("readWeekLines", () => {
     expect(first.sleeperId).toBe("1000");
     // pts_ppr and pts_idp are Sleeper's own totals; pts_allow_0 is a scoring key.
     expect(first.stats).toEqual({ rec: 1, rec_yd: 10, pts_allow_0: 1 });
+  });
+});
+
+describe("isSuspectView", () => {
+  it("refuses to cache a missing league or a view with no teams, which a failed read produces", () => {
+    expect(isSuspectView(null)).toBe(true);
+    expect(isSuspectView({ teams: {} } as never)).toBe(true);
+    expect(isSuspectView({ teams: { 1: {} } } as never)).toBe(false);
   });
 });

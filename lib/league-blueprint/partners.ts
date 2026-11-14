@@ -53,6 +53,8 @@ export function computePartners(
   others: readonly TeamProfile[],
   labels: ReadonlyMap<number, string | null>,
   settings: LeagueBlueprintSettings["partners"],
+  /** Teams in the league, for "4th of 12"; every candidate plus this roster when absent. */
+  teamCount?: number,
 ): TradePartner[] {
   const candidates = others.filter((o) => o.team.rosterId !== mine.team.rosterId);
   if (candidates.length < 2) return [];
@@ -88,6 +90,7 @@ export function computePartners(
   });
   scored.sort((a, b) => b.fit - a.fit || a.r.profile.team.rosterId - b.r.profile.team.rosterId);
 
+  const total = teamCount ?? candidates.length + 1;
   return scored.slice(0, settings.count).map(({ r, terms, fit }) => {
     const t = r.profile.team;
     return {
@@ -95,7 +98,7 @@ export function computePartners(
       teamName: t.teamName,
       ownerHandle: t.ownerHandle,
       statusLabel: labels.get(t.rosterId) ?? null,
-      reason: partnerReason(r, terms, mine),
+      reason: partnerReason(r, terms, mine, total),
       fit: Math.round(fit * 1000) / 1000,
     };
   });
@@ -105,6 +108,7 @@ function partnerReason(
   r: Row,
   terms: { need: number; give: number; direction: number },
   mine: TeamProfile,
+  teamCount: number,
 ): string {
   const have = r.needBest.points > 0 ? r.needBest : null;
   const want = r.giveBest.points > 0 ? r.giveBest : null;
@@ -121,6 +125,6 @@ function partnerReason(
     d === "win-now" ? "playing for this season" : d === "rebuild" ? "building for later" : "in between";
   const rank = r.profile.team.pulseRank;
   return `You are ${word(mine.direction)} and they are ${word(r.profile.direction)}${
-    rank !== null ? ` (${ordinal(rank)} in Power Pulse)` : ""
+    rank !== null ? ` (${ordinal(rank)} of ${teamCount} in Power Pulse)` : ""
   }: timelines that trade with each other.`;
 }

@@ -356,6 +356,7 @@ function warView(curve: PositionCurve): WarView {
     throughWeek: 14,
     status: "ok",
     isStale: false,
+    windowClosed: false,
     shallowPositions: [],
   };
 }
@@ -952,5 +953,35 @@ describe("runUpgradeWhatIf and the IDP switch", () => {
     // No league slot takes a DL on its own, so the target can only add wins
     // through the LB or IDP_FLEX slot his second eligibility opens.
     expect(outcome.result.winsDelta).not.toBeNull();
+  });
+});
+
+describe("pickUpgradeTarget (LPI-T08: free agent by default, trade target on request)", () => {
+  const curve = [
+    { ...CURVE_QB_DEFAULT.curve[0], sleeperId: "s-mine", positionRank: 1 },
+    { ...CURVE_QB_DEFAULT.curve[0], sleeperId: "s-theirs", positionRank: 2 },
+    { ...CURVE_QB_DEFAULT.curve[0], sleeperId: "s-free", positionRank: 3 },
+  ];
+  const owned = new Set(["s-mine"]);
+  const holderOf = new Map([["s-theirs", "Rival Team"]]);
+
+  it("defaults to the best player on no roster", async () => {
+    const { pickUpgradeTarget } = await loadModule();
+    const picked = pickUpgradeTarget(curve, owned, holderOf, "free-agent");
+    expect(picked?.point.sleeperId).toBe("s-free");
+    expect(picked?.rosteredBy).toBeNull();
+    expect(picked?.skippedOwnRank).toBe(1);
+  });
+
+  it("names the holder when asked for a trade target", async () => {
+    const { pickUpgradeTarget } = await loadModule();
+    const picked = pickUpgradeTarget(curve, owned, holderOf, "trade");
+    expect(picked?.point.sleeperId).toBe("s-theirs");
+    expect(picked?.rosteredBy).toBe("Rival Team");
+  });
+
+  it("returns null when no player of that kind is left", async () => {
+    const { pickUpgradeTarget } = await loadModule();
+    expect(pickUpgradeTarget(curve.slice(0, 2), owned, holderOf, "free-agent")).toBeNull();
   });
 });

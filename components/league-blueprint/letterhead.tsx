@@ -64,6 +64,7 @@ export function Letterhead({
             {h.ownerHandle ? `Prepared for @${h.ownerHandle} in ${leagueName}` : `Prepared for the manager of this team in ${leagueName}`}
             : where the team stands, what it is built from, and the moves worth making, from the league&apos;s own numbers.
           </p>
+          {h.frozenSeasonNote && <p className="mt-2 text-sm font-medium text-ink">{h.frozenSeasonNote}</p>}
           <dl className="mt-4 grid gap-x-8 sm:grid-cols-2">
             <Leader label="Record">{recordLabel(h.record)}</Leader>
             <Leader label="Points for">

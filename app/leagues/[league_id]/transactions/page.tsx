@@ -18,6 +18,7 @@ import {
 import {
   loadLeagueTransactions,
   loadTradeAnalyses,
+  countTransactionFacets,
   ALL_TYPES_SENTINEL,
   DEFAULT_TYPE_FILTER,
   type TransactionFilter,
@@ -264,16 +265,13 @@ export default async function LeagueTransactionsPage({
               The rankings on the overview are frozen at the end of the season;
               these grades are not, because pricing a trade as of the day it was
               made needs a dated value lookup this page does not do yet. */}
-          {seasonComplete && (
-            <p className="rounded-card border border-dashed border-line bg-base/40 px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
-              <span className="font-medium text-ink">
-                This season is finished.
-              </span>{" "}
-              The trades below are graded at what the players are worth now, not
-              at what they were worth on the day of the deal, so a verdict can
-              read harsher or kinder than it did at the time.
-            </p>
-          )}
+          <p className="rounded-card border border-dashed border-line bg-base/40 px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
+            {seasonComplete ? (
+              <span className="font-medium text-ink">This season is finished. </span>
+            ) : null}
+            Trades are graded at today&apos;s player values, not the values on the
+            day of the deal.
+          </p>
           <Suspense fallback={<FeedSkeleton />}>
             <TransactionsFeed
               leagueRowId={league.id}
@@ -451,6 +449,7 @@ async function TransactionsFeed({
         weeks={facets.weeks}
         defaultType={DEFAULT_TYPE_FILTER}
         allTypesValue={ALL_TYPES_SENTINEL}
+        resultLabel={countLabel}
       />
 
       <Panel
@@ -710,28 +709,19 @@ async function loadFacets(
 }> {
   // No season facet, Sleeper's transactions endpoint only returns the
   // league's current season, so the synced rows already share one season.
-  // Paged: a league can hold more than 1000 transactions. A failed read
-  // leaves the type and week facets empty rather than undercounted.
-  let allRows: Array<{ type: string; week: number | null }> = [];
-  try {
-    allRows = await fetchAllRows("transaction facets", (from, to) =>
+  // Paged: a league can hold more than 1000 transactions. A failed read throws
+  // rather than showing empty or undercounted facets.
+  const allRows: Array<{ type: string; week: number | null; status: string | null }> =
+    await fetchAllRows("transaction facets", (from, to) =>
       supabase
         .from("league_transactions")
-        .select("type, week")
+        .select("type, week, status")
         .eq("league_id", leagueRowId)
         .order("id", { ascending: true })
         .range(from, to),
     );
-  } catch (error) {
-    console.error("[transactions] facet read failed", error);
-  }
 
-  const typeCounts = new Map<string, number>();
-  const weekSet = new Set<number>();
-  for (const r of allRows) {
-    typeCounts.set(r.type, (typeCounts.get(r.type) ?? 0) + 1);
-    if (typeof r.week === "number") weekSet.add(r.week);
-  }
+  const { typeCounts, weeks: weekSet } = countTransactionFacets(allRows);
 
   const labelMap: Record<string, string> = {
     trade: "Trade",

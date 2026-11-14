@@ -26,15 +26,16 @@
  *   fixed reference than in isolation, and it is the difference between "the
  *   cyan bit is bigger" and "the cyan bit is well past even".
  *
- * ACCESSIBILITY. The whole drawing is aria-hidden and a single sentence carries
- * the same facts for a screen reader, spelled as "62 percent" rather than "62%".
- * Color never carries meaning on its own here: every side has its percentage,
- * its team name, and the favorite has a word.
+ * ACCESSIBILITY. Each percentage is ONE real text node, with the team named in
+ * an sr-only clause inside the same element, so a reader pointing at the number
+ * hears the number. Only the bar is aria-hidden, because it is a picture of the
+ * two numbers already read. Color never carries meaning on its own: every side
+ * has its percentage, its team name, and the favorite has a word.
  *
  * Presentational. No state, no fetching, safe in a server component.
  */
 
-import { pctLabel, pctWords } from "./format";
+import { pctLabel } from "./format";
 
 /** Below this share, a fill is too narrow to hold its own label legibly. */
 const INLINE_LABEL_MIN = 0.18;
@@ -67,7 +68,10 @@ export function WinProbBar({
   const homeFavored = !even && homeProb > 0.5;
   const awayFavored = !even && awayProb > 0.5;
 
-  const numberSize = size === "full" ? "text-3xl sm:text-4xl" : "text-2xl";
+  // The hero on the matchup page, a secondary figure on a board card
+  // (docs/completed/team-blueprint/team-blueprint-plan.md section 10).
+  const numberSize =
+    size === "full" ? "text-4xl font-black leading-none sm:text-5xl" : "text-2xl font-black";
   const trackHeight = size === "full" ? "h-3.5" : "h-3";
 
   return (
@@ -122,15 +126,8 @@ export function WinProbBar({
       </div>
 
       <p className="mt-1.5 text-[11px] text-ink-subtle">
+        {even ? "Close to even. " : ""}
         <span aria-hidden="true">Dashed line marks an even matchup.</span>
-        <span className="sr-only">
-          Win probability: {homeName} {pctWords(homeProb)}, {awayName} {pctWords(awayProb)}.
-          {even
-            ? " The two teams are close to even."
-            : homeFavored
-              ? ` ${homeName} is favored.`
-              : ` ${awayName} is favored.`}
-        </span>
       </p>
     </div>
   );
@@ -164,18 +161,16 @@ function EndLabel({
       : "border-brand-purple/60 bg-brand-purple/15 text-brand-purple";
 
   return (
-    <div
-      aria-hidden="true"
-      className={`min-w-0 flex-1 ${align === "end" ? "text-right" : "text-left"}`}
-    >
+    <div className={`min-w-0 flex-1 ${align === "end" ? "text-right" : "text-left"}`}>
       <div
         className={`flex items-center gap-2 ${
           align === "end" ? "justify-end" : "justify-start"
         }`}
       >
-        <span className={`font-mono font-bold tabular-nums ${numberSize} ${color}`}>
+        <span className={`font-mono tabular-nums ${numberSize} ${color}`}>
           {pct}
           <span className="text-base">%</span>
+          <span className="sr-only"> win chance,</span>
         </span>
         {favored && (
           <span

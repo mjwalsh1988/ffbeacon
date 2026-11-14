@@ -36,10 +36,19 @@ export type CallPlayer = {
   signal: MarketSignalState | null;
 };
 
-export const NOTE_HARD_SELL = "Value is at the top of his own market band.";
-export const NOTE_SELL_HIGH = "Aging and priced high: a sell-high window.";
-export const NOTE_KEEP = "Priced high right now; this is still a keep.";
-export const NOTE_HOLD_LOW = "Priced low against his own market band: do not sell now.";
+/**
+ * The notes name the signal window in days ("30-day"), the window the nightly
+ * job measures each player against (Market Signals windowDays).
+ */
+export const noteHardSell = (days = 30) => `Priced near his ${days}-day high.`;
+export const noteSellHigh = (days = 30) => `Aging and priced near his ${days}-day high.`;
+export const noteKeep = (days = 30) => `Priced near his ${days}-day high, and still a keep.`;
+export const noteHoldLow = (days = 30) => `Priced near his ${days}-day low: do not sell now.`;
+
+export const NOTE_HARD_SELL = noteHardSell();
+export const NOTE_SELL_HIGH = noteSellHigh();
+export const NOTE_KEEP = noteKeep();
+export const NOTE_HOLD_LOW = noteHoldLow();
 
 function marketLean(signal: MarketSignalState | null): "buy" | "sell" | null {
   if (signal === "sell" || signal === "watch_sell") return "sell";
@@ -53,8 +62,11 @@ export function computeCalls(
     direction: TeamDirection;
     isDynasty: boolean;
     ageCutoff: LeagueBlueprintSettings["calls"]["ageCutoff"];
+    /** Market Signals window, for the notes; 30 when absent. */
+    windowDays?: number;
   },
 ): Record<string, PlayerCall> {
+  const days = opts.windowDays ?? 30;
   const drops = dropCandidateIds(
     players.map((p) => ({
       id: p.id,
@@ -96,17 +108,19 @@ export function computeCalls(
     const lean = marketLean(p.signal);
     let call: PlayerCall;
     if (roster === "sell") {
-      call = lean === "sell"
-        ? { call: "sell", strength: "hard", note: NOTE_HARD_SELL }
+      // Hard only on a full "sell" signal (at or past the band's top); a
+      // watch_sell is near it, not there, and stays a plain Sell with no note.
+      call = p.signal === "sell"
+        ? { call: "sell", strength: "hard", note: noteHardSell(days) }
         : { call: "sell", strength: "soft", note: null };
     } else if (roster === "hold" && lean === "sell" && old) {
-      call = { call: "sell", strength: "soft", note: NOTE_SELL_HIGH };
+      call = { call: "sell", strength: "soft", note: noteSellHigh(days) };
     } else if (roster === "build") {
-      call = { call: "build", strength: null, note: lean === "sell" ? NOTE_KEEP : null };
+      call = { call: "build", strength: null, note: lean === "sell" ? noteKeep(days) : null };
     } else if (roster === "cut") {
       call = { call: "cut", strength: null, note: null };
     } else if (lean === "buy") {
-      call = { call: "hold", strength: null, note: NOTE_HOLD_LOW };
+      call = { call: "hold", strength: null, note: noteHoldLow(days) };
     } else {
       call = { call: "hold", strength: null, note: null };
     }

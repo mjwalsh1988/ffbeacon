@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { deriveLeagueFormat, mapToFormatSlug, type DerivedFormat } from "@/lib/sleeper-to-format";
+import {
+  deriveLeagueFormat,
+  isExactFormatMatch,
+  mapToFormatSlug,
+  pickClosestSupportedFormat,
+  toFormatCandidate,
+  type DerivedFormat,
+} from "@/lib/sleeper-to-format";
 import type { FormatLike } from "@/lib/format-fallback";
 import {
   getActiveFormats,
@@ -24,21 +31,26 @@ import {
  *
  * Resolution chain (each step strictly tighter than the next):
  *   1. Derive ideal format from Sleeper league settings (deriveLeagueFormat)
- *   2. If the user's chosen source supports the ideal format → use it
+ *   2. If the user's chosen source supports the ideal format, use it. It is
+ *      "exact" only when the board matches the league on every axis
+ *      (isExactFormatMatch); a near board by design reports "fallback".
  *   3. Otherwise, fall back via pickLeagueTypeSafeFormat() to the source's
  *      closest supported format WITHIN THE SAME league_type (dynasty vs
- *      redraft is a hard wall, never cross it), then same scoring_type,
- *      then same is_superflex, then lowest display_order
+ *      redraft is a hard wall, never cross it), scored by
+ *      pickClosestSupportedFormat: superflex, then scoring_type, then TE
+ *      premium, then best ball, then lowest display_order
  *   4. If the source supports nothing in the league's own league_type,
  *      return `coverage: 'none'` and the UI renders an empty state. We
  *      deliberately do NOT cross to the other league_type: a redraft value
  *      is meaningless for a dynasty roster and vice versa.
  *
- * Draft pick values are a separate axis. FantasyCalc doesn't publish them,
- * so we ALWAYS look them up via the highest-priority source whose
- * source_registry.data_type contains 'draft_pick_values'. In practice this
- * is KTC. When the player-value source is FantasyCalc, the UI surfaces a
- * "Draft pick values powered by KTC" footnote.
+ * Draft pick values are a separate axis. FantasyCalc and DynastyProcess do not
+ * publish them, so for those sources we look them up via the highest-priority
+ * source whose source_registry.data_type contains 'draft_pick_values' (FF
+ * Beacon at the time of writing; the registry decides, not this comment). The
+ * UI then shows a "Draft pick values powered by {name}" footnote, and the
+ * power rankings price picks from the same source (lib/league-power-rankings.ts
+ * buildCombos).
  *
  * This module is the single source of truth for "what format slug should
  * back values inside this league view". Pages, OG image routes, and the
@@ -73,7 +85,8 @@ export type LeagueContext = {
    * actual rules, not whatever format we ended up resolving to. */
   derived: DerivedFormat;
   /** When the selected source doesn't publish draft pick values, this is
-   * the source we use for picks (always KTC today). Null when the chosen
+   * the source we use for picks (the highest-priority source that publishes
+   * them). Null when the chosen
    * source already publishes picks. UI uses this to render the "Draft
    * pick values powered by {name}" footnote. */
   pickSource: { slug: string; display: string } | null;
@@ -181,6 +194,10 @@ export async function resolveLeagueContext(
   // Ideal format exists. Does the source carry it?
   if (sourceSupportsFormat(resolvedSource, idealSlug)) {
     const ideal = allFormats.find((f) => f.slug === idealSlug);
+    // The ideal board is sometimes a near match by design (a half PPR superflex
+    // redraft league maps to the PPR superflex board). That is a fallback, not
+    // an exact match, so the reader sees the banner.
+    const exact = ideal ? isExactFormatMatch(derived, toFormatCandidate(ideal)) : false;
     if (!ideal) {
       return {
         formatSlug: null,
@@ -208,8 +225,10 @@ export async function resolveLeagueContext(
       formatConfigId: fc,
       sourceSlug: resolvedSource.slug,
       sourceDisplay: resolvedSource.display_name,
-      coverage: "exact",
-      fallback: null,
+      coverage: exact ? "exact" : "fallback",
+      fallback: exact
+        ? null
+        : { derivedSlug: idealSlug, derivedDisplay: describeDerived(derived) },
       derived,
       pickSource: pickSource && pickSource.slug !== resolvedSource.slug
         ? { slug: pickSource.slug, display: pickSource.display_name }
@@ -217,7 +236,7 @@ export async function resolveLeagueContext(
     };
   }
 
-  // Source doesn't carry the ideal format → fall through to the closest it
+  // Source doesn't carry the ideal format, so fall through to the closest it
   // does support, locked to the league's own league_type (dynasty stays
   // dynasty, redraft stays redraft).
   const replacement = pickLeagueTypeSafeFormat(
@@ -256,7 +275,12 @@ export async function resolveLeagueContext(
     coverage: "fallback",
     fallback: {
       derivedSlug: idealSlug,
-      derivedDisplay: idealRow?.display_name ?? idealSlug,
+      // Name the league's own rules when the ideal board was itself a near
+      // match, so the banner never claims the league is something it is not.
+      derivedDisplay:
+        idealRow && isExactFormatMatch(derived, toFormatCandidate(idealRow))
+          ? idealRow.display_name
+          : describeDerived(derived),
     },
     derived,
     pickSource: pickSource && pickSource.slug !== resolvedSource.slug
@@ -281,8 +305,7 @@ function pickSourceForLeagueValues(
 }
 
 /** Pick the source we use for draft pick values. By contract this is the
- * highest-priority source whose data_type includes 'draft_pick_values'.
- * Today the only such source is KTC. */
+ * highest-priority source whose data_type includes 'draft_pick_values'. */
 export function pickSourceForDraftPicks(
   registry: SourceRegistryRow[],
 ): SourceRegistryRow | null {
@@ -296,55 +319,44 @@ export function pickSourceForDraftPicks(
  * never back a dynasty roster (or vice versa), so we refuse to cross that line
  * even when it would leave us with nothing.
  *
- * Within the league's own league_type the preference chain is the usual one:
- * same scoring_type → same is_superflex → lowest display_order. Returns null
- * (→ coverage 'none') when the source publishes no format in this league_type.
+ * Within the league's own league_type the preference chain is
+ * pickClosestSupportedFormat's: superflex, then scoring_type, then TE premium,
+ * then best ball, then lowest display_order. Returns null (coverage 'none')
+ * when the source publishes no format in this league_type. Exported for its
+ * test.
  */
-function pickLeagueTypeSafeFormat(
-  allFormats: FormatLike[],
+export function pickLeagueTypeSafeFormat<
+  F extends FormatLike & { te_premium_bonus?: number | null },
+>(
+  allFormats: F[],
   derived: DerivedFormat,
   supportedSlugs: string[] | null,
-): FormatLike | null {
+): F | null {
   const eligible =
     supportedSlugs === null
       ? allFormats
       : allFormats.filter((f) => supportedSlugs.includes(f.slug));
 
-  // HARD wall: only formats in the league's own league_type are candidates.
-  const sameLeague = eligible.filter(
-    (f) => f.league_type === derived.league_type,
-  );
-  if (sameLeague.length === 0) return null;
-
-  const sameScoring = sameLeague.filter(
-    (f) => f.scoring_type === derived.scoring_type,
-  );
-  const scoringPool = sameScoring.length > 0 ? sameScoring : sameLeague;
-
-  const sameSflex = scoringPool.filter(
-    (f) => f.is_superflex === derived.is_superflex,
-  );
-  const sflexPool = sameSflex.length > 0 ? sameSflex : scoringPool;
-
-  return [...sflexPool].sort(byDisplayOrder)[0] ?? null;
-}
-
-function byDisplayOrder(a: FormatLike, b: FormatLike): number {
-  const ao = a.display_order ?? Number.MAX_SAFE_INTEGER;
-  const bo = b.display_order ?? Number.MAX_SAFE_INTEGER;
-  if (ao !== bo) return ao - bo;
-  return a.slug.localeCompare(b.slug);
+  // HARD wall: pickClosestSupportedFormat never crosses league_type, and it
+  // scores superflex, then scoring, then TE premium, then best ball, so a TE
+  // premium league lands on a TE premium board when the source has one.
+  const closest = pickClosestSupportedFormat(derived, eligible.map(toFormatCandidate));
+  if (!closest) return null;
+  return eligible.find((f) => f.slug === closest.slug) ?? null;
 }
 
 async function loadFormatConfigId(
   supabase: ServiceClient,
   slug: string,
 ): Promise<string | null> {
-  const { data } = await (supabase as SupabaseClient<Database>)
+  const { data, error } = await (supabase as SupabaseClient<Database>)
     .from("format_configs")
     .select("id")
     .eq("slug", slug)
     .maybeSingle();
+  // A failed read is not "no such format": that would show the reader an empty
+  // league instead of an error.
+  if (error) throw new Error(`format_configs read failed for ${slug}: ${error.message}`);
   return data?.id ?? null;
 }
 
@@ -354,6 +366,7 @@ async function loadFormatConfigId(
  * actually looks like in plain language. */
 export function describeDerived(d: DerivedFormat): string {
   const parts: string[] = [];
+  if (d.is_best_ball) parts.push("Best Ball");
   parts.push(d.league_type === "dynasty" ? "Dynasty" : "Redraft");
   if (d.scoring_type === "ppr") parts.push("PPR");
   else if (d.scoring_type === "half_ppr") parts.push("Half PPR");

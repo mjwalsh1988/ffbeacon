@@ -28,6 +28,7 @@ import { normalizeIdList } from "@/lib/league-matchups";
 import type { LedgerPlayer } from "./lineup";
 import type { DraftPickInput, TransactionInput } from "./moves";
 import type { WeekInput } from "./lineup";
+import { ledgerRulesFromSettings, type LedgerRules } from "./rules";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -72,12 +73,19 @@ export type LedgerLeagueRow = {
    * priority or rolling waiver order where a bid does not exist.
    */
   hasFaab: boolean;
+  /** League kind, playoff start and median game. See ./rules.ts. */
+  rules: LedgerRules;
 };
 
 function asStringArray(value: unknown): string[] {
   return normalizeIdList(value).filter((id) => id.length > 0);
 }
 
+/**
+ * The league row, or null when no such league exists. A failed read throws:
+ * a read error is not a missing league, and treating it as one would let the
+ * caller act on an answer it never got.
+ */
 export async function loadLedgerLeague(
   supabase: ServiceClient,
   leagueRowId: string,
@@ -87,7 +95,8 @@ export async function loadLedgerLeague(
     .select("id, sleeper_league_id, name, season, roster_positions, metadata")
     .eq("id", leagueRowId)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) throw new Error(`ledger league read failed: ${error.message}`);
+  if (!data) return null;
 
   const meta = (data.metadata ?? {}) as { settings?: Record<string, unknown> };
   const waiverType = Number(meta.settings?.waiver_type);
@@ -101,6 +110,7 @@ export async function loadLedgerLeague(
     rosterPositions: asStringArray(data.roster_positions),
     hasFaab:
       waiverType === 2 || (Number.isFinite(waiverBudget) && waiverBudget > 0),
+    rules: ledgerRulesFromSettings(meta.settings),
   };
 }
 
@@ -163,7 +173,10 @@ export async function loadSettledWeeks(
     .eq("season", season)
     .eq("is_final", true)
     .order("week", { ascending: true });
-  if (error || !data) return [];
+  // A failed read is not "no settled weeks". Returning [] here once let the
+  // orchestrator decide the season had not started and delete a good cache.
+  if (error) throw new Error(`ledger settled weeks read failed: ${error.message}`);
+  if (!data) return [];
 
   type Row = (typeof data)[number];
   const rows = data as Row[];

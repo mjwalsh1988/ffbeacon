@@ -25,6 +25,7 @@ import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { computeLineupSwap, type CandidateWeek, type RosterMetaEntry } from "@/lib/faab/marginal";
 import { loadCachedWeekly } from "@/lib/trade-impact/load";
+import { rosterIsFull } from "@/lib/faab/roster";
 import { matchViewerRoster, type ViewerCandidate } from "@/lib/league-viewer";
 import { loadPositionalWarView, loadViewerCandidates } from "@/lib/league-positional-war-data";
 import type { WarCurvePoint } from "@/lib/positional-war/types";
@@ -53,8 +54,9 @@ import type { WarCurvePoint } from "@/lib/positional-war/types";
  *
  * WHAT THIS ANSWERS, AND WHY IT IS NOT POSITIONAL WAR
  *
- * "If I added the best available player at this position who is not already
- * mine, what would that do to MY season." That is team-specific: it depends on
+ * "If I added the best free agent at this position, what would that do to MY
+ * season." (Or, on request, the best player on another roster, labeled as a
+ * trade target.) That is team-specific: it depends on
  * who is already on the roster, so it is answered in projected wins and
  * playoff odds, never in WAR (see lib/positional-war/naming.test.ts, which
  * allowlists this file for exactly that vocabulary because this is the one
@@ -97,6 +99,8 @@ export type UpgradeWhatIfRefusalReason =
   | "no-baseline"
   | "no-candidates"
   | "no-season-left"
+  /** Sleeper's NFL state did not answer, so the current week is unknown. */
+  | "week-unknown"
   | "league-not-found";
 
 export type UpgradeWhatIfTarget = {
@@ -106,10 +110,53 @@ export type UpgradeWhatIfTarget = {
   positionRank: number;
   /** The league-wide Positional WAR figure for this player, read straight off the cached curve. */
   positionalWar: number;
+  /** The team that holds him, for a trade target. Null for a free agent. */
+  rosteredBy: string | null;
 };
+
+/**
+ * Which player the what-if adds. A free agent by default, because that is a
+ * move the viewer can make today. "trade" names the best player on another
+ * roster instead, and the panel labels him as a trade target.
+ */
+export type UpgradeTargetKind = "free-agent" | "trade";
+
+export const UPGRADE_TARGET_KINDS: readonly UpgradeTargetKind[] = ["free-agent", "trade"];
+
+/**
+ * Walk the cached curve (already best-WAR-first, per ./engine.ts) for the
+ * target. Pure, so the choice is testable without a league.
+ *
+ *   free-agent  the first player on no roster
+ *   trade       the first player on another team's roster
+ *
+ * `skippedOwnRank` is the best rank the viewer already holds above the
+ * target, so the panel can say why rank 1 was not the one used.
+ */
+export function pickUpgradeTarget(
+  curve: readonly WarCurvePoint[],
+  owned: ReadonlySet<string>,
+  holderOf: ReadonlyMap<string, string>,
+  kind: UpgradeTargetKind,
+): { point: WarCurvePoint; rosteredBy: string | null; skippedOwnRank: number | null } | null {
+  let skippedOwnRank: number | null = null;
+  for (const point of curve) {
+    if (!point.sleeperId) continue;
+    if (owned.has(point.sleeperId)) {
+      if (skippedOwnRank === null) skippedOwnRank = point.positionRank;
+      continue;
+    }
+    const holder = holderOf.get(point.sleeperId) ?? null;
+    if (kind === "free-agent" ? holder !== null : holder === null) continue;
+    return { point, rosteredBy: holder, skippedOwnRank };
+  }
+  return null;
+}
 
 export type UpgradeWhatIfResult = {
   position: PulsePosition;
+  /** Which kind of target was asked for. */
+  targetKind: UpgradeTargetKind;
   target: UpgradeWhatIfTarget;
   /**
    * Set when the true best-available player at this position was already on
@@ -209,7 +256,13 @@ export async function resolveUpgradeViewerRoster(
  */
 export async function runUpgradeWhatIf(
   supabase: ServiceClient,
-  params: { sleeperLeagueId: string; position: PulsePosition; rosterId: number },
+  params: {
+    sleeperLeagueId: string;
+    position: PulsePosition;
+    rosterId: number;
+    /** Free agent by default; "trade" asks about the best player on another roster. */
+    targetKind?: UpgradeTargetKind;
+  },
 ): Promise<UpgradeWhatIfOutcome> {
   const { data: leagueRow } = await supabase
     .from("leagues")
@@ -243,26 +296,30 @@ export async function runUpgradeWhatIf(
     ...mine.taxiSleeperIds,
   ]);
 
-  // The target: the highest-WAR player at this position who is not already
-  // the viewer's, read straight off the cached curve (curve.curve is already
-  // ordered best-WAR-first, per lib/positional-war/engine.ts). No search: the
-  // curve was computed once for the whole league and this only walks it.
-  let chosen: WarCurvePoint | null = null;
-  let skippedRank: number | null = null;
-  for (const point of curve.curve) {
-    if (point.sleeperId && owned.has(point.sleeperId)) {
-      if (skippedRank === null) skippedRank = point.positionRank;
-      continue;
+  // Who holds every rostered player in the league, so the default target can
+  // be a player the viewer could actually add today.
+  const holderOf = new Map<string, string>();
+  for (const roster of rosters) {
+    if (roster.sleeperRosterId === mine.sleeperRosterId) continue;
+    for (const sid of [
+      ...roster.playerSleeperIds,
+      ...roster.reserveSleeperIds,
+      ...roster.taxiSleeperIds,
+    ]) {
+      holderOf.set(sid, roster.teamName);
     }
-    if (!point.sleeperId) continue;
-    chosen = point;
-    break;
   }
-  if (!chosen || !chosen.sleeperId) return { ok: false, reason: "no-candidates" };
-  const targetSleeperId = chosen.sleeperId;
+
+  const targetKind: UpgradeTargetKind = params.targetKind ?? "free-agent";
+  const chosen = pickUpgradeTarget(curve.curve, owned, holderOf, targetKind);
+  if (!chosen) return { ok: false, reason: "no-candidates" };
+  const skippedRank = chosen.skippedOwnRank;
+  const targetSleeperId = chosen.point.sleeperId as string;
 
   const nflState = await getNflState();
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  // Unknown week: no compute against a guess (LPI-T02).
+  if (currentWeek === null) return { ok: false, reason: "week-unknown" };
   const lastRegularWeek = Math.max(currentWeek, league.playoffWeekStart - 1);
   const weeks: number[] = [];
   for (let w = currentWeek; w <= lastRegularWeek; w += 1) weeks.push(w);
@@ -397,7 +454,9 @@ export async function runUpgradeWhatIf(
   }
   if (candidateByWeek.size === 0) return { ok: false, reason: "no-candidates" };
 
-  const mustDrop = mine.playerSleeperIds.length >= league.rosterPositions.length;
+  // The shared roster rule: IR and taxi players hold no active spot, so they
+  // never force a cut (lib/faab/roster.ts explains the 19% this got wrong).
+  const mustDrop = rosterIsFull(mine, league.rosterPositions);
 
   // No drop guard: FAAB's guard exists because a real dollar bid must not
   // suggest cutting an asset the market prices above the claim. This is a
@@ -456,12 +515,14 @@ export async function runUpgradeWhatIf(
 
   const result: UpgradeWhatIfResult = {
     position: params.position,
+    targetKind,
     target: {
       playerId: targetPlayer.playerId,
       name: targetPlayer.name,
       team: targetPlayer.team,
-      positionRank: chosen.positionRank,
-      positionalWar: chosen.war,
+      positionRank: chosen.point.positionRank,
+      positionalWar: chosen.point.war,
+      rosteredBy: chosen.rosteredBy,
     },
     fellBackFrom: skippedRank !== null ? { positionRank: skippedRank } : null,
     winsDelta: after.expectedWins - before.expectedWins,

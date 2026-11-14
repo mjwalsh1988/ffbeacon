@@ -174,6 +174,9 @@ export async function loadLeaderboards(
     // Sleeper's default week when the commissioner never set it.
     playoffWeekStart: league.chopped ? null : league.playoffWeekStart,
     bestBall: league.bestBall === true,
+    chopped: league.chopped,
+    playoffRoundType: league.playoffRoundType,
+    playoffTeams: league.playoffTeams,
     week,
   });
 }
@@ -206,9 +209,35 @@ export const LEADERBOARDS_VIEW_TTL_S = 600;
 
 type WeekKey = "season" | "latest" | number;
 
+/**
+ * Thrown out of the cached read so a view that may rest on a failed read is
+ * served once and never stored. unstable_cache stores nothing when its function
+ * throws, so the next request reads again instead of reusing the hole for ten
+ * minutes.
+ */
+class UncacheableView extends Error {
+  constructor(readonly view: LeaderboardsView | null) {
+    super("leaderboards view not cached");
+  }
+}
+
+/**
+ * True when a view is empty in a way a failed read produces: no league row
+ * (loadLeague answers null on a read error too) or no teams (loadRosters
+ * answers [] on one). A real league always has rosters.
+ */
+export function isSuspectView(view: LeaderboardsView | null): boolean {
+  return view === null || Object.keys(view.teams).length === 0;
+}
+
 async function readView(leagueRowId: string, weekKey: WeekKey): Promise<LeaderboardsView | null> {
   const week = weekKey === "season" ? null : weekKey;
-  return loadLeaderboards(createAdminClient(), leagueRowId, { week });
+  // A read error in the settled weeks or the stat lines throws from inside
+  // (lib/manager-ledger/load.ts, lib/supabase/fetch-all.ts), so it is never
+  // cached. An empty answer that may be a swallowed error is thrown here.
+  const view = await loadLeaderboards(createAdminClient(), leagueRowId, { week });
+  if (isSuspectView(view)) throw new UncacheableView(view);
+  return view;
 }
 
 const readViewCached = cached("leaderboards-view", readView, {
@@ -225,9 +254,15 @@ const readViewCached = cached("leaderboards-view", readView, {
  * reader can see in "whose roster is he on today" after a waiver claim; the
  * points themselves only move when a week settles.
  */
-export function loadLeaderboardsCached(
+export async function loadLeaderboardsCached(
   leagueRowId: string,
   week: number | null | "latest",
 ): Promise<LeaderboardsView | null> {
-  return readViewCached(leagueRowId, week === null ? "season" : week);
+  try {
+    return await readViewCached(leagueRowId, week === null ? "season" : week);
+  } catch (error) {
+    // Served, not stored. Any other error is a real failure and propagates.
+    if (error instanceof UncacheableView) return error.view;
+    throw error;
+  }
 }

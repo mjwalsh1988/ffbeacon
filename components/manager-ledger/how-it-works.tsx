@@ -48,12 +48,14 @@ export function HowLedgerWorks({
         <p>
           <strong className="text-ink">Wins left behind.</strong> Losses where that best
           lineup would have beaten your opponent&apos;s real score. Their bench is left
-          alone: you cannot set someone else&apos;s lineup.
+          alone: you cannot set someone else&apos;s lineup. Records count the regular season,
+          with the median game where your league plays one. In a chopped league the line to
+          beat is the week&apos;s lowest other score.
         </p>
         <p>
           <strong className="text-ink">Waivers</strong> count what each pickup scored in your
-          lineup afterward. <strong className="text-ink">Trades</strong> count what came in
-          against what the players you sent scored elsewhere.{" "}
+          lineup until you dropped him. <strong className="text-ink">Trades</strong> count what
+          came in and started against what the players you sent started elsewhere.{" "}
           <strong className="text-ink">Draft</strong> compares each pick to the average pick
           in the same round of the same draft. Keepers are left out.
         </p>

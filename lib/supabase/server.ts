@@ -3,6 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import type { Database } from "@/lib/database.types";
+import { retryingFetch } from "@/lib/supabase/retrying-fetch";
 
 /**
  * The request-scoped session client.
@@ -26,6 +27,7 @@ export const createClient = cache(async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_PUBLISHABLE_KEY!,
     {
+      global: { fetch: retryingFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();
@@ -56,7 +58,7 @@ export function createCachedReadClient() {
   return createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_PUBLISHABLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: retryingFetch } },
   );
 }
 
@@ -79,6 +81,7 @@ export const createAdminClient = cache(function createAdminClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SECRET_KEY!,
     {
+      global: { fetch: retryingFetch },
       cookies: {
         getAll() {
           return [];

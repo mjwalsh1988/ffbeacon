@@ -14,6 +14,10 @@ function view() {
     generatedAt: "2026-10-29T15:00:00.000Z",
     isDynasty: true,
     isSuperflex: false,
+    leagueKind: "dynasty",
+    isBestBall: false,
+    frozenSeasonNote: null,
+    signalWindowDays: 30,
     formatTags: [{ key: "teams", label: "12 teams", tone: "format" }],
     formatDisplay: "Dynasty PPR",
     sourceSlug: "ktc",
@@ -46,6 +50,16 @@ describe("share card", () => {
     expect(card.grades.map((g) => g.code)).toEqual(["QB", "RB", "WR", "TE", "BN", "DC"]);
     expect(card.lineup).toHaveLength(SLOTS.length);
     expect(card.formatTags).toEqual(["12 teams"]);
+  });
+
+  it("carries each season's pick and unpriced counts for the card's null words", () => {
+    const v = view();
+    const card = buildBlueprintShareCard(v);
+    expect(card.capital).not.toBeNull();
+    card.capital!.forEach((s, i) => {
+      expect(s.pickCount).toBe(v.capital!.seasons[i].picks.length);
+      expect(s.unpricedCount).toBe(v.capital!.seasons[i].unpricedCount);
+    });
   });
 
   it("describes the blueprint in one sentence", () => {

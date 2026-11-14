@@ -6,7 +6,7 @@ import { Panel } from "@/components/dashboard-panel";
 import { ChartEmpty } from "@/components/chart-kit";
 import { type PulsePosition } from "@/lib/power-pulse/types";
 import { requestUpgradeWhatIf } from "@/app/leagues/[league_id]/positional-war/actions";
-import type { UpgradeWhatIfOutcome } from "@/lib/positional-war/upgrade";
+import type { UpgradeTargetKind, UpgradeWhatIfOutcome } from "@/lib/positional-war/upgrade";
 
 /**
  * The upgrade what-if panel (T-WAR-48, section 15.1.2).
@@ -66,6 +66,7 @@ export function UpgradeWhatIfPanel({
   positions?: readonly PulsePosition[];
 }) {
   const [position, setPosition] = useState<PulsePosition>("QB");
+  const [targetKind, setTargetKind] = useState<UpgradeTargetKind>("free-agent");
   const [pending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<UpgradeWhatIfOutcome | null>(null);
 
@@ -80,6 +81,7 @@ export function UpgradeWhatIfPanel({
         submittedRosterId: viewerRosterId,
         searchedUsername,
         focusedRosterId,
+        targetKind,
       });
       setOutcome(result);
     });
@@ -91,7 +93,7 @@ export function UpgradeWhatIfPanel({
       title="Try an upgrade"
       eyebrow="What it would do to you"
       headingFocusable
-      helper="Add the best player at a position you do not already own, and see what it does to your season."
+      helper="Add the best free agent at a position, or the best player on another roster, and see what it does to your season."
     >
       {disabled ? (
         <ChartEmpty>Team projections are still calculating.</ChartEmpty>
@@ -122,6 +124,42 @@ export function UpgradeWhatIfPanel({
                 ))}
               </select>
             </div>
+            <fieldset className="sm:max-w-xs">
+              <legend className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                Player to add
+              </legend>
+              <div className="flex gap-2">
+                {(
+                  [
+                    ["free-agent", "Free agent"],
+                    ["trade", "Trade target"],
+                  ] as const
+                ).map(([kind, label]) => (
+                  <label
+                    key={kind}
+                    className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-card border px-3 text-sm focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan ${
+                      targetKind === kind
+                        ? "border-brand-cyan/60 bg-brand-cyan/10 text-ink"
+                        : "border-line bg-base/60 text-ink-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="upgrade-target-kind"
+                      value={kind}
+                      checked={targetKind === kind}
+                      disabled={pending}
+                      onChange={() => {
+                        setTargetKind(kind);
+                        setOutcome(null);
+                      }}
+                      className="accent-brand-cyan"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <button
               type="button"
               onClick={run}
@@ -148,10 +186,12 @@ function refusalMessage(reason: Exclude<UpgradeWhatIfOutcome, { ok: true }>["rea
       return "Too many checks in the last minute. Try again shortly.";
     case "no-season-left":
       return "This league has no regular season games left.";
+    case "week-unknown":
+      return "Sleeper did not tell us the current week. Try again shortly.";
     case "no-baseline":
       return "Team projections are still calculating.";
     case "no-candidates":
-      return "Every ranked player at this position is already yours, or has no projection.";
+      return "No ranked player of that kind at this position has a projection.";
     case "no-viewer":
     case "roster-mismatch":
       return "We could not confirm which team is yours in this league.";
@@ -185,36 +225,42 @@ function OutcomeReadout({ outcome }: { outcome: UpgradeWhatIfOutcome }) {
     ? `, because you would cut ${result.droppedPlayerName}`
     : "";
 
+  const kindLine =
+    result.targetKind === "trade" && target.rosteredBy
+      ? `Trade target, on ${target.rosteredBy}'s roster. This adds him without counting what you would send.`
+      : "Free agent, on no roster in this league.";
+
   return (
     <div className="space-y-3">
       {result.fellBackFrom && (
         <p className="text-xs text-ink-subtle">
-          You already hold {result.position}
-          {result.fellBackFrom.positionRank}, so this uses {result.position}
-          {target.positionRank}.
+          {`You already hold ${result.position}${result.fellBackFrom.positionRank}, so this uses ${result.position}${target.positionRank}.`}
         </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
+        {/* The hero: what the move does for this team. One figure, one text node. */}
+        <div className="rounded-card border border-line-accent bg-base/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">For your team</p>
+          <p className="mt-2 font-mono text-4xl font-black leading-none tabular-nums text-ink sm:text-5xl">
+            {result.winsDelta !== null ? signed(result.winsDelta, 1) : "Not available"}
+          </p>
+          <p className="mt-1 text-xs text-ink-muted">
+            {result.winsDelta !== null ? "projected wins" : "the simulation could not price this"}
+          </p>
+          {playoffText && <p className="mt-1 text-xs text-ink-muted">{playoffText}</p>}
+        </div>
         <div className="rounded-card border border-line bg-base/40 p-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
             Positional WAR (league-wide)
           </p>
-          <p className="mt-1 text-lg font-semibold text-ink">{target.positionalWar.toFixed(2)}</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            {target.name}, {result.position}
-            {target.positionRank}
-            {target.team ? `, ${target.team}` : ""}
+          <p className="mt-2 font-mono text-2xl font-black tabular-nums text-ink">
+            {target.positionalWar.toFixed(2)}
           </p>
-        </div>
-        <div className="rounded-card border border-line bg-base/40 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">For your team</p>
-          <p className="mt-1 text-lg font-semibold text-ink">{winsText ?? "Not available"}</p>
-          {/* Rendered only when there is a figure. A non-breaking space to
-              reserve the line height would put a character with no meaning
-              into the accessibility tree, and the grid already holds the two
-              blocks level without it. */}
-          {playoffText && <p className="mt-1 text-xs text-ink-muted">{playoffText}</p>}
+          <p className="mt-1 text-xs text-ink-muted">
+            {`${target.name}, ${result.position}${target.positionRank}${target.team ? `, ${target.team}` : ""}`}
+          </p>
+          <p className="mt-1 text-xs text-ink-muted">{kindLine}</p>
         </div>
       </div>
 

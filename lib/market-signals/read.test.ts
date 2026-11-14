@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isSignalCurrent } from "./read";
+import { DEFAULT_MARKET_SIGNAL_SETTINGS } from "./default-settings";
+import { isSignalCurrent, staleDaysFor } from "./read";
 
 describe("isSignalCurrent", () => {
   const now = new Date("2026-10-29T15:00:00Z");
@@ -18,5 +19,16 @@ describe("isSignalCurrent", () => {
     const lateEastern = new Date("2026-10-30T03:30:00Z");
     expect(isSignalCurrent("2026-10-27", 3, lateEastern)).toBe(true);
     expect(isSignalCurrent("2026-10-26", 3, lateEastern)).toBe(false);
+  });
+});
+
+describe("staleDaysFor", () => {
+  it("takes a plain count as written and the settings per source", () => {
+    expect(staleDaysFor(3, "dynastyprocess")).toBe(3);
+    expect(staleDaysFor(DEFAULT_MARKET_SIGNAL_SETTINGS, "ktc")).toBe(3);
+    // A weekly source's row from last week's update is still current.
+    const days = staleDaysFor(DEFAULT_MARKET_SIGNAL_SETTINGS, "dynastyprocess");
+    expect(days).toBe(9);
+    expect(isSignalCurrent("2026-10-22", days, new Date("2026-10-29T15:00:00Z"))).toBe(true);
   });
 });

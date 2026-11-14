@@ -27,6 +27,7 @@ export function OptimizerPanel({
   week,
   defenderSlots = 0,
   idpEnabled = false,
+  lockedSlotCount = 0,
 }: {
   optimization: LineupOptimization;
   isFinal: boolean;
@@ -38,6 +39,8 @@ export function OptimizerPanel({
    * defender: not projected at all while off, no projection this week once on.
    */
   idpEnabled?: boolean;
+  /** Live week: starting slots whose player has kicked off, held in place. */
+  lockedSlotCount?: number;
 }) {
   const { moves, pointsLeftOnBench, unavailable, unlistedGain } = optimization;
   const ungradedSlotCount = Math.max(0, optimization.ungradedSlotCount - defenderSlots);
@@ -50,7 +53,9 @@ export function OptimizerPanel({
 
   const helper = isFinal
     ? `What the best legal lineup for week ${week} would have scored, graded on what players actually did.`
-    : `The changes that get your week ${week} lineup to the highest projected score it can reach.`;
+    : lockedSlotCount > 0
+      ? `${lockedSlotCount} ${lockedSlotCount === 1 ? "starter has" : "starters have"} kicked off and keep their points. Only the open slots are optimized.`
+      : `The changes that get your week ${week} lineup to the highest projected score it can reach.`;
 
   return (
     <Panel
@@ -102,9 +107,9 @@ export function OptimizerPanel({
               Sleeper wants the total first; the moves are how to collect it. */}
           {pointsLeftOnBench !== null && (
             <p className="mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span className="font-mono text-3xl font-extrabold tabular-nums text-brand-purple sm:text-4xl">
+              <span className="font-mono text-4xl font-black leading-none tabular-nums text-brand-purple sm:text-5xl">
                 +{fmtPoints(pointsLeftOnBench)}
-                <span className="sr-only"> more points</span>
+                <span className="sr-only"> more points left on the bench</span>
               </span>
               <span className="text-sm leading-relaxed text-ink-muted">
                 {isFinal

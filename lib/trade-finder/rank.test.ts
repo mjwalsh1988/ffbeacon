@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   acceptanceOf,
+  clearsContenderFloor,
+  lineupChange,
   measureImpact,
   qualityGapOf,
   qualityRatioOf,
@@ -544,5 +546,56 @@ describe("scoreSuggestion, horizon weight (Part 4: rest-of-season horizon)", () 
 
     expect(contenderScore).toBeGreaterThan(balancedScore);
     expect(balancedScore).toBeGreaterThan(rebuilderScore);
+  });
+});
+
+describe("league kinds and modes (LPI-T06)", () => {
+  it("ranks Rebuild on value, youth and picks alone: a projection cannot reorder it", () => {
+    const me = profileOf("competitor");
+    const flat = scoreSuggestion({
+      mine: impact({ valueDelta: 500, lineupDelta: 0, winsDelta: 0 }),
+      myProfile: me,
+      acceptance: "likely",
+      strategy: "value",
+    });
+    const projected = scoreSuggestion({
+      mine: impact({ valueDelta: 500, lineupDelta: 6, winsDelta: 0.6 }),
+      myProfile: me,
+      acceptance: "likely",
+      strategy: "value",
+    });
+    expect(projected).toBeCloseTo(flat, 9);
+  });
+
+  it("scores survival odds in a chopped league where there are no wins to count", () => {
+    const me = profileOf(null);
+    const base = { myProfile: me, acceptance: "likely" as const, strategy: "contender" as const };
+    const safer = scoreSuggestion({ ...base, mine: impact({ lineupDelta: 2, survivalDelta: 0.06 }) });
+    const same = scoreSuggestion({ ...base, mine: impact({ lineupDelta: 2, survivalDelta: 0 }) });
+    expect(safer).toBeGreaterThan(same);
+  });
+
+  it("never lets a chopped deal through that raises the reader's chance of the cut", () => {
+    expect(clearsContenderFloor(impact({ lineupDelta: 1, survivalDelta: -0.01 }))).toBe(false);
+    expect(clearsContenderFloor(impact({ lineupDelta: 1, survivalDelta: 0 }))).toBe(true);
+  });
+
+  it("prices value on the consolidation curve when totals are handed in", () => {
+    const roster = fullRoster();
+    const mine = buildTeamProfile(team({ players: roster }), STANDARD_SLOTS, BASELINES);
+    const result = measureImpact(mine, STANDARD_SLOTS, [ref(player({ value: 100 }))], [], {
+      valueTotals: { valueIn: 6400, valueOut: 6000 },
+    });
+    expect(result.valueDelta).toBe(400);
+  });
+
+  it("measures the lineup the same way through lineupChange", () => {
+    const roster = fullRoster();
+    const mine = buildTeamProfile(team({ players: roster }), STANDARD_SLOTS, BASELINES);
+    const incoming = [ref(player({ position: "TE", value: 3000, projPoints: 15 }))];
+    const outgoing = [ref(roster[6])];
+    expect(lineupChange(mine, STANDARD_SLOTS, incoming, outgoing).delta).toBe(
+      measureImpact(mine, STANDARD_SLOTS, incoming, outgoing).lineupDelta,
+    );
   });
 });

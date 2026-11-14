@@ -245,6 +245,8 @@ export type SleeperDraft = {
   settings?: Record<string, number>;
   metadata?: Record<string, unknown> | null;
   slot_to_roster_id?: Record<string, number>;
+  /** Sleeper user id to draft slot. Set once the order is, like slot_to_roster_id. */
+  draft_order?: Record<string, number> | null;
   start_time?: number | null;
   last_picked?: number | null;
 };
@@ -424,6 +426,14 @@ export async function mapLimit<T, R>(
  *
  * `fromWeek` exists because past weeks are settled history. A caller that has
  * already stored weeks 0 through 9 only needs to ask about 9 onward.
+ *
+ * `emptyStop` is only a guess at where an unbounded walk ends. When the caller
+ * KNOWS the last week (the league's last scored week, or week 18 for a settled
+ * season) it passes `Infinity` and every week up to `maxWeek` is read. Three
+ * quiet weeks are normal in a real league (a bye stretch, a waiver freeze, the
+ * weeks before a trade deadline), and stopping on them dropped every move after
+ * the gap. Worse, the resume point (stored max week minus one) sat right before
+ * the same gap, so every later sync stopped at the same place forever.
  *
  * A week whose request fails (as opposed to answering with no transactions)
  * throws rather than being silently treated as empty: a throttled or timed-out

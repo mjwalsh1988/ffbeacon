@@ -66,6 +66,13 @@ export type SeasonWeekPoint = {
   optimalPoints: number | null;
   /** What the set lineup was projected to score that week. Null when unknown. */
   projected: number | null;
+  /**
+   * What the SAME starters behind `projected` actually scored: only the slots
+   * that carried a projection, so the miss compares like with like. The
+   * official total also counts unprojected slots, which reads as the model
+   * running low. Present whenever `projected` was built from week rows.
+   */
+  comparedScored?: number | null;
   outcome: LedgerOutcome | null;
   bestOutcome: LedgerOutcome | null;
   /** True when this is the week the page is currently showing. */
@@ -96,10 +103,13 @@ export function buildSeasonSeries(input: {
   ledgerWeeks: LedgerWeek[];
   /** Projected total for the set lineup, by week. */
   projectedByWeek: Map<number, number>;
+  /** What the same projected starters actually scored, by week. */
+  comparedActualByWeek?: Map<number, number>;
   /** The week the page is showing, so the chart can mark it. */
   viewedWeek: number;
 }): SeasonSeries {
   const { ledgerWeeks, projectedByWeek, viewedWeek } = input;
+  const compared = input.comparedActualByWeek;
 
   const byWeek = new Map<number, SeasonWeekPoint>();
 
@@ -136,6 +146,7 @@ export function buildSeasonSeries(input: {
     const existing = byWeek.get(week);
     if (existing) {
       existing.projected = round2(projected);
+      if (compared) existing.comparedScored = existing.scored === null ? null : (compared.has(week) ? round2(compared.get(week) as number) : null);
       continue;
     }
     byWeek.set(week, {
@@ -190,17 +201,18 @@ export type ProjectionAccuracy = {
 };
 
 export function projectionAccuracy(points: SeasonWeekPoint[]): ProjectionAccuracy | null {
-  const pairs = points.filter(
-    (p): p is SeasonWeekPoint & { scored: number; projected: number } =>
-      p.scored !== null && p.projected !== null,
-  );
+  // Like with like: the same starters on both sides when the week rows gave
+  // us that figure, the official total only for a point built without it.
+  const actualOf = (p: SeasonWeekPoint): number | null =>
+    p.comparedScored !== undefined ? p.comparedScored : p.scored;
+  const pairs = points.filter((p) => actualOf(p) !== null && p.projected !== null);
   if (pairs.length === 0) return null;
 
   let diff = 0;
   let abs = 0;
   let beat = 0;
   for (const p of pairs) {
-    const d = p.scored - p.projected;
+    const d = (actualOf(p) as number) - (p.projected as number);
     diff += d;
     abs += Math.abs(d);
     if (d > 0) beat += 1;

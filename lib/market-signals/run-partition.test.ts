@@ -116,6 +116,56 @@ describe("runPartition", () => {
     expect(calls.stamps[0]).toMatchObject({ rows_written: 0 });
   });
 
+  it("leaves a run-day latest day that is still loading unwritten and unstamped", async () => {
+    const sameDay = new Date(`${LAST}T10:30:00Z`);
+    // 40 players priced the day before, only 20 so far on the run day.
+    const rows = history(40).filter((r) => !(r.captured_at.startsWith(LAST) && Number(r.player_id.slice(1)) >= 20));
+    const { io, calls } = fakeIO(rows);
+    const result = await runPartition(io, partition, S, sameDay);
+    expect(result.partial).toBe(true);
+    expect(calls.signals).toEqual([]);
+    expect(calls.stamps).toEqual([]);
+    // The same day once finished is written and stamped.
+    const done = fakeIO(history(40));
+    const full = await runPartition(done.io, partition, S, sameDay);
+    expect(full.partial).toBe(false);
+    expect(done.calls.stamps).toHaveLength(1);
+  });
+
+  it("reads a past latest day as finished even when it priced fewer players", async () => {
+    const rows = history(40).filter((r) => !(r.captured_at.startsWith(LAST) && Number(r.player_id.slice(1)) >= 30));
+    const { io, calls } = fakeIO(rows);
+    const result = await runPartition(io, partition, S, NOW);
+    expect(result.partial).toBe(false);
+    expect(calls.stamps).toHaveLength(1);
+  });
+
+  it("gives a weekly source calls on its few points", () => {
+    // One point a week for twelve weeks, the last a breakout for p0000.
+    const rows: PartitionHistoryRow[] = [];
+    for (let p = 0; p < 30; p += 1) {
+      for (let w = 0; w < 12; w += 1) {
+        const day = addDays(LAST, -7 * (11 - w));
+        const base = 2000 + 50 * p + (w % 2) * 80;
+        rows.push({
+          player_id: `p${String(p).padStart(4, "0")}`,
+          value: w === 11 && p === 0 ? base * 1.6 : base,
+          formula_offset: null,
+          captured_at: `${day}T12:00:00Z`,
+        });
+      }
+    }
+    const weekly = { ...partition, source: "dynastyprocess" };
+    const out = computePartition(weekly, rows, [], S, NOW);
+    expect(out.signals).toHaveLength(30);
+    expect(out.signals.every((r) => r.signal !== "baseline")).toBe(true);
+    expect(out.signals.find((r) => r.player_id === "p0000")!.signal).toBe("sell");
+    // A daily source reads only the last 30 days of the same series (five
+    // points) and is still building its baseline.
+    const daily = computePartition(partition, rows, [], S, NOW);
+    expect(daily.signals.every((r) => r.signal === "baseline")).toBe(true);
+  });
+
   it("propagates a write failure without stamping", async () => {
     const { io, calls } = fakeIO(history(30));
     io.upsertSignals = async () => {

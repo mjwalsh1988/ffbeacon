@@ -18,27 +18,84 @@ import type { LedgerRecord } from "@/lib/manager-ledger/types";
 // up disagreeing about the eleventh.
 export { ordinal };
 
+/**
+ * The words a null figure prints as. One real text node, read the same by eye
+ * and ear, rather than a dash a screen reader swallows.
+ */
+export const NOT_MEASURED = "Not measured";
+
 /** Points, to one decimal. The precision Sleeper itself shows. */
 export function pts(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "--";
+  if (value === null || value === undefined || !Number.isFinite(value)) return NOT_MEASURED;
   return value.toFixed(1);
 }
 
 /** Points with an explicit sign, for a figure that can go either way. */
 export function signedPts(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "--";
+  if (value === null || value === undefined || !Number.isFinite(value)) return NOT_MEASURED;
   const rounded = value.toFixed(1);
   return value > 0 ? `+${rounded}` : rounded;
 }
 
 /** A ratio as a whole-number percentage. */
 export function pct(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "--";
+  if (value === null || value === undefined || !Number.isFinite(value)) return NOT_MEASURED;
   return `${Math.round(value * 100)}%`;
 }
 
 export function record(r: LedgerRecord): string {
   return r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`;
+}
+
+/** What the page calls each figure, by league kind. See lib/manager-ledger/rules.ts. */
+export type LedgerWords = {
+  /** False in best ball: the lineup sets itself, so nothing about it is graded. */
+  gradesLineups: boolean;
+  /** Weeks are read against the cut line, not an opponent. */
+  chopped: boolean;
+  recordLabel: string;
+  /** One short line under the record. */
+  recordHint: string;
+  bestRecordLabel: string;
+  winsLeftLabel: string;
+  /** One short line naming the wins-left figure. */
+  winsLeftHint: string;
+  /** "Won" or "Survived" for a week's result. */
+  win: string;
+  loss: string;
+};
+
+export function ledgerWords(rules: {
+  bestBall: boolean;
+  chopped: boolean;
+  medianGame: boolean;
+}): LedgerWords {
+  if (rules.chopped) {
+    return {
+      gradesLineups: true,
+      chopped: true,
+      recordLabel: "Weeks survived",
+      recordHint: "weeks above the cut line, then below it",
+      bestRecordLabel: "At their best",
+      winsLeftLabel: "Cuts left behind",
+      winsLeftHint: "weeks below the cut line their bench would have survived",
+      win: "Survived",
+      loss: "Below the cut",
+    };
+  }
+  return {
+    gradesLineups: !rules.bestBall,
+    chopped: false,
+    recordLabel: "Record",
+    recordHint: rules.medianGame
+      ? "regular season, median games included"
+      : "regular season",
+    bestRecordLabel: "Best lineup",
+    winsLeftLabel: "Wins left behind",
+    winsLeftHint: "losses their own bench would have won",
+    win: "Won",
+    loss: "Lost",
+  };
 }
 
 
@@ -57,17 +114,6 @@ export function weeks(n: number): string {
 }
 
 /**
- * The spoken form of the dash these formatters return.
- *
- * Two hyphens are swallowed at a screen reader's default punctuation level, so
- * a cell holding one announces as empty. This file's whole premise is that
- * "we could not measure this" and "there was nothing there" are different
- * statements, and an empty announcement collapses them, so every visible dash
- * is paired with these words in an sr-only span.
- */
-export const NOT_MEASURED = "Not measured";
-
-/**
  * The one-sentence read on a manager, built only from figures on the page.
  *
  * Deterministic templates, never a language model, for the same reason the
@@ -82,9 +128,17 @@ export function summarySentence(params: {
   scoringRank: number | null;
   winsLeftOnBench: number;
   total: number;
+  /** League-kind wording. Absent means an ordinary head-to-head league. */
+  words?: LedgerWords;
 }): string {
   const { teamName, efficiency, efficiencyRank, scoringRank, winsLeftOnBench, total } = params;
   const parts: string[] = [];
+
+  if (params.words && !params.words.gradesLineups) {
+    return scoringRank === null
+      ? `${teamName} has no finished weeks yet. Best ball sets the lineup itself.`
+      : `${teamName} is ${rankWords(scoringRank, total)} on points. Best ball sets the lineup itself.`;
+  }
 
   if (efficiency !== null) {
     parts.push(`${teamName} started ${pct(efficiency)} of their own roster's points`);
@@ -100,7 +154,11 @@ export function summarySentence(params: {
 
   const extras: string[] = [];
   if (winsLeftOnBench > 0) {
-    extras.push(`They lost ${games(winsLeftOnBench)} their own bench would have won.`);
+    extras.push(
+      params.words?.chopped
+        ? `Their bench would have survived ${weeks(winsLeftOnBench)} they fell below the cut.`
+        : `They lost ${games(winsLeftOnBench)} their own bench would have won.`,
+    );
   }
   // The gap between what the roster produced and what the manager extracted is
   // the whole point of the page, so it is stated outright when it is wide.

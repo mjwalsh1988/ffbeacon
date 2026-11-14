@@ -124,6 +124,20 @@ export type LedgerWeek = {
   bestLineupOutcome: LedgerOutcome | null;
   /** The single biggest swap available that week, for the week-by-week table. */
   biggestMiss: LedgerMiss | null;
+  /**
+   * Present (true) on a playoff week. Shown in the week table, never counted
+   * in the record or in wins left on the bench (since ledger-7).
+   */
+  playoff?: boolean;
+  /**
+   * The league median that week, present only in a league that plays a weekly
+   * game against it (Sleeper's league_average_match). Since ledger-7.
+   */
+  medianPoints?: number;
+  /** How the median game went. Present with `medianPoints`. */
+  medianOutcome?: LedgerOutcome;
+  /** Whether the best legal lineup would have beaten the median. */
+  bestLineupMedianOutcome?: LedgerOutcome;
 };
 
 /**
@@ -165,7 +179,11 @@ export type LineupLedger = {
   pointsLeft: number;
   /** setPoints / optimalPoints. Null when nothing gradable has happened yet. */
   efficiency: number | null;
-  /** Record as it actually stands, over graded weeks only. */
+  /**
+   * Record as it actually stands, over graded regular season weeks, with the
+   * median game where the league plays one. In a chopped league a win is a
+   * week survived and a loss is a week below the cut line.
+   */
   actualRecord: LedgerRecord;
   /** Record the best legal lineup would have produced, same opponents. */
   bestLineupRecord: LedgerRecord;
@@ -194,7 +212,7 @@ export type WaiverMove = {
   position: LedgerPosition | null;
   /** FAAB spent, from the Sleeper payload. Null in a league with no budget. */
   bid: number | null;
-  /** Points scored while on this roster, from the week of the claim onward. */
+  /** Points scored while on this roster, from the claim to the next drop. */
   pointsOnRoster: number;
   /** Of those, the points scored from a starting slot. */
   pointsStarted: number;
@@ -223,9 +241,9 @@ export type TradeMove = {
   receivedNames: string[];
   sentIds: string[];
   sentNames: string[];
-  /** Points the received players scored for this roster afterward. */
+  /** Points the received players scored from this roster's lineup afterward. */
   pointsIn: number;
-  /** Points the sent players scored for their new roster afterward. */
+  /** Points the sent players scored from their new roster's lineup afterward. */
   pointsOut: number;
   /** pointsIn - pointsOut. Positive means the trade fed this roster more. */
   net: number;

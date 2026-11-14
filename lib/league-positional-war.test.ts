@@ -460,11 +460,11 @@ describe("classifyPositionalWarResult", () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* Empty week window: settled, and clears existing rows                   */
+/* Empty week window: settled, and KEEPS the last curve (LPI-T08)        */
 /* ---------------------------------------------------------------------- */
 
 describe("calculateLeaguePositionalWar: empty week window", () => {
-  it("sets 'settled' and deletes existing cache rows, without touching the universe", async () => {
+  it("sets 'settled' and keeps the last curve as the final result, without touching the universe", async () => {
     wireOkPipeline();
     vi.mocked(loadLeague).mockResolvedValue(
       fakeLeague({ playoffWeekStart: 9 }) as never,
@@ -481,7 +481,8 @@ describe("calculateLeaguePositionalWar: empty week window", () => {
       /^no regular season weeks remaining from week/,
     );
     expect(classifyPositionalWarResult(result).status).toBe("settled");
-    expect(calls).toContain("cache.delete");
+    // The curve for the season's last weeks stays and is shown with them.
+    expect(calls).not.toContain("cache.delete");
     expect(loadWarUniverse).not.toHaveBeenCalled();
     expect(resolveSharedCurves).not.toHaveBeenCalled();
   });

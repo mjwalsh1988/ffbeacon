@@ -3,6 +3,7 @@ import {
   buildDraftLedger,
   buildTradeLedger,
   buildWaiverLedger,
+  holdingEnd,
   LedgerIndex,
   roundBaselines,
   type IndexedWeek,
@@ -185,18 +186,20 @@ describe("buildTradeLedger", () => {
     rosterIds: [1, 2],
   });
 
-  it("credits the receiving roster with what arrived and debits what left", () => {
+  it("credits the receiving roster with what arrived and debits what left, in started points", () => {
+    // "a" scored 50 on roster 2 but started only week 3 (30). Started points
+    // are the basis, the same as waivers, so the bench week does not count.
     const received = buildTradeLedger(2, [trade], index, PLAYERS);
     expect(received.trades).toBe(1);
-    expect(received.pointsIn).toBe(50);
+    expect(received.pointsIn).toBe(30);
     expect(received.pointsOut).toBe(0);
-    expect(received.net).toBe(50);
+    expect(received.net).toBe(30);
 
     const sent = buildTradeLedger(1, [trade], index, PLAYERS);
     expect(sent.pointsIn).toBe(0);
-    // What the player went on to score for his NEW owner.
-    expect(sent.pointsOut).toBe(50);
-    expect(sent.net).toBe(-50);
+    // What the player went on to START for his NEW owner.
+    expect(sent.pointsOut).toBe(30);
+    expect(sent.net).toBe(-30);
   });
 
   it("attributes a leg of a three-team trade to the roster that actually received it", () => {
@@ -209,9 +212,9 @@ describe("buildTradeLedger", () => {
       rosterIds: [1, 2],
     });
     const one = buildTradeLedger(1, [threeWay], index, PLAYERS);
-    // Roster 1 sent "a" (who scored 50 for roster 2) and received "c" (who
+    // Roster 1 sent "a" (who started for 30 on roster 2) and received "c" (who
     // stayed on roster 2 in the fixture, so he scored nothing FOR roster 1).
-    expect(one.pointsOut).toBe(50);
+    expect(one.pointsOut).toBe(30);
     expect(one.pointsIn).toBe(0);
   });
 
@@ -311,5 +314,32 @@ describe("draft ledger", () => {
     // Roster 1 took the best of each: +20.5 in the startup, +6.5 in the rookie.
     const one = buildDraftLedger(1, twoDrafts, baselines, index, PLAYERS);
     expect(one.aboveBaseline).toBeCloseTo(20.5 + 6.5, 6);
+  });
+});
+
+describe("holdingEnd (a claim ends at the next drop)", () => {
+  // "b" sits on roster 1 every week (5, 8, 6) and starts weeks 2 and 3.
+  it("stops crediting a claim at the roster's next drop of that player", () => {
+    const claim = tx({ id: "c1", week: 1, adds: { b: 1 }, rosterIds: [1] });
+    const drop = tx({ id: "d1", type: "free_agent", week: 2, drops: { b: 1 }, rosterIds: [1] });
+    expect(holdingEnd([claim, drop], claim, "b", 1)).toBe(2);
+    const ledger = buildWaiverLedger(1, [claim, drop], index, PLAYERS, false);
+    // Weeks 1 and 2 only (started in week 2); week 3 is past the drop.
+    expect(ledger.pointsStarted).toBe(8);
+    expect(ledger.pointsOnRoster).toBe(13);
+  });
+
+  it("never credits the same week to two claims of the same player", () => {
+    const first = tx({ id: "c1", week: 1, adds: { b: 1 }, rosterIds: [1] });
+    const second = tx({ id: "c2", week: 3, adds: { b: 1 }, rosterIds: [1] });
+    const ledger = buildWaiverLedger(1, [first, second], index, PLAYERS, false);
+    expect(ledger.moves).toBe(2);
+    // 8 for the first claim (weeks 1 and 2), 6 for the second: 14, not 14 + 6.
+    expect(ledger.pointsStarted).toBe(14);
+  });
+
+  it("runs to the end of the season when the player is never dropped", () => {
+    const claim = tx({ id: "c1", week: 1, adds: { b: 1 }, rosterIds: [1] });
+    expect(holdingEnd([claim], claim, "b", 1)).toBe(Number.POSITIVE_INFINITY);
   });
 });

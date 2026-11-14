@@ -43,6 +43,21 @@ describe("computeCalls decision table", () => {
     expect(callLabel(c.x)).toBe("Hard sell");
   });
 
+  it("a watch_sell lean is not enough for a hard sell", () => {
+    const c = computeCalls([...stars, p("x", { inSurplus: true, signal: "watch_sell" })], opts);
+    expect(c.x).toEqual({ call: "sell", strength: "soft", note: null });
+  });
+
+  it("writes the notes in plain words with the signal window", () => {
+    expect(NOTE_HARD_SELL).toBe("Priced near his 30-day high.");
+    expect(NOTE_HOLD_LOW).toBe("Priced near his 30-day low: do not sell now.");
+    for (const n of [NOTE_HARD_SELL, NOTE_SELL_HIGH, NOTE_KEEP, NOTE_HOLD_LOW]) {
+      expect(n).not.toMatch(/band|window/);
+    }
+    const c = computeCalls([...stars, p("x", { inSurplus: true, signal: "sell" })], { ...opts, windowDays: 45 });
+    expect(c.x.note).toBe("Priced near his 45-day high.");
+  });
+
   it("roster sell without a lean is a soft sell", () => {
     const c = computeCalls([...stars, p("x", { inSurplus: true })], opts);
     expect(c.x).toEqual({ call: "sell", strength: "soft", note: null });

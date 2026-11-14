@@ -167,11 +167,8 @@ export function SignalCheckTradeCard({
               </span>
             )}
             {!isComplete && status && (
-              <span
-                className="rounded-full border border-signal-warning/50 bg-signal-warning/10 px-2 py-0.5 text-xs text-signal-warning"
-                aria-label={`Status: ${status}`}
-              >
-                {status}
+              <span className="rounded-full border border-signal-warning/50 bg-signal-warning/10 px-2 py-0.5 text-xs text-signal-warning">
+                Status: {status}
               </span>
             )}
           </div>
@@ -363,6 +360,12 @@ export function SignalCheckTradeCard({
           </p>
         )}
 
+        {view.graded !== false && (
+          <p className="text-xs text-ink-subtle">
+            Graded at today&apos;s player values, not the values on the trade date.
+          </p>
+        )}
+
         {(view.hasMissingValues || view.hasBlendedPicks || view.hasEstimatedPicks) && (
           // role="note" dropped for the same reason as the startup note above:
           // no major screen reader announces it, so it produced no difference.
@@ -403,7 +406,7 @@ function startupNote(startup: LeagueTradeStartupInfo): string {
         : `${startup.simulatedCount} picks have not been made yet and are valued as the players expected at those slots.`,
     );
   }
-  parts.push("Values are current, so this reads how the deal looks now rather than on the day.");
+  if (parts.length === 0) return "Startup picks in this trade are priced as players.";
   return parts.join(" ");
 }
 

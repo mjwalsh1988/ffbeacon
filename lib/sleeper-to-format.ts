@@ -6,6 +6,11 @@ export type DerivedFormat = {
   scoring_type: "ppr" | "half_ppr" | "standard";
   is_superflex: boolean;
   is_tep: boolean;
+  /**
+   * Sleeper settings.best_ball === 1. Optional so callers that build a
+   * DerivedFormat by hand (tests, scripts) keep compiling; absent means false.
+   */
+  is_best_ball?: boolean;
 };
 
 /**
@@ -82,7 +87,11 @@ export function deriveLeagueFormat(league: SleeperLeague): DerivedFormat {
   const recTeBoost = Number(scoring.rec_te ?? 0);
   const is_tep = bonusTe >= 0.5 || recTeBoost >= 0.5;
 
-  return { league_type, scoring_type, is_superflex, is_tep };
+  // best ball: Sleeper sets settings.best_ball to 1 (lib/league-category.ts
+  // reads the same field to file the league).
+  const is_best_ball = Number(settings.best_ball ?? 0) === 1;
+
+  return { league_type, scoring_type, is_superflex, is_tep, is_best_ball };
 }
 
 /**
@@ -106,6 +115,22 @@ export function deriveLeagueFormat(league: SleeperLeague): DerivedFormat {
  */
 export function mapToFormatSlug(derived: DerivedFormat): string | null {
   const { league_type, scoring_type, is_superflex, is_tep } = derived;
+
+  // Best ball has its own boards: bestball-ppr-std, bestball-ppr-sflex and
+  // bestball-dynasty-ppr-sflex. Lineups set themselves there, so depth is
+  // worth more than on a managed board, and that is a bigger difference than a
+  // TE premium. A best ball league lands on one when its superflex setting has
+  // a board (any scoring for a redraft superflex league, the same rule as
+  // below; PPR for the rest). Otherwise it drops to the managed boards and
+  // resolveLeagueContext reports the mismatch through isExactFormatMatch.
+  if (derived.is_best_ball) {
+    if (league_type === "dynasty") {
+      if (is_superflex && scoring_type === "ppr") return "bestball-dynasty-ppr-sflex";
+    } else {
+      if (is_superflex) return "bestball-ppr-sflex";
+      if (scoring_type === "ppr") return "bestball-ppr-std";
+    }
+  }
 
   if (league_type === "dynasty") {
     // We only carry PPR dynasty formats today.
@@ -140,7 +165,7 @@ export function describeDerivedFormat(d: DerivedFormat): string {
   const league = d.league_type === "dynasty" ? "Dynasty" : "Redraft";
   const scoring =
     d.scoring_type === "ppr" ? "PPR" : d.scoring_type === "half_ppr" ? "Half PPR" : "Standard";
-  const parts = [league, scoring];
+  const parts = d.is_best_ball ? ["Best Ball", league, scoring] : [league, scoring];
   if (d.is_superflex) parts.push("Superflex");
   if (d.is_tep) parts.push("TE Premium");
   return parts.join(" ");
@@ -155,6 +180,56 @@ export interface FormatCandidate {
   is_superflex: boolean;
   is_tep: boolean;
   display_order: number | null;
+  /** Absent means "read it off the slug" (the best ball boards start with "bestball-"). */
+  is_best_ball?: boolean;
+}
+
+function candidateIsBestBall(c: { slug: string; is_best_ball?: boolean }): boolean {
+  return c.is_best_ball ?? c.slug.startsWith("bestball-");
+}
+
+/**
+ * A format_configs row as a FormatCandidate. TE premium is read off
+ * te_premium_bonus, falling back to the slug when the column was not selected.
+ */
+export function toFormatCandidate(row: {
+  slug: string;
+  display_name: string;
+  league_type: string;
+  scoring_type: string;
+  is_superflex: boolean;
+  display_order: number | null;
+  te_premium_bonus?: number | null;
+}): FormatCandidate {
+  const is_tep =
+    row.te_premium_bonus != null ? Number(row.te_premium_bonus) > 0 : row.slug.includes("-tep");
+  return {
+    slug: row.slug,
+    display: row.display_name,
+    league_type: row.league_type,
+    scoring_type: row.scoring_type,
+    is_superflex: row.is_superflex,
+    is_tep,
+    display_order: row.display_order,
+    is_best_ball: row.slug.startsWith("bestball-"),
+  };
+}
+
+/**
+ * True only when a format matches the league on every axis we price: league
+ * type, scoring, superflex, TE premium and best ball. mapToFormatSlug sometimes
+ * picks a near board on purpose (a half PPR superflex redraft league goes to the
+ * PPR superflex board, since we carry no other superflex scoring), and the
+ * league view must call that a fallback so the reader sees the banner.
+ */
+export function isExactFormatMatch(derived: DerivedFormat, format: FormatCandidate): boolean {
+  return (
+    format.league_type === derived.league_type &&
+    format.scoring_type === derived.scoring_type &&
+    format.is_superflex === derived.is_superflex &&
+    format.is_tep === derived.is_tep &&
+    candidateIsBestBall(format) === Boolean(derived.is_best_ball)
+  );
 }
 
 /**
@@ -164,9 +239,12 @@ export interface FormatCandidate {
  * ever maps to a redraft format and a dynasty league only to a dynasty format.
  *
  * Within the same league_type, closeness is scored by structural impact:
- * superflex (the biggest value driver) > scoring > TE premium, then the lowest
- * display_order breaks ties. Returns null only when no supported format shares
- * the league_type (which should not happen while both types have formats).
+ * superflex (the biggest value driver) > scoring > TE premium > best ball,
+ * then the lowest display_order breaks ties. Best ball weighs least so it only
+ * decides between boards that tie on everything else (it keeps a managed league
+ * off a best ball board and a best ball league on one). Returns null only when
+ * no supported format shares the league_type (which should not happen while
+ * both types have formats).
  */
 export function pickClosestSupportedFormat(
   derived: DerivedFormat,
@@ -178,7 +256,8 @@ export function pickClosestSupportedFormat(
   const scoreOf = (c: FormatCandidate) =>
     (c.is_superflex === derived.is_superflex ? 8 : 0) +
     (c.scoring_type === derived.scoring_type ? 4 : 0) +
-    (c.is_tep === derived.is_tep ? 2 : 0);
+    (c.is_tep === derived.is_tep ? 2 : 0) +
+    (candidateIsBestBall(c) === Boolean(derived.is_best_ball) ? 1 : 0);
 
   return [...sameLeague].sort((a, b) => {
     const diff = scoreOf(b) - scoreOf(a);

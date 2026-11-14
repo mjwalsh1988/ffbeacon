@@ -66,8 +66,18 @@ export type WarView = {
   fromWeek: number | null;
   throughWeek: number | null;
   status: PositionalWarStatus | null;
-  /** generated_at older than the TTL AND the last attempt did not succeed. */
+  /**
+   * generated_at older than the TTL AND the last attempt did not succeed.
+   * Never true once the window has closed: a finished regular season is not
+   * stale, it is final.
+   */
   isStale: boolean;
+  /**
+   * True once no regular season weeks remain (status "settled"). The stored
+   * curve is kept and shown as the last result, with its weeks, rather than
+   * cleared.
+   */
+  windowClosed: boolean;
   shallowPositions: PulsePosition[];
 };
 
@@ -197,6 +207,11 @@ export const loadPositionalWarView = cache(async function loadPositionalWarView(
       .maybeSingle(),
   ]);
 
+  // A failed read is a failure, never "no curve yet": an empty answer here
+  // would show the empty state over a curve that exists.
+  if (cacheRes.error) throw new Error(`positional WAR view read failed: ${cacheRes.error.message}`);
+  if (leagueRes.error) throw new Error(`positional WAR status read failed: ${leagueRes.error.message}`);
+
   const rows = (cacheRes.data ?? []) as unknown as WarCacheReadRow[];
   if (rows.length === 0) return null;
 
@@ -212,7 +227,9 @@ export const loadPositionalWarView = cache(async function loadPositionalWarView(
   const status = isRecognizedStatus(rawStatus) ? rawStatus : null;
 
   const staleAge = generatedAt ? Date.now() - new Date(generatedAt).getTime() : null;
-  const isStale = staleAge !== null && staleAge > POSITIONAL_WAR_TTL_MS && status !== "ok";
+  const windowClosed = status === "settled";
+  const isStale =
+    staleAge !== null && staleAge > POSITIONAL_WAR_TTL_MS && status !== "ok" && !windowClosed;
 
   return {
     curves,
@@ -222,6 +239,7 @@ export const loadPositionalWarView = cache(async function loadPositionalWarView(
     throughWeek: first.through_week ?? null,
     status,
     isStale,
+    windowClosed,
     shallowPositions: curves.filter((c) => c.shallowPool).map((c) => c.position),
   };
 });
@@ -315,20 +333,39 @@ export const loadCurveTradeValues = cache(async function loadCurveTradeValues(
   const out = new Map<string, number>();
   if (playerIds.length === 0 || !formatConfigId || !sourceSlug) return out;
 
-  const { data, error } = await supabase
-    .from("player_value_trends")
-    .select("player_id, current_value")
-    .eq("format_config_id", formatConfigId)
-    .eq("source", sourceSlug)
-    .in("player_id", playerIds);
-  if (error || !data) return out;
+  // Chunked: nine positions with defenders can pass the id count a single
+  // .in() filter carries in a URL, and one row per id keeps each chunk far
+  // under PostgREST's 1000-row cap.
+  const unique = [...new Set(playerIds)];
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += TRADE_VALUE_CHUNK) {
+    chunks.push(unique.slice(i, i + TRADE_VALUE_CHUNK));
+  }
+  const results = await Promise.all(
+    chunks.map((ids) =>
+      supabase
+        .from("player_value_trends")
+        .select("player_id, current_value")
+        .eq("format_config_id", formatConfigId)
+        .eq("source", sourceSlug)
+        .in("player_id", ids),
+    ),
+  );
 
-  for (const row of data) {
-    const value = numOrNull(row.current_value);
-    if (row.player_id && value !== null) out.set(row.player_id, value);
+  for (const { data, error } of results) {
+    // A failed read is not "no value": every player in the chunk would print
+    // as unpriced. Throw instead.
+    if (error) throw new Error(`positional WAR trade values read failed: ${error.message}`);
+    for (const row of data ?? []) {
+      const value = numOrNull(row.current_value);
+      if (row.player_id && value !== null) out.set(row.player_id, value);
+    }
   }
   return out;
 });
+
+/** Ids per trade value read. See loadCurveTradeValues. */
+const TRADE_VALUE_CHUNK = 100;
 
 function asStringArray(value: Json | null | undefined): string[] {
   if (!Array.isArray(value)) return [];

@@ -29,6 +29,13 @@ import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { Panel } from "@/components/dashboard-panel";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
+import {
+  joinNames,
+  namesWithStatus,
+  pctOdds,
+  playedRecordText,
+  projectedRecordText,
+} from "./odds-format";
 
 /** How many arguments each side of the case is allowed. */
 const MAX_REASONS_FOR = 5;
@@ -45,12 +52,9 @@ function ordinal(n: number): string {
   return `${n}th`;
 }
 
+/** A chance in words. Below one percent it says so, and a missing one is "No odds yet". */
 function pct(value: number | null): string {
-  if (value === null) return "--";
-  const asPct = value * 100;
-  // Below one percent, "0%" reads as impossible when it is not.
-  if (asPct > 0 && asPct < 1) return "under 1%";
-  return `${Math.round(asPct)}%`;
+  return pctOdds(value);
 }
 
 /** One line of the case: a short claim, then the figure behind it. */
@@ -127,10 +131,17 @@ function buildCaseFor(
         }.`,
       });
     }
-  } else if (team.projectedWins !== null) {
+  } else if (team.playoff?.phase === "playoffs" && team.playoff.seed !== null) {
+    reasons.push({
+      claim: "It is in the bracket",
+      evidence: `Seed ${team.playoff.seed} with a ${pct(team.titleOdds)} chance of winning the bracket from here.`,
+    });
+  } else if (team.projectedRecord !== null) {
     reasons.push({
       claim: "It is favored in most games it has left",
-      evidence: `Projects to finish ${team.projectedWins.toFixed(1)}-${(team.projectedLosses ?? 0).toFixed(1)} and reaches the bracket in ${pct(team.playoffOdds)} of seasons${
+      evidence: `Projects to finish ${projectedRecordText(team.projectedRecord)}${
+        team.playoffOdds !== null ? ` and reaches the bracket in ${pct(team.playoffOdds)} of seasons` : ""
+      }${
         team.byeOdds !== null && team.byeOdds > 0.05 ? `, with a bye in ${pct(team.byeOdds)}` : ""
       }.`,
     });
@@ -287,6 +298,15 @@ export function ProjectedChampion({
   simulationRuns: number;
 }) {
   const chopped = teams.some((t) => t.chopped);
+  const phase = chopped ? null : (teams.find((t) => t.playoff)?.playoff?.phase ?? null);
+
+  // The title game is played: there is nothing left to project, so the panel
+  // names the champion and the final order instead.
+  if (phase === "complete") {
+    const champion = teams.find((t) => t.playoff?.status === "champion");
+    if (champion) return <FinalResult champion={champion} teams={teams} />;
+  }
+
   const title = chopped ? "Last one standing" : "Projected champion";
   const ranked = [...teams]
     .filter((t) => winOdds(t) !== null)
@@ -325,9 +345,13 @@ export function ProjectedChampion({
     ? favorite.expectedWeeksAlive !== null
       ? `${favorite.expectedWeeksAlive.toFixed(1)} more weeks on average`
       : null
-    : favorite.projectedWins !== null
-      ? `${favorite.projectedWins.toFixed(1)}-${(favorite.projectedLosses ?? 0).toFixed(1)} projected record`
-      : null;
+    : phase === "playoffs"
+      ? favorite.playoff?.seed != null
+        ? `Seed ${favorite.playoff.seed}, ${playedRecordText(favorite.record)} in the regular season`
+        : null
+      : favorite.projectedRecord !== null
+        ? `${projectedRecordText(favorite.projectedRecord)} projected record`
+        : null;
 
   return (
     <Panel
@@ -336,7 +360,9 @@ export function ProjectedChampion({
       helper={
         chopped
           ? `${simulationRuns.toLocaleString("en-US")} simulated seasons of chops, one team out a week, on the teams still in.`
-          : `${simulationRuns.toLocaleString("en-US")} simulated seasons on your real schedule and bracket.`
+          : phase === "playoffs"
+            ? "The bracket is being played, so these odds count only the teams still alive."
+            : `${simulationRuns.toLocaleString("en-US")} simulated seasons on your real schedule and bracket.`
       }
       glow
     >
@@ -359,10 +385,6 @@ export function ProjectedChampion({
           }}
         />
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          {/* Decorative. "Projected champion" above already says what this is. */}
-          <span aria-hidden="true" className="text-4xl leading-none sm:text-5xl">
-            🏆
-          </span>
           <SleeperAvatar
             avatarId={favorite.ownerAvatarId}
             initial={favorite.teamName.charAt(0)}
@@ -382,25 +404,14 @@ export function ProjectedChampion({
               <p className="mt-0.5 truncate text-xs text-ink-muted">{record}</p>
             )}
           </div>
+          {/* The hero figure is one real text node. Its label sits above it, so
+              a screen reader hears "To win it all, 24%" in the order it reads. */}
           <p className="shrink-0">
-            <span
-              className="block font-mono text-4xl font-extrabold leading-none tabular-nums text-brand-cyan sm:text-5xl"
-              aria-hidden="true"
-            >
-              {oddsLabel}
-            </span>
-            <span className="sr-only">
-              {teamLabel(favorite.teamName, favorite.ownerHandle)}{" "}
-              {chopped
-                ? "is the last team standing"
-                : "wins the championship"}{" "}
-              in {oddsLabel} of simulated seasons.
-            </span>
-            <span
-              aria-hidden="true"
-              className="mt-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted"
-            >
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-cyan">
               {chopped ? "To outlast them all" : "To win it all"}
+            </span>
+            <span className="mt-1 block font-mono text-4xl font-black leading-none tabular-nums text-brand-cyan sm:text-5xl">
+              {oddsLabel}
             </span>
           </p>
         </div>
@@ -474,6 +485,97 @@ export function ProjectedChampion({
           </div>
         )}
       </div>
+
+      {phase === "playoffs" && (
+        <p className="mt-4 text-sm leading-relaxed text-ink-muted">
+          {[
+            namesWithStatus(teams, "eliminated").length > 0
+              ? `Out of the bracket: ${joinNames(namesWithStatus(teams, "eliminated"))}.`
+              : null,
+            namesWithStatus(teams, "missed").length > 0
+              ? `Missed the playoffs: ${joinNames(namesWithStatus(teams, "missed"))}.`
+              : null,
+          ]
+            .filter((s): s is string => s !== null)
+            .join(" ")}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * The panel after the title game: the champion, and every team in final order.
+ * Nothing here is a projection, so it carries no simulated-season language.
+ */
+function FinalResult({ champion, teams }: { champion: PulseTeam; teams: PulseTeam[] }) {
+  const order = [...teams].sort(
+    (a, b) =>
+      (a.playoff?.finalPlace ?? Number.MAX_SAFE_INTEGER) -
+        (b.playoff?.finalPlace ?? Number.MAX_SAFE_INTEGER) ||
+      a.sleeperRosterId - b.sleeperRosterId,
+  );
+  return (
+    <Panel
+      eyebrow="Final result"
+      title="Champion"
+      helper="The title game is played, so this is the final order."
+      glow
+    >
+      <div className="flex flex-wrap items-center gap-3 rounded-card border border-brand-cyan/60 p-4 sm:gap-4 sm:p-5">
+        <SleeperAvatar
+          avatarId={champion.ownerAvatarId}
+          initial={champion.teamName.charAt(0)}
+          title={champion.teamName}
+          size={52}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
+            {champion.teamName}
+          </p>
+          {ownerLine(champion.teamName, champion.ownerHandle) && (
+            <p className="truncate text-sm font-semibold text-brand-cyan">
+              {ownerLine(champion.teamName, champion.ownerHandle)}
+            </p>
+          )}
+        </div>
+        <p className="shrink-0">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-cyan">
+            Regular season record
+          </span>
+          <span className="mt-1 block font-mono text-4xl font-black leading-none tabular-nums text-brand-cyan sm:text-5xl">
+            {playedRecordText(champion.record)}
+          </span>
+        </p>
+      </div>
+
+      <h3 className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
+        Final order
+      </h3>
+      <ol className="mt-2 divide-y divide-line">
+        {order.map((team) => (
+          <li key={team.rosterRowId} className="flex items-center gap-3 py-2">
+            <span className="w-12 shrink-0 font-mono text-base font-extrabold tabular-nums text-ink sm:text-lg">
+              {team.playoff?.finalPlace != null
+                ? ordinal(team.playoff.finalPlace)
+                : "No place"}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-ink">
+                {team.teamName}
+              </span>
+              {ownerLine(team.teamName, team.ownerHandle) && (
+                <span className="block truncate text-[11px] text-ink-subtle">
+                  {ownerLine(team.teamName, team.ownerHandle)}
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums text-ink-subtle">
+              {playedRecordText(team.record)}
+            </span>
+          </li>
+        ))}
+      </ol>
     </Panel>
   );
 }

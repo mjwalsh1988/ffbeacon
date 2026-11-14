@@ -3,11 +3,37 @@ import type { Database, Json } from "@/lib/database.types";
 import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 import { loadLatestPickSnapshot } from "@/lib/draft-pick-snapshot";
 import { mapWithConcurrency } from "@/lib/supabase/fetch-all";
+import { categorizeLeague } from "@/lib/league-category";
+import {
+  buildPickPositionResolver,
+  isPickSeasonSpent,
+  NO_PICK_POSITIONS,
+  positionFromDraftSlot,
+  type PickPositionResolver,
+} from "@/lib/league-pick-position";
+import type { PickPosition } from "@/lib/signal-check/types";
+import type { SleeperLeague } from "@/lib/sleeper";
 
 type ServiceClient = SupabaseClient<Database>;
 
 /** Combos whose pick snapshot is read at once. */
 const PICK_SNAPSHOT_CONCURRENCY = 6;
+
+/**
+ * The version of the ranking math, stamped into every row at
+ * positional_breakdowns.PICKS.model_version. lib/league-pulse.ts treats a row
+ * carrying any other version as stale and rebuilds it on the next view, so a
+ * change to how rosters or picks are priced reaches every stored ranking
+ * without a backfill. Bump it whenever the math changes.
+ *
+ * 2: spent seasons dropped, picks priced by slot or projected finish (else the
+ * round's blend, never a blanket mid), FantasyCalc and DynastyProcess picks
+ * priced from the pick source, no pick value in redraft, keeper or chopped
+ * leagues, stable rank tiebreak.
+ */
+export const POWER_RANKINGS_MODEL_VERSION = "2";
+
+const EMPTY_PICK_LOOKUP: PickValueLookup = { values: new Map<string, number>() };
 
 export type PowerRankingsResult =
   | { ok: true; combosWritten: number; rostersConsidered: number }
@@ -39,14 +65,17 @@ type PlayerLite = {
 
 type ValueMap = Map<string, number>; // player_id -> current_value
 
-type PickValueLookup = {
+export type PickValueLookup = {
   // key: `${season}|${round}|${pick_position}`
   values: Map<string, number>;
 };
 
-type Combo = {
+export type Combo = {
   format_config_id: string;
   source: string;
+  /** The source whose draft_pick_values price this combo's picks; null when no
+   * active source publishes pick values. */
+  pickSource: string | null;
 };
 
 /**
@@ -70,7 +99,7 @@ export async function calculateLeaguePowerRankings(
 ): Promise<PowerRankingsResult> {
   const { data: league, error: leagueErr } = await supabase
     .from("leagues")
-    .select("id, roster_positions, format_config_id")
+    .select("id, roster_positions, format_config_id, season, status, total_rosters, metadata")
     .eq("id", leagueRowId)
     .maybeSingle();
   if (leagueErr) return { ok: false, error: leagueErr.message };
@@ -79,7 +108,8 @@ export async function calculateLeaguePowerRankings(
   const { data: rosters, error: rosterErr } = await supabase
     .from("rosters")
     .select("id, sleeper_roster_id, player_ids, starter_ids, draft_pick_assets")
-    .eq("league_id", leagueRowId);
+    .eq("league_id", leagueRowId)
+    .order("sleeper_roster_id", { ascending: true });
   if (rosterErr) return { ok: false, error: rosterErr.message };
   if (!rosters || rosters.length === 0) {
     return { ok: true, combosWritten: 0, rostersConsidered: 0 };
@@ -96,20 +126,52 @@ export async function calculateLeaguePowerRankings(
   // Active combos: every (active source, active format) pair where the
   // source supports the format. Picks are valued from draft_pick_values,
   // player values from player_value_trends.
-  const combos = await loadActiveCombos(supabase);
+  let combos: Combo[];
+  try {
+    combos = await loadActiveCombos(supabase);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 
   const startingSlots = parseStartingSlots(asStringArray(league.roster_positions));
 
+  // Only a league that keeps players year to year trades in draft capital worth
+  // pricing. Redraft, keeper and chopped rooms carry no pick value at all.
+  const carriesPicks = leagueCarriesPickValue(league.metadata);
+  const leagueGate = { season: league.season, status: league.status };
+  const teamCount =
+    typeof league.total_rosters === "number" && league.total_rosters > 0
+      ? league.total_rosters
+      : rosters.length;
+  const anyPicks =
+    carriesPicks &&
+    rosters.some((r) =>
+      asUnknownArray(r.draft_pick_assets).some((p) => !isPickSeasonSpent(pickSeasonOf(p), leagueGate)),
+    );
+
   // Values and pick prices for every combo, in two passes instead of two per
   // combo. Values are scoped to the players actually on these rosters, which is
-  // both smaller and the only part any of this reads.
-  const [valuesByCombo, picksByCombo] = await Promise.all([
-    loadPlayerValueMaps(
-      supabase,
-      Array.from(new Set([...players.values()].map((p) => p.player_id))),
-    ),
-    loadPickLookups(supabase, combos),
-  ]);
+  // both smaller and the only part any of this reads. The pick ordering (real
+  // slots, else projected standings) is read once and only when there are
+  // picks to place; it throws on a failed read so a roster is never cached
+  // priced on the blend because of a hiccup.
+  let valuesByCombo: Map<string, ValueMap>;
+  let picksByCombo: Map<string, PickValueLookup>;
+  let positions: PickPositionResolver;
+  try {
+    [valuesByCombo, picksByCombo, positions] = await Promise.all([
+      loadPlayerValueMaps(
+        supabase,
+        Array.from(new Set([...players.values()].map((p) => p.player_id))),
+      ),
+      anyPicks ? loadPickLookups(supabase, combos) : Promise.resolve(new Map<string, PickValueLookup>()),
+      anyPicks
+        ? buildPickPositionResolver(supabase, leagueRowId, { throwOnError: true })
+        : Promise.resolve(NO_PICK_POSITIONS),
+    ]);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 
   const upsertRows: Database["public"]["Tables"]["league_power_rankings_cache"]["Insert"][] = [];
   const generatedAt = new Date().toISOString();
@@ -122,10 +184,13 @@ export async function calculateLeaguePowerRankings(
     const valueMap = valuesByCombo.get(key);
     if (!valueMap || valueMap.size === 0) continue;
 
-    const pickLookup = picksByCombo.get(key) ?? { values: new Map<string, number>() };
+    const pickLookup =
+      (combo.pickSource ? picksByCombo.get(pickKey(combo.format_config_id, combo.pickSource)) : null) ??
+      EMPTY_PICK_LOOKUP;
 
     type RosterCalc = {
       rosterRowId: string;
+      sleeperRosterId: number;
       starter_value: number;
       bench_value: number;
       picks_value: number;
@@ -149,13 +214,21 @@ export async function calculateLeaguePowerRankings(
         startingSlots,
       );
 
-      const picks = asUnknownArray(roster.draft_pick_assets);
-      const picksValue = sumPickValues(picks, pickLookup);
+      const picks = carriesPicks
+        ? asUnknownArray(roster.draft_pick_assets).filter(
+            (p) => !isPickSeasonSpent(pickSeasonOf(p), leagueGate),
+          )
+        : [];
+      const pricedPicks = picks.map((p) =>
+        priceDraftPick(p, pickLookup, { teamCount, positions }),
+      );
+      const picksValue = pricedPicks.reduce((sum, p) => sum + (p.value ?? 0), 0);
 
       const total = starterValue + benchValue + picksValue;
 
       calcs.push({
         rosterRowId: roster.id,
+        sleeperRosterId: roster.sleeper_roster_id,
         starter_value: round2(starterValue),
         bench_value: round2(benchValue),
         picks_value: round2(picksValue),
@@ -164,20 +237,36 @@ export async function calculateLeaguePowerRankings(
           ...breakdowns,
           PICKS: {
             value: round2(picksValue),
-            picks: picks.map((p) => describePick(p)),
+            source: combo.pickSource,
+            model_version: POWER_RANKINGS_MODEL_VERSION,
+            picks: picks.map((p, i) => ({
+              ...describePick(p),
+              priced_position: pricedPicks[i].position,
+              priced_basis: pricedPicks[i].basis,
+              value: pricedPicks[i].value === null ? null : round2(pricedPicks[i].value as number),
+            })),
           },
         } as unknown as Json,
       });
     }
 
-    // Rank by total_value desc, then starter_value desc for tiebreak.
+    // Rank by total_value desc, then starter_value desc, then the Sleeper
+    // roster id, so two identical rosters always rank the same way round.
     const byOverall = [...calcs].sort(
-      (a, b) => b.total_value - a.total_value || b.starter_value - a.starter_value,
+      (a, b) =>
+        b.total_value - a.total_value ||
+        b.starter_value - a.starter_value ||
+        a.sleeperRosterId - b.sleeperRosterId,
     );
     const overallRankByRoster = new Map<string, number>();
     byOverall.forEach((c, i) => overallRankByRoster.set(c.rosterRowId, i + 1));
 
-    const byStarter = [...calcs].sort((a, b) => b.starter_value - a.starter_value);
+    const byStarter = [...calcs].sort(
+      (a, b) =>
+        b.starter_value - a.starter_value ||
+        b.total_value - a.total_value ||
+        a.sleeperRosterId - b.sleeperRosterId,
+    );
     const starterRankByRoster = new Map<string, number>();
     byStarter.forEach((c, i) => starterRankByRoster.set(c.rosterRowId, i + 1));
 
@@ -254,23 +343,54 @@ async function resolvePlayers(
   return map;
 }
 
+/**
+ * Every active (format, source) pair, each carrying the source its pick prices
+ * come from. Throws on a failed read: an empty registry from a failed read would
+ * write nothing and report success.
+ */
 async function loadActiveCombos(supabase: ServiceClient): Promise<Combo[]> {
-  const [{ data: sources }, { data: formats }] = await Promise.all([
+  const [sourcesRes, formatsRes] = await Promise.all([
     supabase
       .from("source_registry")
-      .select("slug, supported_format_slugs")
-      .eq("is_active", true),
+      .select("slug, supported_format_slugs, data_type, priority")
+      .eq("is_active", true)
+      .order("priority", { ascending: true })
+      .order("slug", { ascending: true }),
     supabase.from("format_configs").select("id, slug").eq("is_active", true),
   ]);
-  if (!sources || !formats) return [];
+  if (sourcesRes.error) throw new Error(`source_registry read failed: ${sourcesRes.error.message}`);
+  if (formatsRes.error) throw new Error(`format_configs read failed: ${formatsRes.error.message}`);
+  return buildCombos(sourcesRes.data ?? [], formatsRes.data ?? []);
+}
+
+/**
+ * Pure half of loadActiveCombos, exported for its test.
+ *
+ * Pick prices follow the league view's own rule (lib/league-format-resolution.ts
+ * pickSourceForDraftPicks): a source that publishes pick values prices its own
+ * picks; one that does not (FantasyCalc, DynastyProcess) borrows the
+ * highest-priority source that does. Before this every FantasyCalc and
+ * DynastyProcess row carried a pick value of zero, because their own pick
+ * snapshot does not exist.
+ *
+ * `sources` must arrive in priority order.
+ */
+export function buildCombos(
+  sources: Array<{ slug: string; supported_format_slugs: string[] | null; data_type: string[] | null }>,
+  formats: Array<{ id: string; slug: string }>,
+): Combo[] {
+  const publishesPicks = (s: { data_type: string[] | null }) =>
+    (s.data_type ?? []).includes("draft_pick_values");
+  const fallbackPickSource = sources.find(publishesPicks)?.slug ?? null;
 
   const combos: Combo[] = [];
   for (const source of sources) {
     const supported = source.supported_format_slugs;
+    const pickSource = publishesPicks(source) ? source.slug : fallbackPickSource;
     for (const format of formats) {
       const supports = supported === null || supported.includes(format.slug);
       if (!supports) continue;
-      combos.push({ format_config_id: format.id, source: source.slug });
+      combos.push({ format_config_id: format.id, source: source.slug, pickSource });
     }
   }
   return combos;
@@ -278,6 +398,10 @@ async function loadActiveCombos(supabase: ServiceClient): Promise<Combo[]> {
 
 function comboKey(combo: Combo): string {
   return `${combo.format_config_id}|${combo.source}`;
+}
+
+function pickKey(formatConfigId: string, pickSource: string): string {
+  return `${formatConfigId}|${pickSource}`;
 }
 
 /**
@@ -368,22 +492,30 @@ async function loadPickLookups(
   const out = new Map<string, PickValueLookup>();
   if (combos.length === 0) return out;
 
-  // One entry per distinct (format, source); the combo list can repeat neither,
-  // but deduplicating keeps the read count honest if it ever does.
-  const unique = Array.from(new Map(combos.map((c) => [`${c.format_config_id}|${c.source}`, c])).values());
+  // One read per distinct (format, pick source). Several player-value sources
+  // share one pick source, so this is fewer reads than combos.
+  const unique = new Map<string, { format_config_id: string; pickSource: string }>();
+  for (const c of combos) {
+    if (!c.pickSource) continue;
+    unique.set(pickKey(c.format_config_id, c.pickSource), {
+      format_config_id: c.format_config_id,
+      pickSource: c.pickSource,
+    });
+  }
+  const targets = Array.from(unique.values());
 
-  const snapshots = await mapWithConcurrency(unique, PICK_SNAPSHOT_CONCURRENCY, (combo) =>
-    loadLatestPickSnapshot(supabase, combo.format_config_id, combo.source),
+  const snapshots = await mapWithConcurrency(targets, PICK_SNAPSHOT_CONCURRENCY, (t) =>
+    loadLatestPickSnapshot(supabase, t.format_config_id, t.pickSource),
   );
 
-  unique.forEach((combo, i) => {
+  targets.forEach((t, i) => {
     const rows = snapshots[i].rows;
     if (rows.length === 0) return;
     const lookup: PickValueLookup = { values: new Map<string, number>() };
     for (const row of rows) {
       lookup.values.set(`${row.season}|${row.round}|${row.pick_position}`, row.value);
     }
-    out.set(`${combo.format_config_id}|${combo.source}`, lookup);
+    out.set(pickKey(t.format_config_id, t.pickSource), lookup);
   });
   return out;
 }
@@ -476,24 +608,111 @@ function assignStarters(
   return { starterValue, benchValue, breakdowns };
 }
 
-function sumPickValues(picks: unknown[], lookup: PickValueLookup): number {
-  let total = 0;
-  for (const pick of picks) {
-    if (!pick || typeof pick !== "object") continue;
-    const p = pick as Record<string, unknown>;
-    const season = typeof p.season === "number" ? p.season : null;
-    const round = typeof p.round === "number" ? p.round : null;
-    if (season === null || round === null) continue;
-    // The Phase 1 sync writes pick_position later via the calc; pick assets
-    // don't yet carry a slot. Default to "mid" which is the most common
-    // bucket KTC publishes. Phase 3 may refine this using original-owner
-    // standings.
-    const pickPos = typeof p.pick_position === "string" ? (p.pick_position as string) : "mid";
-    const key = `${season}|${round}|${pickPos}`;
-    const value = lookup.values.get(key);
-    if (typeof value === "number") total += value;
+/**
+ * True when the league's kind trades in draft capital worth pricing: dynasty and
+ * best ball dynasty. Redraft, keeper and chopped (guillotine) rooms get no pick
+ * value, so a stray pick row Sleeper keeps on one of their rosters never moves a
+ * ranking. The kind comes from lib/league-category.ts off the stored Sleeper
+ * league object, the same classification every league list uses.
+ */
+export function leagueCarriesPickValue(metadata: Json | null | undefined): boolean {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const kind = categorizeLeague(metadata as unknown as SleeperLeague);
+  return kind === "dynasty" || kind === "best-ball-dynasty";
+}
+
+function pickSeasonOf(pick: unknown): number | string | null {
+  if (!pick || typeof pick !== "object") return null;
+  const season = (pick as Record<string, unknown>).season;
+  return typeof season === "number" || typeof season === "string" ? season : null;
+}
+
+function toInteger(value: unknown): number | null {
+  if (typeof value === "number") return Number.isInteger(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isInteger(n) ? n : null;
   }
-  return total;
+  return null;
+}
+
+const PICK_POSITIONS: readonly PickPosition[] = ["early", "mid", "late"];
+
+export type PricedPick = {
+  /** Null when no price exists for this season and round at all. */
+  value: number | null;
+  /** The bucket the price came from; null when it is the round's blend. */
+  position: PickPosition | null;
+  /**
+   * slot: the pick's real draft slot. projected: the original team's projected
+   * finish (lib/league-pick-position.ts). blend: neither was known, so the
+   * average of the round's early, mid and late prices.
+   */
+  basis: "slot" | "projected" | "blend" | null;
+};
+
+/**
+ * Price one pick against a snapshot of pick values.
+ *
+ * Best evidence first:
+ *   1. The real slot the pick carries (the sync writes it once the draft order
+ *      is published), bucketed early, mid or late by lib/league-pick-position.ts.
+ *   2. An early, mid or late bucket already on the row.
+ *   3. The resolver: the season's published draft order, else the original
+ *      team's projected finish.
+ *   4. Otherwise the average of the round's published buckets. Never a blanket
+ *      "mid": that silently priced every unknown pick as a middle pick.
+ *
+ * A pick whose bucket is missing from the snapshot also falls to the blend, so a
+ * source that publishes only some buckets still prices the pick.
+ */
+export function priceDraftPick(
+  pick: unknown,
+  lookup: PickValueLookup,
+  ctx: { teamCount: number; positions: PickPositionResolver },
+): PricedPick {
+  const none: PricedPick = { value: null, position: null, basis: null };
+  if (!pick || typeof pick !== "object") return none;
+  const p = pick as Record<string, unknown>;
+  const season = toInteger(p.season);
+  const round = toInteger(p.round);
+  if (season === null || round === null) return none;
+
+  let position: PickPosition | null = null;
+  let basis: PricedPick["basis"] = null;
+
+  const slot = toInteger(p.slot);
+  if (slot !== null) {
+    position = positionFromDraftSlot(slot, ctx.teamCount);
+    if (position) basis = "slot";
+  }
+  if (!position && typeof p.pick_position === "string") {
+    const stored = p.pick_position as PickPosition;
+    if (PICK_POSITIONS.includes(stored)) {
+      position = stored;
+      basis = "slot";
+    }
+  }
+  if (!position) {
+    const original = toInteger(p.original_roster_id);
+    const resolved = original !== null ? ctx.positions.resolve(original, season) : null;
+    if (resolved) {
+      position = resolved.position;
+      basis = resolved.estimated ? "projected" : "slot";
+    }
+  }
+
+  if (position) {
+    const value = lookup.values.get(`${season}|${round}|${position}`);
+    if (typeof value === "number") return { value, position, basis };
+  }
+
+  const bucketValues = PICK_POSITIONS.map((pos) => lookup.values.get(`${season}|${round}|${pos}`)).filter(
+    (v): v is number => typeof v === "number",
+  );
+  if (bucketValues.length === 0) return none;
+  const blend = bucketValues.reduce((a, b) => a + b, 0) / bucketValues.length;
+  return { value: blend, position: null, basis: "blend" };
 }
 
 function describePick(pick: unknown): Record<string, unknown> {

@@ -41,7 +41,8 @@ import {
 import { lineupTotal } from "./profile";
 import type { TeamProfile } from "./profile";
 import { assetValue, type AssetRef } from "./packages";
-import { winsDeltaFor } from "./pulse";
+import { survivalDeltaFor, winsDeltaFor } from "./pulse";
+import { marginToLargerShare, valueMarginPct } from "./value-margin";
 import type {
   AcceptanceBand,
   FinderPlayer,
@@ -102,7 +103,7 @@ const MEANINGFULLY_YOUNGER = 0.4;
 
 /** The roster this team would hold after the deal. */
 function rosterAfter(
-  profile: TeamProfile,
+  profile: Pick<TeamProfile, "team">,
   incoming: AssetRef[],
   outgoing: AssetRef[],
 ): FinderPlayer[] {
@@ -144,39 +145,79 @@ export function measureImpact(
   slots: string[],
   incoming: AssetRef[],
   outgoing: AssetRef[],
+  opts: {
+    /**
+     * Both sides' value from THIS team's seat, after the consolidation
+     * adjustment (lib/trade-finder/value-margin.ts consolidatedTotals). Absent,
+     * the raw sums are used, which is what a one-for-one comes to anyway.
+     */
+    valueTotals?: { valueIn: number; valueOut: number };
+  } = {},
 ): SideImpact {
+  const lineup = lineupChange(profile, slots, incoming, outgoing);
   const after = rosterAfter(profile, incoming, outgoing);
-  const afterTotal = lineupTotal(slots, after);
   const beforeAge = profile.meanAge;
   const afterAge = weightedMeanAge(after);
+  const lineupDelta = lineup.delta;
 
-  const lineupDelta =
-    profile.startingTotal === null || afterTotal === null
-      ? null
-      : afterTotal - profile.startingTotal;
+  const valueIn = opts.valueTotals?.valueIn ?? incoming.reduce((s, a) => s + assetValue(a), 0);
+  const valueOut = opts.valueTotals?.valueOut ?? outgoing.reduce((s, a) => s + assetValue(a), 0);
 
   return {
-    valueDelta:
-      incoming.reduce((s, a) => s + assetValue(a), 0) -
-      outgoing.reduce((s, a) => s + assetValue(a), 0),
+    valueDelta: valueIn - valueOut,
     lineupDelta,
     // Points per week turned into games, against THIS team's own remaining
     // schedule. Two points a week is worth a different number of wins to a team
     // with ten coin-flips left than to one with three games it has already all
     // but won, and that difference is the whole reason the reader is asking.
     winsDelta: winsDeltaFor(lineupDelta, profile.team.pulse),
+    // Chopped leagues: the same points priced against this week's cut line.
+    survivalDelta: survivalDeltaFor(lineupDelta, profile.team.pulse),
     ageDelta: beforeAge === null || afterAge === null ? null : afterAge - beforeAge,
     pickCountDelta: countPicks(incoming) - countPicks(outgoing),
   };
 }
 
-/** The gap between the sides, as a share of the larger one. 0 is a dead heat. */
+/**
+ * The lineup before and after a deal, in points per week.
+ *
+ * THE ONE LINEUP METHOD for a trade, shared by the suggestion card and the full
+ * evaluation under it (lib/trade-impact/evaluate.ts): the optimal fill over
+ * each player's average projection across the same short window, with the same
+ * injury discount, from lib/trade-finder-data.ts. Two methods used to put two
+ * different lineup figures for one deal on one screen.
+ *
+ * Null when the roster has no projections at all, which is "we cannot say",
+ * never zero.
+ */
+export function lineupChange(
+  profile: Pick<TeamProfile, "team" | "startingTotal">,
+  slots: string[],
+  incoming: AssetRef[],
+  outgoing: AssetRef[],
+): { before: number | null; after: number | null; delta: number | null } {
+  const after = lineupTotal(slots, rosterAfter(profile, incoming, outgoing));
+  const before = profile.startingTotal;
+  return {
+    before,
+    after,
+    delta: before === null || after === null ? null : after - before,
+  };
+}
+
+/**
+ * The gap between the sides, as a share of the larger one. 0 is a dead heat.
+ *
+ * Kept on the larger-side measure because every acceptance threshold in this
+ * file was tuned on it, but worked out through the shared value percent
+ * (lib/trade-finder/value-margin.ts) so there is one definition of the gap and
+ * this is only a conversion of it. What a reader sees is the shared percent.
+ */
 export function valueGapOf(incoming: AssetRef[], outgoing: AssetRef[]): number {
   const inValue = incoming.reduce((s, a) => s + assetValue(a), 0);
   const outValue = outgoing.reduce((s, a) => s + assetValue(a), 0);
-  const larger = Math.max(inValue, outValue);
-  if (larger <= 0) return 1;
-  return Math.abs(inValue - outValue) / larger;
+  if (Math.max(inValue, outValue) <= 0) return 1;
+  return marginToLargerShare(valueMarginPct(inValue, outValue));
 }
 
 /**
@@ -617,12 +658,10 @@ const HORIZON_WEIGHTS: Record<
  * ranking wearing a contender label; the strategy toggle already carries that
  * intent and the horizon has to agree with it rather than argue.
  *
- * "value" reads as "even" rather than as the rebuilder row. Pressing Value is
- * a contender or a bubble team asking to rank on trade value too, not a
- * declaration that this season does not matter; STRATEGY_WEIGHTS.value already
- * keeps a small, deliberate, positive lineup and wins term for exactly that
- * reason (see its own comment above), and the hard rule below only ever
- * applies to a team we have inferred, not asked, is rebuilding.
+ * "value" is the Rebuild mode and reads as the rebuilder row (owner decision,
+ * 2026-11-13): Rebuild ranks on value, youth and picks, and a projection does
+ * not get a vote. It used to read as "even", which let a rest-of-season
+ * projection reorder a shortlist the reader had asked to see ranked on value.
  *
  * `!isDynasty` is a defensive fallback rather than the normal path: every real
  * caller resolves strategy to "contender" for a redraft league before this
@@ -635,7 +674,7 @@ function horizonBucket(
   strategy?: TradeStrategy | null,
 ): "dominant" | "even" | "rebuilder" {
   if (strategy === "contender") return "dominant";
-  if (strategy === "value") return "even";
+  if (strategy === "value") return "rebuilder";
   if (!myProfile.isDynasty) return "dominant";
   if (myProfile.direction === "win-now") return "dominant";
   if (myProfile.direction === "rebuild") return "rebuilder";
@@ -678,6 +717,16 @@ export function clearsContenderFloor(mine: SideImpact): boolean {
   if (mine.lineupDelta === null) return true;
   if (!(mine.lineupDelta > MIN_LINEUP_GAIN)) return false;
   if (mine.winsDelta !== null && mine.winsDelta <= 0) return false;
+  // Chopped: never a deal that leaves the reader more likely to be cut this
+  // week. Zero passes, because a team nowhere near the cut line gains no
+  // survival this week from any trade and its lineup gain is still real.
+  if (
+    mine.survivalDelta !== undefined &&
+    mine.survivalDelta !== null &&
+    mine.survivalDelta < 0
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -696,6 +745,17 @@ export function clearsContenderFloor(mine: SideImpact): boolean {
  * only one of the two that can tell a week 3 upgrade from a week 16 one.
  */
 const WINS_SCALE = 10;
+
+/**
+ * What one point of survival probability this week is worth on the same scale.
+ *
+ * Chopped leagues have no opponent, so the wins term is null there and this
+ * stands in for it at the same weight. Two points a week for a team near the
+ * cut line moves its survival odds by a few percentage points; scaled by a
+ * hundred that lands on the same footing as a fifth of a win in a head to head
+ * league.
+ */
+const SURVIVAL_SCALE = 100;
 
 /**
  * How good this deal is for the reader, weighted by their stated goal, scaled by
@@ -733,7 +793,8 @@ export function scoreSuggestion(params: {
   // with no Power Pulse row contributes nothing to this term instead of being
   // scored against a made-up rate, which leaves the ranking exactly where it
   // was before any of this existed.
-  const winsScore = (mine.winsDelta ?? 0) * WINS_SCALE;
+  const winsScore =
+    (mine.winsDelta ?? 0) * WINS_SCALE + (mine.survivalDelta ?? 0) * SURVIVAL_SCALE;
   const valueScore = (mine.valueDelta / rosterValue) * 100;
   const youthScore = mine.ageDelta === null ? 0 : -mine.ageDelta * 2;
   const pickScore = mine.pickCountDelta * 0.6;
@@ -787,6 +848,7 @@ export const SCORE_WEIGHTS = {
   STRATEGY_WEIGHTS,
   HORIZON_WEIGHTS,
   WINS_SCALE,
+  SURVIVAL_SCALE,
 };
 
 export const RANK_THRESHOLDS = {

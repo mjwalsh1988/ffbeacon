@@ -8,7 +8,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildTierScale, describeTierScale, tierFor, WAR_TIERS, WAR_TIER_LABEL } from "./tiers";
+import {
+  buildTierScale,
+  describeTierScale,
+  STARTER_FLOOR_PERCENTILE,
+  tierFor,
+  WAR_TIERS,
+  WAR_TIER_LABEL,
+} from "./tiers";
 import type { PlottableCurve, WarCurvePoint } from "./types";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 
@@ -85,6 +92,23 @@ describe("buildTierScale", () => {
 
   it("returns null for a league with no curves at all", () => {
     expect(buildTierScale([])).toBeNull();
+  });
+
+  it("sets the Starter floor at a low percentile, so one starter near zero cannot drag it to nothing", () => {
+    const curves = league();
+    // One starting quarterback projected near zero for the window.
+    curves[0].curve[11] = { ...curves[0].curve[11], war: 0.001 };
+    const scale = buildTierScale(curves)!;
+    const starterWars = curves
+      .flatMap((c) => c.curve.filter((p) => p.positionRank <= c.structuralDemand))
+      .map((p) => p.war)
+      .sort((a, b) => a - b);
+    expect(scale.starter).toBeGreaterThan(starterWars[0]);
+    expect(scale.starter).toBe(starterWars[Math.ceil(STARTER_FLOOR_PERCENTILE * starterWars.length) - 1]);
+  });
+
+  it("says Positional WAR is per player and not a team total", () => {
+    expect(describeTierScale(buildTierScale(league()))).toMatch(/per player and does not add up to a team total/);
   });
 });
 

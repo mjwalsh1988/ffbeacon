@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityBand, computeActivity, type ActivityInput } from "./activity";
+import { activityBand, computeActivity, largestRemainderPercents, type ActivityInput } from "./activity";
 import { DEFAULT_LEAGUE_BLUEPRINT_SETTINGS } from "./default-settings";
 import type { PlayerCall } from "./types";
 
@@ -24,7 +24,18 @@ describe("computeActivity", () => {
     const a = computeActivity(base());
     expect(a.score).toBe(28);
     expect(a.band).toBe("Low");
-    expect([a.sellsPct, a.buildsPct, a.holdsPct]).toEqual([50, 25, 25]);
+    // Sell and Cut counted apart.
+    expect([a.sellsPct, a.cutsPct, a.buildsPct, a.holdsPct]).toEqual([25, 25, 25, 25]);
+    expect([a.sellCount, a.cutCount]).toEqual([1, 1]);
+  });
+
+  it("rounds the split to exactly 100 by largest remainder", () => {
+    // Three of a kind: 33.3 each, the leftover point to the first.
+    const a = computeActivity(base({ calls: { a: call("sell"), c: call("build"), d: call("hold") } }));
+    expect([a.sellsPct, a.cutsPct, a.buildsPct, a.holdsPct]).toEqual([34, 0, 33, 33]);
+    expect(largestRemainderPercents([1, 1, 1, 4])).toEqual([15, 14, 14, 57]);
+    expect(largestRemainderPercents([2, 1, 0, 4]).reduce((x, y) => x + y, 0)).toBe(100);
+    expect(largestRemainderPercents([0, 0, 0, 0])).toEqual([0, 0, 0, 0]);
   });
 
   it("caps divergence at half the league", () => {
@@ -40,15 +51,18 @@ describe("computeActivity", () => {
   });
 
   it("names the largest term in the driver sentence", () => {
-    expect(computeActivity(base()).driver).toBe("Driven mostly by 2 players worth selling.");
+    expect(computeActivity(base()).driver).toBe("Driven by 1 player to sell and 1 to cut.");
+    expect(computeActivity(base({ calls: { a: call("sell"), b: call("sell") } })).driver).toBe(
+      "Driven by 2 players to sell.",
+    );
     expect(
       computeActivity(base({ calls: { d: call("hold") }, needPositions: ["RB", "TE"] })).driver,
-    ).toBe("Driven mostly by needs at RB and TE.");
+    ).toBe("Driven by needs at RB and TE.");
     expect(
       computeActivity(
         base({ calls: { d: call("hold") }, needPositions: [], rankDivergence: -6, valueRank: 3, pulseRank: 9 }),
       ).driver,
-    ).toBe("Driven mostly by the gap between value rank 3 and Pulse rank 9.");
+    ).toBe("Driven by the gap between 3rd of 12 in value and 9th of 12 in Power Pulse.");
   });
 
   it("counts buy targets apart from the roster shares", () => {

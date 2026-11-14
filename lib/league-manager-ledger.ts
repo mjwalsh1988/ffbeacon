@@ -36,9 +36,13 @@ import {
 } from "@/lib/manager-ledger/default-settings";
 import { computeLedger, isLedgerSkip } from "@/lib/manager-ledger/engine";
 import {
+  ineligibleDigest,
   ledgerFingerprint,
+  officialPointsTotal,
   type LedgerFingerprintInput,
 } from "@/lib/manager-ledger/fingerprint";
+import { ledgerRulesToken } from "@/lib/manager-ledger/rules";
+import { normalizeIdList } from "@/lib/league-matchups";
 import { planSlots } from "@/lib/manager-ledger/lineup";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { idpEnabledFrom } from "@/lib/power-pulse/default-settings";
@@ -155,13 +159,14 @@ async function loadGateRow(
   supabase: ServiceClient,
   leagueRowId: string,
 ): Promise<LedgerGateRow | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("leagues")
     .select(
       "season, last_pulsed_at, manager_ledger_status, manager_ledger_detail, manager_ledger_attempted_at",
     )
     .eq("id", leagueRowId)
     .maybeSingle();
+  if (error) throw new Error(`ledger gate row read failed: ${error.message}`);
   return (data as LedgerGateRow | null) ?? null;
 }
 
@@ -217,16 +222,18 @@ async function buildFingerprintInput(
     // it on an IDP league's defensive slots become gradable, so its slot list
     // and fingerprint change; every other league's stay byte-identical.
     ledgerIdpEnabled(supabase),
-    // `week` alone, not the jsonb columns: 216 tiny rows rather than 430 kB.
+    // `week` and `points`, not the jsonb columns: a few hundred tiny rows
+    // rather than 430 kB. The points sum catches a stat correction.
     supabase
       .from("league_matchups")
-      .select("week")
+      .select("week, points")
       .eq("league_id", leagueRowId)
       .eq("season", league.season)
       .eq("is_final", true),
+    // The IR and taxi lists, which decide who could have started.
     supabase
       .from("rosters")
-      .select("id", { count: "exact", head: true })
+      .select("sleeper_roster_id, reserve_ids, taxi_ids")
       .eq("league_id", leagueRowId),
     supabase
       .from("league_transactions")
@@ -241,16 +248,37 @@ async function buildFingerprintInput(
       .eq("season", league.season),
   ]);
 
-  const weekNumbers = [...new Set((weeksRes.data ?? []).map((r) => Number(r.week)))];
+  // A failed read is not a zero. A key built from one would never match the
+  // stored row, and the recompute it forces would then read the same failure.
+  for (const [label, res] of [
+    ["settled weeks", weeksRes],
+    ["rosters", rosterRes],
+    ["transactions", txRes],
+    ["draft picks", pickRes],
+  ] as const) {
+    if (res.error) throw new Error(`ledger gate ${label} read failed: ${res.error.message}`);
+  }
+
+  const weekRows = weeksRes.data ?? [];
+  const weekNumbers = [...new Set(weekRows.map((r) => Number(r.week)))];
+  const rosterRows = rosterRes.data ?? [];
 
   return {
     season: league.season,
     gradedWeekCount: weekNumbers.length,
     latestGradedWeek: weekNumbers.length > 0 ? Math.max(...weekNumbers) : 0,
-    rosterCount: rosterRes.count ?? 0,
+    rosterCount: rosterRows.length,
     slots: planSlots(league.rosterPositions, idpEnabled).gradableTokens,
     transactionCount: txRes.count ?? 0,
     draftPickCount: pickRes.count ?? 0,
+    ineligibleDigest: ineligibleDigest(
+      rosterRows.map((r) => ({
+        rosterId: Number(r.sleeper_roster_id),
+        ids: [...normalizeIdList(r.reserve_ids), ...normalizeIdList(r.taxi_ids)],
+      })),
+    ),
+    officialPointsTotal: officialPointsTotal(weekRows.map((r) => Number(r.points ?? 0))),
+    rules: ledgerRulesToken(league.rules),
     modelVersion: MANAGER_LEDGER_MODEL_VERSION,
   };
 }
@@ -325,6 +353,13 @@ async function buildContext(
     rosterCount: rosters.length,
     transactionCount: transactions.length,
     draftPickCount: picks.length,
+    ineligibleDigest: ineligibleDigest(
+      rosters.map((r) => ({
+        rosterId: r.sleeperRosterId,
+        ids: [...r.reserveSleeperIds, ...r.taxiSleeperIds],
+      })),
+    ),
+    officialPointsTotal: officialPointsTotal(weeks.map((w) => w.officialPoints)),
   };
 
   return {
@@ -684,11 +719,15 @@ export async function calculateLeagueManagerLedger(
     draftPicks: ctx.picks,
     players: ctx.players,
     leagueHasFaab: ctx.league.hasFaab,
+    rules: ctx.league.rules,
   });
 
   if (isLedgerSkip(computed)) {
     // A skipped run must not leave last season's rows, or a stale answer
-    // outlives the run that decided there was no answer to give.
+    // outlives the run that decided there was no answer to give. This is only
+    // reached after every read SUCCEEDED and came back empty: each loader
+    // throws on a read error, and a throw lands in runRefresh's catch, which
+    // writes an error verdict and leaves the stored rows alone.
     await clearCache(supabase, leagueRowId, ctx.league.season);
     return {
       ok: true,

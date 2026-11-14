@@ -17,6 +17,7 @@ import { loadBlueprint, type LoadBlueprintArgs } from "@/lib/league-blueprint/da
 import { readCachedBlueprint } from "@/lib/league-blueprint/cache";
 import { loadLeagueBlueprintSettings } from "@/lib/league-blueprint/settings";
 import { describeBlueprint } from "@/lib/league-blueprint/share";
+import { leagueKindOf } from "@/lib/league-blueprint/league-kind";
 import type { BlueprintView } from "@/lib/league-blueprint/types";
 import type { LineupTeamOption } from "@/lib/league-lineups/types";
 import type { SleeperLeague } from "@/lib/sleeper";
@@ -245,7 +246,14 @@ export default async function LeagueBlueprintPage({
           <div className="min-w-0">
             <Suspense
               key={`${rosterId}-${context.sourceSlug}`}
-              fallback={<SheetSkeleton teamName={team.teamName} leagueName={league.name} season={season} />}
+              fallback={
+                <SheetSkeleton
+                  teamName={team.teamName}
+                  leagueName={league.name}
+                  season={season}
+                  showCapital={["dynasty", "keeper"].includes(leagueKindOf(league.metadata).kind)}
+                />
+              }
             >
               <BlueprintBody
                 leagueId={sleeperLeagueId}
@@ -368,6 +376,15 @@ async function BlueprintBody({
     );
   }
   if (result.kind === "failed") {
+    if (result.reason === "empty-roster") {
+      return (
+        <div className="mt-6">
+          <Panel eyebrow="Team Blueprint" title="No blueprint for this team">
+            <p className="text-sm leading-relaxed text-ink-muted">{result.message}</p>
+          </Panel>
+        </div>
+      );
+    }
     return (
       <div className="mt-6">
         <Panel eyebrow="Team Blueprint" title="The blueprint could not be built">
@@ -382,6 +399,11 @@ async function BlueprintBody({
   const view = result.view;
   const bands: [number, number] = [settings.activity.lowBelow, settings.activity.highAbove];
   const T = view.header.teamCount;
+  // Draft capital is graded in dynasty and keeper only; elsewhere the section is
+  // left out, not shown empty. Numbers follow the sections that are drawn.
+  const showCapital = (view.header.leagueKind === "dynasty" || view.header.leagueKind === "keeper") && view.capital !== null;
+  let n = 0;
+  const num = () => String(++n).padStart(2, "0");
   return (
     <>
       {result.kind === "stale" && (
@@ -396,21 +418,21 @@ async function BlueprintBody({
         <Letterhead view={view} leagueName={league.name}>
           <BlueprintShare view={view} canonical={canonical} sleeperLeagueId={leagueId} linkUsername={linkUsername} />
         </Letterhead>
-        <StandingPanel view={view} number="01" />
-        <PrioritiesPanel priorities={view.priorities} number="02" />
-        <GradeRings grades={view.grades} teamCount={T} number="03" />
-        <LineupTable view={view} number="04" />
-        <DepthLists view={view} number="05" />
-        <SharesPanel view={view} number="06" />
-        <AgeChart age={view.age} number="07" />
-        <MoversPanel view={view} number="08" />
-        <SpotlightCard view={view} number="09" />
-        <CallsPanel view={view} bands={bands} linkUsername={linkUsername} signalWindowDays={marketSettings.windowDays} number="10" />
-        <CapitalPanel view={view} number="11" />
-        <StrategyPanel view={view} linkUsername={linkUsername} number="12" />
+        <StandingPanel view={view} number={num()} />
+        <PrioritiesPanel priorities={view.priorities} number={num()} />
+        <CallsPanel view={view} bands={bands} linkUsername={linkUsername} signalWindowDays={marketSettings.windowDays} number={num()} />
+        <StrategyPanel view={view} linkUsername={linkUsername} number={num()} />
+        <GradeRings grades={view.grades} teamCount={T} number={num()} />
+        <LineupTable view={view} number={num()} />
+        <DepthLists view={view} number={num()} />
+        <SharesPanel view={view} number={num()} />
+        <AgeChart age={view.age} number={num()} />
+        <MoversPanel view={view} number={num()} />
+        <SpotlightCard view={view} number={num()} />
+        {showCapital && <CapitalPanel view={view} number={num()} />}
         {offer && (
           <ReviewOfferSection
-            number="13"
+            number={num()}
             teamName={teamName}
             sleeperLeagueId={leagueId}
             rosterId={chosenByDefault ? null : rosterId}

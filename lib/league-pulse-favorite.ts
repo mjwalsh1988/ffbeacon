@@ -30,6 +30,8 @@ import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { formatTeamLabel } from "@/lib/team-label";
+import { isLegacyBracketRowForChoppedLeague } from "@/lib/power-pulse/legacy-rows";
+import type { PlayoffPhase, TeamPlayoffState } from "@/lib/power-pulse/playoffs";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -64,6 +66,17 @@ export type PulseFavorite = {
   chopOddsThisWeek: number | null;
   /** How many other teams share the top title odds. 0 when the favorite is alone. */
   tiedWith: number;
+  /**
+   * Where the league is in its season, from the stored playoff state:
+   * "regular" (odds are projections), "playoffs" (the bracket is being
+   * played), "complete" (the title game is played). Null in a chopped league
+   * and on rows written before the model carried it.
+   */
+  playoffPhase: PlayoffPhase | null;
+  /** True once the title game is played and this team won it. */
+  isChampion: boolean;
+  /** Playoff seed once the regular season is over, else null. */
+  seed: number | null;
   /** The week the stored run scored through, for the card's footnote. */
   throughWeek: number;
   generatedAt: string | null;
@@ -71,6 +84,8 @@ export type PulseFavorite = {
 
 type CacheRow = {
   roster_id: string;
+  model_version?: string | null;
+  playoff?: TeamPlayoffState | null;
   power_pulse: number;
   pulse_rank: number | null;
   title_odds: number | null;
@@ -116,6 +131,10 @@ function num(v: unknown): number | null {
 export function pickFavorite(rows: CacheRow[]): { row: CacheRow; tiedWith: number } | null {
   if (rows.length === 0) return null;
 
+  // The title game is played: the champion is the answer, whatever the odds.
+  const champion = rows.find((r) => r.playoff?.status === "champion");
+  if (champion) return { row: champion, tiedWith: 0 };
+
   const withOdds = rows.filter((r) => (winMetric(r) ?? 0) > 0);
   if (withOdds.length > 0) {
     const sorted = [...withOdds].sort((a, b) => {
@@ -153,16 +172,26 @@ export const loadPulseFavorite = cache(async function loadPulseFavorite(
   leagueRowId: string,
   season: number,
 ): Promise<PulseFavorite | null> {
-  const { data, error } = await supabase
-    .from("league_power_pulse_cache")
-    .select(
-      "roster_id, power_pulse, pulse_rank, title_odds, playoff_odds, projected_wins, projected_losses, chopped, survive_all_odds, chop_odds_this_week, through_week, generated_at",
-    )
-    .eq("league_id", leagueRowId)
-    .eq("season", season);
-  if (error || !data || data.length === 0) return null;
+  const [{ data, error }, { data: leagueRow, error: leagueError }] = await Promise.all([
+    supabase
+      .from("league_power_pulse_cache")
+      .select(
+        "roster_id, model_version, power_pulse, pulse_rank, title_odds, playoff_odds, projected_wins, projected_losses, chopped, survive_all_odds, chop_odds_this_week, through_week, generated_at, playoff:components->playoff",
+      )
+      .eq("league_id", leagueRowId)
+      .eq("season", season),
+    supabase.from("leagues").select("type:metadata->settings->type").eq("id", leagueRowId).maybeSingle(),
+  ]);
+  if (error || leagueError || !data || data.length === 0) return null;
 
-  const picked = pickFavorite(data as unknown as CacheRow[]);
+  // Bracket rows a chopped league kept from before its own model are never
+  // served (lib/power-pulse/legacy-rows.ts).
+  const leagueType = Number((leagueRow as { type?: unknown } | null)?.type);
+  const rows = (data as unknown as CacheRow[]).filter(
+    (r) => !isLegacyBracketRowForChoppedLeague(r, leagueType),
+  );
+
+  const picked = pickFavorite(rows);
   if (!picked) return null;
 
   // Identity, resolved for the ONE roster the card names. Two tiny reads
@@ -202,6 +231,9 @@ export const loadPulseFavorite = cache(async function loadPulseFavorite(
     surviveAllOdds: num(picked.row.survive_all_odds),
     chopOddsThisWeek: num(picked.row.chop_odds_this_week),
     tiedWith: picked.tiedWith,
+    playoffPhase: picked.row.playoff?.phase ?? null,
+    isChampion: picked.row.playoff?.status === "champion",
+    seed: num(picked.row.playoff?.seed),
     throughWeek: Number(picked.row.through_week),
     generatedAt: picked.row.generated_at ?? null,
   };

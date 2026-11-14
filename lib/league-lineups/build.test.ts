@@ -668,3 +668,43 @@ describe("buildLineup: both totals come from one candidate pool", () => {
     expect(built.optimization.efficiency).toBe(1);
   });
 });
+
+describe("a live week: locked players keep their points and only open slots are optimized", () => {
+  it("holds a kicked-off starter, never brings in a kicked-off bench player, and optimizes the rest", () => {
+    const roster: Spec[] = [
+      ...optimalRoster(),
+      // On the bench, still to play, and better than the FLEX starter.
+      { sleeperId: "rb3", position: "RB", points: 16 },
+      // On the bench and already kicked off: cannot come in, however good.
+      { sleeperId: "wr9", position: "WR", points: 30, actual: 25 },
+    ];
+    // rb2 kicked off and has 3 points banked.
+    const spec = roster.find((r) => r.sleeperId === "rb2")!;
+    spec.actual = 3;
+    const input = buildInput({ roster, starters: OPTIMAL_STARTERS });
+    input.actualsVisible = true;
+    input.lockedSleeperIds = new Set(["rb2", "wr9"]);
+
+    const built = buildLineup(input);
+    const { optimization } = built;
+    expect(optimization.lockedSlotCount).toBe(1);
+    // Nobody moves rb2 out and nobody moves wr9 in.
+    for (const move of optimization.moves) {
+      expect(move.inPlayer.sleeperId).not.toBe("wr9");
+      expect(move.outPlayer?.sleeperId).not.toBe("rb2");
+    }
+    // The one open upgrade: rb3 in for the weakest unlocked starter.
+    expect(optimization.moves.map((m) => m.inPlayer.sleeperId)).toEqual(["rb3"]);
+    // rb2's banked 3 points sit on both sides, so the gap is the open swap only.
+    const gained = optimization.moves.reduce((t, m) => t + m.pointsGained, 0);
+    expect(optimization.pointsLeftOnBench).toBeCloseTo(gained, 1);
+    expect(built.optimalSleeperIds).toContain("rb2");
+  });
+
+  it("ignores locks on a final week, which is graded on results throughout", () => {
+    const roster = optimalRoster().map((r) => ({ ...r, actual: r.points ?? 0 }));
+    const input = buildInput({ roster, starters: OPTIMAL_STARTERS, isFinal: true });
+    input.lockedSleeperIds = new Set(["rb2"]);
+    expect(buildLineup(input).optimization.lockedSlotCount).toBeUndefined();
+  });
+});

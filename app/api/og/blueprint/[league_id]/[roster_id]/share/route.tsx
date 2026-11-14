@@ -17,5 +17,5 @@ export async function GET(
   const { league_id, roster_id } = await params;
   const load = await loadBlueprintImage(request, league_id, roster_id);
   if (load.kind === "response") return load.response;
-  return renderPortrait(load.card);
+  return renderPortrait(load.card, load.bands);
 }

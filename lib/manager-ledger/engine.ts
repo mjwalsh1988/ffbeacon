@@ -42,6 +42,7 @@ import {
   type TransactionInput,
 } from "./moves";
 import type { LedgerResult, LedgerSkip, LedgerTeam } from "./types";
+import { DEFAULT_LEDGER_RULES, isRegularSeasonWeek, type LedgerRules } from "./rules";
 
 /** One roster, as the engine reads it. */
 export type EngineRoster = {
@@ -68,7 +69,85 @@ export type EngineInput = {
   players: Map<string, LedgerPlayer>;
   /** True when the league runs a FAAB budget, so a bid means something. */
   leagueHasFaab: boolean;
+  /**
+   * League kind, playoff start and median game (./rules.ts). Absent means a
+   * plain league with no playoffs and no median game.
+   */
+  rules?: LedgerRules;
 };
+
+type EngineWeek = EngineInput["weeks"][number];
+
+/** The median of a list, the mean of the middle two for an even count. */
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Fit each settled week to the league's rules before it is graded.
+ *
+ *   Playoff weeks are flagged, so the record counts the regular season only.
+ *   A median-game league gets each regular season week's median attached.
+ *   A chopped league has no opponent: a roster that started nobody that week
+ *   was already cut and is dropped, and every live roster is read against the
+ *   cut line, the lowest score among the OTHER live rosters that week. Beat it
+ *   and the week was survived.
+ */
+export function applyLedgerRules(weeks: EngineWeek[], rules: LedgerRules): EngineWeek[] {
+  const live = rules.chopped ? weeks.filter((w) => w.startedIds.size > 0) : weeks;
+
+  const byWeek = new Map<number, EngineWeek[]>();
+  for (const w of live) {
+    const list = byWeek.get(w.week) ?? [];
+    list.push(w);
+    byWeek.set(w.week, list);
+  }
+
+  return live.map((w) => {
+    const regular = isRegularSeasonWeek(w.week, rules);
+    const same = byWeek.get(w.week) ?? [];
+    const out: EngineWeek = { ...w };
+    if (!regular) out.playoff = true;
+    if (rules.medianGame && regular) {
+      out.medianPoints = median(same.map((s) => s.officialPoints));
+    }
+    if (rules.chopped) {
+      const others = same
+        .filter((s) => s.sleeperRosterId !== w.sleeperRosterId)
+        .map((s) => s.officialPoints);
+      out.opponentPoints = others.length > 0 ? Math.min(...others) : null;
+    }
+    return out;
+  });
+}
+
+/**
+ * Best ball sets its own lineup, so there is no lineup decision to grade. The
+ * record stays (it is the league's own), and everything that measures a
+ * lineup choice is cleared rather than reported as a perfect score.
+ */
+function withoutLineupGrading(lineup: LedgerTeam["lineup"]): LedgerTeam["lineup"] {
+  return {
+    ...lineup,
+    pointsLeft: 0,
+    efficiency: null,
+    bestLineupRecord: { ...lineup.actualRecord },
+    winsLeftOnBench: 0,
+    weeks: lineup.weeks.map((w) => {
+      const week = {
+        ...w,
+        pointsLeft: 0,
+        bestLineupOutcome: w.outcome,
+        biggestMiss: null,
+      };
+      if (w.medianOutcome !== undefined) week.bestLineupMedianOutcome = w.medianOutcome;
+      return week;
+    }),
+  };
+}
 
 /**
  * Standard competition ranking over a list of values, highest first.
@@ -130,8 +209,14 @@ export function computeLedger(input: EngineInput): LedgerResult | LedgerSkip {
   const index = new LedgerIndex(indexed);
   const baselines = roundBaselines(input.draftPicks, index);
 
+  // The index above reads every settled row, because ownership is ownership
+  // whatever the week. The lineup grading below reads the weeks fitted to the
+  // league's rules.
+  const rules = input.rules ?? DEFAULT_LEDGER_RULES;
+  const ruledWeeks = applyLedgerRules(input.weeks, rules);
+
   const byRoster = new Map<number, WeekInput[]>();
-  for (const week of input.weeks) {
+  for (const week of ruledWeeks) {
     const list = byRoster.get(week.sleeperRosterId) ?? [];
     list.push(week);
     byRoster.set(week.sleeperRosterId, list);
@@ -143,11 +228,12 @@ export function computeLedger(input: EngineInput): LedgerResult | LedgerSkip {
       .sort((a, b) => a.week - b.week)
       .map((week) => gradeWeek(plan, week, input.players));
 
+    const lineup = summarizeLineup(weeks);
     return {
       sleeperRosterId: roster.sleeperRosterId,
       teamName: roster.teamName,
       ownerHandle: roster.ownerHandle,
-      lineup: summarizeLineup(weeks),
+      lineup: rules.bestBall ? withoutLineupGrading(lineup) : lineup,
       waivers: buildWaiverLedger(
         roster.sleeperRosterId,
         input.transactions,
@@ -193,14 +279,17 @@ export function computeLedger(input: EngineInput): LedgerResult | LedgerSkip {
   const draftRanks = rankDesc(
     teams.map((t) => (t.draft.picks > 0 ? t.draft.aboveBaseline : null)),
   );
-  // Scoring uses the OFFICIAL totals, so it matches the league's own standings
-  // rather than the gradable subset the efficiency figure is built on.
+  // Scoring uses the OFFICIAL totals over the REGULAR SEASON, so it matches
+  // the league's own standings rather than the gradable subset the efficiency
+  // figure is built on, and a team does not climb it by playing extra
+  // playoff games.
   const scoringRanks = rankDesc(
-    teams.map((t) =>
-      t.lineup.weeksGraded > 0
-        ? t.lineup.weeks.reduce((sum, w) => sum + w.officialPoints, 0)
-        : null,
-    ),
+    teams.map((t) => {
+      const regular = t.lineup.weeks.filter((w) => !w.playoff);
+      return regular.length > 0
+        ? regular.reduce((sum, w) => sum + w.officialPoints, 0)
+        : null;
+    }),
   );
 
   teams.forEach((team, i) => {

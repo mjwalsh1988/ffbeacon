@@ -4,6 +4,8 @@ import {
   mapToFormatSlug,
   pickClosestSupportedFormat,
   describeDerivedFormat,
+  isExactFormatMatch,
+  toFormatCandidate,
   type DerivedFormat,
   type FormatCandidate,
 } from "./sleeper-to-format";
@@ -141,6 +143,88 @@ describe("pickClosestSupportedFormat", () => {
     const onlyRedraft = CANDIDATES.filter((c) => c.league_type === "redraft");
     const d = derived({ league_type: "dynasty" });
     expect(pickClosestSupportedFormat(d, onlyRedraft)).toBeNull();
+  });
+});
+
+describe("best ball", () => {
+  it("reads settings.best_ball", () => {
+    expect(deriveLeagueFormat(sleeperLeague({ settings: { type: 0, best_ball: 1 } })).is_best_ball).toBe(true);
+    expect(deriveLeagueFormat(sleeperLeague({ settings: { type: 0, best_ball: 0 } })).is_best_ball).toBe(false);
+    expect(deriveLeagueFormat(sleeperLeague({ settings: { type: 0 } })).is_best_ball).toBe(false);
+  });
+
+  it("maps best ball leagues to the best ball boards", () => {
+    expect(mapToFormatSlug(derived({ is_best_ball: true }))).toBe("bestball-ppr-std");
+    expect(mapToFormatSlug(derived({ is_best_ball: true, is_superflex: true }))).toBe("bestball-ppr-sflex");
+    expect(mapToFormatSlug(derived({ is_best_ball: true, is_superflex: true, scoring_type: "half_ppr" }))).toBe(
+      "bestball-ppr-sflex",
+    );
+    expect(
+      mapToFormatSlug(derived({ is_best_ball: true, league_type: "dynasty", is_superflex: true })),
+    ).toBe("bestball-dynasty-ppr-sflex");
+  });
+
+  it("drops to the managed board when no best ball board fits", () => {
+    expect(mapToFormatSlug(derived({ is_best_ball: true, league_type: "dynasty" }))).toBe("dynasty-ppr-std");
+    expect(mapToFormatSlug(derived({ is_best_ball: true, scoring_type: "half_ppr" }))).toBe("redraft-half-std");
+  });
+
+  it("keeps a managed league off the best ball board in a fallback", () => {
+    const withBestBall: FormatCandidate[] = [
+      ...CANDIDATES,
+      { slug: "bestball-ppr-std", display: "Best Ball PPR", league_type: "redraft", scoring_type: "ppr", is_superflex: false, is_tep: false, display_order: 0 },
+    ];
+    expect(pickClosestSupportedFormat(derived({ scoring_type: "half_ppr" }), withBestBall)?.slug).toBe(
+      "redraft-ppr-std",
+    );
+    expect(
+      pickClosestSupportedFormat(derived({ scoring_type: "half_ppr", is_best_ball: true }), withBestBall)?.slug,
+    ).toBe("bestball-ppr-std");
+  });
+
+  it("names best ball in the plain-language label", () => {
+    expect(describeDerivedFormat(derived({ is_best_ball: true }))).toBe("Best Ball Redraft PPR");
+  });
+});
+
+describe("isExactFormatMatch", () => {
+  const row = (slug: string, over: Partial<Parameters<typeof toFormatCandidate>[0]> = {}) =>
+    toFormatCandidate({
+      slug,
+      display_name: slug,
+      league_type: slug.includes("dynasty") ? "dynasty" : "redraft",
+      scoring_type: "ppr",
+      is_superflex: slug.includes("sflex"),
+      display_order: 1,
+      te_premium_bonus: slug.includes("-tep") ? 0.5 : 0,
+      ...over,
+    });
+
+  it("calls a half or standard superflex redraft league on the PPR superflex board a near match", () => {
+    for (const scoring of ["half_ppr", "standard"] as const) {
+      const d = derived({ scoring_type: scoring, is_superflex: true });
+      expect(mapToFormatSlug(d)).toBe("redraft-ppr-sflex");
+      expect(isExactFormatMatch(d, row("redraft-ppr-sflex"))).toBe(false);
+    }
+  });
+
+  it("calls a matching board exact", () => {
+    expect(isExactFormatMatch(derived({ is_superflex: true }), row("redraft-ppr-sflex"))).toBe(true);
+    expect(isExactFormatMatch(derived({ league_type: "dynasty", is_tep: true }), row("dynasty-ppr-tep"))).toBe(true);
+    expect(isExactFormatMatch(derived({ is_best_ball: true }), row("bestball-ppr-std"))).toBe(true);
+  });
+
+  it("calls a best ball or TE premium mismatch a near match", () => {
+    expect(isExactFormatMatch(derived({ is_best_ball: true, league_type: "dynasty" }), row("dynasty-ppr-std"))).toBe(
+      false,
+    );
+    expect(isExactFormatMatch(derived({}), row("bestball-ppr-std"))).toBe(false);
+    expect(isExactFormatMatch(derived({ scoring_type: "half_ppr", is_tep: true }), row("redraft-half-std", { scoring_type: "half_ppr" }))).toBe(false);
+  });
+
+  it("reads TE premium off the slug when te_premium_bonus was not selected", () => {
+    expect(row("dynasty-ppr-tep", { te_premium_bonus: undefined }).is_tep).toBe(true);
+    expect(row("dynasty-ppr-std", { te_premium_bonus: undefined }).is_tep).toBe(false);
   });
 });
 

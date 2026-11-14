@@ -85,6 +85,8 @@ function fmtSigned(value: number, digits = 0): string {
 
 function fmtOdds(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return UNAVAILABLE;
+  // A real chance that rounds to nothing is not a zero.
+  if (value > 0 && value < 0.005) return "Under 1%";
   return `${Math.round(value * 100)}%`;
 }
 
@@ -113,7 +115,13 @@ export function TradeVerdict({
   sleeperLeagueId,
   positionalWarByPlayer,
   emphasis,
+  showStrategyReason = true,
 }: {
+  /**
+   * Print the one line saying which mode judged the call and why. False on the
+   * suggestion tab, where the same line already sits beside the mode toggle.
+   */
+  showStrategyReason?: boolean;
   impact: TradeImpact;
   myTeamLabel: string;
   theirTeamLabel: string;
@@ -128,7 +136,11 @@ export function TradeVerdict({
   emphasis?: LeagueEmphasis;
 }) {
   const mine = impact.mine;
-  const outcome = buildTradeOutcome(mine, impact.gaps);
+  const outcome = buildTradeOutcome(mine, impact.gaps, {
+    leagueKind: impact.leagueKind,
+    strategy: impact.strategy,
+    value: impact.value,
+  });
 
   const impactTab = (
     <div className="space-y-4">
@@ -251,6 +263,9 @@ export function TradeVerdict({
           would mean a reader on the other tab never sees it. It also settles
           what the tabs are FOR, which is checking the call rather than
           assembling it. */}
+      {showStrategyReason && impact.strategyReason && (
+        <p className="text-xs leading-relaxed text-ink-muted">{impact.strategyReason}</p>
+      )}
       <TradeOutcomePanel
         outcome={outcome}
         mine={mine}
@@ -296,7 +311,16 @@ function PerformanceBody({
             accent="cyan"
           />
         )}
-        {noSim ? (
+        {impact.gaps.simulationCause === "chopped" ? (
+          // A chopped league plays against the cut line, not an opponent, so
+          // its season figure is the chance of surviving this week.
+          <OddsTile
+            label="Survival odds this week"
+            before={t.survivalBefore ?? null}
+            after={t.survivalAfter ?? null}
+            accent="cyan"
+          />
+        ) : noSim ? (
           <>
             <GapTile label="Wins" reason={GAP_COPY.simulation} />
             <GapTile label="Playoff odds" reason={GAP_COPY.simulation} />
@@ -444,7 +468,7 @@ function OddsTile({
               <span className="font-mono tabular-nums">
                 {fmtSigned(points)}
               </span>{" "}
-              on the odds
+              percentage {Math.abs(points) === 1 ? "point" : "points"}
             </>
           )}
         </span>

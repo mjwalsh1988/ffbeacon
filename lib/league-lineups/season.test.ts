@@ -137,3 +137,19 @@ describe("projectionAccuracy", () => {
     expect(projectionAccuracy(series.points)?.beatWeeks).toBe(0);
   });
 });
+
+describe("projectionAccuracy: like with like", () => {
+  it("measures the miss over the same starters the projection covered", () => {
+    const series = buildSeasonSeries({
+      ledgerWeeks: [{ week: 1, officialPoints: 130, pointsLeft: 0 } as never],
+      projectedByWeek: new Map([[1, 100]]),
+      // The projected starters scored 104; the official 130 includes slots
+      // nobody projected.
+      comparedActualByWeek: new Map([[1, 104]]),
+      viewedWeek: 1,
+    });
+    const accuracy = projectionAccuracy(series.points);
+    expect(accuracy?.meanDiff).toBe(4);
+    expect(series.points[0].scored).toBe(130);
+  });
+});

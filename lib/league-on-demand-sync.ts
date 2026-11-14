@@ -99,7 +99,7 @@ export async function refreshStaleLeagues(
 
   const { data: rows, error } = await admin
     .from("leagues")
-    .select("sleeper_league_id, last_pulsed_at, pulse_status")
+    .select("sleeper_league_id, last_pulsed_at, pulse_status, frozen_at")
     .in("sleeper_league_id", ids);
   if (error) {
     console.warn("[league-sync] stale check failed", error);
@@ -108,7 +108,8 @@ export async function refreshStaleLeagues(
 
   const now = Date.now();
   const stale = (rows ?? [])
-    .filter((r) => !isLeaguePulseFresh(r, now))
+    // A frozen past season is never refreshed: what is stored is the answer.
+    .filter((r) => !r.frozen_at && !isLeaguePulseFresh(r, now))
     .sort(
       (a, b) =>
         (a.last_pulsed_at ? new Date(a.last_pulsed_at).getTime() : 0) -
@@ -154,6 +155,16 @@ export async function refreshStaleLeagues(
   return { refreshed, failed };
 }
 
+/** A sync that did not finish for a reason that passes: retry after the cooldown. */
+function temporaryFailure(): LeagueSyncOutcome {
+  return {
+    ok: false,
+    reason: "failed",
+    error: "That sync did not finish. Try again in a few seconds.",
+    retryInSeconds: LEAGUE_SYNC_COOLDOWN_SECONDS,
+  };
+}
+
 export async function syncLeagueOnDemand(
   admin: ServiceClient,
   sleeperLeagueId: string,
@@ -166,10 +177,11 @@ export async function syncLeagueOnDemand(
   // which is how a league synced once used to be priced off day-old rosters.
   const { data: stored } = await admin
     .from("leagues")
-    .select("last_pulsed_at, pulse_status")
+    .select("last_pulsed_at, pulse_status, frozen_at")
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
-  if (isLeaguePulseFresh(stored)) return { ok: true, cached: true };
+  // A frozen past season is a stored snapshot and is never synced again.
+  if (stored?.frozen_at || isLeaguePulseFresh(stored)) return { ok: true, cached: true };
 
   const { data: claim, error: claimErr } = await admin.rpc(
     "try_claim_league_sync" as never,
@@ -214,13 +226,23 @@ export async function syncLeagueOnDemand(
     // league Sleeper does not know about fails before any derived work starts.
     const core = await pulseLeagueCore(admin, sleeperLeagueId);
     if (!core.ok) {
-      return {
-        ok: false,
-        reason: "not_found",
-        error: "We could not find that league on Sleeper.",
-        retryInSeconds: 0,
-      };
+      // Only Sleeper saying "no such league" is a not-found. A timeout, a
+      // throttle or our own failed write says nothing about the league, and
+      // telling the reader it does not exist sent them away from a real one.
+      if (core.reason === "not_found" || core.reason === "not_found_unconfirmed") {
+        return {
+          ok: false,
+          reason: "not_found",
+          error: "We could not find that league on Sleeper.",
+          retryInSeconds: 0,
+        };
+      }
+      return temporaryFailure();
     }
+    // Sleeper answered for the league but not for its rosters, members, picks
+    // or drafts. Nothing was overwritten, and the caller is about to read rows
+    // this sync did not refresh, so it is a failed sync, said so.
+    if (core.syncFailed) return temporaryFailure();
 
     // Awaited rather than backgrounded: the caller is about to read rosters,
     // transactions, and the schedule this half writes.

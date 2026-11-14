@@ -53,13 +53,22 @@ import { starterIdsFromRosterMetadata } from "@/lib/league-lineups/data";
 import { loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
 import { loadSignalsFor } from "@/lib/market-signals/read";
 import { loadMarketSignalSettings } from "@/lib/market-signals/settings";
+import { sourceRules } from "@/lib/market-signals/default-settings";
 import { coalesce } from "@/lib/request-coalesce";
 import type { SleeperLeague } from "@/lib/sleeper";
 import type { TradeGoal } from "@/lib/trade-finder/types";
 import { writeAgeHistory } from "./age-history";
-import { buildBlueprintView, type BlueprintInputs, type LedgerSlice, type PulseSlice } from "./build";
+import {
+  buildBlueprintView,
+  EMPTY_ROSTER_TEXT,
+  EmptyRosterError,
+  type BlueprintInputs,
+  type LedgerSlice,
+  type PulseSlice,
+} from "./build";
 import {
   buildFingerprint,
+  type FingerprintInput,
   isFresh,
   loadFingerprintInput,
   readCachedBlueprint,
@@ -70,7 +79,8 @@ import {
 import { claimBlueprintBuildSlot } from "./rate-limit";
 import { loadLeagueBlueprintSettings, type LeagueBlueprintSettings } from "./settings";
 import { buildStrategy, type StrategyBuild } from "./strategy";
-import type { BlueprintView, MarketSignalState } from "./types";
+import { frozenSeasonNote, isFrozenSeason, leagueKindOf } from "./league-kind";
+import { BLUEPRINT_MODEL_VERSION, type BlueprintView, type MarketSignalState } from "./types";
 
 type Client = SupabaseClient<Database>;
 
@@ -81,7 +91,11 @@ export type BlueprintLoad =
   /** Shown with its "as of" line: the slot was refused or the rebuild threw. */
   | { kind: "stale"; view: BlueprintView; context: LeagueContext; reason: "rate-limited" | "failed" }
   | { kind: "rate-limited"; context: LeagueContext }
-  | { kind: "failed"; context: LeagueContext; message: string };
+  /**
+   * reason "empty-roster": the roster holds no players (an eliminated chopped
+   * team); `message` is the sentence to show (EMPTY_ROSTER_TEXT). Never cached.
+   */
+  | { kind: "failed"; context: LeagueContext; message: string; reason?: "empty-roster" };
 
 export type LoadBlueprintArgs = {
   admin: Client;
@@ -113,15 +127,34 @@ export async function loadBlueprint(args: LoadBlueprintArgs): Promise<BlueprintL
   const ttlMs = settings.cache.ttlHours * 3_600_000;
   const keyArgs = { leagueRowId: league.id, rosterId, season, source: ctx.sourceSlug };
 
-  const [cached, fpInput] = await Promise.all([
-    args.prefetched ? Promise.resolve(args.prefetched.cached) : readCachedBlueprint(admin, keyArgs),
-    loadFingerprintInput(admin, {
+  const cached = args.prefetched ? args.prefetched.cached : await readCachedBlueprint(admin, keyArgs);
+
+  // A past season is a frozen snapshot (LPI-T02): its stored view is served as
+  // it is, whatever its age or fingerprint, and rebuilt only when the model
+  // changed or no view was ever stored.
+  if (isFrozenSeason(season) && cached && cached.modelVersion === BLUEPRINT_MODEL_VERSION) {
+    return { kind: "fresh", view: cached.view, context: ctx };
+  }
+
+  let fpInput: FingerprintInput;
+  try {
+    fpInput = await loadFingerprintInput(admin, {
       ...keyArgs,
       formatConfigId: ctx.formatConfigId,
       settingsVersion: settings.version,
-    }),
-  ]);
-  if (cached && isFresh(cached, buildFingerprint(fpInput), ttlMs, now.getTime())) {
+    });
+  } catch (err) {
+    // A failed read is not a match and not a reason to rebuild on top of it.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[league-blueprint] fingerprint read failed", league.id, rosterId, message);
+    return staleOrFailed(cached, ctx, message);
+  }
+  if (fpInput.playerIds.length === 0) {
+    return { kind: "failed", context: ctx, message: EMPTY_ROSTER_TEXT, reason: "empty-roster" };
+  }
+  // A league the caller just resynced is rebuilt: the sync may have moved
+  // something the fingerprint cannot see (a value, a status).
+  if (!args.resynced && cached && isFresh(cached, buildFingerprint(fpInput), ttlMs, now.getTime())) {
     return { kind: "fresh", view: cached.view, context: ctx };
   }
 
@@ -137,6 +170,9 @@ export async function loadBlueprint(args: LoadBlueprintArgs): Promise<BlueprintL
     );
     return { kind: "rebuilt", view, context: ctx };
   } catch (err) {
+    if (err instanceof EmptyRosterError) {
+      return { kind: "failed", context: ctx, message: EMPTY_ROSTER_TEXT, reason: "empty-roster" };
+    }
     const message = err instanceof Error ? err.message : String(err);
     console.error("[league-blueprint] rebuild failed", league.id, rosterId, message);
     return staleOrFailed(cached, ctx, message);
@@ -194,9 +230,13 @@ async function rebuildBlueprint(
         .order("current_value", { ascending: false })
         .limit(1),
     ]);
+  if (rosterRow.error) throw new Error(`rosters: ${rosterRow.error.message}`);
+  if (topRow.error) throw new Error(`player_value_trends top: ${topRow.error.message}`);
   if (!finder) throw new Error("The trade finder could not load this league.");
   const mine = cards.find((c) => c.sleeperRosterId === rosterId);
   if (!mine) throw new Error(`Roster ${rosterId} has no team card.`);
+  if (mine.players.length === 0) throw new EmptyRosterError(rosterId);
+  const { kind: leagueKind, isBestBall } = leagueKindOf(league.metadata);
   const idpEnabled = idpEnabledFrom(pulseSettings);
 
   // Signals for every priced player in the league (buy targets live on other
@@ -205,7 +245,8 @@ async function rebuildBlueprint(
   const myIds = mine.players.map((p) => p.id);
   const marketSettings = await loadMarketSignalSettings(admin);
   const [signalRows, trendRows] = await Promise.all([
-    loadSignalsFor(admin, leaguePlayerIds, context.formatConfigId, context.sourceSlug, marketSettings.staleDays),
+    // The whole settings, so a weekly source's rows stay current between updates.
+    loadSignalsFor(admin, leaguePlayerIds, context.formatConfigId, context.sourceSlug, marketSettings),
     loadTrends(admin, myIds, context.formatConfigId, context.sourceSlug, { window: "30d" }),
   ]);
   const signals = new Map<string, MarketSignalState>(
@@ -276,6 +317,10 @@ async function rebuildBlueprint(
     generatedAt,
     isDynasty,
     isSuperflex: context.derived.is_superflex,
+    leagueKind,
+    isBestBall,
+    frozenSeasonNote: frozenSeasonNote(season),
+    signalWindowDays: sourceRules(marketSettings, context.sourceSlug).windowDays,
     formatTags: buildLeagueFormatTags({
       rosterPositions,
       scoringSettings: league.scoring_settings,

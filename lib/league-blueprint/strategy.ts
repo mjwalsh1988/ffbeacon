@@ -53,7 +53,16 @@ const topValue = (assets: SuggestionAsset[]) => assets.reduce((m, a) => Math.max
 export function classifyShape(s: TradeSuggestion, pivotGapPct: number): TradeShape | null {
   const out = s.outgoing;
   const inc = s.incoming;
-  if (out.length === 1 && inc.length >= 2) return "downtier";
+  // A downtier sends one PLAYER (a pick out is not "one star out") worth at
+  // least TIER_JUMP times the best asset coming back, the mirror of uptier.
+  if (
+    out.length === 1 &&
+    inc.length >= 2 &&
+    out[0].kind === "player" &&
+    out[0].value >= TIER_JUMP * topValue(inc)
+  ) {
+    return "downtier";
+  }
   if (out.length >= 2 && inc.length === 1 && topValue(inc) >= TIER_JUMP * topValue(out)) return "uptier";
   if (
     out.length === 1 &&

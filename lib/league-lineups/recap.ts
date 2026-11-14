@@ -63,6 +63,13 @@ export type WeekRecap = {
   costTheGame: boolean;
   /** Margin against the opponent, positive for a win. Null with no opponent. */
   margin: number | null;
+  /**
+   * Leg 2 of a two-week playoff round: both weeks added, for this team and the
+   * opponent. The outcome, the best-lineup outcome and the margin are all
+   * decided on these. Null in every other week.
+   */
+  roundScored: number | null;
+  roundOpponent: number | null;
   /** Starters who beat their projection, biggest first. */
   overperformers: PlayerSwing[];
   /** Starters who missed it, biggest miss first. */
@@ -131,15 +138,27 @@ export function buildWeekRecap(input: {
   actualTotal: number | null;
   /** The opponent's official total. Null for a bye, an unpaired roster, or a live week. */
   opponentActual: number | null;
+  /** The other leg of a two-week playoff round, when this is leg 2. */
+  legs?: { ownOther: number; opponentOther: number } | null;
 }): WeekRecap {
   const { groups, optimization, actualTotal, opponentActual } = input;
+  const legs = input.legs && opponentActual !== null ? input.legs : null;
 
   const leftOnBench = optimization.pointsLeftOnBench;
   const bestPossible =
     actualTotal === null || leftOnBench === null ? null : round2(actualTotal + leftOnBench);
 
-  const outcome = actualTotal === null ? null : resultOf(actualTotal, opponentActual);
-  const bestOutcome = bestPossible === null ? null : resultOf(bestPossible, opponentActual);
+  // A two-week round is decided on both weeks added. The other leg is fixed,
+  // so the best-lineup question is still about this week's bench alone.
+  const ownBase = legs ? legs.ownOther : 0;
+  const roundScored = legs && actualTotal !== null ? round2(actualTotal + legs.ownOther) : null;
+  const roundOpponent = legs && opponentActual !== null ? round2(opponentActual + legs.opponentOther) : null;
+  const opponentForResult = legs ? roundOpponent : opponentActual;
+
+  const outcome =
+    actualTotal === null ? null : resultOf(actualTotal + ownBase, opponentForResult);
+  const bestOutcome =
+    bestPossible === null ? null : resultOf(bestPossible + ownBase, opponentForResult);
 
   const swings = playerSwings(groups);
   const measurable = swings.filter((s) => Math.abs(s.diff) >= SWING_THRESHOLD);
@@ -156,9 +175,11 @@ export function buildWeekRecap(input: {
     bestOutcome,
     costTheGame: outcome === "loss" && bestOutcome === "win",
     margin:
-      actualTotal === null || opponentActual === null
+      actualTotal === null || opponentForResult === null
         ? null
-        : round2(actualTotal - opponentActual),
+        : round2(actualTotal + ownBase - opponentForResult),
+    roundScored,
+    roundOpponent,
     overperformers: measurable
       .filter((s) => s.diff > 0)
       .sort((a, b) => b.diff - a.diff)

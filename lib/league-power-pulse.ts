@@ -18,7 +18,7 @@ import type { Database, Json } from "@/lib/database.types";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { isDraftPending } from "@/lib/league-readiness";
 import { getNflState } from "@/lib/sleeper";
-import { resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
+import { MAX_MATCHUP_WEEK, resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
 import { computePowerPulse, type PowerPulseTeamResult } from "@/lib/power-pulse/engine";
 import {
   loadAccuracy,
@@ -26,11 +26,17 @@ import {
   loadCompletedResults,
   loadDefenseSplits,
   loadLeague,
+  loadLiveWeek,
   loadPlayers,
+  loadProjectionStamp,
   loadProjections,
   loadRosters,
   loadSchedule,
+  type LeagueRow,
+  type RosterRow,
 } from "@/lib/power-pulse/load";
+import { bracketFacts, playoffStates } from "@/lib/power-pulse/playoffs";
+import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { choppedWeeks, resolveFinalWeek } from "@/lib/chopped/league";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
@@ -82,6 +88,7 @@ const SETTLED_REASON_TESTS: Array<(reason: string) => boolean> = [
   (r) => r === "draft pending with empty rosters",
   (r) => r.startsWith("no regular season games remaining from week"),
   (r) => r.startsWith("chopped league has no weeks left"),
+  (r) => r.startsWith("season complete"),
 ];
 
 /**
@@ -211,8 +218,91 @@ function withinRetryBackoff(row: BackoffRow): boolean {
 export function powerPulseCacheModelVersion(
   modelVersion: string,
   projectionSource: string,
+  /**
+   * leagueResultFingerprint: the league settings that change the answer. A
+   * commissioner who adds a playoff spot, edits scoring or a roster slot, or
+   * splits the league into divisions has changed every figure, and the row
+   * must rescore on the next view rather than at the end of its TTL.
+   */
+  leagueFingerprint?: string | null,
+  /**
+   * loadProjectionStamp: when the projection sync last wrote the week this
+   * league is scored from. New projections are new numbers for every team.
+   */
+  projectionStamp?: string | null,
 ): string {
-  return `${modelVersion}:${projectionSource}`;
+  let version = `${modelVersion}:${projectionSource}`;
+  if (leagueFingerprint) version += `:${leagueFingerprint}`;
+  if (projectionStamp) version += `@${projectionStamp}`;
+  return version;
+}
+
+/** FNV-1a over a canonical (key-sorted) JSON form. Collisions cost one stale row. */
+function fingerprintOf(value: unknown): string {
+  const canonical = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === "object") {
+      return Object.entries(v as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([k, inner]) => [k, canonical(inner)]);
+    }
+    return v;
+  };
+  const json = JSON.stringify(canonical(value)) ?? "";
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < json.length; i++) {
+    hash ^= json.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+/**
+ * A short fingerprint of every league setting that changes a Power Pulse
+ * result: the playoff shape (teams, start week, round type, seeding, losers
+ * bracket), divisions, the median game, best ball, the chopped switch, the
+ * starting slots and the scoring.
+ */
+export function leagueResultFingerprint(league: LeagueRow): string {
+  return fingerprintOf({
+    playoffTeams: league.playoffTeams,
+    playoffWeekStart: league.playoffWeekStart,
+    playoffRoundType: league.playoffRoundType,
+    playoffSeedType: league.playoffSeedType ?? 0,
+    playoffType: league.playoffType ?? 0,
+    divisions: league.divisions ?? 0,
+    medianMatch: league.medianMatch,
+    bestBall: league.bestBall ?? false,
+    chopped: league.chopped,
+    rosterPositions: league.rosterPositions,
+    scoringSettings: league.scoringSettings,
+  });
+}
+
+/**
+ * The full cache version for one league at one week: the model, the source
+ * it reads, the league settings and the projection sync stamp. The staleness
+ * gate and the writer both call this, so the two can never disagree.
+ */
+export async function resolvePowerPulseCacheVersion(
+  supabase: ServiceClient,
+  league: LeagueRow,
+  settings: Pick<PowerPulseSettings, "modelVersion" | "beaconProjections">,
+  currentWeek: number,
+): Promise<string> {
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season: league.season,
+    fromWeek: currentWeek,
+    settings: settings.beaconProjections,
+  });
+  const stamp = await loadProjectionStamp(supabase, projectionSource, league.season, currentWeek);
+  return powerPulseCacheModelVersion(
+    settings.modelVersion,
+    projectionSource,
+    leagueResultFingerprint(league),
+    stamp,
+  );
 }
 
 export async function powerPulseIsStale(
@@ -387,17 +477,25 @@ export async function refreshPowerPulse(
 ): Promise<void> {
   let attemptedAt: string | null = null;
   try {
-    const settings = await loadPowerPulseSettings(supabase);
+    // Settings and the league row are independent reads: one round trip.
+    const [settings, preloadedLeague] = await Promise.all([
+      loadPowerPulseSettings(supabase),
+      options.force ? Promise.resolve(null) : loadLeague(supabase, leagueRowId),
+    ]);
     if (!options.force) {
-      const league = await loadLeague(supabase, leagueRowId);
+      const league = preloadedLeague;
       if (!league) return;
       // Lazy: only invoked (and only then does it touch Sleeper) if
       // powerPulseIsStale's backoff check does not already resolve the
       // question on its own.
+      // Unknown week (Sleeper's NFL state did not answer): throw, which the
+      // catch below logs, and the stored cache is served untouched (LPI-T02).
       const getCurrentWeek = () =>
-        getNflState().then((state) =>
-          resolveCurrentWeek(state, league.season, league.playoffWeekStart),
-        );
+        getNflState().then((state) => {
+          const week = resolveCurrentWeek(state, league.season, league.playoffWeekStart);
+          if (week === null) throw new Error("NFL week unknown: Sleeper state did not answer");
+          return week;
+        });
       const stale = await powerPulseIsStale(
         supabase,
         leagueRowId,
@@ -405,15 +503,7 @@ export async function refreshPowerPulse(
         league.playoffWeekStart,
         getCurrentWeek,
         async () =>
-          powerPulseCacheModelVersion(
-            settings.modelVersion,
-            await resolveProjectionSourceForWindow({
-              supabase,
-              season: league.season,
-              fromWeek: await getCurrentWeek(),
-              settings: settings.beaconProjections,
-            }),
-          ),
+          resolvePowerPulseCacheVersion(supabase, league, settings, await getCurrentWeek()),
         options.rostersChangedAt ?? null,
       );
       if (!stale) return;
@@ -486,10 +576,29 @@ export async function calculateLeaguePowerPulse(
   const league = await loadLeague(supabase, leagueRowId);
   if (!league) return { ok: false, error: "league row not found" };
 
-  const settings = await loadPowerPulseSettings(supabase);
-
-  const nflState = await getNflState();
+  // A chopped league's rows from before the chopped model (pp-6 to pp-8, and
+  // any other row not marked chopped) describe a bracket the league does not
+  // have. They are never a good cache, so they go first, before the unknown
+  // week, a failed sync or an incomplete schedule can return early and leave
+  // them standing for every reader of the cache.
+  const [settings, nflState] = await Promise.all([
+    loadPowerPulseSettings(supabase),
+    getNflState(),
+    league.chopped
+      ? purgeBracketRowsForChoppedLeague(supabase, leagueRowId, league.season)
+      : Promise.resolve(),
+  ]);
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
+  // Unknown week: no sync, no compute, the stored cache stays (LPI-T02).
+  if (currentWeek === null) {
+    return {
+      ok: true,
+      teams: 0,
+      season: league.season,
+      currentWeek: 0,
+      skipped: "NFL week unknown (Sleeper state did not answer)",
+    };
+  }
 
   // Refresh the head-to-head slate before reading it.
   const matchupSync = await syncLeagueMatchups(
@@ -500,10 +609,14 @@ export async function calculateLeaguePowerPulse(
     currentWeek,
     { force: options.force },
   );
-  if (!matchupSync.ok) {
-    console.warn(
-      `[power-pulse] matchup sync failed for league ${leagueRowId}: ${matchupSync.error}`,
-    );
+  // A failed database read or write inside the sync (no Sleeper week missing)
+  // is an error, not an empty slate: stop, write nothing, keep the cache. The
+  // Sleeper-side misses are the failedWeeks case just below.
+  if (!matchupSync.ok && matchupSync.failedWeeks.length === 0) {
+    return {
+      ok: false,
+      error: `matchup sync failed: ${matchupSync.error ?? "unknown error"}`,
+    };
   }
 
   // A schedule we could not fully fetch is not a schedule we may reason about.
@@ -557,6 +670,36 @@ export async function calculateLeaguePowerPulse(
     };
   }
 
+  // The slate first, because whether any regular season game is left decides
+  // which mode this league is scored in.
+  const [schedule, results] = await Promise.all([
+    loadSchedule(supabase, leagueRowId, league.season),
+    loadCompletedResults(supabase, leagueRowId, league.season),
+  ]);
+  const regularWeeksLeft = schedule.weeks.filter(
+    (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
+  ).length;
+  const playsBracket = !league.chopped && league.playoffTeams >= 2;
+
+  // THE SEASON IS DECIDED. Once the title game is played the answer is the
+  // real champion and the real final order, and it is kept: never cleared,
+  // never rescored from projections that no longer exist. The stored rows are
+  // brought up to the result and left alone after that.
+  if (playsBracket && regularWeeksLeft === 0 && bracketFacts(league.winnersBracket).championRosterId !== null) {
+    const kept = await keepFinalResult(supabase, league, rosters);
+    if (kept > 0) {
+      return {
+        ok: true,
+        teams: kept,
+        season: league.season,
+        currentWeek,
+        skipped: "season complete, final result kept",
+      };
+    }
+    // No rows were ever computed for this season: fall through and score it
+    // from whatever projections exist, which the engine marks complete too.
+  }
+
   const sleeperIds = Array.from(
     new Set(rosters.flatMap((r) => r.playerSleeperIds)),
   );
@@ -592,20 +735,27 @@ export async function calculateLeaguePowerPulse(
     settings: settings.beaconProjections,
   });
 
-  const cacheModelVersion = powerPulseCacheModelVersion(
-    settings.modelVersion,
-    projectionSource,
-  );
-
-  const [projections, accuracy, defense, schedule, results] = await Promise.all([
+  const [projections, accuracy, defense, projectionStamp, live] = await Promise.all([
+    // From the current week with no ceiling, so the playoff weeks' projections
+    // are here for the playoff rounds.
     loadProjections(supabase, playerIds, league.season, currentWeek, undefined, projectionSource),
     // Scoped to the SAME source, per migration 0240.
     // A defender is graded and split under idp123 only (plan IDP-303).
     loadAccuracy(supabase, playerIds, scoringKeysArg(idpReads), projectionSource),
     loadDefenseSplits(supabase, scoringKeysArg(idpReads), defenseSeasons),
-    loadSchedule(supabase, leagueRowId, league.season),
-    loadCompletedResults(supabase, leagueRowId, league.season),
+    loadProjectionStamp(supabase, projectionSource, league.season, currentWeek),
+    // Points already on the board this week, once a game has kicked off.
+    currentWeek <= MAX_MATCHUP_WEEK
+      ? loadLiveWeek(supabase, leagueRowId, league.season, currentWeek)
+      : Promise.resolve(null),
   ]);
+
+  const cacheModelVersion = powerPulseCacheModelVersion(
+    settings.modelVersion,
+    projectionSource,
+    leagueResultFingerprint(league),
+    projectionStamp,
+  );
 
   if (projections.length === 0) {
     return {
@@ -635,6 +785,11 @@ export async function calculateLeaguePowerPulse(
   // of weeks between now and the one that leaves a single survivor, and a
   // league already down to that survivor is over: choppedWeeks says so by
   // coming back empty rather than by being clamped up to one more week.
+  //
+  // A bracket league whose regular season is over is NOT this case any more.
+  // It is in its playoffs, and the engine simulates the rest of its stored
+  // bracket from the playoff weeks' projections. Clearing it here is what used
+  // to blank the page for the three weeks people care about most.
   const aliveCount = aliveRosterIds?.length ?? rosters.length;
   const remainingWeekCount = league.chopped
     ? choppedWeeks(
@@ -642,10 +797,9 @@ export async function calculateLeaguePowerPulse(
         resolveFinalWeek(currentWeek, aliveCount, league.choppedPerWeek ?? 1).finalWeek,
       )
         .length
-    : schedule.weeks.filter(
-        (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
-      ).length;
-  if (remainingWeekCount === 0) {
+    : regularWeeksLeft;
+  const inPlayoffs = playsBracket && remainingWeekCount === 0 && schedule.weeks.length > 0;
+  if (remainingWeekCount === 0 && !inPlayoffs) {
     await clearCache(supabase, leagueRowId, league.season);
     return {
       ok: true,
@@ -685,6 +839,7 @@ export async function calculateLeaguePowerPulse(
     currentWeek,
     settings,
     idpEnabled: idpReads.idpEnabled,
+    live,
   });
 
   if (teams.length === 0) {
@@ -759,6 +914,95 @@ async function clearCache(
       `[power-pulse] could not clear stale cache for league ${leagueRowId}: ${error.message}`,
     );
   }
+}
+
+/**
+ * Delete a chopped league's rows that were not scored by the chopped model.
+ * Rows written by pp-6 to pp-8, before chopped leagues had their own model,
+ * carry bracket odds for a league with no bracket, and nothing may serve them.
+ */
+async function purgeBracketRowsForChoppedLeague(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  season: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("league_power_pulse_cache")
+    .delete()
+    .eq("league_id", leagueRowId)
+    .eq("season", season)
+    .eq("chopped", false);
+  if (error) {
+    console.warn(
+      `[power-pulse] could not purge bracket rows for chopped league ${leagueRowId}: ${error.message}`,
+    );
+  }
+}
+
+/**
+ * Bring the stored rows of a finished bracket league up to the real result:
+ * title odds 1 for the champion and 0 for everyone else, playoff odds 1 for the
+ * field, and each team's playoff state (seed, champion or eliminated, final
+ * place) in components.playoff. Rows already showing the result are not
+ * written again. Returns how many rows the league holds; 0 means there is
+ * nothing to keep and the caller scores the season instead.
+ *
+ * Throws on a failed read or write: a final result half written is not one.
+ */
+async function keepFinalResult(
+  supabase: ServiceClient,
+  league: LeagueRow,
+  rosters: RosterRow[],
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("league_power_pulse_cache")
+    .select("id, roster_id, title_odds, playoff_odds, components")
+    .eq("league_id", league.id)
+    .eq("season", league.season);
+  if (error) throw new Error(`power pulse cache read failed: ${error.message}`);
+  const rows = data ?? [];
+  if (rows.length === 0) return 0;
+
+  const teams = rosters.filter((r) => r.playerSleeperIds.length > 0);
+  const { states } = playoffStates(
+    teams.map((r) => ({
+      sleeperRosterId: r.sleeperRosterId,
+      wins: r.wins,
+      ties: r.ties,
+      pointsFor: r.pointsFor,
+      division: r.division ?? null,
+    })),
+    league,
+    true,
+  );
+  const sleeperIdByRow = new Map(rosters.map((r) => [r.id, r.sleeperRosterId]));
+
+  for (const row of rows) {
+    const sleeperRosterId = sleeperIdByRow.get(row.roster_id);
+    const state = sleeperRosterId === undefined ? undefined : states.get(sleeperRosterId);
+    if (!state) continue;
+    const titleOdds = state.status === "champion" ? 1 : 0;
+    const playoffOdds = state.seed !== null ? 1 : 0;
+    const components = (row.components ?? {}) as Record<string, unknown>;
+    const current = JSON.stringify(components.playoff ?? null);
+    if (
+      Number(row.title_odds) === titleOdds &&
+      Number(row.playoff_odds) === playoffOdds &&
+      current === JSON.stringify(state)
+    ) {
+      continue;
+    }
+    const { error: writeError } = await supabase
+      .from("league_power_pulse_cache")
+      .update({
+        title_odds: titleOdds,
+        playoff_odds: playoffOdds,
+        components: { ...components, playoff: state } as unknown as Json,
+      })
+      .eq("id", row.id);
+    if (writeError) throw new Error(`power pulse final result write failed: ${writeError.message}`);
+  }
+  return rows.length;
 }
 
 function toCacheRow(

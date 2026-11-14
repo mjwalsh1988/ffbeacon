@@ -39,6 +39,7 @@ import { LeagueLoadError } from "@/components/league-load-error";
 import { LeagueShell } from "@/components/league-shell";
 import { WarRailSection } from "@/components/league-war/positional-war-section";
 import { PulseFavoriteCard } from "@/components/league-rail/pulse-favorite-card";
+import { oddsSummary } from "@/components/power-pulse/odds-format";
 import { ChampionCard } from "@/components/league-season/champion-card";
 import { FrozenValuesNote } from "@/components/league-season/frozen-values-note";
 import { ChopCard } from "@/components/league-season/chop-card";
@@ -1459,7 +1460,8 @@ async function PowerRankingsSection({
           <caption className="sr-only">
             League power rankings, ordered by{" "}
             {effectiveMode === "pulse" ? "Power Pulse" : "team value"}. Columns:
-            rank, team, Power Pulse score, whether the team is competing,
+            rank, team, Power Pulse score, title and playoff odds (or seed and
+            result once the playoffs start), whether the team is competing,
             mid-table, or rebuilding, positional rank (QB, RB, WR, TE
             {includePicks ? ", Picks" : ""}), then total team value
             {includePicks ? "" : " counting players only"} with its league rank.
@@ -1476,6 +1478,9 @@ async function PowerRankingsSection({
               </th>
               <th scope="col" className="px-2 py-3 text-center">
                 Pulse
+              </th>
+              <th scope="col" className="px-2 py-3 text-left">
+                Odds
               </th>
               <th scope="col" className="hidden px-3 py-3 text-left md:table-cell">
                 Outlook
@@ -1526,6 +1531,12 @@ async function PowerRankingsSection({
                   pulseRank: pulseByRoster.get(t.rosterRowId)?.pulseRank ?? null,
                   valueRank: valueRankByRoster.get(t.rosterRowId) ?? null,
                   status: pulseByRoster.get(t.rosterRowId)?.status ?? null,
+                  odds: (() => {
+                    const pulseTeam = pulseByRoster.get(t.rosterRowId);
+                    return pulseTeam
+                      ? oddsSummary(pulseTeam, pulseView?.playoffPhase ?? null)
+                      : null;
+                  })(),
                   positionRanks: {
                     QB: t.positionRanks.QB,
                     RB: t.positionRanks.RB,

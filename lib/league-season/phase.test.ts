@@ -194,3 +194,31 @@ describe("isChopThisWeek", () => {
     expect(isChopThisWeek(null, 5)).toBe(false);
   });
 });
+
+describe("resolveLeagueOutcome, a chopped season that ends on the calendar", () => {
+  it("names the alive team with the most points, the way the survival model settles it", () => {
+    const outcome = resolveLeagueOutcome({
+      status: "complete",
+      settings: { type: 3 },
+      rosters: [
+        { sleeperRosterId: 1, settings: { eliminated: 3, fpts: 900 } },
+        { sleeperRosterId: 2, settings: { eliminated: 0, fpts: 1500, fpts_decimal: 40 } },
+        { sleeperRosterId: 3, settings: { eliminated: 0, fpts: 1500, fpts_decimal: 90 } },
+      ],
+    });
+    expect(outcome.champion).toEqual({ sleeperRosterId: 3, source: "most_points" });
+    expect(outcome.phase).toBe("complete");
+  });
+
+  it("names nobody while the season is still running", () => {
+    const outcome = resolveLeagueOutcome({
+      status: "in_season",
+      settings: { type: 3 },
+      rosters: [
+        { sleeperRosterId: 1, settings: { eliminated: 0, fpts: 100 } },
+        { sleeperRosterId: 2, settings: { eliminated: 0, fpts: 200 } },
+      ],
+    });
+    expect(outcome.champion).toBeNull();
+  });
+});

@@ -8,7 +8,7 @@
 
 import { NO_PRODUCTION } from "@/lib/league-blueprint/shares";
 import type { BlueprintView, ShareFigure } from "@/lib/league-blueprint/types";
-import { rankOf, ROW_SUB, SECONDARY_LABEL } from "./bits";
+import { rankOf, ROW_SUB, SECONDARY_FIGURE, SECONDARY_LABEL } from "./bits";
 import { SheetSection } from "./sheet";
 
 function Share({
@@ -35,7 +35,7 @@ function Share({
         <p className="mt-1 text-sm text-ink-muted">{empty}</p>
       ) : (
         <>
-          <p className="mt-1 font-mono text-3xl font-black tabular-nums text-ink sm:text-4xl">
+          <p className={`mt-1 ${SECONDARY_FIGURE}`}>
             {figure.pct.toFixed(1)}%<span className="sr-only"> of the league</span>
           </p>
           <p className={ROW_SUB}>{rankOf(figure.rank, teamCount)}</p>
@@ -45,8 +45,8 @@ function Share({
           </div>
           <p className="mt-1.5 text-[11px] text-ink-subtle">
             {figure.pct >= even
-              ? `${(figure.pct - even).toFixed(1)} points above an even ${even.toFixed(1)}% share (the mark on the bar).`
-              : `${(even - figure.pct).toFixed(1)} points below an even ${even.toFixed(1)}% share (the mark on the bar).`}
+              ? `${(figure.pct - even).toFixed(1)} percentage points above an even ${even.toFixed(1)}% share (the mark).`
+              : `${(even - figure.pct).toFixed(1)} percentage points below an even ${even.toFixed(1)}% share (the mark).`}
           </p>
         </>
       )}

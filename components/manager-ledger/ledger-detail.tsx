@@ -15,16 +15,26 @@
  *   where the bench held the win are marked, and the deficit is read against
  *   that rather than on its own.
  *
- * WHY EVERY NUMBER IS ALSO A SENTENCE
- *   The tables are drawn for the eye. A screen reader hitting a row of six
- *   numeric cells hears six numbers and no meaning, so the weeks that changed a
- *   result carry an sr-only sentence naming the swap, the points, and the
- *   outcome. The sentence and the cells carry the same figures; neither is a
- *   summary of the other.
+ * EVERY FIGURE IS ONE TEXT NODE
+ *   Read the same by eye and by ear: "102.4 to 98.1", "None", "Not ranked".
+ *   No aria-hidden copy beside an sr-only copy, and no dash for a null.
+ *
+ * ONE HERO PER SECTION
+ *   Started (or the record in best ball), waiver points from starts, trade
+ *   net, and points against the room, per the section pattern in
+ *   docs/completed/team-blueprint/team-blueprint-plan.md section 10.
  */
 
 import type { LedgerViewTeam } from "@/lib/league-manager-ledger-data";
-import { games, pct, pts, record, signedPts } from "./format";
+import {
+  games,
+  pct,
+  pts,
+  record,
+  signedPts,
+  weeks as weekCount,
+  type LedgerWords,
+} from "./format";
 
 /**
  * A section title at whichever level the caller sits at.
@@ -49,14 +59,19 @@ function SectionHeading({
   );
 }
 
+const HERO = "font-mono font-black tabular-nums leading-none text-4xl sm:text-5xl";
+
 function Figure({
   label,
   value,
   hint,
+  hero = false,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** The one figure a section leads with. Spans the row so it reads first. */
+  hero?: boolean;
 }) {
   // The hint lives INSIDE the dd, not in a sibling paragraph. `dl > div` may
   // hold only dt and dd, and a <p> there is both invalid and detached from the
@@ -64,10 +79,20 @@ function Figure({
   // 84%" means nothing without "of the points their own roster could have
   // scored" attached to it.
   return (
-    <div className="rounded-card border border-line bg-surface px-3 py-2">
+    <div
+      className={`rounded-card border bg-surface px-3 py-2 ${
+        hero ? "col-span-2 border-line-accent sm:col-span-4" : "border-line"
+      }`}
+    >
       <dt className="text-[11px] uppercase tracking-wide text-ink-subtle">{label}</dt>
-      <dd className="font-mono text-base font-bold tabular-nums text-ink">
-        {value}
+      <dd
+        className={
+          hero
+            ? `mt-1 ${HERO} text-ink`
+            : "font-mono text-base font-bold tabular-nums text-ink"
+        }
+      >
+        <span className="block">{value}</span>
         {hint ? (
           <span className="mt-0.5 block font-sans text-[11px] font-normal leading-snug text-ink-muted">
             {hint}
@@ -86,10 +111,13 @@ function Nothing({ children }: { children: React.ReactNode }) {
 export function LedgerDetail({
   team,
   teamCount,
+  words,
   headingLevel = 4,
 }: {
   team: LedgerViewTeam;
   teamCount: number;
+  /** League-kind wording: chopped, best ball, median game. */
+  words: LedgerWords;
   /**
    * 3 under the bottom sheet's own h3, 4 when expanded inline under a Panel's
    * h2 with an h3 in between. The two entry points sit at different depths and
@@ -101,54 +129,77 @@ export function LedgerDetail({
   const SUB_LEVELS = { 3: "h4", 4: "h5", 5: "h6" } as const;
   const H = LEVELS[headingLevel];
   const HSub = SUB_LEVELS[headingLevel];
+  const lineups = words.gradesLineups;
   const weeksThatMattered = team.weeks.filter(
     (w) => w.outcome === "loss" && w.bestLineupOutcome === "win",
   );
+  const hasMedian = team.weeks.some((w) => w.medianOutcome !== undefined);
+  const outcomeWord = (outcome: "win" | "loss" | "tie" | null | undefined): string =>
+    outcome === "win" ? words.win : outcome === "loss" ? words.loss : outcome === "tie" ? "Tied" : "No game";
 
   return (
     <div className="space-y-6 py-2">
       {/* ---------------- lineup ---------------- */}
       <section>
         <SectionHeading as={H}>Lineups</SectionHeading>
+        {lineups ? null : (
+          <p className="mb-2 text-xs leading-relaxed text-ink-muted">
+            Best ball sets the lineup itself, so there is no lineup to grade.
+          </p>
+        )}
         <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {lineups ? (
+            <>
+              <Figure
+                hero
+                label="Started"
+                value={pct(team.efficiency)}
+                hint="the share of their roster's points they started"
+              />
+              <Figure
+                label="Left on bench"
+                value={pts(team.pointsLeft)}
+                hint={
+                  team.pointsLeftPerWeek === null
+                    ? "points their best lineup would have added"
+                    : `${pts(team.pointsLeftPerWeek)} a week`
+                }
+              />
+            </>
+          ) : null}
           <Figure
-            label="Started"
-            value={pct(team.efficiency)}
-            hint="of their own roster's points"
+            hero={!lineups}
+            label={words.recordLabel}
+            value={record(team.actualRecord)}
+            hint={words.recordHint}
           />
-          <Figure
-            label="Left on bench"
-            value={pts(team.pointsLeft)}
-            hint={
-              team.pointsLeftPerWeek === null
-                ? undefined
-                : `${pts(team.pointsLeftPerWeek)} per week`
-            }
-          />
-          <Figure label="Actual record" value={record(team.actualRecord)} />
-          <Figure
-            label="Best lineup"
-            value={record(team.bestLineupRecord)}
-            hint="same opponents, same scores"
-          />
-          {/* THE POINTS RANK. The table drops this column below md, and this
-              component is what the mobile sheet renders, so without it the
-              single most useful comparison on the page is unreachable on a
-              phone. Decision rank is the manager, points rank is the roster,
-              and the whole point is reading them next to each other. */}
-          <Figure
-            label="Decisions rank"
-            value={
-              team.efficiencyRank === null
-                ? "Not ranked"
-                : `${team.efficiencyRank} of ${teamCount}`
-            }
-            hint={
-              team.efficiencyRank === null
-                ? "too few finished weeks to rank"
-                : "on points started"
-            }
-          />
+          {lineups ? (
+            <>
+              <Figure
+                label={words.bestRecordLabel}
+                value={record(team.bestLineupRecord)}
+                hint={words.chopped ? "same cut lines, best lineup" : "same opponents, same scores"}
+              />
+              {/* THE POINTS RANK. The table drops this column below md, and
+                  this component is what the mobile sheet renders, so without it
+                  the most useful comparison on the page is unreachable on a
+                  phone. Decision rank is the manager, points rank is the
+                  roster. */}
+              <Figure
+                label="Decisions rank"
+                value={
+                  team.efficiencyRank === null
+                    ? "Not ranked"
+                    : `${team.efficiencyRank} of ${teamCount}`
+                }
+                hint={
+                  team.efficiencyRank === null
+                    ? "too few finished weeks to rank"
+                    : "on points started"
+                }
+              />
+            </>
+          ) : null}
           <Figure
             label="Points rank"
             value={
@@ -156,24 +207,25 @@ export function LedgerDetail({
                 ? "Not ranked"
                 : `${team.scoringRank} of ${teamCount}`
             }
-            hint="on points scored, which is the roster"
+            hint="regular season points, which is the roster"
           />
         </dl>
 
-        {team.winsLeftOnBench > 0 ? (
+        {lineups ? (
           <p className="mt-2 text-xs leading-relaxed text-ink-muted">
-            They lost {games(team.winsLeftOnBench)} their own bench would have won.
+            {team.winsLeftOnBench > 0
+              ? words.chopped
+                ? `Their bench would have survived ${weekCount(team.winsLeftOnBench)} below the cut.`
+                : `They lost ${games(team.winsLeftOnBench)} their own bench would have won.`
+              : words.chopped
+                ? "No week below the cut was survivable from their bench."
+                : "No loss was winnable from their bench."}
           </p>
-        ) : (
-          <p className="mt-2 text-xs leading-relaxed text-ink-muted">
-            No loss was winnable from their bench.
-          </p>
-        )}
+        ) : null}
 
-        {team.weeksWithUngradedSlots > 0 ? (
+        {lineups && team.weeksWithUngradedSlots > 0 ? (
           <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-            This league starts slots we cannot grade, so these cover the rest of the
-            lineup only. Records and scores use the league&apos;s own totals.
+            Some slots here cannot be graded, so these cover the rest of the lineup.
           </p>
         ) : null}
 
@@ -181,133 +233,89 @@ export function LedgerDetail({
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <caption className="sr-only">
-                Week by week for {team.teamName}, each row headed by its week. Columns:
-                result, both scores, points left on the bench, and the biggest swap that was
-                available. Weeks marked &quot;bench had the win&quot; are losses the best
-                lineup would have won.
+                {`Week by week for ${team.teamName}. Columns: week, result, ${
+                  words.chopped ? "score and the cut line" : "both scores"
+                }${lineups ? ", points left on the bench, and the biggest swap that was available" : ""}.`}
               </caption>
               <thead className="text-left text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
                 <tr>
                   <th scope="col" className="px-2 py-2">
-                    Wk
+                    Week
                   </th>
                   <th scope="col" className="px-2 py-2">
                     Result
                   </th>
                   <th scope="col" className="px-2 py-2 text-right">
-                    Score
+                    {words.chopped ? "Score, cut line" : "Score"}
                   </th>
-                  <th scope="col" className="px-2 py-2 text-right">
-                    Left
-                  </th>
-                  <th scope="col" className="px-2 py-2">
-                    Biggest swap available
-                  </th>
+                  {lineups ? (
+                    <>
+                      <th scope="col" className="px-2 py-2 text-right">
+                        Left
+                      </th>
+                      <th scope="col" className="px-2 py-2">
+                        Biggest swap available
+                      </th>
+                    </>
+                  ) : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {team.weeks.map((week) => {
-                  const flipped = week.outcome === "loss" && week.bestLineupOutcome === "win";
-                  const resultWord =
-                    week.outcome === null
-                      ? "No game"
-                      : week.outcome === "win"
-                        ? "Won"
-                        : week.outcome === "tie"
-                          ? "Tied"
-                          : "Lost";
+                  const flipped =
+                    lineups && week.outcome === "loss" && week.bestLineupOutcome === "win";
+                  const resultParts = [outcomeWord(week.outcome)];
+                  if (week.medianOutcome !== undefined) {
+                    resultParts.push(`${outcomeWord(week.medianOutcome).toLowerCase()} vs median`);
+                  }
+                  if (week.playoff) resultParts.push("playoffs");
                   return (
                     <tr key={week.week} className={flipped ? "bg-brand-purple/5" : undefined}>
-                      {/* The row header. Without it, reading the "Left" column
-                          on its own gives a column of numbers with no week
-                          attached to any of them. */}
                       <th
                         scope="row"
                         className="px-2 py-2 text-left font-mono text-xs font-normal tabular-nums text-ink-muted"
                       >
-                        <span aria-hidden="true">{week.week}</span>
-                        <span className="sr-only">Week {week.week}</span>
+                        {week.week}
                       </th>
                       <td className="px-2 py-2 text-xs">
                         <span className={flipped ? "font-semibold text-brand-purple" : "text-ink"}>
-                          {resultWord}
+                          {flipped
+                            ? `${resultParts.join(", ")}, bench had the ${words.chopped ? "save" : "win"}`
+                            : resultParts.join(", ")}
                         </span>
-                        {flipped ? (
-                          <span className="ml-1 whitespace-nowrap text-[10px] uppercase tracking-wide text-brand-purple">
-                            {/* The comma is spoken and the visual gap is not,
-                                so without it this reads as "Lost bench had the
-                                win" in one breath. */}
-                            <span className="sr-only">, </span>bench had the win
-                          </span>
-                        ) : null}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-right font-mono text-xs tabular-nums text-ink-muted">
-                        {/* The hyphen between the two scores is not spoken, so
-                            without the sr-only words this cell announces as two
-                            bare numbers with no indication of whose is whose.
-                            It has to be here rather than in the swap sentence,
-                            because a week with a perfect lineup has no swap
-                            sentence and still has a score. */}
-                        {pts(week.officialPoints)}
-                        {week.opponentPoints === null ? null : (
-                          <>
-                            <span aria-hidden="true"> - </span>
-                            <span className="sr-only"> to </span>
-                            {pts(week.opponentPoints)}
-                          </>
-                        )}
+                        {week.opponentPoints === null
+                          ? pts(week.officialPoints)
+                          : `${pts(week.officialPoints)} to ${pts(week.opponentPoints)}`}
                       </td>
-                      <td className="px-2 py-2 text-right font-mono text-xs tabular-nums text-ink-muted">
-                        {week.pointsLeft > 0 ? (
-                          pts(week.pointsLeft)
-                        ) : (
-                          <>
-                            {/* A dash is swallowed at the default punctuation
-                                level, so this cell would announce as empty.
-                                Here it means "nothing left", which is a real
-                                answer rather than an unmeasured one. */}
-                            <span aria-hidden="true">--</span>
-                            <span className="sr-only">None</span>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-xs text-ink-muted">
-                        {week.biggestMiss ? (
-                          <>
-                            <span aria-hidden="true">
-                              {week.biggestMiss.inName} over {week.biggestMiss.outName},{" "}
-                              {signedPts(week.biggestMiss.gain)}
-                            </span>
-                            {/* The swap, and only the swap. This used to open
-                                by restating the week, the result and the score,
-                                all three of which the reader has just heard from
-                                their own cells, and reading the column on its
-                                own then announced sentences that began "Lost
-                                week 5" under a heading that says "Biggest swap
-                                available". */}
-                            <span className="sr-only">
-                              {week.biggestMiss.inName} at{" "}
-                              {pts(week.biggestMiss.inPoints)} points in place of{" "}
-                              {week.biggestMiss.outName} at {pts(week.biggestMiss.outPoints)},
-                              worth {pts(week.biggestMiss.gain)} points.
-                              {flipped
-                                ? " That alone would have won this game."
-                                : ""}
-                            </span>
-                          </>
-                        ) : (
-                          <span>{week.pointsLeft > 0 ? "--" : "Best lineup available"}</span>
-                        )}
-                      </td>
+                      {lineups ? (
+                        <>
+                          <td className="px-2 py-2 text-right font-mono text-xs tabular-nums text-ink-muted">
+                            {week.pointsLeft > 0 ? pts(week.pointsLeft) : "None"}
+                          </td>
+                          <td className="px-2 py-2 text-xs text-ink-muted">
+                            {week.biggestMiss
+                              ? `${week.biggestMiss.inName} (${pts(week.biggestMiss.inPoints)}) over ${week.biggestMiss.outName} (${pts(week.biggestMiss.outPoints)}), ${signedPts(week.biggestMiss.gain)}`
+                              : week.pointsLeft > 0
+                                ? "No single swap"
+                                : "Best lineup available"}
+                          </td>
+                        </>
+                      ) : null}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {weeksThatMattered.length > 0 ? (
+            {lineups && weeksThatMattered.length > 0 ? (
               <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">
-                Each swap is priced against the lineup as it stood, so they do not add up
-                to the week&apos;s total.
+                Each swap is priced against the lineup as it stood, so swaps do not add up.
+              </p>
+            ) : null}
+            {hasMedian ? (
+              <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">
+                This league also plays the league median each regular season week.
               </p>
             ) : null}
           </div>
@@ -322,15 +330,16 @@ export function LedgerDetail({
         ) : (
           <>
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Figure
+                hero
+                label="Points from starts"
+                value={pts(team.waiverPointsStarted)}
+                hint="scored in this lineup, from the claim to the next drop"
+              />
               <Figure label="Moves" value={String(team.waiverMoves)} />
               <Figure
                 label="Started at least once"
                 value={`${team.waiverHits} of ${team.waiverMoves}`}
-              />
-              <Figure
-                label="Points from starts"
-                value={pts(team.waiverPointsStarted)}
-                hint="scored in this lineup after the claim"
               />
               <Figure
                 label={team.waiverFaabSpent === null ? "Budget" : "FAAB spent"}
@@ -362,13 +371,7 @@ export function LedgerDetail({
                       ) : null}
                     </span>
                     <span className="font-mono tabular-nums text-ink-muted">
-                      {pts(move.pointsStarted)}
-                      <span aria-hidden="true"> started</span>
-                      <span className="sr-only">
-                        {" "}
-                        points started, across {move.weeksStarted} week
-                        {move.weeksStarted === 1 ? "" : "s"} in the lineup
-                      </span>
+                      {`${pts(move.pointsStarted)} started in ${weekCount(move.weeksStarted)}`}
                     </span>
                   </li>
                 ))}
@@ -386,18 +389,23 @@ export function LedgerDetail({
         ) : (
           <>
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Figure
+                hero
+                label="Net"
+                value={signedPts(team.tradeNet)}
+                hint="started points in, minus started points out"
+              />
               <Figure label="Trades" value={String(team.tradeCount)} />
               <Figure
                 label="Points in"
                 value={pts(team.tradePointsIn)}
-                hint="scored here after arriving"
+                hint="started here after arriving"
               />
               <Figure
                 label="Points out"
                 value={pts(team.tradePointsOut)}
-                hint="scored elsewhere after leaving"
+                hint="started elsewhere after leaving"
               />
-              <Figure label="Net" value={signedPts(team.tradeNet)} />
             </dl>
             {team.tradeAnyPicks ? (
               <p className="mt-2 text-xs leading-relaxed text-ink-muted">
@@ -415,8 +423,7 @@ export function LedgerDetail({
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                       <span className="text-ink-subtle">Week {move.week}</span>
                       <span className="font-mono font-semibold tabular-nums text-ink">
-                        {signedPts(move.net)}
-                        <span className="sr-only"> points net</span>
+                        {`${signedPts(move.net)} net`}
                       </span>
                     </div>
                     <p className="mt-0.5 leading-relaxed text-ink-muted">
@@ -444,6 +451,12 @@ export function LedgerDetail({
         ) : (
           <>
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Figure
+                hero
+                label="Against the room"
+                value={signedPts(team.draftAboveBaseline)}
+                hint="points against the average pick in those rounds"
+              />
               <Figure label="Picks" value={String(team.draftPicks)} />
               <Figure
                 label="Points drafted"
@@ -451,13 +464,8 @@ export function LedgerDetail({
                 hint="what those picks scored here"
               />
               <Figure
-                label="Against the room"
-                value={signedPts(team.draftAboveBaseline)}
-                hint="vs the average pick in those rounds"
-              />
-              <Figure
                 label="Rank"
-                value={team.draftRank === null ? "--" : `${team.draftRank} of ${teamCount}`}
+                value={team.draftRank === null ? "Not ranked" : `${team.draftRank} of ${teamCount}`}
               />
             </dl>
             {team.moves.draftBest.length > 0 ? (

@@ -36,7 +36,8 @@ import { buildPickPositionResolver, NO_PICK_POSITIONS } from "@/lib/league-pick-
 import { formatPickLabel } from "@/lib/trade-ideas/pick-label";
 import { loadLeagueTeamCards, type TeamCardData } from "@/lib/league-view-data";
 import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
-import { pulseSnapshotFor } from "@/lib/trade-finder/pulse";
+import { chopWeekFor, pulseSnapshotFor } from "@/lib/trade-finder/pulse";
+import { categorizeLeague } from "@/lib/league-category";
 import { startingSlots } from "@/lib/power-pulse/lineup";
 import { formatTeamLabel } from "@/lib/team-label";
 import { type ScoringSettings } from "@/lib/league-scoring";
@@ -46,7 +47,13 @@ import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
 import { loadLatestPickSnapshot } from "@/lib/draft-pick-snapshot";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
-import type { FinderPick, FinderPlayer, FinderTeam } from "@/lib/trade-finder/types";
+import {
+  tradeLeagueKindOf,
+  type FinderPick,
+  type FinderPlayer,
+  type FinderTeam,
+  type TradeLeagueKind,
+} from "@/lib/trade-finder/types";
 import {
   matchViewerRoster,
   type ViewerCandidate,
@@ -69,6 +76,13 @@ export type TradeFinderLeague = {
   teams: FinderTeam[];
   startingSlots: string[];
   isDynasty: boolean;
+  /** Redraft, dynasty or chopped: what the ranking and the call answer for. */
+  leagueKind: TradeLeagueKind;
+  /**
+   * The weeks every lineup figure for a deal is averaged over, on the card and
+   * in the evaluation alike.
+   */
+  lineupWindow: { fromWeek: number; toWeek: number };
   allowPicks: boolean;
   formatDisplay: string;
   sourceDisplay: string;
@@ -110,10 +124,11 @@ function asStringArray(value: Json | null | undefined): string[] {
  * player was projected to score nothing. A player with no rows at all comes
  * back absent, and the engine treats that as unknown rather than as zero.
  *
- * Trade Finder does not currently load each player's Sleeper injury_status
- * (lib/league-view-data.ts's player select omits it), so no injury map is
- * passed here; loadAdjustedProjections treats an absent one as "everyone
- * healthy", the same default the injury multiplier itself falls back to.
+ * Each player's Sleeper injury_status rides in with the birth dates (see
+ * loadPlayerFacts), so an injured player is discounted here exactly as the
+ * evaluation under the card discounts him. The card and the evaluation share
+ * this one figure: lib/trade-impact/evaluate.ts reads the lineup change off
+ * these same projections rather than building a second one.
  */
 async function loadProjectedPoints(
   supabase: AnySupabase,
@@ -123,6 +138,7 @@ async function loadProjectedPoints(
   scoring: ScoringSettings,
   positionByPlayer: Map<string, string>,
   currentWeek: number,
+  injuryByPlayer: Map<string, string | null>,
 ): Promise<Map<string, number>> {
   if (playerIds.length === 0) return new Map();
 
@@ -134,6 +150,7 @@ async function loadProjectedPoints(
     toWeek: fromWeek + WEEK_HORIZON - 1,
     scoringSettings: scoring,
     positionByPlayer,
+    injuryByPlayer,
     currentWeek,
   });
 
@@ -144,25 +161,33 @@ async function loadProjectedPoints(
   return out;
 }
 
-/** Birth dates for the rostered players, so the engine can reason about age. */
-async function loadAges(
+/**
+ * Birth dates and injury status for the rostered players: age for the engine,
+ * injury status for the projection discount, the same Sleeper field the
+ * evaluation reads (lib/power-pulse/load.ts loadPlayers).
+ */
+async function loadPlayerFacts(
   supabase: AnySupabase,
   playerIds: string[],
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
+): Promise<{ ages: Map<string, number>; injuries: Map<string, string | null> }> {
+  const ages = new Map<string, number>();
+  const injuries = new Map<string, string | null>();
   const CHUNK = 300;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("players")
-      .select("id, birth_date")
+      .select("id, birth_date, injury_status:metadata->sleeper->>injury_status")
       .in("id", chunk);
+    if (error) throw new Error(`players ages: ${error.message}`);
     for (const row of data ?? []) {
       const age = computeAgeDecimal(row.birth_date);
-      if (age !== null) out.set(row.id, age);
+      if (age !== null) ages.set(row.id, age);
+      const status = (row as { injury_status?: unknown }).injury_status;
+      injuries.set(row.id, typeof status === "string" && status.length > 0 ? status : null);
     }
   }
-  return out;
+  return { ages, injuries };
 }
 
 /**
@@ -178,7 +203,7 @@ async function loadPoolMax(
   formatConfigId: string,
   source: string,
 ): Promise<number | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("player_value_trends")
     .select("current_value")
     .eq("format_config_id", formatConfigId)
@@ -186,6 +211,7 @@ async function loadPoolMax(
     .order("current_value", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) throw new Error(`player_value_trends pool max: ${error.message}`);
   const value = data?.current_value;
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
@@ -265,13 +291,17 @@ export async function loadTradeFinderLeague(
     identity: RosterIdentity;
   },
 ): Promise<TradeFinderLeague | null> {
-  const { data: league } = await supabase
+  const { data: league, error: leagueError } = await supabase
     .from("leagues")
     .select(
       "id, sleeper_league_id, name, season, status, total_rosters, roster_positions, scoring_settings, metadata",
     )
     .eq("sleeper_league_id", params.sleeperLeagueId)
     .maybeSingle();
+  // A failed read is not "this league is not synced". Thrown, so the surface
+  // shows an error rather than telling the reader to go sync a league that is
+  // already there.
+  if (leagueError) throw new Error(`trade finder: league read failed: ${leagueError.message}`);
   if (!league) return null;
 
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
@@ -318,6 +348,11 @@ export async function loadTradeFinderLeague(
   ]);
 
   if (cards.length < 2) return null;
+  // Without the roster rows nobody owns anything and every IR player looks
+  // startable, which is a confident wrong answer rather than an empty one.
+  if (rosterRows.error) {
+    throw new Error(`trade finder: roster read failed: ${rosterRows.error.message}`);
+  }
 
   // Owner AND co-owners. A co-owner is an owner for the purpose of "which team
   // is mine", and omitting them found a co-owner's team on the league overview
@@ -358,26 +393,31 @@ export async function loadTradeFinderLeague(
   // lib/league-power-pulse.ts resolves the same value: Sleeper's own NFL
   // state clamped into the league's regular season, so the preseason and
   // offseason both resolve to week 1 rather than an empty remaining slate.
-  const nflState = await getNflState();
+  //
+  // The player facts (ages and injury status) start first and run alongside
+  // the NFL state, because the projection read needs the injury map.
+  const factsPromise = loadPlayerFacts(supabase, playerIds);
+  const [nflState, facts] = await Promise.all([getNflState(), factsPromise]);
   const rawPlayoffWeekStart = Number(sleeperLeague.settings?.playoff_week_start);
   const playoffWeekStart =
     Number.isFinite(rawPlayoffWeekStart) && rawPlayoffWeekStart > 0
       ? rawPlayoffWeekStart
       : 15;
   const currentWeek = resolveCurrentWeek(nflState, season, playoffWeekStart);
+  // Unknown week (Sleeper's NFL state did not answer): a failure, not week 1.
+  if (currentWeek === null) throw new Error("trade finder: NFL week unknown, Sleeper state did not answer");
+  const ages = facts.ages;
 
-  const [projected, ages] = await Promise.all([
-    loadProjectedPoints(
-      supabase,
-      playerIds,
-      season,
-      fromWeek,
-      (league.scoring_settings ?? {}) as ScoringSettings,
-      positionByPlayer,
-      currentWeek,
-    ),
-    loadAges(supabase, playerIds),
-  ]);
+  const projected = await loadProjectedPoints(
+    supabase,
+    playerIds,
+    season,
+    fromWeek,
+    (league.scoring_settings ?? {}) as ScoringSettings,
+    positionByPlayer,
+    currentWeek,
+    facts.injuries,
+  );
 
   const pulseByRoster = new Map(
     (pulseView?.teams ?? []).map((t) => [t.sleeperRosterId, t]),
@@ -485,11 +525,19 @@ export async function loadTradeFinderLeague(
       // scored. The engine leans on this to decide how much a deal is worth
       // to THIS team, and a fabricated zero would tell it every trade is
       // worth nothing on the field.
-      // Power Pulse's own headline figures (projected wins, playoff odds) are
-      // deliberately not carried across. Nothing in the engine reads them and
-      // they are already on the Power Pulse page; a field kept in case
-      // somebody wants it later is a field nobody can tell is stale.
-      pulse: pulse ? pulseSnapshotFor(pulse.weekly, weeklyByRoster) : null,
+      // Power Pulse's own season figures ride along as the "before" every
+      // trade surface prints: a card and the evaluation under it start from
+      // the number Power Pulse shows, and a trade supplies only the change.
+      pulse: pulse
+        ? {
+            ...pulseSnapshotFor(pulse.weekly, weeklyByRoster),
+            projectedWins: pulse.projectedWins,
+            playoffOdds: pulse.playoffOdds,
+            titleOdds: pulse.titleOdds,
+            chopOdds: pulse.chopped ? pulse.chopOddsThisWeek : null,
+            chopWeek: pulse.chopped ? chopWeekFor(card.sleeperRosterId, weeklyByRoster) : null,
+          }
+        : null,
       players,
       picks,
     };
@@ -504,6 +552,8 @@ export async function loadTradeFinderLeague(
     teams,
     startingSlots: startingSlots(asStringArray(league.roster_positions)),
     isDynasty,
+    leagueKind: tradeLeagueKindOf(categorizeLeague(sleeperLeague), isDynasty),
+    lineupWindow: { fromWeek, toWeek: fromWeek + WEEK_HORIZON - 1 },
     allowPicks: isDynasty,
     formatDisplay: context.formatDisplay,
     sourceDisplay: context.sourceDisplay,

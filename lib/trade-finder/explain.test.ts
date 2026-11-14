@@ -203,8 +203,8 @@ describe("buildRationale stays inside its character budget", () => {
   }
 
   it("names the question the reader actually asked", () => {
-    expect(rationale("contender")).toContain("asked for contender deals");
-    expect(rationale("value")).toContain("asked for value deals");
+    expect(rationale("contender")).toContain("In Compete mode");
+    expect(rationale("value")).toContain("In Rebuild mode");
   });
 
   it("lets the reader's stated strategy outrank Power Pulse's read of them", () => {

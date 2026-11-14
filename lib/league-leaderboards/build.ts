@@ -13,6 +13,7 @@
  */
 
 import { isUsableScoring, scoreActualLine, type ScoringSettings } from "@/lib/league-scoring";
+import { otherLegWeek, playoffLeg, type PlayoffShape } from "@/lib/league-schedule/playoff-legs";
 import type {
   GameResult,
   LeaderboardPlayer,
@@ -72,6 +73,12 @@ export type LeaderboardInput = {
   /** First playoff week, or null when the league runs no bracket. */
   playoffWeekStart: number | null;
   bestBall: boolean;
+  /** A chopped league: no head-to-head, so no games to list. */
+  chopped?: boolean;
+  /** Sleeper's playoff_round_type (2 = two weeks per round, 1 = two-week final). */
+  playoffRoundType?: number;
+  /** Teams in the bracket, which sets how many rounds there are. */
+  playoffTeams?: number;
   /** One week, or null for the whole season. */
   week: number | null;
 };
@@ -148,11 +155,12 @@ export function buildLeaderboards(input: LeaderboardInput): LeaderboardsView {
       const line = lines.get(sid);
       const own = roster.get(sid);
       if (own) {
-        // The figure that counted in this league. A rostered player without a
-        // stat line did not play, unless Sleeper credited him something anyway.
+        // The figure that counted in this league. Every week in here is final,
+        // so a rostered player played when he has a stat line, was credited
+        // points, or started: a starter's zero is a game, not a missing one.
         put(sid, w, {
           points: own.points,
-          played: line !== undefined || own.points !== 0,
+          played: line !== undefined || own.points !== 0 || own.started,
           rosterId: own.rosterId,
           started: own.started,
           benchable: own.benchable,
@@ -331,17 +339,40 @@ export function buildLeaderboards(input: LeaderboardInput): LeaderboardsView {
   }
 
   // Head to head games. Each pair once, from the lower roster id's side, and
-  // only when somebody on either side actually started.
+  // only when somebody on either side actually started. None in a chopped
+  // league, where nobody plays the team they were drawn against.
+  //
+  // A TWO-WEEK PLAYOFF ROUND is one game: leg 1 is folded into leg 2 and the
+  // points are both weeks added. Leg 1 alone decides nothing, so it is not
+  // listed; leg 2 is listed once both legs are settled.
+  const showsGames = input.chopped !== true;
+  const legShape: PlayoffShape = {
+    playoffWeekStart: input.playoffWeekStart,
+    playoffRoundType: input.playoffRoundType ?? 0,
+    playoffTeams: input.playoffTeams ?? 6,
+  };
   const rowByKey = new Map(input.weeks.map((r) => [`${r.week}|${r.sleeperRosterId}`, r]));
   const games: GameResult[] = [];
-  for (const r of input.weeks) {
+  for (const r of showsGames ? input.weeks : []) {
     if (!inScope.has(r.week) || r.opponentRosterId === null) continue;
     if (r.sleeperRosterId > r.opponentRosterId) continue;
     const other = rowByKey.get(`${r.week}|${r.opponentRosterId}`);
     if (!other) continue;
     if (r.startedIds.size === 0 && other.startedIds.size === 0) continue;
-    const home = round(r.officialPoints);
-    const away = round(other.officialPoints);
+    const leg = playoffLeg(r.week, legShape);
+    if (leg === 1) continue;
+    let home = round(r.officialPoints);
+    let away = round(other.officialPoints);
+    let twoLegs = false;
+    if (leg === 2) {
+      const first = otherLegWeek(r.week, legShape);
+      const ownFirst = first === null ? undefined : rowByKey.get(`${first}|${r.sleeperRosterId}`);
+      const otherFirst = first === null ? undefined : rowByKey.get(`${first}|${other.sleeperRosterId}`);
+      if (!ownFirst || !otherFirst || ownFirst.opponentRosterId !== other.sleeperRosterId) continue;
+      home = round(home + ownFirst.officialPoints);
+      away = round(away + otherFirst.officialPoints);
+      twoLegs = true;
+    }
     games.push({
       week: r.week,
       playoff: isPlayoff(r.week),
@@ -352,6 +383,7 @@ export function buildLeaderboards(input: LeaderboardInput): LeaderboardsView {
       margin: round(Math.abs(home - away)),
       combined: round(home + away),
       winnerId: home === away ? null : home > away ? r.sleeperRosterId : other.sleeperRosterId,
+      ...(twoLegs ? { twoLegs } : {}),
     });
   }
 
@@ -377,6 +409,7 @@ export function buildLeaderboards(input: LeaderboardInput): LeaderboardsView {
       closest: [...games].sort((a, b) => a.margin - b.margin || a.week - b.week).slice(0, TEAM_LIST_DEPTH),
       shootouts: [...games].sort((a, b) => b.combined - a.combined || a.week - b.week).slice(0, TEAM_LIST_DEPTH),
     },
+    showsGames,
     scoresFreeAgents,
   };
 }

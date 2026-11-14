@@ -35,14 +35,30 @@ export function StandingPanel({ view, number }: { view: BlueprintView; number: s
       )}
       <dl className="mt-5 grid gap-4 sm:grid-cols-3">
         <Readout
-          label="Value archetype"
+          label="Team direction"
           value={s.valueArchetype ?? "Not computed yet"}
           note={s.valueArchetype ? null : s.standingNote}
         />
-        <Readout label="Roster archetype" value={s.rosterArchetype} />
+        <Readout
+          label="Roster shape"
+          value={s.rosterArchetype}
+          note={
+            s.starterSharePct === null
+              ? "No priced players to measure a starter share."
+              : `Starters hold ${s.starterSharePct}% of the roster's value.`
+          }
+        />
         <Readout
           label="Outlook"
-          value={s.outlook ? s.outlook.text : view.header.isDynasty ? "Not computed yet" : "One season"}
+          value={
+            s.outlook
+              ? s.outlook.text
+              : view.header.isDynasty
+                ? "Not computed yet"
+                : view.header.leagueKind === "chopped"
+                  ? "Survival"
+                  : "One season"
+          }
           note={s.outlook ? s.outlook.reason : s.outlookNote}
         />
       </dl>

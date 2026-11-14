@@ -201,8 +201,18 @@ export type ScheduleMatchup = {
   isFinal: boolean;
   home: ScheduleMatchupSide;
   away: ScheduleMatchupSide | null;
-  /** Probability the home side wins. Null on a final week or with no cache. */
+  /**
+   * Chance the home side wins: the home set lineup against the away set
+   * lineup, with points already scored banked (lib/league-schedule/win-chance.ts).
+   * Current week only, because no other week has a lineup set yet. Null on a
+   * final week, an unpaired roster, a chopped league, and any other week.
+   */
   homeWinProb: number | null;
+  /**
+   * Which leg of a two-week playoff round this week is, or null. On leg 2 a
+   * side's `roundTotal` is both weeks added, and `won` is decided on it.
+   */
+  leg?: 1 | 2 | null;
 };
 
 export type ScheduleMatchupSide = {
@@ -215,12 +225,25 @@ export type ScheduleMatchupSide = {
   /** Actual points. Non-null only on a final week. */
   actual: number | null;
   /**
-   * Projected points from the Power Pulse cache, which is the OPTIMAL lineup.
-   * The same number the Power Pulse tab ranks on, so the two never disagree.
+   * "Projected": the SET lineup's expected final total, points already scored
+   * plus what its starters still project. Current week only, because no other
+   * week has a lineup set yet. Null otherwise.
+   */
+  projectedSet?: number | null;
+  /** Points on the board so far in a week being played. Null otherwise. */
+  liveScore?: number | null;
+  /**
+   * The BEST lineup's projection, from the Power Pulse cache. The same number
+   * the Power Pulse tab ranks on. Shown as "Best lineup", never as "Projected".
    */
   projectedOptimal: number | null;
   /** Spread that goes with projectedOptimal. */
   sigma: number | null;
+  /**
+   * Leg 2 of a two-week playoff round: both weeks added, once this week is
+   * final. Null in every other week.
+   */
+  roundTotal?: number | null;
   /**
    * Points the manager is leaving on the bench, from the Power Pulse cache.
    * Non-null on the CURRENT week only: the cache holds one figure per team,
@@ -231,7 +254,8 @@ export type ScheduleMatchupSide = {
    * True when this side won a final week. False covers three different things,
    * so it is not enough on its own to label an outcome: a loss, a tie, and a
    * roster with no opponent. Check `ScheduleMatchup.away === null` for the bye
-   * before falling through to "Tied".
+   * before falling through to "Tied". Always false in a chopped league, where
+   * nobody plays a head-to-head game, and on leg 1 of a two-week round.
    */
   won: boolean;
 };
@@ -283,6 +307,11 @@ export type ScheduleBoard = {
   noScheduleYet: boolean;
   /** True when no Power Pulse row exists, so projections are unavailable. */
   projectionsUnavailable: boolean;
+  /**
+   * True when Sleeper's NFL state could not be read, so `currentWeek` was
+   * inferred from the stored slate (the first week not yet final).
+   */
+  weekFromStored: boolean;
   /**
    * A chopped (guillotine) league.
    *

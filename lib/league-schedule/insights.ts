@@ -29,6 +29,8 @@ import type {
 export type InsightWeek = {
   week: number;
   isFinal: boolean;
+  /** A playoff week. Luck leaves these out: the real record it is set against is regular season only. */
+  isPlayoffWeek?: boolean;
   matchups: ScheduleMatchup[];
 };
 
@@ -101,9 +103,13 @@ export function buildSosRows(teams: ScheduleTeam[], weeks: InsightWeek[]): SosRo
  *
  * A tie counts half a win and half a loss on both sides of the comparison, so a
  * week where two teams post the same score does not hand either an advantage.
+ *
+ * REGULAR SEASON ONLY. Sleeper's record counts regular season games, so the
+ * all-play record it is set against has to count the same weeks. Playoff weeks
+ * would hand every bracket team extra all-play games the real record never had.
  */
 export function buildLuckRows(teams: ScheduleTeam[], weeks: InsightWeek[]): LuckRow[] {
-  const finalWeeks = weeks.filter((w) => w.isFinal);
+  const finalWeeks = weeks.filter((w) => w.isFinal && !w.isPlayoffWeek);
   if (finalWeeks.length === 0) return [];
 
   const allPlayWins = new Map<number, number>();
