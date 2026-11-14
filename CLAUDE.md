@@ -132,6 +132,9 @@ Do not add feature documentation to this file.
   Ledger, Blueprint) are computed on demand when a league is viewed. No cron
   ever iterates leagues. A degenerate result (no schedule, no settled weeks)
   is never cached.
+  - The one exception: the league-relay cron (app/api/cron/league-relay,
+    every 15 minutes) walks the community leagues, because the Discord bot
+    and the members who follow it depend on it. No other cron may do this.
 - A page that shows a figure another model owns reads that model's cache. It
   never recomputes the figure a second way.
 - A null value or projection is shown in words ("No projection", "No market

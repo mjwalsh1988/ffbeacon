@@ -232,13 +232,12 @@ Gate in order: npm run typecheck, npm run lint (0 errors, 0 warnings), npm test,
 - Past-season leagues are frozen snapshots and are never synced again (T02).
 - Trade ideas: redraft and chopped rank on winning now; dynasty has Compete and Rebuild with the default inferred from the team (T06).
 - Explanations stay short and plain; visuals carry the page.
-- Open: the league-relay cron (app/api/cron/league-relay, every 15 minutes) walks community leagues, which the "no cron iterates leagues" rule forbids. Left as it is until the owner decides; explain it in the final report.
+- The league-relay cron (app/api/cron/league-relay, every 15 minutes) is the one approved exception to the no cron iterates leagues rule; the Discord bot depends on it. Recorded in CLAUDE.md.
 
 ## Left for the owner
 
 - 377 old chopped Power Pulse rows (22 leagues, models pp-6 to pp-8) are still stored. Each league is cleaned on its next view and the rail card filters them; about 8 other readers of the cache do not. A one-time delete was not run.
 - app/leagues/[league_id]/page.tsx reads the Power Pulse view three times per request (it did before this build).
-- The league-relay cron decision (see Owner decisions recorded).
 - One past-season league still fails its final capture and retries on its next view.
 - cadenceDays (Market Signals) has no admin field; the player profile band chart still uses the daily window for DynastyProcess.
 - Keeper leagues carry no pick value in team totals.
