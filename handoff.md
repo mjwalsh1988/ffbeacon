@@ -236,7 +236,7 @@ Gate in order: npm run typecheck, npm run lint (0 errors, 0 warnings), npm test,
 
 ## Left for the owner
 
-- 377 old chopped Power Pulse rows (22 leagues, models pp-6 to pp-8) are still stored. Each league is cleaned on its next view and the rail card filters them; about 8 other readers of the cache do not. A one-time delete was not run.
+- Done 2026-11-13: the 377 old chopped Power Pulse rows (22 leagues, 2026 season) were deleted from league_power_pulse_cache; each league rebuilds on its next view.
 - app/leagues/[league_id]/page.tsx reads the Power Pulse view three times per request (it did before this build).
 - One past-season league still fails its final capture and retries on its next view.
 - cadenceDays (Market Signals) has no admin field; the player profile band chart still uses the daily window for DynastyProcess.
