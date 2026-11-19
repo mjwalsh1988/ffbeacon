@@ -18014,3 +18014,8 @@ LPI-T12 | completed | Close out: full gate, one reviewer sub-agent, its findings
      | depends on: LPI-T01 to LPI-T11
      | design: the rail card shows the champion after the title game and bracket odds during the playoffs at hero size; the old chopped row purge runs before any early return; season context fits chopped and best ball; the share image uses the real unpriced pick count; the retry looks up fetch per call; week lookups run alongside the derived sync
      | verified: yes (typecheck, lint 0/0, npm test green with 8,347 tests, build; verify:idp-invariant identical; migration 0379 policies confirmed; one reviewer sub-agent, findings fixed except the items listed for the owner in handoff.md)
+FAAB-FIX-01 | completed | FAAB priors cron timeout: the hourly pass failed on every run from 2026-11-18 09:25 UTC because the waiver read for 100 leagues walked the whole league_transactions primary key (about 9.6 s, past the statement timeout)
+     | files: lib/faab/priors-load.ts, supabase/migrations/0380_league_transactions_waiver_league_id_index.sql
+     | depends on: none
+     | design: one keyset walk per league with an equality on league_id, served by a new partial index (league_id, id) where type = 'waiver'; a page now reads in about 6 ms. The index alone does not fix the old 100-league query, so the code must deploy
+     | verified: yes (typecheck, lint 0/0, npm test green with 8,347 tests, build; migration 0380 applied to prod; npm run faab:priors resumed the stalled pass from the 2026-11-18 08:10 watermark, read 189 leagues and 17,584 auctions and rebuilt the 2026 and 2025 cells; one reviewer sub-agent, no findings)

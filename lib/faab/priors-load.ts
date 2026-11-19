@@ -218,6 +218,12 @@ export async function loadLeagueAuctions(
   // Keyset on id rather than offset paging: offset makes Postgres discard
   // every earlier row on every page, and a chopped or dynasty league can hold
   // thousands of failed bids.
+  //
+  // ONE LEAGUE PER WALK. With 100 leagues in an `.in()` list ordered by id,
+  // the planner walked the primary key across the whole table and filtered,
+  // which hit the statement timeout on every run from 2026-11-18. An equality
+  // on league_id lets idx_league_transactions_waiver_league_id (league_id, id)
+  // serve each page in index order (migration 0380).
   const rows = await fetchAllRowsInChunksByKeyset<WaiverRow, string, string>(
     "faab priors waiver transactions",
     budgeted,
@@ -225,7 +231,7 @@ export async function loadLeagueAuctions(
       let q = supabase
         .from("league_transactions")
         .select("id, league_id, season, week, type, status, adds, roster_ids, metadata")
-        .in("league_id", chunk)
+        .eq("league_id", chunk[0])
         .eq("type", "waiver")
         .in("season", seasons)
         .order("id", { ascending: true })
@@ -237,7 +243,7 @@ export async function loadLeagueAuctions(
       }>;
     },
     (row) => row.id,
-    ID_CHUNK,
+    1,
   );
 
   const rowsByLeague = new Map<string, AuctionTransactionRow[]>();
