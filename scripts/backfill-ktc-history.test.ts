@@ -13,8 +13,18 @@ describe("backfill-ktc-history arguments", () => {
     expect(parseRunArgs(["--from", "2026-09-08", "--to", "2026-09-24", "--dry-run"])).toEqual({
       window: { from: "2026-09-08", to: "2026-09-24" },
       dryRun: true,
+      product: null,
     });
-    expect(parseRunArgs(["--all"])).toEqual({ window: null, dryRun: false });
+    expect(parseRunArgs(["--all"])).toEqual({ window: null, dryRun: false, product: null });
+  });
+
+  it("reads --product, and refuses anything but dynasty or redraft", () => {
+    expect(parseRunArgs(["--from", "2026-01-01", "--to", "2026-06-09", "--product", "redraft"]).product).toBe("redraft");
+    expect(parseRunArgs(["--all", "--product", "dynasty"]).product).toBe("dynasty");
+    expect(() => parseRunArgs(["--from", "2026-01-01", "--to", "2026-06-09", "--product", "fantasy"])).toThrow(
+      /--product/,
+    );
+    expect(() => parseRunArgs(["--from", "2026-01-01", "--to", "2026-06-09", "--product"])).toThrow(/--product/);
   });
 
   it("filters dates inclusively, and keeps everything with no window", () => {

@@ -70,8 +70,19 @@ export type KtcMatchResult =
   | { kind: "unmatched" }
   | { kind: "ambiguous"; candidates: string[] };
 
+export type KtcResolveOptions = {
+  /**
+   * Settle a shared name by the KTC id stored on our player (default true).
+   * The stored id is in dynasty numbering, and KTC numbers its redraft list
+   * separately, so an entry from the fantasy list passes false: a namesake
+   * left unsettled is skipped instead of being given to whichever player's
+   * dynasty id happens to equal the redraft id.
+   */
+  useStoredId?: boolean;
+};
+
 export type KtcPlayerIndex = {
-  resolve(entry: KtcMatchEntry, position: string): KtcMatchResult;
+  resolve(entry: KtcMatchEntry, position: string, options?: KtcResolveOptions): KtcMatchResult;
 };
 
 export function buildKtcPlayerIndex(players: readonly KtcMatchPlayer[]): KtcPlayerIndex {
@@ -84,7 +95,7 @@ export function buildKtcPlayerIndex(players: readonly KtcMatchPlayer[]): KtcPlay
   }
 
   return {
-    resolve(entry, position) {
+    resolve(entry, position, options) {
       const key = `${normalizeKtcName(entry.playerName)}|${position}`;
       const candidates = byKey.get(key);
       if (!candidates || candidates.length === 0) return { kind: "unmatched" };
@@ -99,9 +110,11 @@ export function buildKtcPlayerIndex(players: readonly KtcMatchPlayer[]): KtcPlay
       const rostered = candidates.filter((c) => !!c.team);
       if (rostered.length === 1) return { kind: "matched", playerId: rostered[0].id };
 
-      const ktcId = String(entry.playerID);
-      const owner = candidates.filter((c) => storedKtcId(c.external_ids) === ktcId);
-      if (owner.length === 1) return { kind: "matched", playerId: owner[0].id };
+      if (options?.useStoredId !== false) {
+        const ktcId = String(entry.playerID);
+        const owner = candidates.filter((c) => storedKtcId(c.external_ids) === ktcId);
+        if (owner.length === 1) return { kind: "matched", playerId: owner[0].id };
+      }
 
       return { kind: "ambiguous", candidates: candidates.map((c) => c.id) };
     },

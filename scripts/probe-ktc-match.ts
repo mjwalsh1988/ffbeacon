@@ -1,6 +1,6 @@
 import { getServiceClient } from "./_supabase";
 import { fetchAllRows } from "../lib/supabase/fetch-all";
-import { extractKtcPlayers } from "../lib/ktc-page";
+import { fetchKtcPlayers } from "../lib/ktc-fetch";
 
 function normalizeName(name: string): string {
   return name
@@ -13,13 +13,7 @@ function normalizeName(name: string): string {
 
 async function main() {
   const supabase = getServiceClient();
-  const url = "https://keeptradecut.com/dynasty-rankings?format=1";
-  const response = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0 Chrome/120" },
-  });
-  const html = await response.text();
-  const extracted = extractKtcPlayers(html);
-  if (!extracted) return;
+  const extracted = await fetchKtcPlayers("dynasty");
   const ktc = extracted.players as Array<{
     playerName: string;
     position: string;

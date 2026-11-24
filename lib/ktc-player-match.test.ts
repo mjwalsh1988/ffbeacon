@@ -48,6 +48,15 @@ describe("buildKtcPlayerIndex", () => {
     });
   });
 
+  it("skips the stored-id step for a redraft entry, whose numbering differs from the stored dynasty id", () => {
+    const a = row({ id: "a", external_ids: { ktc: "9" } });
+    const b = row({ id: "b" });
+    const out = buildKtcPlayerIndex([a, b]).resolve({ playerID: 9, playerName: "A B", team: null }, "RB", {
+      useStoredId: false,
+    });
+    expect(out).toEqual({ kind: "ambiguous", candidates: ["a", "b"] });
+  });
+
   it("reports an ambiguous name instead of guessing", () => {
     const a = row({ id: "a" });
     const b = row({ id: "b" });

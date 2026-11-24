@@ -15,6 +15,12 @@
  * itself answered 200. Both layouts are read here, the new one first, so the
  * nightly sync and the history backfill cannot drift apart again.
  *
+ *   - From 2026-11-24 the page ships `var playersArray = [];` and the browser
+ *     loads the list from a separate endpoint, keyed by the page's
+ *     `playersVersion` global. That empty literal still "parses" here as an
+ *     empty legacy list; lib/ktc-fetch.ts treats an empty list as "go to the
+ *     endpoint" and uses extractKtcPlayersVersion below for the version.
+ *
  * Pure. Returns null when neither layout is present (or the JSON does not
  * parse into an array), which the callers treat as "the markup changed".
  */
@@ -36,6 +42,16 @@ export function extractKtcPlayers(html: string): { players: unknown[]; layout: K
     if (parsed) return { players: parsed, layout: "legacy-literal" };
   }
   return null;
+}
+
+// Bounded to the characters KTC uses (e.g. 2611241820-8e1084b1baae51c9), so an
+// odd value never reaches the request URL or the alert text.
+const VERSION_PATTERN = /\bplayersVersion\s*=\s*["']([A-Za-z0-9._-]{1,64})["']/;
+
+/** The page's `playersVersion` global, which the player-pool endpoint is keyed by. Null when absent. */
+export function extractKtcPlayersVersion(html: string): string | null {
+  const match = html.match(VERSION_PATTERN);
+  return match ? match[1] : null;
 }
 
 function parseArray(text: string): unknown[] | null {

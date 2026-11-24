@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractKtcPlayers } from "./ktc-page";
+import { extractKtcPlayers, extractKtcPlayersVersion } from "./ktc-page";
 
 const PLAYER = { playerName: "Josh Allen", playerID: 1, position: "QB", superflexValues: { value: 9994 } };
 
@@ -38,5 +38,29 @@ describe("extractKtcPlayers", () => {
     expect(extractKtcPlayers("<html><title>Just a moment</title></html>")).toBeNull();
     expect(extractKtcPlayers(`<script id="ktc-players">{"a":1}</script>`)).toBeNull();
     expect(extractKtcPlayers(`<script id="ktc-players">not json</script>`)).toBeNull();
+  });
+
+  it("reads the 2026-11-24 placeholder as an empty legacy list, which the fetcher treats as go to the pool", () => {
+    const html = `<script>
+    var playersVersion = '2611241820-8e1084b1baae51c9';
+    var playersArray = [];
+    var ktcPoolReady = ktcFetchPlayerPool('dynasty', playersVersion, null).then(function (pool) { playersArray = pool; });
+    </script>`;
+    expect(extractKtcPlayers(html)).toEqual({ players: [], layout: "legacy-literal" });
+  });
+});
+
+describe("extractKtcPlayersVersion", () => {
+  it("reads the playersVersion global in either quote style", () => {
+    expect(extractKtcPlayersVersion(`var playersVersion = '2611241820-8e1084b1baae51c9';`)).toBe(
+      "2611241820-8e1084b1baae51c9",
+    );
+    expect(extractKtcPlayersVersion(`var playersVersion="abc-1";`)).toBe("abc-1");
+  });
+
+  it("does not confuse the histories version for it, and returns null when absent", () => {
+    expect(extractKtcPlayersVersion(`var historiesVersion = '261124-95eefa093e1e86b4';`)).toBeNull();
+    expect(extractKtcPlayersVersion("<html></html>")).toBeNull();
+    expect(extractKtcPlayersVersion(`var playersVersion = 'a b<script>';`)).toBeNull();
   });
 });

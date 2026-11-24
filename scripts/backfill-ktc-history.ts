@@ -42,14 +42,15 @@
  * CLAUDE.md (one row per (player, format, source, captured_at), so we
  * persist the per-date sliver rather than the entire endpoint blob).
  *
- * Player matching mirrors sync-ktc.ts: name+position lookup against the
- * existing `players` table. Unmatched KTC IDs are logged to
+ * Player matching is the nightly sync's own index (lib/ktc-player-match.ts):
+ * name+position against the existing `players` table, shared names settled
+ * the same way. Unmatched KTC IDs are logged to
  * /tmp/backfill-ktc-unmatched.json so we don't silently drop rows.
  *
  * Re-runnable: the unique constraint (player_id, format_config_id, source,
  * captured_at) plus ignoreDuplicates:true means a second run is a no-op.
  *
- * Run: npm run backfill:ktc -- --from 2026-09-08 --to 2026-09-24 [--dry-run]
+ * Run: npm run backfill:ktc -- --from 2026-09-08 --to 2026-09-24 [--product dynasty|redraft] [--dry-run]
  *      npm run backfill:ktc -- --all            (the original full-history run)
  *
  * A DATE WINDOW IS REQUIRED unless --all is passed. This script writes each
@@ -60,7 +61,9 @@
  * form exists to fill a gap the nightly sync missed, and only that gap. First
  * used 2026-09-25 for 2026-09-08 to 2026-09-24, when KTC moved its player list
  * into a <script id="ktc-players"> element and the sync wrote nothing for
- * eighteen nights (lib/ktc-page.ts).
+ * eighteen nights (lib/ktc-page.ts). Used again for 2026-11-24, when KTC
+ * moved the list out of the page into a separate player-pool endpoint
+ * (lib/ktc-fetch.ts) and that night's sync wrote nothing.
  *
  * Inside a window it also fills draft_pick_values for the dynasty formats
  * (the histories endpoint carries every pick KTC ranks, under the pick's own
@@ -81,8 +84,9 @@ import { join } from "node:path";
 import { getServiceClient } from "./_supabase";
 import { pathToFileURL } from "node:url";
 import { applyKtcTep, tepTierFromTePremiumBonus, type TepPlayer } from "../lib/ktc-tep";
-import { extractKtcPlayers } from "../lib/ktc-page";
+import { fetchKtcPlayers, type KtcRoute } from "../lib/ktc-fetch";
 import { parsePickName } from "../lib/ktc-picks";
+import { buildKtcPlayerIndex } from "../lib/ktc-player-match";
 import type { Json } from "../lib/database.types";
 
 type KtcFormatSection = {
@@ -109,6 +113,8 @@ type DecodedEntry = {
 
 type ProductSource = {
   product: "dynasty" | "redraft";
+  /** The ranked list whose playerIDs this product's history uses. */
+  route: KtcRoute;
   url: string;
   oneQBSlug: string;
   sflexSlug: string;
@@ -117,12 +123,14 @@ type ProductSource = {
 const PRODUCTS: ProductSource[] = [
   {
     product: "dynasty",
+    route: "dynasty",
     url: "https://keeptradecut.com/dynasty-rankings/histories",
     oneQBSlug: "dynasty-ppr-std",
     sflexSlug: "dynasty-ppr-sflex",
   },
   {
     product: "redraft",
+    route: "fantasy",
     url: "https://keeptradecut.com/fantasy-rankings/histories",
     oneQBSlug: "redraft-ppr-std",
     sflexSlug: "redraft-ppr-sflex",
@@ -141,17 +149,8 @@ const SOURCE_SLUG = "ktc";
 const UNMATCHED_LOG_PATH = join(tmpdir(), "backfill-ktc-unmatched.json");
 const UPSERT_BATCH_SIZE = 500;
 
-// Match sync-ktc.ts's name normalization so we get the same player matches
-// the daily sync produces. Diverging here would mean backfill rows land
-// against different player_ids than current-day rows for the same player.
-function normalizeName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[.''']/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
-    .trim();
-}
+/** Name, position and team of one KTC entry, from the ranked list. */
+type KtcMeta = { name: string; position: string; team: string | null };
 
 function normalizePosition(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -295,14 +294,28 @@ type ProductSnapshots = {
 
 type RunWindow = { from: string; to: string } | null;
 
-/** --from/--to (both YYYY-MM-DD, inclusive) or --all. Anything else is refused. Exported for tests. */
-export function parseRunArgs(argv: string[]): { window: RunWindow; dryRun: boolean } {
+type RunProduct = ProductSource["product"] | null;
+
+/**
+ * --from/--to (both YYYY-MM-DD, inclusive) or --all, plus an optional
+ * --product dynasty|redraft to touch one product only (null means both).
+ * Anything else is refused. Exported for tests.
+ */
+export function parseRunArgs(argv: string[]): { window: RunWindow; dryRun: boolean; product: RunProduct } {
   const valueOf = (flag: string) => {
     const i = argv.indexOf(flag);
     return i >= 0 ? argv[i + 1] : undefined;
   };
   const dryRun = argv.includes("--dry-run");
-  if (argv.includes("--all")) return { window: null, dryRun };
+  let product: RunProduct = null;
+  if (argv.includes("--product")) {
+    const raw = valueOf("--product");
+    if (raw !== "dynasty" && raw !== "redraft") {
+      throw new Error("backfill-ktc-history: --product takes dynasty or redraft.");
+    }
+    product = raw;
+  }
+  if (argv.includes("--all")) return { window: null, dryRun, product };
   const from = valueOf("--from");
   const to = valueOf("--to");
   const ymd = /^\d{4}-\d{2}-\d{2}$/;
@@ -312,7 +325,7 @@ export function parseRunArgs(argv: string[]): { window: RunWindow; dryRun: boole
         "A full rerun duplicates every day the nightly sync already wrote; see the header.",
     );
   }
-  return { window: { from, to }, dryRun };
+  return { window: { from, to }, dryRun, product };
 }
 
 /** Inclusive date filter; no window keeps everything. Exported for tests. */
@@ -321,10 +334,13 @@ export function inWindow(date: string, window: RunWindow): boolean {
 }
 
 async function main() {
-  const { window, dryRun } = parseRunArgs(process.argv.slice(2));
+  const { window, dryRun, product: onlyProduct } = parseRunArgs(process.argv.slice(2));
   console.log(
-    window ? `Window ${window.from} to ${window.to}${dryRun ? " (dry run)" : ""}` : `Full history${dryRun ? " (dry run)" : ""}`,
+    (window ? `Window ${window.from} to ${window.to}` : "Full history") +
+      (onlyProduct ? `, ${onlyProduct} only` : "") +
+      (dryRun ? " (dry run)" : ""),
   );
+  const products = PRODUCTS.filter((p) => onlyProduct === null || p.product === onlyProduct);
   const supabase = getServiceClient();
 
   // --- Load format_configs (with te_premium_bonus for TEP tier mapping)
@@ -362,46 +378,42 @@ async function main() {
   console.log(`Loaded ${players.length} players, ${formats.length} format_configs`);
 
   // KTC players don't carry sleeperId, so name|position is the only matching
-  // surface, same as sync-ktc.ts. Build the lookup once.
-  const playerByName = new Map<string, string>();
+  // surface. The same index the nightly sync uses (lib/ktc-player-match.ts):
+  // a shared name is settled by team, then rostered, then stored KTC id, and
+  // left unmatched when still ambiguous, never given to whichever row came last.
+  const playerIndex = buildKtcPlayerIndex(players);
   const positionByPlayerId = new Map<string, string>();
   for (const p of players) {
-    const key = `${normalizeName(`${p.first_name} ${p.last_name}`)}|${p.position}`;
-    playerByName.set(key, p.id);
     positionByPlayerId.set(p.id, p.position);
   }
 
   // To resolve a KTC playerID to one of our player_ids we need each KTC
   // player's name + position. The histories endpoint only returns the
-  // encoded value history, no name. We pull names from the public
-  // dynasty-rankings + fantasy-rankings HTML pages (same `playersArray`
-  // embedded script the daily sync uses).
-  const ktcMetaByID = new Map<number, { name: string; position: string }>();
-  for (const rankingsUrl of [
-    "https://keeptradecut.com/dynasty-rankings?format=2",
-    "https://keeptradecut.com/fantasy-rankings?format=2",
-  ]) {
-    const meta = await fetchKtcPlayerMeta(rankingsUrl);
-    for (const [id, info] of meta) {
-      // Dynasty page wins ties (loaded first). Either source's name+position
-      // is fine, KTC keys players consistently across products.
-      if (!ktcMetaByID.has(id)) ktcMetaByID.set(id, info);
-    }
+  // encoded value history, no name. We pull names from each product's own
+  // ranked list, fetched the same way the daily sync does (lib/ktc-fetch.ts).
+  //
+  // The two products number their entries separately: on 2026-11-24 redraft
+  // 1704 was Brock Bowers while dynasty 1704 was the 2027 Late 1st, and 42 of
+  // the 373 redraft IDs named someone else on the dynasty list. A product's
+  // history is therefore only ever read against that product's own list.
+  const metaByProduct = new Map<ProductSource["product"], Map<number, KtcMeta>>();
+  for (const product of products) {
+    metaByProduct.set(product.product, await fetchKtcPlayerMeta(product.route));
   }
-  console.log(`Loaded ${ktcMetaByID.size} KTC player metadata entries`);
 
   // --- Fetch + decode each product
   const productSnapshots: ProductSnapshots[] = [];
-  for (const product of PRODUCTS) {
+  for (const product of products) {
     console.log(`Fetching ${product.product} histories...`);
     const players = await fetchHistories(product.url);
     console.log(`  ${players.length} ${product.product} players`);
 
     const perPlayer = new Map<number, { sflex: DecodedEntry[]; oneQB: DecodedEntry[] }>();
     const unmatched: Array<{ ktcPlayerID: number }> = [];
+    const productMeta = metaByProduct.get(product.product)!;
     for (const p of players) {
       if (typeof p?.playerID !== "number") continue;
-      const meta = ktcMetaByID.get(p.playerID);
+      const meta = productMeta.get(p.playerID);
       if (!meta) {
         unmatched.push({ ktcPlayerID: p.playerID });
         continue;
@@ -439,8 +451,9 @@ async function main() {
 
     let matched = 0;
     let unmatched = 0;
+    const productMeta = metaByProduct.get(product.product)!;
     for (const [ktcPlayerID, allSnaps] of prodSnap.perPlayer) {
-      const meta = ktcMetaByID.get(ktcPlayerID)!;
+      const meta = productMeta.get(ktcPlayerID)!;
       const snaps = {
         oneQB: allSnaps.oneQB.filter((e) => inWindow(e.date, window)),
         sflex: allSnaps.sflex.filter((e) => inWindow(e.date, window)),
@@ -508,8 +521,13 @@ async function main() {
 
       const position = normalizePosition(meta.position);
       if (!position) continue;
-      const nameKey = `${normalizeName(meta.name)}|${position}`;
-      const playerId = playerByName.get(nameKey);
+      const resolved = playerIndex.resolve(
+        { playerID: ktcPlayerID, playerName: meta.name, team: meta.team },
+        position,
+        // Stored KTC ids are dynasty numbering; see KtcResolveOptions.
+        { useStoredId: product.route !== "fantasy" },
+      );
+      const playerId = resolved.kind === "matched" ? resolved.playerId : null;
       if (!playerId) {
         unmatchedToPlayerByName.push({
           ktcPlayerID,
@@ -735,30 +753,15 @@ async function upsertWithRetry(
   }
 }
 
-// Pull KTC's `playersArray` JSON from a rankings page so we can map
+// Pull KTC's ranked list for one product so we can map
 // playerID -> { name, position }. The histories endpoint omits names. The
-// daily sync also reads this same embedded array (sync-ktc.ts), but we
-// re-parse here because the daily sync isn't guaranteed to run before
-// backfill and we don't want a stale ktc_player_id mapping.
-async function fetchKtcPlayerMeta(
-  url: string,
-): Promise<Map<number, { name: string; position: string }>> {
-  const res = await fetch(url, {
-    headers: {
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-      accept: "text/html,application/xhtml+xml",
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`KTC rankings ${res.status} ${res.statusText} for ${url}`);
-  }
-  const html = await res.text();
-  // Both page layouts KTC has served, through the same reader the nightly sync uses.
-  const extracted = extractKtcPlayers(html);
-  if (!extracted) throw new Error(`No KTC player list found at ${url} (markup changed?)`);
-  const arr = extracted.players;
-  const out = new Map<number, { name: string; position: string }>();
+// daily sync reads the same list (lib/ktc-fetch.ts), but we re-fetch here
+// because the daily sync isn't guaranteed to run before backfill and we don't
+// want a stale ktc_player_id mapping. A failed fetch throws.
+async function fetchKtcPlayerMeta(route: KtcRoute): Promise<Map<number, KtcMeta>> {
+  const { players: arr, source } = await fetchKtcPlayers(route);
+  console.log(`  ${route}: ${arr.length} ranked entries from ${source}`);
+  const out = new Map<number, KtcMeta>();
   for (const raw of arr) {
     if (!raw || typeof raw !== "object") continue;
     const p = raw as Record<string, unknown>;
@@ -767,7 +770,8 @@ async function fetchKtcPlayerMeta(
     const name = typeof p.playerName === "string" ? p.playerName.trim() : "";
     const position = typeof p.position === "string" ? p.position.trim() : "";
     if (!name || !position) continue;
-    out.set(id, { name, position });
+    const team = typeof p.team === "string" && p.team.trim() ? p.team.trim() : null;
+    out.set(id, { name, position, team });
   }
   return out;
 }

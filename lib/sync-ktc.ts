@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyKtcTep, tepTierFromTePremiumBonus, type TepPlayer } from "./ktc-tep";
 import { parsePickName } from "./ktc-picks";
-import { extractKtcPlayers } from "./ktc-page";
+import { fetchKtcPlayers, type KtcPlayersResult, type KtcRoute } from "./ktc-fetch";
 import { withRetry } from "./supabase/retry";
 import {
   buildKtcPlayerIndex,
@@ -50,6 +50,8 @@ type KtcPlayer = {
 
 type ScrapeTarget = {
   formatSlug: string;
+  /** KTC product the values come from. Null on a derived (non-scraped) batch. */
+  route: KtcRoute | null;
   url: string;
   variant: "oneQB" | "superflex";
 };
@@ -63,10 +65,10 @@ const ALLOWED_KTC_FORMAT_SLUGS = new Set<string>([
 ]);
 
 const TARGETS: ScrapeTarget[] = [
-  { formatSlug: "dynasty-ppr-std", url: "https://keeptradecut.com/dynasty-rankings?format=1", variant: "oneQB" },
-  { formatSlug: "dynasty-ppr-sflex", url: "https://keeptradecut.com/dynasty-rankings?format=2", variant: "superflex" },
-  { formatSlug: "redraft-ppr-std", url: "https://keeptradecut.com/fantasy-rankings?format=1", variant: "oneQB" },
-  { formatSlug: "redraft-ppr-sflex", url: "https://keeptradecut.com/fantasy-rankings?format=2", variant: "superflex" },
+  { formatSlug: "dynasty-ppr-std", route: "dynasty", url: "https://keeptradecut.com/dynasty-rankings?format=1", variant: "oneQB" },
+  { formatSlug: "dynasty-ppr-sflex", route: "dynasty", url: "https://keeptradecut.com/dynasty-rankings?format=2", variant: "superflex" },
+  { formatSlug: "redraft-ppr-std", route: "fantasy", url: "https://keeptradecut.com/fantasy-rankings?format=1", variant: "oneQB" },
+  { formatSlug: "redraft-ppr-sflex", route: "fantasy", url: "https://keeptradecut.com/fantasy-rankings?format=2", variant: "superflex" },
 ];
 
 const DERIVED_FROM_SFLEX: Array<{ targetSlug: string; baseSlug: string }> = [
@@ -91,33 +93,33 @@ export type KtcSyncResult = {
   durationMs: number;
 };
 
-async function scrapeTarget(target: ScrapeTarget): Promise<KtcPlayer[]> {
-  const response = await fetch(target.url, {
-    headers: {
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-      accept: "text/html,application/xhtml+xml",
-    },
-  });
-  if (!response.ok) {
-    console.warn(`  ${target.formatSlug}: HTTP ${response.status}`);
+/**
+ * One KTC product's list per run: the dynasty pool carries both the 1QB and
+ * superflex values, so its two targets share one fetch (lib/ktc-fetch.ts).
+ * A failure is logged, recorded for the zero-row error and read as empty.
+ */
+async function scrapeTarget(
+  target: ScrapeTarget,
+  byRoute: Map<KtcRoute, Promise<KtcPlayersResult>>,
+  failures: string[],
+): Promise<KtcPlayer[]> {
+  const route = target.route;
+  if (!route) return [];
+  let pending = byRoute.get(route);
+  if (!pending) {
+    pending = fetchKtcPlayers(route);
+    byRoute.set(route, pending);
+  }
+  try {
+    const { players, source } = await pending;
+    console.log(`  ${target.formatSlug}: ${players.length} entries from ${source}`);
+    return players as KtcPlayer[];
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`  ${target.formatSlug}: ${reason}`);
+    if (!failures.includes(reason)) failures.push(reason);
     return [];
   }
-  const html = await response.text();
-  // lib/ktc-page.ts reads both page layouts KTC has served (see its header).
-  const extracted = extractKtcPlayers(html);
-  if (!extracted) {
-    console.warn(
-      `  ${target.formatSlug}: HTTP 200 but no player list in the page (${html.length} bytes); KTC's markup may have changed again`,
-    );
-    return [];
-  }
-  if (extracted.players.length === 0) {
-    // A list that parses but is empty is the next silent failure waiting to
-    // happen: say so rather than skip the target without a word.
-    console.warn(`  ${target.formatSlug}: the page's player list is present but empty (${extracted.layout})`);
-  }
-  return extracted.players as KtcPlayer[];
 }
 
 const normalizeName = normalizeKtcName;
@@ -177,8 +179,10 @@ export async function runKtcSync(
   // the index decides between them instead of letting the last row win.
   const playerIndex = buildKtcPlayerIndex(players);
   const ambiguousWarned = new Set<string>();
-  const resolvePlayerId = (k: KtcPlayer, position: string): string | null => {
-    const r = playerIndex.resolve(k, position);
+  // The stored KTC id is in dynasty numbering, so a fantasy-list entry never
+  // settles a shared name by it (lib/ktc-player-match.ts, KtcResolveOptions).
+  const resolvePlayerId = (k: KtcPlayer, position: string, route: KtcRoute | null): string | null => {
+    const r = playerIndex.resolve(k, position, { useStoredId: route !== "fantasy" });
     if (r.kind === "matched") return r.playerId;
     if (r.kind === "ambiguous" && !ambiguousWarned.has(k.playerName)) {
       ambiguousWarned.add(k.playerName);
@@ -214,6 +218,8 @@ export async function runKtcSync(
 
   const batches: ScrapedBatch[] = [];
   const pickRows: PickRow[] = [];
+  const listByRoute = new Map<KtcRoute, Promise<KtcPlayersResult>>();
+  const scrapeFailures: string[] = [];
 
   for (const target of TARGETS) {
     if (!ALLOWED_KTC_FORMAT_SLUGS.has(target.formatSlug)) {
@@ -228,9 +234,8 @@ export async function runKtcSync(
     }
     const formatId = formatEntry.id;
     console.log(`Scraping ${target.formatSlug}...`);
-    const ktcPlayers = await scrapeTarget(target);
+    const ktcPlayers = await scrapeTarget(target, listByRoute, scrapeFailures);
     if (ktcPlayers.length === 0) continue;
-    console.log(`  ${ktcPlayers.length} KTC entries`);
 
     const rows: ScrapedBatch["rows"] = [];
     const fingerprint = new Map<string, number>();
@@ -262,7 +267,7 @@ export async function runKtcSync(
 
       const key = `${normalizeName(k.playerName)}|${position}`;
       fingerprint.set(key, value);
-      const playerId = resolvePlayerId(k, position);
+      const playerId = resolvePlayerId(k, position, target.route);
       if (!playerId) {
         unmatched++;
         continue;
@@ -341,7 +346,7 @@ export async function runKtcSync(
     }));
 
     batches.push({
-      target: { formatSlug: targetSlug, url: `derived:tep-from:${baseSlug}`, variant: "superflex" },
+      target: { formatSlug: targetSlug, route: null, url: `derived:tep-from:${baseSlug}`, variant: "superflex" },
       formatId: targetEntry.id,
       rows: derivedRows,
       ktcPlayers: [],
@@ -377,7 +382,7 @@ export async function runKtcSync(
     for (const k of ktcPlayers) {
       const position = k.position === "RDP" ? "PICK" : k.position?.toUpperCase();
       if (!position || position === "PICK") continue;
-      const playerId = resolvePlayerId(k, position);
+      const playerId = resolvePlayerId(k, position, target.route);
       if (!playerId) continue;
       collectKtcPlayerUpdate(pendingPlayerUpdates, playerId, k);
     }
@@ -515,8 +520,10 @@ export async function runKtcSync(
   // we want the cron to surface a 500 so the outage is visible rather than
   // logging a green "ok" with no data behind it.
   if (totalRows === 0) {
+    // The cause leads, so the alert email's 120-character preview shows it.
+    const why = scrapeFailures.length > 0 ? ` Cause: ${scrapeFailures.join("; ")}.` : "";
     throw new Error(
-      "runKtcSync: wrote 0 player_value_history rows, every KTC target returned empty (source markup may have changed or the scrape was blocked).",
+      `runKtcSync: wrote 0 player_value_history rows.${why} Every KTC target returned empty (source markup may have changed or the scrape was blocked).`,
     );
   }
 
