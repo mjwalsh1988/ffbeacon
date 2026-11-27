@@ -24,6 +24,7 @@ import { withUsername } from "@/components/league-schedule/format";
 import { Sheet } from "@/components/league-blueprint/sheet";
 import { CheckoutForm } from "@/components/commerce/checkout-form";
 import { TierCardStatic } from "@/components/commerce/tier-card";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,9 @@ export default async function LeagueReviewPage({
   searchParams: Promise<{ roster?: string; tier?: string; username?: string; source?: string }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   if (!/^\d{1,20}$/.test(sleeperLeagueId)) notFound();
 

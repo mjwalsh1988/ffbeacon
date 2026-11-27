@@ -36,6 +36,7 @@ import { loadPositionalWarView, loadViewerCandidates } from "@/lib/league-positi
 import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 import { resolveUpgradePanelAvailability } from "@/lib/positional-war/upgrade";
 import type { SleeperLeague } from "@/lib/sleeper";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,9 @@ export default async function LeaguePositionalWarPage({
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   const focusedRosterId = (() => {
     if (typeof sp.roster !== "string" || !sp.roster.trim()) return null;

@@ -45,13 +45,17 @@ export default async function LeagueLayout({
   const { league_id: sleeperLeagueId } = await params;
   if (!SLEEPER_LEAGUE_ID.test(sleeperLeagueId)) notFound();
 
-  const { data: stored } = await createCachedReadClient()
+  const { data: stored, error: storedError } = await createCachedReadClient()
     .from("leagues")
     .select("id")
     .eq("sleeper_league_id", sleeperLeagueId)
     .limit(1)
     .maybeSingle();
   if (stored) return children;
+  // A failed read is not "never stored". Asking Sleeper about every league
+  // while the database is down would spend the call budget on an answer the
+  // page cannot use; the page renders its own retry state.
+  if (storedError) return children;
 
   const requestHeaders = await headers();
   if (requestHeaders.get("next-router-prefetch")) return children;

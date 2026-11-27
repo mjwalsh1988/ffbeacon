@@ -38,6 +38,7 @@ import { loadLineupSeason } from "@/lib/league-lineups/season-data";
 import { refreshManagerLedger } from "@/lib/league-manager-ledger";
 import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 /**
  * `/leagues/[id]/lineups`: one team, one week, in depth.
@@ -164,6 +165,9 @@ export default async function LeagueLineupsPage({
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   const adminClient = createAdminClient();
   const synced = await getSyncedLeague(sleeperLeagueId);

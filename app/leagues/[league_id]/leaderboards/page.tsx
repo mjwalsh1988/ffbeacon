@@ -33,6 +33,7 @@ import {
   type ShareBoard,
 } from "@/lib/league-leaderboards/board-share";
 import type { SleeperLeague } from "@/lib/sleeper";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,9 @@ export default async function LeagueLeaderboardsPage({
   searchParams: Promise<{ week?: string; username?: string; source?: string }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   const requestedWeek = intOrNull(sp.week);
 

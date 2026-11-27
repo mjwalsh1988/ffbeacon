@@ -60,6 +60,20 @@ import { SITE } from "@/lib/site";
  * crawler obeys the group that names it and ignores the rest, and none of the
  * others match the token "Amazonbot" or "Amzn-SearchBot".
  *
+ * /leagues/ joined the wildcard disallow list on 2026-11-27, for every crawler.
+ * That night OAI-SearchBot loaded one league's pages 3,300 times in 25 minutes
+ * (818 loads of the overview alone, the rest its tabs), each load about fifty
+ * database reads, and the database stopped answering for six hours. League
+ * pages were already noindex and out of the sitemap, so nothing that can rank
+ * is lost: a crawler that obeys this file now never fetches a page it was going
+ * to be told not to index. The one cost is that noindex can no longer be read
+ * on those pages, so a league URL linked from somewhere public could appear in
+ * results as a bare address with no title. A private league id is rarely linked
+ * anywhere public, and that is a better failure than the one above. A crawler
+ * that ignores this file meets the page budget in lib/league-view-gate.ts.
+ * Link preview fetchers (Discord, Slack, X) do not consult robots.txt for a
+ * link somebody posted, so league links still unfurl.
+ *
  * Vercel's Firewall and Bot Protection settings can block AI crawlers regardless of
  * this file. Those live in the Vercel dashboard, not the repo.
  */
@@ -87,6 +101,10 @@ export default function robots(): MetadataRoute.Robots {
           // The owner's edition preview. Admin-gated and noindex; a crawler
           // would only ever be sent to the login page.
           "/brief/preview/",
+          // League pages. Already noindex and out of the sitemap, so no search
+          // result is lost. See the header: a crawler loading these took the
+          // database down on 2026-11-27.
+          "/leagues/",
         ],
       },
       {

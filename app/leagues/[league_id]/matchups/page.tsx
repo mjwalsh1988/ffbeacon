@@ -61,6 +61,7 @@ import {
 } from "@/components/league-schedule/format";
 import { matchViewerRoster } from "@/lib/league-viewer";
 import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,9 @@ export default async function LeagueMatchupsPage({
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   const view: "week" | "team" = sp.view === "team" ? "team" : "week";
   const requestedWeek = intOrNull(sp.week);

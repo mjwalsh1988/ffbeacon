@@ -47,6 +47,7 @@ import { ReviewRail } from "@/components/commerce/review-rail";
 import { ReviewStrip } from "@/components/commerce/review-strip";
 import { reviewSectionHref } from "@/components/commerce/review-href";
 import { loadOfferState, type OfferState } from "@/lib/commerce/offer";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -134,6 +135,9 @@ export default async function LeagueBlueprintPage({
   searchParams: Promise<{ roster?: string; username?: string; source?: string }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   if (!/^\d{1,20}$/.test(sleeperLeagueId)) notFound();
 

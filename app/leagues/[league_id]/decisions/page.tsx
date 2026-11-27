@@ -43,6 +43,7 @@ import { ledgerRulesFromSettings } from "@/lib/manager-ledger/rules";
 import type { LedgerViewTeam } from "@/lib/league-manager-ledger-data";
 import { ListChecks } from "lucide-react";
 import type { SleeperLeague } from "@/lib/sleeper";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 /**
  * Decisions: the Manager Ledger.
@@ -145,6 +146,9 @@ export default async function DecisionsPage({
   searchParams: Promise<{ source?: string; username?: string; roster?: string }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   const focusedRosterId = (() => {
     if (typeof sp.roster !== "string" || !sp.roster.trim()) return null;

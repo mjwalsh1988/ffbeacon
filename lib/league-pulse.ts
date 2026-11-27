@@ -399,11 +399,30 @@ export async function pulseLeagueCore(
     // same row a third time. The extra columns are a few kilobytes on a query
     // that was happening anyway, against two whole round trips saved on the
     // critical path of every league page.
-    const { data: existing } = await supabase
+    const { data: existing, error: readError } = await supabase
       .from("leagues")
       .select(LEAGUE_CORE_COLUMNS)
       .eq("sleeper_league_id", sleeperLeagueId)
       .maybeSingle();
+
+    // A FAILED READ IS NOT "WE HAVE NEVER STORED THIS LEAGUE". Until 2026-11-27
+    // the error was dropped, so a database that could not answer looked exactly
+    // like a brand new league, and every request that arrived during the bad
+    // moment started a full sync: four Sleeper calls and a stack of upserts
+    // aimed at the database that was already struggling. On 2026-11-27 that
+    // turned a five minute stall into roughly 2,900 league upserts and 30,000
+    // failed reads. Stop here instead and let the page show its retry state.
+    if (readError) {
+      console.error(
+        `[pulseLeague] league read failed for ${sleeperLeagueId}: ${readError.message}`,
+      );
+      return {
+        ok: false as const,
+        error: "League read failed",
+        sleeperLeagueId,
+        reason: "error" as const,
+      };
+    }
 
     // A frozen past season answers from the stored copy whatever the caller
     // asked for, force included: no Sleeper request is ever made for it again.

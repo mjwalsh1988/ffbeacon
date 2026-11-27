@@ -56,10 +56,15 @@ export const config = {
     // the same kind of route as the sitemaps: public, cached, and reading no
     // session, so running the auth refresh in front of either is pure cost.
     //
+    // `ico` is in the static extension list as well as the root favicon. The
+    // root rule only ever matched /favicon.ico, so /img/favicon.ico ran the
+    // session refresh on every request, and on 2026-11-27 one phone asked for
+    // it 5,300 times in a few minutes.
+    //
     // Every literal below ends at a boundary, either a slash or the end of the
     // path. Without that, `/llms.txt.php` and `/sitemap.xml.bak` are excluded
     // too, which is inert today only because nothing is routed under those
     // prefixes.
-    "/((?!api/donate/webhook$|api/orders/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms(?:-full)?\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/donate/webhook$|api/orders/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms(?:-full)?\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

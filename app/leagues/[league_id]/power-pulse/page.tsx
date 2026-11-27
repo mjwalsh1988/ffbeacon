@@ -43,6 +43,7 @@ import {
   type LeagueEmphasis,
 } from "@/lib/league-emphasis";
 import { categorizeLeague } from "@/lib/league-category";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +116,9 @@ export default async function LeaguePowerPulsePage({
   searchParams: Promise<{ source?: string; username?: string; war?: string }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   // Core pulse only: the league, its rosters and its members. The derived half
   // is what computes Power Pulse when it is stale, and that is the slow part, so

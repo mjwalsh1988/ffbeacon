@@ -18031,3 +18031,29 @@ KTC-FIX-02 | completed | Backfilled KTC redraft history repaired: rows put on th
      | depends on: KTC-FIX-01
      | design: KTC numbers its dynasty and redraft lists separately (on 2026-11-24, 42 of 373 redraft ids named someone else on the dynasty list), but the backfill merged both lists into one id lookup with dynasty winning, so the original full run (2026-01-01 to 2026-06-09) and the 2026-09-08 to 2026-09-24 gap fill put some redraft values on the wrong players (for example Devaughn Vele carried Drake Maye's values). Each backfilled redraft row's stored redraft id was resolved through today's redraft list and the sync's matcher: 90,626 correct, 6,621 on the wrong player, plus 482 for Cole Payton and Eli Raridon (dynasty names the nightly redraft sync never listed). Those 7,103 rows were deleted, then the fixed script refilled redraft only for both windows. KTC's histories today carry all 17 September dates but only 12 of the January to June dates (2026-05-29 to 2026-06-09), so earlier dates lose the bad rows without a replacement; the right players had no row on those days before either
      | verified: yes (2026-09-24 backfill against the 2026-09-25 sync: 0 id mismatches and 0 values off by more than 25%, was 8 and 5; the only player-days doubled in 2026 are 2026-05-16, 2026-05-17 and 2026-06-09, all from before this work)
+
+## Incident 2026-11-27: league page crawls took the database down
+
+INC-1127-01 | completed | A failed read of a league row is no longer treated as a league we have never stored
+     | files: lib/league-pulse.ts, app/leagues/[league_id]/layout.tsx
+     | depends on: none
+     | design: pulseLeagueCore dropped the error from its first read, so while the database could not answer every league request looked like a first visit and started a full sync (four Sleeper calls and the upserts). On 2026-11-27 03:11 UTC that turned a short stall into about 2,900 league upserts and 30,000 failed reads in four minutes. The read error now returns ok false with reason error and the page shows its retry state. The league layout made the same mistake in front of its Sleeper lookup and now returns to the page instead
+     | verified: yes (typecheck, lint 0/0, npm test, build)
+
+INC-1127-02 | completed | League page budget: per member, per anonymous address, per league and site-wide caps on league page loads
+     | files: lib/league-view-gate.ts, lib/league-view-gate.test.ts, components/league-view-refused.tsx, the 13 page.tsx files under app/leagues/[league_id]
+     | depends on: INC-1127-01
+     | design: every league page body calls refuseLeagueView before it reads anything. Per five minutes: 150 loads per signed-in member and 900 for all members together; for signed-out readers 40 per address (salted hash), then 75 per league, then 300 across every league, claimed in that order through try_claim_rate_limit so a refused request never spends a later shared budget. A refused reader gets a short page that says to wait or sign in. Anonymous readers fail closed when the counter cannot be reached, members fail open. It lives in the page body because Next strips the prefetch headers before middleware and headers() see them (a prefetch never renders a body, so it is not counted), because middleware can be sidestepped with an encoded id, an image suffix or a POST, and because a layout is not rendered again on a client navigation. A test reads every league page and fails if one does not ask first
+     | verified: yes (typecheck, lint 0/0, npm test, build; three reviewer sub-agents: security found the middleware version could be bypassed and that prefetches would be counted, which is why it moved to the page body, plus a ceiling for all members together; implementation confirmed the header stripping; accessibility changed the member title, the wait text, the link label and the link border; all fixed)
+
+INC-1127-03 | completed | robots.txt disallows /leagues/ for every crawler
+     | files: app/robots.ts
+     | depends on: none
+     | design: OAI-SearchBot loaded one league 3,300 times in 25 minutes on 2026-11-27. League pages were already noindex and out of the sitemap, so nothing that can rank is lost. Vercel firewall rule "Deny search and AI crawlers on league pages" (path starts with /leagues/ and a user agent list of 18 crawlers, link preview bots left out) was published the same day and covers crawlers until they read the new file
+     | verified: yes (a request with the OAI-SearchBot user agent gets 403 on a league page)
+
+INC-1127-04 | completed | Middleware no longer runs on .ico files below the root
+     | files: middleware.ts, lib/supabase/middleware.test.ts
+     | depends on: none
+     | design: the matcher only excluded /favicon.ico, so /img/favicon.ico ran the session refresh on every request, and one phone asked for it 5,300 times in a few minutes on 2026-11-27
+     | verified: yes (matcher test covers /img/favicon.ico)

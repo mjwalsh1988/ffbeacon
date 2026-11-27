@@ -76,6 +76,7 @@ import {
 import { loadLeaderboardsCached } from "@/lib/league-leaderboards/load";
 import { WeekLeadersCard } from "@/components/league-leaderboards/week-leaders-card";
 import { leaderboardsHref } from "@/components/league-leaderboards/range-nav";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -160,6 +161,9 @@ export default async function LeagueDeepViewPage({
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const {
     tab: tabParam,
     source: sourceParam,

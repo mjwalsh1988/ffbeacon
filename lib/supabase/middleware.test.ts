@@ -93,6 +93,7 @@ describe("the middleware matcher", () => {
       "/llms-full.txt",
       // Static assets.
       "/favicon.ico",
+      "/img/favicon.ico",
       "/img/ff-beacon-logo.png",
     ]) {
       expect(matcher.test(path), `expected middleware to skip ${path}`).toBe(

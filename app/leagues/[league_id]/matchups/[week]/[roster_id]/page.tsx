@@ -49,6 +49,7 @@ import {
   withUsername,
 } from "@/components/league-schedule/format";
 import { resolvePlayoffWeekStart } from "@/lib/power-pulse/playoff-defaults";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -249,6 +250,9 @@ export default async function LeagueMatchupPage({
     week: weekParam,
     roster_id: rosterParam,
   } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
 
   // A route segment is whatever somebody typed. Anything that is not a real

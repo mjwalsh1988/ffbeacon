@@ -78,6 +78,7 @@ import {
   type TradePosition,
   type TradeStrategy,
 } from "@/lib/trade-finder/types";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 /**
  * Suggestions handed to the client on first paint.
@@ -226,6 +227,9 @@ export default async function LeagueTradeFinderPage({
   >;
 }) {
   const { league_id: sleeperLeagueId } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const sp = await searchParams;
   const mode: TradeIdeasMode = sp.mode === "build" ? "build" : "suggested";
   const rosterParam = (() => {

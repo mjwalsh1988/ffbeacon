@@ -26,6 +26,7 @@ import {
   buildLeagueScoringTags,
 } from "@/lib/league-format-tags";
 import { formatRelative } from "@/lib/datetime";
+import { refuseLeagueView } from "@/components/league-view-refused";
 
 export const dynamic = "force-dynamic";
 
@@ -134,6 +135,9 @@ export default async function TeamDetailPage({
   searchParams: Search;
 }) {
   const { league_id: sleeperLeagueId, roster_id } = await params;
+  // The league page budget (lib/league-view-gate.ts). First, before any read.
+  const refused = await refuseLeagueView(sleeperLeagueId);
+  if (refused) return refused;
   const {
     source: sourceParam,
     username: usernameParam,
