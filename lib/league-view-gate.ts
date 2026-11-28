@@ -73,11 +73,11 @@ export const MEMBER_MAX = 150;
 /** League page loads all signed-in members may make per window, together. */
 export const MEMBER_SITE_MAX = 900;
 /** League page loads one anonymous address may make per window. */
-export const ANON_PER_IP_MAX = 40;
+export const ANON_PER_IP_MAX = 20;
 /** Anonymous loads of any one league per window, all readers together. */
-export const ANON_PER_LEAGUE_MAX = 75;
+export const ANON_PER_LEAGUE_MAX = 30;
 /** Anonymous loads of every league per window, all readers together. */
-export const ANON_SITE_MAX = 300;
+export const ANON_SITE_MAX = 50;
 
 /** How long one counter update may take before the gate gives up. */
 const CLAIM_TIMEOUT_MS = 2_000;

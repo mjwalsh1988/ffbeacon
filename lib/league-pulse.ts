@@ -40,6 +40,13 @@ import { refreshPowerPulse } from "@/lib/league-power-pulse";
 import { refreshPositionalWar } from "@/lib/league-positional-war";
 import { refreshManagerLedger } from "@/lib/league-manager-ledger";
 import { coalesce } from "@/lib/request-coalesce";
+import {
+  LEAGUE_READ_TTL_MS,
+  leagueReadMode,
+  leagueSyncedAt,
+  noteLeagueDerived,
+  noteLeagueSync,
+} from "@/lib/league-read-cache";
 import { captureLeagueDraftSelections } from "@/lib/league-draft-selections";
 import { normalizeDraftPicks } from "@/lib/sleeper-draft-picks";
 import { chooseDraftPerSeason, MAX_DRAFT_ROUNDS, type LeagueDraftRow } from "@/lib/league-drafts";
@@ -390,7 +397,7 @@ export async function pulseLeagueCore(
   // the bulk sync summary, and every league page was paying two round trips
   // for them in the middle of its critical path.
   const { force = false, counts: wantCounts = false } = options;
-  return coalesce(`core:${sleeperLeagueId}:${force}:${wantCounts}`, async () => {
+  const result = await coalesce(`core:${sleeperLeagueId}:${force}:${wantCounts}`, async () => {
     const startedAt = Date.now();
 
     // Widened past what the cache check needs so the activity snapshot below can
@@ -784,6 +791,19 @@ export async function pulseLeagueCore(
       rostersChangedAt,
     };
   });
+  // Tell the signed-out read memory when this league last changed, so no view
+  // is built on rows from before a sync (lib/league-read-cache.ts). A sync
+  // that just ran counts from now. A stored copy counts from its own stamp,
+  // which is how a sync done by another instance, a member or the Refresh
+  // button reaches this one. Done on the shared result and in every context.
+  if (result.ok) {
+    noteLeagueSync(
+      sleeperLeagueId,
+      result.leagueRowId,
+      result.cached ? Date.parse(result.league?.last_pulsed_at ?? "") : Date.now(),
+    );
+  }
+  return result;
 }
 
 /**
@@ -818,6 +838,12 @@ async function readStoredRosterShapes(
  */
 type SharedDerivedPass = { promise: Promise<void>; syncs: boolean; force: boolean };
 const sharedDerivedPasses = new Map<string, SharedDerivedPass>();
+
+/** When this instance last finished a derived pass, per league and option set. */
+const recentDerivedPasses = new Map<
+  string,
+  { transactions: number; finishedAt: number; expiresAt: number }
+>();
 
 /**
  * Join the league's in-flight shared pass when it covers what this caller
@@ -899,6 +925,23 @@ export async function pulseLeagueDerived(
     // every new one would have had to remember.
     includeManagerLedger = false,
   } = options;
+  // A signed-out view inside the read cache window skips the pass when this
+  // instance already ran it for the league a moment ago. The pass only checks
+  // whether the stored models are current, and the page is about to read them
+  // from memory anyway. A resync or a force always runs it, a member always
+  // runs it, and a pass that finished before the league's last sync does not
+  // count (another page or another instance may have done that sync).
+  const memoKey = `${leagueRowId}:${includePositionalWar}:${includeManagerLedger}`;
+  if (!force && !resynced && leagueReadMode() === "use") {
+    const recent = recentDerivedPasses.get(memoKey);
+    if (
+      recent &&
+      recent.expiresAt > Date.now() &&
+      recent.finishedAt > leagueSyncedAt(leagueRowId)
+    ) {
+      return { transactions: recent.transactions };
+    }
+  }
   const startedAt = Date.now();
   const timings: string[] = [];
   const timed = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
@@ -963,6 +1006,17 @@ export async function pulseLeagueDerived(
     `[pulseLeague] derived ${leagueRowId} in ${Date.now() - startedAt}ms (${timings.join(", ")})`,
   );
 
+  if (recentDerivedPasses.size > 2_000) recentDerivedPasses.clear();
+  const finishedAt = Date.now();
+  recentDerivedPasses.set(memoKey, {
+    transactions: count ?? 0,
+    finishedAt,
+    expiresAt: finishedAt + LEAGUE_READ_TTL_MS,
+  });
+  // The pass may have written models. An answer a signed-out view read while
+  // it was still running (an empty Power Pulse on a first open) must not be
+  // remembered past this point.
+  noteLeagueDerived(leagueRowId, finishedAt);
   return { transactions: count ?? 0 };
 }
 

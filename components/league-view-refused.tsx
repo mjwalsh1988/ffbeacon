@@ -9,6 +9,7 @@ import {
   type LeagueViewRefusalReason,
   type LeagueViewVerdict,
 } from "@/lib/league-view-gate";
+import { allowLeagueReadCache } from "@/lib/league-read-cache";
 
 /**
  * One verdict per request. A page asks at the top of its body, and anything
@@ -31,7 +32,11 @@ const leagueViewVerdict = cache(
     } catch {
       // A broken session read is not a reason to skip the budget.
     }
-    return claimLeagueView(requestHeaders, sleeperLeagueId, userId);
+    const verdict = await claimLeagueView(requestHeaders, sleeperLeagueId, userId);
+    // A counted signed-out view may answer repeat reads from memory
+    // (lib/league-read-cache.ts). A member always reads live.
+    if (!userId && verdict.allowed) allowLeagueReadCache(sleeperLeagueId);
+    return verdict;
   },
 );
 

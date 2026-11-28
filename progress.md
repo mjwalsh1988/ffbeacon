@@ -18057,3 +18057,21 @@ INC-1127-04 | completed | Middleware no longer runs on .ico files below the root
      | depends on: none
      | design: the matcher only excluded /favicon.ico, so /img/favicon.ico ran the session refresh on every request, and one phone asked for it 5,300 times in a few minutes on 2026-11-27
      | verified: yes (matcher test covers /img/favicon.ico)
+
+INC-1127-05 | completed | Signed-out league views answer repeat database reads from memory for five minutes
+     | files: lib/league-read-cache.ts, lib/league-read-cache.test.ts, lib/supabase/server.ts, components/league-view-refused.tsx, lib/league-pulse.ts
+     | depends on: INC-1127-02
+     | design: the session client's fetch is wrapped. On a render the league page budget counted as anonymous, a GET to the REST API sent with the publishable key is remembered per server instance for five minutes, keyed on URL plus the headers that change the answer; only a 200 is kept, identical reads in flight share one request, and a member's token is never stored or served. Each league has a "changed at" time raised by a sync (pulseLeagueCore, in any context), by the last_pulsed_at on the row the core reads live (so another instance's sync or the Refresh button counts), and by a derived pass finishing; an answer asked for before that time is a miss. pulseLeagueDerived skips its pass for such a view when this instance finished the same pass after the league's last sync and inside the window. In memory, not the Next data cache, because that bills every write and a crawl across leagues is all writes. Query strings are NOT stripped for signed-out readers: tab, week, roster, username and offset are navigation, not filters, and stripping them would switch off the Teams tab, week switching, team pickers, paging and the team highlight the League Pulse tool passes in its links.
+     | verified: yes (typecheck, lint 0/0, npm test 8,389 passing, build, verify:idp-invariant; local production run: a repeat signed-out view of a league went from 89 database requests to 17 and from 2.9 s to 0.8 s; one reviewer sub-agent found no privacy issue and four staleness bugs, all fixed by the per-league changed-at rule above)
+
+INC-1127-06 | completed | Signed-out league page budgets lowered: 50 site-wide, 20 per address, 30 per league, per five minutes
+     | files: lib/league-view-gate.ts
+     | depends on: INC-1127-02
+     | design: owner asked for the site-wide cap to drop from 300 to 50. The per-address (was 40) and per-league (was 75) caps were lowered with it, because at 50 site-wide the league cap could never be reached and one address could spend 80 percent of what all signed-out readers share. Member budgets are unchanged.
+     | verified: yes (lib/league-view-gate.test.ts reads the constants)
+
+INC-1127-07 | completed | /favicon.ico is a real file
+     | files: public/favicon.ico
+     | depends on: none
+     | design: a byte copy of public/img/favicon.ico. The site declares its icon at /img/favicon.ico, but some clients (Microsoft Edge's new tab page) ask for the root path regardless; with no file there each request ran the /[handle] function to return a 404, 111K times on 2026-11-28. The Vercel firewall rule "Deny root favicon.ico requests" added earlier that day is removed once this is live.
+     | verified: yes (200 image/x-icon on a local production run)

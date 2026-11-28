@@ -4,6 +4,14 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import type { Database } from "@/lib/database.types";
 import { retryingFetch } from "@/lib/supabase/retrying-fetch";
+import { createLeagueReadCachingFetch } from "@/lib/league-read-cache";
+
+/**
+ * The session client reads through this. It is the plain retrying fetch for
+ * every request except a counted anonymous league view, where repeat reads are
+ * answered from memory for a few minutes (lib/league-read-cache.ts).
+ */
+const sessionClientFetch = createLeagueReadCachingFetch(retryingFetch);
 
 /**
  * The request-scoped session client.
@@ -27,7 +35,7 @@ export const createClient = cache(async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_PUBLISHABLE_KEY!,
     {
-      global: { fetch: retryingFetch },
+      global: { fetch: sessionClientFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();
